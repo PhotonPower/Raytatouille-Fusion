@@ -98,22 +98,26 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
     rng = np.random.default_rng(seed)
     mats = scene.materials
     n = pass_size(samples, depth)
-    accum = np.zeros(camera.count)
+    channels = len(scene.wavelengths)
+    accum = np.zeros(channels * camera.count)
     done = rays = passes = 0
     r2 = radius * radius if radius > 0 else None
     last_r2 = 0.0
     while done < samples:
         count = min(n, samples - done)
         light = pt_integrator.light_subpaths(scene, camera, count, depth, rng)
-        eye = pt_integrator.eye_subpaths(scene, camera, count, depth + 1, rng, stop_rough=True)
+        eye = pt_integrator.eye_subpaths(scene, camera, count, depth + 1, rng, stop_rough=True,
+                                         channel=light.channel)
         rays += light.rays + eye.rays
         pixel = eye.tex[0]
+        slot = eye.channel * camera.count + pixel            # wavelength and pixel
         # sources seen directly, in mirrors or through glass (every vertex before the last is specular)
         for k in range(1, eye.valid.shape[0]):
             j = np.nonzero(eye.valid[k] & (eye.src[k] >= 0) & (pixel >= 0))[0]
             if j.size:
                 le, _ = scene.emitted(eye.src[k, j], eye.ns[k, j], eye.wo[k, j])
-                accum += np.bincount(pixel[j], weights=eye.beta[k, j] * le, minlength=len(accum))
+                le = le * scene.spectral_weight(eye.src[k, j], eye.channel[j])
+                accum += np.bincount(slot[j], weights=eye.beta[k, j] * le, minlength=len(accum))
         # photons: the vertices of the light paths on surfaces that are not specular
         pk, pj = np.nonzero(light.valid[1:] & ~light.spec[1:])
         pk += 1
@@ -128,13 +132,16 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
                 r2 = first_radius2(scene, light.p[pk, pj], x)
             grid = PhotonGrid(light.p[pk, pj], float(np.sqrt(r2)))
             p_wo, p_ns, p_beta = light.wo[pk, pj], light.ns[pk, pj], light.beta[pk, pj]
+            p_channel, channel = light.channel[pj], eye.channel[j]
             total = np.zeros(len(j))
-            for q, ph in grid.pairs(x):
-                ok = (pk[ph] + t[q] <= depth) & (np.abs(np.einsum("ij,ij->i", p_ns[ph], ns[q])) > 0.5)
+            for q, ph in grid.pairs(x):                      # only photons of the camera path's wavelength
+                ok = (pk[ph] + t[q] <= depth) & (np.abs(np.einsum("ij,ij->i", p_ns[ph], ns[q])) > 0.5) \
+                    & (p_channel[ph] == channel[q])
                 q, ph = q[ok], ph[ok]
                 f, _, _ = mats.eval(m[q], ns[q], wo[q], p_wo[ph])
                 total += np.bincount(q, weights=f * p_beta[ph], minlength=len(j))
-            accum += np.bincount(pixel[j], weights=eye.beta[t, j] * total / (np.pi * r2 * count),
+            total /= scene.channel_prob[channel]             # the path stands for all wavelengths
+            accum += np.bincount(slot[j], weights=eye.beta[t, j] * total / (np.pi * r2 * count),
                                  minlength=len(accum))
         done += count
         passes += 1
@@ -145,5 +152,6 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
             progress(done / samples)
         if cancelled is not None and cancelled():
             break
-    return {"values": accum / max(done, 1), "samples": done, "rays": rays, "passes": passes,
+    per = accum.reshape(channels, camera.count) / max(done, 1)
+    return {"values": per.sum(axis=0), "channels": per, "samples": done, "rays": rays, "passes": passes,
             "radius": float(np.sqrt(last_r2))}

@@ -350,6 +350,61 @@ camera = pt_scene.Camera((0, -50, 80), (0, 100, 60), (0, 0, 1), 20.0, 4, 4)
 reference = values(scene, camera, "path", 40_000, 6).mean()
 assert abs(values(scene, camera, "photon", 80_000, 6).mean() / reference - 1) < 0.1
 
+# ---- wavelengths: a beam of two lines falls at 60° through a plate of glass that disperses
+# (n_d = 1.5, Abbe number 10); a detector below shows each line where Snell's law puts it
+angle = math.radians(60)
+way = np.array([math.sin(angle), 0.0, -math.cos(angle)])            # the beam
+start = np.array([-60.0, 0.0, 30.0])
+across = np.array([-way[2], 0.0, way[0]])                            # in the beam's cross-section: y x across = way
+beam = rect(start - np.array([0.0, 1.0, 0.0]) - across, (0, 2, 0), 2 * across)
+strong = pt_bsdf.Materials.from_rows([{"name": "flint", "kind": "glass", "ior": 1.5, "abbe": 10.0},
+                                      {"name": "black", "kind": "absorber"}, {"name": "detector", "kind": "detector"}])
+mesh = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(
+    [box((-300, -300, 0), (300, 300, 20)), beam, rect((-40, -10, -10), (80, 0, 0), (0, 20, 0))])], 1e-3)
+scene = pt_scene.Scene(mesh, strong, np.array([0, 1, 2]),
+                       [pt_scene.SourceSpec("beam", 1.0, 0.5, "front", entities=(1,), spectrum=((450, 1), (650, 3)))], (0,))
+assert list(scene.wavelengths) == [450, 650] and np.allclose(scene.channel_prob, [0.25, 0.75])
+index = strong.ior_table[0]
+assert index[0] > 1.5 > index[1] and abs((index[0] - index[1]) - 0.5 / 10 * (1 / 0.45 ** 2 - 1 / 0.65 ** 2)
+                                         / (1 / 0.48613 ** 2 - 1 / 0.65627 ** 2)) < 1e-12
+assert np.allclose(strong.wavelengths([587.56]), [[1.5], [1.5], [1.5]])
+strong.wavelengths(scene.wavelengths)
+sensor = pt_scene.TexelSensor(scene, [7], 160)                       # 0.5 mm along x
+assert sensor.size[0] == (160, 40)
+out = pt_integrator.render(scene, sensor, "light", 40_000, 3, seed=SEED)   # 3 segments: no second pass inside
+x = -40 + (np.arange(160) + 0.5) * 0.5
+straight = start[0] + (start[2] + 10) * math.tan(angle)
+for k in range(2):
+    per_x = out["channels"][k].reshape(40, 160).sum(axis=0)
+    expected = straight - 20 * (math.tan(angle) - math.sin(angle) / math.sqrt(index[k] ** 2 - math.sin(angle) ** 2))
+    assert abs((per_x * x).sum() / per_x.sum() - expected) < 0.08, (k, (per_x * x).sum() / per_x.sum(), expected)
+assert abs(out["channels"][1].sum() / out["channels"][0].sum() - 3) < 0.25 and np.allclose(out["channels"].sum(axis=0), out["values"])
+
+# ---- wavelengths: two lamps of different colour over a white floor – every method gives each
+# wavelength its lamp's light (paths that end on a source count by that source's spectrum)
+lamps = [rect((-60, -10, 80), (0, 20, 0), (20, 0, 0)), rect((40, -10, 80), (0, 20, 0), (20, 0, 0))]
+scene = scene_of([wall] + lamps, [WHITE, BLACK, BLACK],
+                 [pt_scene.SourceSpec("blue", 1.0, 90, "front", entities=(1,), spectrum=((450, 1),)),
+                  pt_scene.SourceSpec("red", 3.0, 90, "front", entities=(2,), spectrum=((650, 2), (450, 1)))])
+sensor = pt_scene.TexelSensor(scene, [0], 2)                         # 2 x 2 texels: left and right half
+light = pt_integrator.render(scene, sensor, "light", 80_000, 4, seed=SEED)["channels"]
+assert light[1].reshape(2, 2)[:, 1].sum() > 1.5 * light[1].reshape(2, 2)[:, 0].sum()        # red: at +x
+assert abs(light[0].sum() / light[1].sum() - 1) < 0.05                                      # 1 + 1 W blue, 2 W red
+for method in ("path", "bidir"):
+    got = pt_integrator.render(scene, sensor, method, 40_000, 4, seed=SEED)["channels"]
+    assert np.allclose(got.reshape(2, 2, 2).sum(axis=1) / light.reshape(2, 2, 2).sum(axis=1), 1, atol=0.06), method
+camera = pt_scene.Camera((0, 0, 20), (0, 0, 80), (0, 1, 0), 120.0, 2, 1)     # looks up: right is -x, so
+seen = pt_integrator.render(scene, camera, "path", 20_000, 2, seed=SEED)["channels"]       # pixel 0 holds the red
+bidir = pt_integrator.render(scene, camera, "bidir", 20_000, 2, seed=SEED)["channels"]     # lamp, pixel 1 the blue
+radiance = 1 / (math.pi * 400)                                       # of 1 W: blue lamp, and each line of the red
+share = 400 / 60 ** 2 / (4 * math.tan(math.radians(60)) ** 2 / 4)    # of a pixel, roughly (lamp area / film)
+for image in (seen, bidir):
+    assert image[1, 1] == 0 and image[1, 0] > 0                      # 650 nm: only the red lamp
+    assert abs(image[1, 0] / image[0, 0] - 2) < 0.3 and abs(image[0, 1] / image[0, 0] - 1) < 0.3
+    assert 0.3 < image[0, 1] / (radiance * share) < 1.5
+assert pt_setup.parse_spectrum("450:1, 550: 2;650") == ((450.0, 1.0), (550.0, 2.0), (650.0, 1.0))
+assert pt_setup.parse_spectrum("") == ((550.0, 1.0),)
+
 # ---- the model and the panel -> scene; the plugin's actions with a stand-in for CAD
 params = {"materials": pt_setup.DEFAULT_MATERIALS, "default_material": "white", "sources": pt_setup.DEFAULT_SOURCES,
           "tolerance": 0.01}
@@ -470,6 +525,22 @@ assert any("photon mapping: " in line for line in cad.logs)
 assert cad.fields[0][2]["unit"] == "W/m²" and cad.fields[0][2]["value_range"][1] > 0 and cad.fields[3][2]["face"] == 1
 means = [img.mean() for _, img, _ in cad.images]
 assert min(means) > 0 and max(means) / min(means) < 1.5, means       # the three methods see the same scene
+p.update(method="light tracing", per_wavelength=True,
+         sources=[{"name": "lamp", "flux": 1.0, "half_angle": 90.0, "side": "front", "spectrum": "450, 650:3"}])
+before = len(cad.fields), len(cad.images)
+plugin.irradiance(cad)
+plugin.camera_image(cad)
+assert (len(cad.fields) - before[0], len(cad.images) - before[1]) == (24, 3)        # the sum and two wavelengths
+assert cad.fields[-1][0] == "E ball · face 6 · 650 nm" and cad.images[-1][0] == "Radiance 650 nm – light tracing"
+assert any("at 450, 650 nm" in line for line in cad.logs)
+assert abs(cad.images[-1][1].sum() / cad.images[-2][1].sum() - 3) < 0.6               # the shares of the flux
+p["sources"][0]["spectrum"] = "blue"
+try:
+    plugin.irradiance(cad)
+    raise AssertionError("not refused")
+except UserError as e:
+    assert "write wavelengths in nm" in str(e), e
+p.update(per_wavelength=False, sources=pt_setup.DEFAULT_SOURCES)
 assert plugin.show_paths(cad) == "20 light paths" and plugin.show_camera(cad) == "Camera drawn"
 assert cad.line_sets == [("Light paths", 20), ("Viewing pyramid", 5)]
 cad.selection = [12, 13]

@@ -29,12 +29,14 @@ _MATERIAL = {
     "roughness": Param.number(0.2, min=0.001, max=1.0, decimals=3, label="Roughness"),
     "ior": Param.number(1.5, min=1.0, max=10.0, decimals=4, label="Index"),
     "absorption": Param.number(0.0, min=0.0, decimals=5, unit="1/mm", label="Absorption"),
+    "abbe": Param.number(0.0, min=0.0, decimals=2, label="Abbe number"),
 }
 _SOURCE = {
     "name": Param.text("", label="Name"),
     "flux": Param.number(1.0, min=0.0, decimals=6, unit="W", label="Flux"),
     "half_angle": Param.number(90.0, min=0.01, max=90.0, decimals=2, unit="°", label="Half-angle"),
     "side": Param.choice(["front", "back", "both"], "front", label="Side"),
+    "spectrum": Param.text("550", label="Wavelengths / nm"),
 }
 
 
@@ -42,7 +44,9 @@ class PathTracerPlugin(Plugin):
     params = {
         "materials": Param.table(_MATERIAL, pt_setup.DEFAULT_MATERIALS, label="Materials", group="Materials",
                                  description="absorber; diffuse (reflectance, transmittance); mirror (reflectance); "
-                                             "glossy (reflectance, roughness); glass (index, absorption)"),
+                                             "glossy (reflectance, roughness); glass (index, absorption; with an "
+                                             "Abbe number the index is n_d and depends on the wavelength); "
+                                             "detector (the light passes, only to measure)"),
         "default_material": Param.text("white", label="Material of the other objects", group="Materials",
                                        description="For objects without a material of their own"),
         "assign_material": Param.text("white", label="Material for the selection", group="Materials",
@@ -50,7 +54,8 @@ class PathTracerPlugin(Plugin):
         "sources": Param.table(_SOURCE, pt_setup.DEFAULT_SOURCES, label="Sources", group="Sources",
                                description="Surfaces emit with constant radiance into a cone around the normal "
                                            "(half-angle 90°: Lambertian) and share the flux by area; points emit "
-                                           "evenly into all directions"),
+                                           "evenly into all directions. Wavelengths: lines in nm, each with an "
+                                           "optional share of the flux – 550 or 450:1, 550:2, 650:1"),
         "assign_source": Param.text("lamp", label="Source for the selection", group="Sources",
                                     description="Used by \"Selection: make it a source\""),
         "method": Param.choice(list(pt_setup.METHODS), "light tracing", label="Method", group="Computation",
@@ -67,6 +72,9 @@ class PathTracerPlugin(Plugin):
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
+        "per_wavelength": Param.boolean(False, label="Also per wavelength", group="Computation",
+                                        description="Besides the sum over all wavelengths, a texture / an image for "
+                                                    "each wavelength of the sources"),
         "photon_radius": Param.number(0.0, min=0.0, decimals=4, unit="mm", label="Photon radius",
                                       group="Computation",
                                       description="Photon mapping: the first search radius; it shrinks from pass to "
@@ -148,7 +156,8 @@ class PathTracerPlugin(Plugin):
             raise UserError(str(e)) from None
         mesh = scene.mesh
         ctx.log(f"{mesh.triangles} triangles on {len(mesh.face_area)} faces; {len(scene.src_flux)} source(s), "
-                f"{scene.flux:.6g} W" + (f"; {len(scene.flipped)} face(s) turned outwards" if scene.flipped else ""))
+                f"{scene.flux:.6g} W at {', '.join(f'{nm:g}' for nm in scene.wavelengths)} nm"
+                + (f"; {len(scene.flipped)} face(s) turned outwards" if scene.flipped else ""))
         return scene
 
     def _render(self, ctx, scene, sensor, what: str) -> tuple[dict, str]:
@@ -192,6 +201,11 @@ class PathTracerPlugin(Plugin):
             rows.append([name, f["area"], f["flux"], f["flux"] / f["area"] * 1e6 if f["area"] > 0 else 0.0,
                          float(finite.max()) if finite.size else 0.0])
         ctx.table(run, "Irradiance per face", ["Face", "Area / mm²", "Flux / W", "Mean E / W/m²", "Max E / W/m²"], rows)
+        if p["per_wavelength"] and len(scene.wavelengths) > 1:
+            for nm, flux in zip(scene.wavelengths, out["channels"]):
+                for f, row in zip(pt_setup.irradiance(sensor, flux), rows):
+                    ctx.field(run, f"E {row[0]} · {nm:g} nm", f["entity"], f["values"], f["w"], f["h"], face=f["face"],
+                              unit="W/m²", colormap="inferno")
         return f"Irradiance on {len(faces)} face(s), {out['samples']:,} samples{note}"
 
     def _camera(self, ctx) -> pt_scene.Camera:
@@ -216,6 +230,11 @@ class PathTracerPlugin(Plugin):
                   x_label="x / pixel", y_label="y / pixel", colormap="grey", unit="W/(m² sr)",
                   value_range=(0.0, white), description=f"{out['samples']:,} samples, paths up to {p['depth']} "
                                                         f"segments{note}")
+        if p["per_wavelength"] and len(scene.wavelengths) > 1:
+            for nm, channel in zip(scene.wavelengths, out["channels"]):
+                ctx.image(run, f"Radiance {nm:g} nm – {p['method']}", channel * 1e6, camera.w, camera.h,
+                          extent=(0, camera.w, 0, camera.h), x_label="x / pixel", y_label="y / pixel",
+                          colormap="grey", unit="W/(m² sr)", description=f"{nm:g} nm{note}")
         return f"Camera image {camera.w} × {camera.h}, {out['samples']:,} samples{note}"
 
     # ------------------------------------------------------------------ previews

@@ -44,6 +44,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   Material `detector`: a face the light passes unchanged, only to measure the irradiance there.
   Method *photon mapping* for camera images: also finds light through glass or off mirrors that
   is seen through glass or in a mirror.
+  Wavelengths: sources emit lines with shares of their flux, glass disperses by its Abbe number,
+  results as the sum or per wavelength.
 - **Camera image** (Raytracer): the irradiance on the last surface of each path from many rays
   (default 200 000 per field and wavelength, millions possible), square pixels over the
   sensor, shown in the new **Image** window and optionally on the surface in 3D. The quick
