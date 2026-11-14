@@ -20,7 +20,7 @@ import pt_integrator
 
 ALPHA = 0.7          # radius reduction: r²(i+1) = r²(i) · (i + ALPHA) / (i + 1)
 PHOTONS = 30         # photons expected within the first radius when it is chosen automatically
-PAIRS = 2_000_000    # photon – point pairs looked at together
+PAIRS = 500_000      # photon – point pairs looked at together (some 100 bytes each)
 
 
 def pass_size(samples: int, depth: int) -> int:
@@ -100,6 +100,7 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
     n = pass_size(samples, depth)
     channels = len(scene.wavelengths)
     accum = np.zeros(channels * camera.count)
+    spread = pt_integrator.Spread(camera.count, channels)
     done = rays = passes = 0
     r2 = radius * radius if radius > 0 else None
     last_r2 = 0.0
@@ -144,6 +145,7 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
             accum += np.bincount(slot[j], weights=eye.beta[t, j] * total / (np.pi * r2 * count),
                                  minlength=len(accum))
         done += count
+        spread.add(accum, count)
         passes += 1
         if r2 is not None:
             last_r2 = r2
@@ -153,5 +155,6 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
         if cancelled is not None and cancelled():
             break
     per = accum.reshape(channels, camera.count) / max(done, 1)
-    return {"values": per.sum(axis=0), "channels": per, "samples": done, "rays": rays, "passes": passes,
+    return {"values": per.sum(axis=0), "channels": per, "error": spread.error(done), "samples": done, "rays": rays,
+            "passes": passes,
             "radius": float(np.sqrt(last_r2))}

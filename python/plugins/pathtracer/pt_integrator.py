@@ -393,6 +393,31 @@ def lengths(method: str, camera: bool, depth: int) -> tuple[int, int]:
     return (depth if camera else depth + 1), depth + 1
 
 
+class Spread:
+    """How far the estimate can be trusted: its standard error, from the spread of the batches
+    it is the mean of."""
+
+    def __init__(self, count: int, channels: int):
+        self.count, self.channels = count, channels
+        self.before = np.zeros(count)
+        self.squares = np.zeros(count)
+        self.batches = 0
+
+    def add(self, accum: np.ndarray, n: int) -> None:
+        """After a batch of n samples was added to the running sums `accum`."""
+        total = accum.reshape(self.channels, self.count).sum(axis=0)
+        self.squares += (total - self.before) ** 2 / n
+        self.before = total
+        self.batches += 1
+
+    def error(self, done: int):
+        """Standard error of the values (None with fewer than two batches)."""
+        if self.batches < 2 or done < 1:
+            return None
+        mean = self.before / done
+        return np.sqrt(np.clip((self.squares / done - mean ** 2) / (self.batches - 1), 0.0, None))
+
+
 def batch_size(k_light: int, k_eye: int) -> int:
     """Subpaths per batch: large batches trace faster per ray, but every vertex of every subpath
     is kept (about 170 bytes) – this aims at some 100 MB."""
@@ -404,8 +429,9 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
     """Estimates the sensor's values with `samples` pairs of subpaths; paths have up to `depth`
     segments (source – … – sensor). Returns {"values": per texel the flux / W or per pixel the
     radiance / W/(mm² sr), "channels": the same per wavelength of scene.wavelengths (their sum is
-    "values"), "samples": done, "rays": traced}. progress(fraction) and cancelled() are called
-    between batches; a cancelled run returns what it has."""
+    "values"), "error": the standard error of the values (from the spread of the batches; None
+    with a single batch), "samples": done, "rays": traced}. progress(fraction) and cancelled()
+    are called between batches; a cancelled run returns what it has."""
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}")
     if depth < 1:
@@ -419,9 +445,10 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
         method = "light"            # on faces the texels already collect the photons
     rng = np.random.default_rng(seed)
     k_light, k_eye = lengths(method, sensor.camera, depth)
-    if batch is None:
-        batch = batch_size(k_light, k_eye)
+    if batch is None:                   # eight batches at least where the samples allow: for the error
+        batch = min(batch_size(k_light, k_eye), max(samples // 8, 5_000))
     accum = np.zeros(len(scene.wavelengths) * sensor.count)
+    spread = Spread(sensor.count, len(scene.wavelengths))
     done = rays = 0
     while done < samples:
         n = min(batch, samples - done)
@@ -435,12 +462,14 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
         if light.cross:
             _detector_deposits(scene, sensor, light, eye, method, depth, accum)
         done += n
+        spread.add(accum, n)
         if progress is not None:
             progress(done / samples)
         if cancelled is not None and cancelled():
             break
     channels = accum.reshape(len(scene.wavelengths), sensor.count) / max(done, 1)
-    return {"values": channels.sum(axis=0), "channels": channels, "samples": done, "rays": rays}
+    return {"values": channels.sum(axis=0), "channels": channels, "error": spread.error(done), "samples": done,
+            "rays": rays}
 
 
 def light_paths(scene, n: int, depth: int, seed: int = 0):

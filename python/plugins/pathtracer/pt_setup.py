@@ -174,10 +174,11 @@ def sensor_faces(scene: pt_scene.Scene, ids) -> list[int]:
     return faces
 
 
-def irradiance(sensor: pt_scene.TexelSensor, flux: np.ndarray) -> list[dict]:
+def irradiance(sensor: pt_scene.TexelSensor, flux: np.ndarray, error: np.ndarray | None = None) -> list[dict]:
     """Per sensor face: entity (id), face (number within the entity), w, h, values (irradiance in
-    W/m², row by row, NaN where the face has no or hardly any area in a texel), flux / W and
-    area / mm²."""
+    W/m², row by row, NaN where the face has no or hardly any area in a texel), flux / W,
+    area / mm² and – with the standard error of the flux per texel – noise: the relative
+    standard error of the face's flux (NaN if unknown)."""
     mesh = sensor.scene.mesh
     out = []
     for k, f in enumerate(sensor.faces):
@@ -188,5 +189,61 @@ def irradiance(sensor: pt_scene.TexelSensor, flux: np.ndarray) -> list[dict]:
             values = np.where(area > 0.1 * full, flux[a:b] / area * 1e6, np.nan)
         out.append({"entity": mesh.entity_ids[mesh.face_entity[f]], "face": int(mesh.face_index[f]),
                     "w": int(sensor.w[k]), "h": int(sensor.h[k]), "values": values,
-                    "flux": float(flux[a:b].sum()), "area": float(mesh.face_area[f])})
+                    "flux": float(flux[a:b].sum()), "area": float(mesh.face_area[f]),
+                    "noise": float(np.sqrt((error[a:b] ** 2).sum()) / flux[a:b].sum())
+                    if error is not None and flux[a:b].sum() > 0 else float("nan")})
     return out
+
+
+def typical_noise(values: np.ndarray, error: np.ndarray | None) -> float:
+    """The relative standard error of a typical texel or pixel: the median over those that got
+    light (NaN if unknown)."""
+    if error is None or not (values > 0).any():
+        return float("nan")
+    return float(np.median(error[values > 0] / values[values > 0]))
+
+
+def tagged(path: str, tag: str) -> str:
+    """file.npz -> file-<tag>.npz (the extension added if missing)."""
+    stem = path[:-4] if path.lower().endswith(".npz") else path
+    return f"{stem}-{tag}.npz"
+
+
+def export_irradiance(path: str, sensor: pt_scene.TexelSensor, out: dict, names: dict, info: dict) -> str:
+    """Writes the irradiance as a NumPy archive: per face `E_<entity>_<face>` (W/m², [row v,
+    column u]), `flux_…` (W per texel) and `error_…` (standard error of the flux); with several
+    wavelengths `flux_…_<nm>nm`; `wavelengths` and `info` (JSON: the run and the faces)."""
+    arrays: dict[str, np.ndarray] = {"wavelengths": np.asarray(sensor.scene.wavelengths)}
+    faces = []
+    several = len(sensor.scene.wavelengths) > 1
+    for k, f in enumerate(irradiance(sensor, out["values"], out.get("error"))):
+        a, b, shape = sensor.first[k], sensor.first[k + 1], (f["h"], f["w"])
+        key = f"{f['entity']}_{f['face']}"
+        arrays[f"E_{key}"] = f["values"].reshape(shape)
+        arrays[f"flux_{key}"] = out["values"][a:b].reshape(shape)
+        if out.get("error") is not None:
+            arrays[f"error_{key}"] = out["error"][a:b].reshape(shape)
+        if several:
+            for nm, channel in zip(sensor.scene.wavelengths, out["channels"]):
+                arrays[f"flux_{key}_{nm:g}nm"] = channel[a:b].reshape(shape)
+        faces.append({"key": key, "name": names.get(f["entity"], str(f["entity"])), "entity": f["entity"],
+                      "face": f["face"], "area_mm2": f["area"], "flux_W": f["flux"]})
+    arrays["info"] = np.asarray(json.dumps({**info, "faces": faces}))
+    path = tagged(path, "irradiance")
+    np.savez_compressed(path, **arrays)
+    return path
+
+
+def export_image(path: str, camera: pt_scene.Camera, out: dict, info: dict) -> str:
+    """Writes a camera image as a NumPy archive: `radiance` (W/(m² sr), [row from the bottom,
+    column]), `error` (its standard error), `radiance_per_wavelength` [wavelength, row, column],
+    `wavelengths` and `info` (JSON)."""
+    shape = (camera.h, camera.w)
+    arrays = {"radiance": out["values"].reshape(shape) * 1e6,
+              "radiance_per_wavelength": out["channels"].reshape((-1,) + shape) * 1e6,
+              "wavelengths": np.asarray(info.get("wavelengths", [])), "info": np.asarray(json.dumps(info))}
+    if out.get("error") is not None:
+        arrays["error"] = out["error"].reshape(shape) * 1e6
+    path = tagged(path, "camera")
+    np.savez_compressed(path, **arrays)
+    return path
