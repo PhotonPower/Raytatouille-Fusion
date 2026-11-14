@@ -90,3 +90,67 @@ def distinct_knots(degree: int, knots) -> np.ndarray:
     """The distinct knot values of the domain (span borders)."""
     k = np.asarray(knots, dtype=float)
     return np.unique(k[degree:len(k) - degree])
+
+
+def local_basis(degree: int, knots: np.ndarray, u: np.ndarray):
+    """The degree + 1 basis functions that are not zero at each parameter u, and their
+    derivatives: (span, N, dN) with N[:, r] the function of control point span - degree + r
+    (The NURBS Book, A2.2). For many points on a surface with many control points."""
+    k = np.asarray(knots, dtype=float)
+    u = np.asarray(u, dtype=float)
+    n = len(k) - degree - 1
+    span = np.clip(np.searchsorted(k, u, side="right") - 1, degree, n - 1)
+    m = len(u)
+    basis_ = np.zeros((m, degree + 1))
+    basis_[:, 0] = 1.0
+    lower = np.zeros((m, degree))                            # the functions of degree - 1
+    left = np.zeros((m, degree + 1))
+    right = np.zeros((m, degree + 1))
+    for j in range(1, degree + 1):
+        if j == degree:
+            lower = basis_[:, :degree].copy()
+        left[:, j] = u - k[span + 1 - j]
+        right[:, j] = k[span + j] - u
+        saved = np.zeros(m)
+        for r in range(j):
+            den = right[:, r + 1] + left[:, j - r]
+            temp = np.divide(basis_[:, r], den, out=np.zeros(m), where=den != 0)
+            basis_[:, r] = saved + right[:, r + 1] * temp
+            saved = left[:, j - r] * temp
+        basis_[:, j] = saved
+    deriv = np.zeros((m, degree + 1))
+    for r in range(degree + 1):
+        if r > 0:
+            den = k[span + r] - k[span + r - degree]
+            deriv[:, r] += degree * np.divide(lower[:, r - 1], den, out=np.zeros(m), where=den != 0)
+        if r < degree:
+            den = k[span + r + 1] - k[span + r - degree + 1]
+            deriv[:, r] -= degree * np.divide(lower[:, r], den, out=np.zeros(m), where=den != 0)
+    return span, basis_, deriv
+
+
+class Surface:
+    """A surface dict prepared for points one by one: at(u, v) for arrays of parameters."""
+
+    def __init__(self, g: dict):
+        self.degree_u, self.degree_v = int(g["degree_u"]), int(g["degree_v"])
+        self.knots_u = np.asarray(g["knots_u"], dtype=float)
+        self.knots_v = np.asarray(g["knots_v"], dtype=float)
+        nu, nv = int(g["num_u"]), int(g["num_v"])
+        p, w = _points(g, nu * nv)
+        self.pw = np.concatenate([p * w[:, None], w[:, None]], axis=1).reshape(nu, nv, 4)
+        self.domain = surface_domain(g)
+
+    def at(self, u: np.ndarray, v: np.ndarray):
+        """Points and first derivatives at the parameters (u[i], v[i]): S, S_u, S_v, each (m, 3)."""
+        su, nu, du = local_basis(self.degree_u, self.knots_u, u)
+        sv, nv, dv = local_basis(self.degree_v, self.knots_v, v)
+        iu = (su - self.degree_u)[:, None] + np.arange(self.degree_u + 1)
+        iv = (sv - self.degree_v)[:, None] + np.arange(self.degree_v + 1)
+        net = self.pw[iu[:, :, None], iv[:, None, :]]            # (m, degree_u + 1, degree_v + 1, 4)
+        a = np.einsum("ma,mb,mabk->mk", nu, nv, net)
+        au = np.einsum("ma,mb,mabk->mk", du, nv, net)
+        av = np.einsum("ma,mb,mabk->mk", nu, dv, net)
+        wgt = a[:, 3:4]
+        s = a[:, :3] / wgt
+        return s, (au[:, :3] - au[:, 3:4] * s) / wgt, (av[:, :3] - av[:, 3:4] * s) / wgt

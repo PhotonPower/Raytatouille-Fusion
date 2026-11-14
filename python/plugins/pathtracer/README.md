@@ -24,6 +24,11 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air. With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
    | `detector` | – | no surface for the light – it passes as if the object were not there; only a place to measure the irradiance (a measuring plane in free space). Not visible to the camera, cannot be a source |
 
+   *By wavelength* makes a material coloured: the reflectance (for glass: the absorption) at
+   wavelengths in nm, e.g. `450:0.05, 550:0.1, 600:0.6, 650:0.8` for a red paint – straight
+   lines between the values, the first / last value outside. It replaces the constant value and
+   shows where the sources emit several wavelengths.
+
 2. **Sources** (table in the panel: flux in W, half-angle, side). Select surfaces, bodies, curves
    or points, write a source's name into *Source for the selection* and choose *Selection: make
    it a source*.
@@ -93,7 +98,11 @@ diffuse box, a glass plate).
 
 - **Geometry.** Every face is tessellated in its surface parameters to the *Mesh tolerance*;
   trimming is a mask over (u, v) (512² cells per face; fewer with very many faces), tested at
-  every hit. Normals are interpolated over the triangles. Closed bodies are oriented by counting
+  every hit. Where a ray hits a curved face, the point where it meets the surface itself is
+  found from the triangle's hit (Newton's method), and the normal is the surface's there
+  (*Exact normals on curved faces*): mirrors and lenses send the light on exactly, however
+  coarse the triangles. The path's vertex stays on the triangle – within the mesh tolerance of
+  the surface. Closed bodies are oriented by counting
   crossings, so that their front is the outside.
 - **Tracing.** A bounding volume hierarchy (built with the surface area heuristic, large
   triangles set apart) and a traversal that advances all rays of a batch together (NumPy). Expect roughly 10⁵ … 10⁶ rays per second and processor core.
@@ -116,8 +125,6 @@ diffuse box, a glass plate).
 
 ## Not yet
 
-Continuous spectra and colours, reflectances that depend on the wavelength, measured materials
-and rough glass, glass touching glass,
+Continuous spectra and colours, measured materials and rough glass, glass touching glass,
 sources with a measured distribution, a lens
-camera with depth of field, the exact NURBS surface at a hit (instead of the triangle), a
-compiled intersection kernel, keeping results with the document (until then: *Also write to file*).
+camera with depth of field, a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).

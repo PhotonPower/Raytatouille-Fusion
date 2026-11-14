@@ -22,23 +22,43 @@ UP = {"+Z": (0, 0, 1), "-Z": (0, 0, -1), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+X"
 
 DEFAULT_MATERIALS = [
     {"name": "white", "kind": "diffuse", "reflectance": 0.8, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "black", "kind": "absorber", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "mirror", "kind": "mirror", "reflectance": 0.95, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "metal", "kind": "glossy", "reflectance": 0.85, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "glass", "kind": "glass", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "diffuser", "kind": "diffuse", "reflectance": 0.3, "transmittance": 0.6, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "BK7", "kind": "glass", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5168,
-     "absorption": 0.0, "abbe": 64.17},
+     "absorption": 0.0, "abbe": 64.17, "spectrum": ""},
+    {"name": "red paint", "kind": "diffuse", "reflectance": 0.5, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
+     "absorption": 0.0, "abbe": 0.0, "spectrum": "450:0.05, 550:0.1, 600:0.6, 650:0.8"},
     {"name": "detector", "kind": "detector", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0, "abbe": 0.0},
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
 ]
 DEFAULT_SOURCES = [{"name": "lamp", "flux": 1.0, "half_angle": 90.0, "side": "front", "spectrum": "550"}]
+
+
+def parse_values(text) -> tuple:
+    """Values at wavelengths from text: "450:0.2, 550:0.8, 650:0.9" -> ((450, 0.2), …); empty: ().
+    ValueError for anything else."""
+    pairs = []
+    for part in str(text or "").replace(";", ",").split(","):
+        if not part.strip():
+            continue
+        nm, colon, value = part.partition(":")
+        try:
+            if not colon:
+                raise ValueError
+            pairs.append((float(nm), float(value)))
+        except ValueError:
+            raise ValueError(f"spectrum {text!r}: write values at wavelengths in nm, e.g. "
+                             f"\"450:0.2, 550:0.8, 650:0.9\"") from None
+    return tuple(pairs)
 
 
 def parse_spectrum(text) -> tuple:
@@ -124,7 +144,8 @@ class MeshCache:
 def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = None) -> pt_scene.Scene:
     """The scene of the model: materials and sources of the panel, assigned by the attributes
     pt.material and pt.source. ValueError with a message for the user when something is missing."""
-    materials = pt_bsdf.Materials.from_rows(params["materials"])
+    materials = pt_bsdf.Materials.from_rows([{**row, "spectrum": parse_values(row.get("spectrum", ""))}
+                                             for row in params["materials"]])
     default = str(params.get("default_material", "")).strip()
     if default not in materials.names:
         raise ValueError(f"the default material {default!r} is not in the table of materials")
@@ -159,7 +180,9 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
     tol = float(params.get("tolerance", 0.01))
     mesh = cache.get(surf, tol) if cache is not None else pt_mesh.build(surf, tol)
     closed = tuple(k for k, e in enumerate(surf) if _kind(e) == "shell")
-    return pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
+    scene = pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
+    scene.exact = bool(params.get("exact_normals", True))
+    return scene
 
 
 def sensor_faces(scene: pt_scene.Scene, ids) -> list[int]:

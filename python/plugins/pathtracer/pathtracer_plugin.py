@@ -31,6 +31,7 @@ _MATERIAL = {
     "ior": Param.number(1.5, min=1.0, max=10.0, decimals=4, label="Index"),
     "absorption": Param.number(0.0, min=0.0, decimals=5, unit="1/mm", label="Absorption"),
     "abbe": Param.number(0.0, min=0.0, decimals=2, label="Abbe number"),
+    "spectrum": Param.text("", label="By wavelength"),
 }
 _SOURCE = {
     "name": Param.text("", label="Name"),
@@ -47,7 +48,9 @@ class PathTracerPlugin(Plugin):
                                  description="absorber; diffuse (reflectance, transmittance); mirror (reflectance); "
                                              "glossy (reflectance, roughness); glass (index, absorption; with an "
                                              "Abbe number the index is n_d and depends on the wavelength); "
-                                             "detector (the light passes, only to measure)"),
+                                             "detector (the light passes, only to measure). By wavelength: the "
+                                             "reflectance (glass: the absorption) at wavelengths in nm, e.g. "
+                                             "450:0.2, 550:0.8, 650:0.9 – replaces the constant value"),
         "default_material": Param.text("white", label="Material of the other objects", group="Materials",
                                        description="For objects without a material of their own"),
         "assign_material": Param.text("white", label="Material for the selection", group="Materials",
@@ -73,6 +76,11 @@ class PathTracerPlugin(Plugin):
         "tolerance": Param.number(0.01, min=1e-6, max=100.0, decimals=6, unit="mm", label="Mesh tolerance",
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
+        "exact_normals": Param.boolean(True, label="Exact normals on curved faces", group="Computation",
+                                       description="Where a ray hits a curved face, the normal of the surface "
+                                                   "itself at the point the ray meets it (instead of one "
+                                                   "interpolated over the triangle): exact directions for "
+                                                   "mirrors and lenses"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
         "adaptive": Param.boolean(True, label="Adaptive sampling", group="Computation",
                                   description="Path tracing, bidirectional and photon mapping move their samples "
