@@ -141,9 +141,12 @@ narrower strips, a smaller spread per strip, or neighbouring zones with similar 
 *System → patterned lens*. The mirror is the paraboloid of *Reflector → Focal length* within the
 frame, outside the lamp hole; *Lens → Mirror focus behind the filament centre* moves its focus
 (H4: the low-beam coil sits before the focus, so the upper half of the mirror, which alone gets
-light past the shield, sends it below the horizon). The lens is a plate at *Lens in front of the
-filament* with a plane outer side; its inner side is a grid of cells (*Element width / height*,
-one cell centred on the lamp axis).
+light past the shield, sends it below the horizon). The lens is a plate that meets the lamp axis
+at *Lens in front of the filament*; its outer side is smooth, its inner side a grid of cells
+(*Element width / height*, one cell centred on the lamp axis). It may lean back (*Rake*: its top
+towards the mirror), run back to one side (*Sweep*) and be domed outwards (*Dome radius*, a
+sphere): the outer side has that shape, the inner side the same shape *Thickness* behind it
+(measured along X) with the elements on it.
 
 **Elements.** Each row of the table holds a region (y to the left, z up, about the lamp axis) and
 what the cells with their centre in it do; the first row that holds a cell counts.
@@ -156,8 +159,9 @@ what the cells with their centre in it do; the first row that holds a cell count
 
 For a point of a cell, the ray that comes from the filament centre by way of the mirror
 (direction d) is to leave the lens turned by these angles (direction t). The direction g inside
-the glass follows from t by refraction at the plane outer side, and the inner surface gets the
-normal N ∝ d − n g (Snell's law in vector form). Its slopes are integrated over the cell and the
+the glass follows from t by refraction at the outer side (with the normal of the lens' shape
+there), and the inner surface gets the normal N ∝ d − n g (Snell's law in vector form). A plate
+of any shape without elements turns nothing. Its slopes are integrated over the cell and the
 cell's surface is the Bézier patch of degree 5 closest to that (the log gives the largest slope
 error).
 
@@ -177,7 +181,8 @@ axis. The colour of the lens is part of *Transmittance* (a red or amber lens pas
 the lamp's flux); the lamps P21W, PY21W, R10W and R5W have their filament across the axis.
 
 Not modelled: the walls between neighbouring elements (the steps of the prisms) and their stray
-light, an inclined or curved lens, reflections at the glass.
+light, reflections at the glass. The dome is a sphere about a point on the lamp axis; the elements
+stand on the lens' shape along X (for a steep rake they are sheared, not perpendicular to it).
 
 ## Limits of this version
 

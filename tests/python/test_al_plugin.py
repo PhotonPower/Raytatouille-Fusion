@@ -398,6 +398,30 @@ for bad, message in ((dict(lens_x=-10.0), "inside the mirror"), (dict(thickness=
     except al_design.DesignError as e:
         assert message in str(e), e
 
+# a lens that leans back, runs back to one side, is domed: a plate of that shape turns nothing, prisms on
+# it turn the beam as on a flat lens
+flat_width = wide_h[1] - wide_h[0]
+for form in (dict(rake=20.0), dict(rake=15.0, sweep=-25.0), dict(radius=250.0), dict(rake=10.0, sweep=10.0, radius=400.0)):
+    plate, _, centre, wide, _ = lens_beam((0, 0, 0, 0), **form)
+    assert max(map(abs, plate.sag)) < 1e-9 and abs(centre[0]) < 0.1 and abs(centre[1]) < 0.1, (form, centre)
+    assert abs(wide[1] - wide[0] - flat_width) < 1.0
+    turned, _, centre, _, _ = lens_beam((5.0, -2.0, 0, 0), **form)
+    assert abs(centre[0] - 5.0) < 0.2 and abs(centre[1] + 2.0) < 0.2 and turned.fit_error < 1e-3, (form, centre)
+raked = lens_beam((0.0, 0.0, 10.0, 3.0), rake=20.0, radius=300.0)[0]
+x0, slope_y, slope_z = raked.shape(np.array([0.0, 0.0]), np.array([0.0, 10.0]))
+assert x0[0] == 0.0 and x0[1] < -3.0 and abs(slope_z[0] + tan(20.0)) < 1e-12 and slope_y[0] == 0.0
+outer_face = al_lens.faces(raked)[1][2]["surface"]
+ctrl = np.array(outer_face["points"]).reshape(outer_face["num_u"], outer_face["num_v"], 3)
+Bu = al_spline.basis_matrix(np.array(outer_face["knots_u"]), outer_face["num_u"], 3, np.array([12.0]))
+Bv = al_spline.basis_matrix(np.array(outer_face["knots_v"]), outer_face["num_v"], 3, np.array([-7.0]))
+expected = raked.settings.lens_x + raked.settings.thickness + raked.shape(np.array([12.0]), np.array([-7.0]))[0][0]
+assert np.allclose(np.einsum("i,ijk,j->k", Bu[0], ctrl, Bv[0]), [expected, 12.0, -7.0], atol=1e-4)
+try:
+    lens_beam((0, 0, 0, 0), rake=50.0, lens_x=20.0)
+    raise AssertionError("a lens through the mirror")
+except al_design.DesignError as e:
+    assert "inside the mirror" in str(e)
+
 # ---- signal lamps: the standard light distribution of UN R148, lamps with the coil across the axis
 flat = al_photometry.Distribution(np.arange(-39.875, 40, 0.25), np.arange(-19.875, 20, 0.25), np.full((160, 320), 100.0),
                                   1.0, 1.0, 1.0)
