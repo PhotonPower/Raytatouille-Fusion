@@ -39,15 +39,18 @@ def _hull(points: np.ndarray) -> np.ndarray:
     return np.array(half(pts) + half(pts[::-1]))
 
 
-def filament_images(P: np.ndarray, n: np.ndarray, fil: Filament) -> list[np.ndarray]:
+def filament_images(P: np.ndarray, n: np.ndarray, fil: Filament, after=None) -> list[np.ndarray]:
     """The outline of the filament image of every mirror point (position P, normal n): polygons
-    (k, 2) of (H, V) in degrees."""
+    (k, 2) of (H, V) in degrees. after(origins, directions) -> directions, factors: a lens."""
     Q = fil.outline_samples(32)
     out = []
     for p, normal in zip(P, n):
         d = p - Q
         d = reflect(d / np.linalg.norm(d, axis=1, keepdims=True), normal)
         d = d[d[:, 0] > 1e-6]
+        if after is not None and len(d):
+            d, factor = after(np.repeat(p[None, :], len(d), axis=0), d)
+            d = d[(factor > 0.0) & (d[:, 0] > 1e-6)]
         if len(d) < 3:
             continue
         h, v = screen(d)
@@ -121,18 +124,27 @@ class Distribution:
         return out / ((2 * nj + 1) * (2 * ni + 1))
 
 
-def light_distribution(reflector: Reflector, *, spacing: float = 1.0, n_axial: int = 12, n_around: int = 24,
-                       h_range=(-40.0, 40.0), v_range=(-15.0, 10.0), dh: float = 0.25, dv: float = 0.1,
-                       reflectance: float = 0.85, reflectance_connections: float | None = None,
-                       progress=None) -> Distribution:
-    """The luminous intensity of the reflector by rays from every sample of the coil's surface to
-    every mirror point of a front-view lattice (`spacing`, mm)."""
-    lamp: Lamp = reflector.settings.lamp
-    fil = reflector.filament
+def light_distribution(reflector: Reflector, *, spacing: float = 1.0, reflectance: float = 0.85,
+                       reflectance_connections: float | None = None, **options) -> Distribution:
+    """The luminous intensity of the facetted reflector by rays from every sample of the coil's
+    surface to every mirror point of a front-view lattice (`spacing`, mm); options as intensity()."""
     P, N, A, part = reflector.samples(spacing)
     connection = np.array([p.kind != FACET for p in reflector.parts()], dtype=bool)[part] if len(part) else part
     rho = np.where(connection, reflectance if reflectance_connections is None else reflectance_connections,
                    reflectance)
+    return intensity(reflector.settings.lamp, reflector.filament, P, N, A, rho, connection, **options)
+
+
+def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.ndarray, rho: np.ndarray,
+              connection: np.ndarray | None = None, *, after=None, n_axial: int = 12, n_around: int = 24,
+              h_range=(-40.0, 40.0), v_range=(-15.0, 10.0), dh: float = 0.25, dv: float = 0.1,
+              progress=None) -> Distribution:
+    """The luminous intensity of a mirror given by points P, unit normals N, areas A and reflectances
+    rho: rays from every sample of the coil's surface to every mirror point. `connection`: points
+    whose light is counted as stray light of connecting faces; after(origins, directions) ->
+    directions, factors: what follows the mirror (a lens), factor 0 for a lost ray."""
+    if connection is None:
+        connection = np.zeros(len(P), dtype=bool)
     flux_connections = 0.0
     Q, nu, dA = fil.surface_samples(n_axial, n_around)
     luminance = lamp.flux / (math.pi * dA * len(Q))        # lm / (sr mm²)
@@ -152,13 +164,25 @@ def light_distribution(reflector: Reflector, *, spacing: float = 1.0, n_axial: i
         cos_p = -np.einsum("mki,mi->mk", d, n)
         w = luminance * dA * a[:, None] * np.clip(cos_q, 0.0, None) * np.clip(cos_p, 0.0, None) / r2
         if lamp.window is not None:
-            az = np.degrees(np.arctan2(d[..., 2], d[..., 1]))
+            # the shield's edges: where the ray passes the cylinder of the shield's radius about the axis
+            qa = d[..., 1] ** 2 + d[..., 2] ** 2
+            qb = Q[None, :, 1] * d[..., 1] + Q[None, :, 2] * d[..., 2]
+            qc = Q[None, :, 1] ** 2 + Q[None, :, 2] ** 2 - lamp.shield_radius ** 2
+            t = (-qb + np.sqrt(np.maximum(qb * qb - qa * qc, 0.0))) / np.maximum(qa, 1e-300)
+            az = np.degrees(np.arctan2(Q[None, :, 2] + t * d[..., 2], Q[None, :, 1] + t * d[..., 1]))
+            az = np.where(qc < 0.0, az, np.degrees(np.arctan2(d[..., 2], d[..., 1])))   # (no shield radius: the direction)
             lo, hi = lamp.window
             w = np.where(((az - lo) % 360.0) <= (hi - lo), w, 0.0)
         flux_mirror += float(w.sum())
         out = d - 2.0 * np.einsum("mki,mi->mk", d, n)[..., None] * n[:, None, :]
         ok = (out[..., 0] > 1e-6) & (w > 0.0)
         w = w * rho[start:start + chunk, None]
+        if after is not None:
+            rows = np.nonzero(ok)[0]
+            passed, factor = after(p[rows], out[ok])
+            out[ok] = passed
+            w[ok] *= factor
+            ok &= (w > 0.0) & (out[..., 0] > 1e-6)
         flux_connections += float((w * ok)[connection[start:start + chunk]].sum())
         w, out = w[ok], out[ok]
         flux_beam += float(w.sum())
