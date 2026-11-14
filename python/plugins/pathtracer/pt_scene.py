@@ -9,6 +9,10 @@ Sources
   curves     emit like a thin glowing wire (a Lambertian cylinder): the intensity is
              Phi sin(theta) / pi² at the angle theta to the wire; the curves of one source share
              its flux by length
+  measured   a surface or a point can emit with a measured distribution (pt_photometry.Distribution,
+             from a luminaire file) instead: theta from the surface normal (points: from `axis`),
+             phi from the world's X axis projected across it (Y if the axis is along X). A surface
+             then sends the same distribution from each of its points
   spectrum   a source emits at single wavelengths (lines), each with a share of its flux. Every
              path carries one wavelength ("channel": its number in Scene.wavelengths); it matters
              where glass disperses, and the sensors keep the channels apart
@@ -27,6 +31,15 @@ import numpy as np
 import pt_bsdf
 import pt_bvh
 import pt_mesh
+
+
+def _across(axis: np.ndarray):
+    """Two unit vectors across each axis: the first is the world's X axis projected across it (Y
+    where the axis is along X) – the direction phi = 0 of a measured distribution."""
+    ref = np.where((np.abs(axis[:, 0]) < 0.999)[:, None], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    a = ref - np.einsum("ij,ij->i", ref, axis)[:, None] * axis
+    a = a / np.linalg.norm(a, axis=1, keepdims=True)
+    return a, np.cross(axis, a)
 
 
 class _Part:
@@ -52,6 +65,8 @@ class SourceSpec:
     points: tuple = ()                   # (x, y, z) of point sources
     curves: tuple = ()                   # polylines (arrays (m, 3)) of wire sources
     spectrum: tuple = ((550.0, 1.0),)    # lines (wavelength / nm, share of the flux – any scale)
+    distribution: object = None          # pt_photometry.Distribution: measured (surfaces, points)
+    axis: tuple = (0.0, 0.0, -1.0)       # points with a distribution: the direction theta = 0
 
 
 class Scene:
@@ -162,6 +177,8 @@ class Scene:
         flux, sin_max, sides, area, point, is_point, spectra = [], [], [], [], [], [], []
         faces: list[np.ndarray] = []
         wires: dict[int, tuple] = {}                         # source -> segment starts, ends, cumulative length
+        measured: dict[int, object] = {}                     # source -> Distribution
+        axes: dict[int, np.ndarray] = {}                     # point source with a distribution -> its axis
         self.face_source = np.full(len(mesh.face_area), -1, dtype=np.int64)
         self.source_names = []
         for spec in specs:
@@ -192,6 +209,8 @@ class Scene:
                                      f"as if it were not there)")
                 if (self.face_source[fs] >= 0).any():
                     raise ValueError(f"source {spec.name!r}: a surface already belongs to another source")
+                if spec.distribution is not None:
+                    measured[len(flux)] = spec.distribution
                 self.face_source[fs] = len(flux)
                 faces.append(fs)
                 flux.append(spec.flux)
@@ -221,6 +240,12 @@ class Scene:
                 self.source_names.append(spec.name)
             else:
                 for p in spec.points:
+                    if spec.distribution is not None:
+                        axis = np.asarray(spec.axis, dtype=float)
+                        if not np.linalg.norm(axis) > 0:
+                            raise ValueError(f"source {spec.name!r}: its axis has no direction")
+                        measured[len(flux)] = spec.distribution
+                        axes[len(flux)] = axis / np.linalg.norm(axis)
                     faces.append(np.zeros(0, dtype=np.int64))
                     flux.append(spec.flux / len(spec.points))
                     sin_max.append(1.0)
@@ -241,6 +266,9 @@ class Scene:
         self.src_is_point = np.asarray(is_point, dtype=bool)
         self.src_faces = faces
         self.src_wires = wires
+        self.src_measured = measured
+        self.src_axes = axes
+        self.src_is_measured = np.asarray([k in measured for k in range(len(flux))], dtype=bool)
         self.src_is_wire = np.asarray([k in wires for k in range(len(flux))], dtype=bool)
         self.flux = float(self.src_flux.sum())
         self.src_prob = self.src_flux / self.flux
@@ -278,7 +306,26 @@ class Scene:
         across = np.where(self.src_is_wire[src], np.sqrt(np.clip(1 - cos * cos, 0.0, None)), 1.0)   # sin(theta)
         le = np.where(ok, self.src_radiance[src] * across, 0.0)
         pdf = np.where(ok, self.src_dir_norm[src] * np.where(pt, across, np.abs(cos)), 0.0)
+        if self.src_is_measured[src].any():
+            for k in np.unique(src[self.src_is_measured[src]]):
+                sel = np.nonzero(src == k)[0]
+                axis = self._axis(k, n[sel])
+                c = np.einsum("ij,ij->i", axis, w[sel])
+                a, b = _across(axis)
+                density = self.src_measured[k].eval(c, np.arctan2(np.einsum("ij,ij->i", b, w[sel]),
+                                                                  np.einsum("ij,ij->i", a, w[sel])))
+                pdf[sel] = density
+                if pt[sel[0]]:                               # intensity; a surface: radiance = it / (area |cos|)
+                    le[sel] = self.src_flux[k] * density
+                else:
+                    le[sel] = self.src_flux[k] * density / (self.src_area[k] * np.maximum(np.abs(c), 1e-9))
         return le, pdf
+
+    def _axis(self, k: int, n: np.ndarray) -> np.ndarray:
+        """The direction theta = 0 of the measured source k at points with the normals n."""
+        if k in self.src_axes:
+            return np.broadcast_to(self.src_axes[k], n.shape)
+        return n * (-1.0 if self.src_sides[k] < 0 else 1.0)
 
     def emit_pdf_pos(self, src: np.ndarray) -> np.ndarray:
         """Density of picking a point of the source (per mm²; points: the probability)."""
@@ -297,8 +344,27 @@ class Scene:
         cos = np.ones(n)
         u1, u2, u3 = rng.random(n), rng.random(n), rng.random(n)
         channel = (rng.random(n)[:, None] < np.cumsum(self.src_spectrum, axis=1)[src]).argmax(axis=1)
+        measured_pdf = np.zeros(n)
         for k in np.unique(src):
             sel = np.nonzero(src == k)[0]
+            if self.src_is_measured[k]:                      # a direction by the measured distribution
+                if self.src_is_point[k]:
+                    p[sel] = self.src_point[k]
+                    axis = np.broadcast_to(self.src_axes[k], (len(sel), 3))
+                else:
+                    tri, b1, b2 = mesh.sample(self.src_faces[k], len(sel), rng)
+                    p[sel] = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
+                    normal, _ = mesh.shade(tri, b1, b2)
+                    ns[sel], ng[sel] = normal, mesh.ng[tri]
+                    axis = self._axis(k, normal)
+                c, phi, density = self.src_measured[k].sample(len(sel), rng)
+                a, b = _across(axis)
+                sin = np.sqrt(np.clip(1 - c * c, 0.0, None))
+                d[sel] = (sin * np.cos(phi))[:, None] * a + (sin * np.sin(phi))[:, None] * b + c[:, None] * axis
+                if self.src_is_point[k]:
+                    ns[sel] = axis                           # (kept for emitted(); a point has no surface)
+                measured_pdf[sel] = density
+                continue
             if self.src_is_wire[k]:                          # a point on the wire, a direction as from the
                 starts, ends, cum = self.src_wires[k]        # surface of a thin Lambertian cylinder around it
                 seg = np.minimum(np.searchsorted(cum, u3[sel] * cum[-1], side="right"), len(cum) - 1)
@@ -326,6 +392,9 @@ class Scene:
         pt = self.src_is_point[src]
         pdf_dir = self.src_dir_norm[src] * np.where(pt & ~self.src_is_wire[src], 1.0, cos)
         ok = pt | ((cos > 0) & (np.einsum("ij,ij->i", ng, d) * np.einsum("ij,ij->i", ns, d) > 0))
+        by_table = self.src_is_measured[src]
+        pdf_dir = np.where(by_table, measured_pdf, pdf_dir)
+        ok = np.where(by_table, pt | (np.einsum("ij,ij->i", ng, d) * np.einsum("ij,ij->i", ns, d) > 0), ok)
         return {"p": p, "ns": ns, "ng": ng, "src": src, "d": d, "pdf_pos": self.emit_pdf_pos(src),
                 "pdf_dir": pdf_dir, "ok": ok, "point": pt, "channel": channel}
 

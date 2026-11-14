@@ -11,6 +11,7 @@ import numpy as np
 import pt_bsdf
 import pt_mesh
 import pt_nurbs
+import pt_photometry
 import pt_scene
 
 MATERIAL = "pt.material"        # attribute of an object: name of a material of the panel
@@ -40,7 +41,52 @@ DEFAULT_MATERIALS = [
     {"name": "detector", "kind": "detector", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
      "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
 ]
-DEFAULT_SOURCES = [{"name": "lamp", "flux": 1.0, "half_angle": 90.0, "side": "front", "spectrum": "550"}]
+DEFAULT_SOURCES = [{"name": "lamp", "flux": 1.0, "unit": "W", "half_angle": 90.0, "side": "front", "spectrum": "550",
+                    "distribution": "", "axis": "0, 0, -1"}]
+UNITS = {"radiometric (W)": {"flux": "W", "irradiance": "W/m²", "radiance": "W/(m² sr)", "E": "E", "L": "Radiance"},
+         "photometric (lm)": {"flux": "lm", "irradiance": "lx", "radiance": "cd/m²", "E": "Ev", "L": "Luminance"}}
+
+
+def photometric(out: dict, wavelengths) -> dict:
+    """A result in lumens instead of watts: every wavelength weighted with the eye's sensitivity
+    (683 lm/W · V(lambda)). The errors are scaled like the values."""
+    weight = pt_photometry.LM_PER_W * pt_photometry.v_lambda(wavelengths)
+    channels = out["channels"] * weight[:, None]
+    values = channels.sum(axis=0)
+    error = out.get("error")
+    if error is not None:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            error = np.where(out["values"] > 0, error * values / out["values"], 0.0)
+    return {**out, "channels": channels, "values": values, "error": error}
+
+
+def parse_axis(text) -> tuple:
+    """A direction from text: "0, 0, -1". ValueError for anything else."""
+    try:
+        axis = tuple(float(v) for v in str(text or "0, 0, -1").replace(";", ",").replace(",", " ").split())
+    except ValueError:
+        axis = ()
+    if len(axis) != 3 or not any(axis):
+        raise ValueError(f"axis {text!r}: write three numbers, e.g. \"0, 0, -1\"")
+    return axis
+
+
+class Distributions:
+    """Luminaire files that were read, by path (read again when the file changed)."""
+
+    def __init__(self):
+        self.known: dict = {}
+
+    def get(self, path: str):
+        import os
+
+        try:
+            key = (path, os.path.getmtime(path))
+        except OSError as e:
+            raise ValueError(f"luminaire file {path!r}: {e.strerror or e}") from None
+        if key not in self.known:
+            self.known = {key: pt_photometry.load(path), **{k: v for k, v in self.known.items() if k[0] != path}}
+        return self.known[key]
 
 
 def parse_values(text) -> tuple:
@@ -141,7 +187,8 @@ class MeshCache:
         return self.mesh
 
 
-def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = None) -> pt_scene.Scene:
+def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = None,
+                files: Distributions | None = None) -> pt_scene.Scene:
     """The scene of the model: materials and sources of the panel, assigned by the attributes
     pt.material and pt.source. ValueError with a message for the user when something is missing."""
     materials = pt_bsdf.Materials.from_rows([{**row, "spectrum": parse_values(row.get("spectrum", ""))}
@@ -171,9 +218,21 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
                        if _kind(e) == "point" and _attr(e, SOURCE) == name)
         curves = tuple(polyline(e["geometry"]) for e in active(entities)
                        if _kind(e) == "curve" and _attr(e, SOURCE) == name)
-        specs.append(pt_scene.SourceSpec(name, float(row.get("flux", 0.0)), float(row.get("half_angle", 90.0)),
-                                         str(row.get("side", "front")), on, points, curves,
-                                         parse_spectrum(row.get("spectrum", ""))))
+        spectrum = parse_spectrum(row.get("spectrum", ""))
+        flux = float(row.get("flux", 0.0))
+        if str(row.get("unit", "W")).strip().lower() == "lm":           # lumens: by the eye's sensitivity
+            efficacy = pt_photometry.lumens_per_watt([nm for nm, _ in spectrum], [share for _, share in spectrum])
+            if not efficacy > 0:
+                raise ValueError(f"source {name!r}: its flux is in lumens, but none of its wavelengths is visible")
+            flux /= efficacy
+        file = str(row.get("distribution", "") or "").strip()
+        distribution = None
+        if file and (on or points):
+            distribution = (files or Distributions()).get(file)
+        specs.append(pt_scene.SourceSpec(name, flux, float(row.get("half_angle", 90.0)),
+                                         str(row.get("side", "front")), on, points, curves, spectrum, distribution,
+                                         parse_axis(row.get("axis", "")) if distribution is not None and points
+                                         else (0.0, 0.0, -1.0)))
     if not any(s.entities or s.points or s.curves for s in specs):
         raise ValueError("no object is a source: select a surface, a body, a curve or a point and choose "
                          "\"Selection: make it a source\"")

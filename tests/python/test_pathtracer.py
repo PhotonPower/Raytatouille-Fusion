@@ -562,6 +562,83 @@ try:
 except ValueError as e:
     assert "values at wavelengths" in str(e), e
 
+# ---- luminaire files: an IES file of a Lambertian emitter (the same all around), one with two planes
+# (a quarter, mirrored to the full turn), and the same as EULUMDAT; lumens through V(lambda)
+import pt_photometry  # noqa: E402
+
+gammas = np.arange(0, 91, 5.0)
+lambert = np.cos(np.radians(gammas))
+
+
+def ies(planes, rows):
+    head = ["IESNA:LM-63-2002", "[TEST] made for this test", "TILT=NONE",
+            f"1 1000 1 {len(gammas)} {len(planes)} 1 2 0 0 0", "1 1 100"]
+    return "\n".join(head + [" ".join(f"{v:g}" for v in gammas), " ".join(f"{v:g}" for v in planes)]
+                     + [" ".join(f"{v:.6g}" for v in row) for row in rows])
+
+
+def ldt(symmetry, planes, rows):
+    step = 360 // planes
+    lines = ["maker", "1", str(symmetry), str(planes), str(step), str(len(gammas)), "5", "report", "name", "number", "file",
+             "date", "100", "100", "50", "100", "100", "0", "0", "0", "0", "100", "100", "1", "0", "1",
+             "1", "lamp", "1000", "3000", "80", "10"] + ["1"] * 10
+    lines += [str(k * step) for k in range(planes)] + [f"{v:g}" for v in gammas]
+    return "\r\n".join(lines + [f"{v:.6g}" for row in rows for v in row])
+
+
+around = pt_photometry.parse_ies(ies([0], [1000 * lambert]))
+assert around.symmetric and abs(around.eval(np.array([1.0]), np.array([0.3]))[0] * math.pi - 1) < 0.01     # cos / pi
+assert around.eval(np.array([-0.5]), np.array([0.0]))[0] == 0                                           # nothing upwards
+cos_t, phi_t, dens = around.sample(50_000, np.random.default_rng(SEED))
+assert abs(cos_t.mean() - 2 / 3) < 0.01 and np.allclose(dens, around.eval(cos_t, phi_t))
+quarter = pt_photometry.parse_ies(ies([0, 90], [1000 * lambert, 200 * lambert]))
+where = np.radians([1.0, 45.0, 91.0, 135.0, 181.0, 271.0])
+shape = quarter.eval(np.full(6, math.cos(math.radians(20))), where)
+assert np.allclose(shape / shape[0], [1, 0.6, 0.2, 0.6, 1, 0.2], atol=0.03), shape / shape[0]
+for symmetry, planes, rows in ((1, 24, [1000 * lambert]), (4, 4, [1000 * lambert, 200 * lambert]),
+                               (2, 4, [1000 * lambert, 200 * lambert, 1000 * lambert]),
+                               (0, 4, [1000 * lambert, 200 * lambert, 1000 * lambert, 200 * lambert])):
+    same_shape = pt_photometry.parse_ldt(ldt(symmetry, planes, rows))
+    assert np.allclose(same_shape.density, (around if symmetry == 1 else quarter).density, atol=1e-9), symmetry
+side_on = pt_photometry.parse_ldt(ldt(3, 4, [200 * lambert, 1000 * lambert, 200 * lambert]))    # C90, C180, C270
+assert np.allclose(side_on.density, quarter.density, atol=1e-9)
+for broken in ("no numbers here", ies([0, 45], [lambert, lambert]), ies([0], [lambert]).replace("TILT=NONE", "TILT=lamp.tlt")):
+    try:
+        pt_photometry.parse_ies(broken)
+        raise AssertionError("not refused")
+    except ValueError:
+        pass
+assert pt_photometry.v_lambda(555) == 1 and pt_photometry.v_lambda(900) == 0 and abs(pt_photometry.v_lambda(505) - 0.413) < 1e-9
+assert abs(pt_photometry.lumens_per_watt([555, 900], [1, 1]) - 341.5) < 1e-9
+
+# ---- a point source with the Lambertian file, pointing down at a floor: E = Phi cos(theta) cos(theta) / (pi d²)
+down = pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),), distribution=around, axis=(0, 0, -2))
+scene_d = scene_of([wall], [BLACK], [down])
+sensor_d = pt_scene.TexelSensor(scene_d, [0], 4)
+gx, gy = np.meshgrid((np.arange(40) + 0.5) * 5 - 100, (np.arange(40) + 0.5) * 5 - 100)
+dist2 = gx ** 2 + gy ** 2 + 2500
+by_form = (2500 / dist2 / (math.pi * dist2) * 25).reshape(4, 10, 4, 10).sum(axis=(1, 3))
+for method in pt_integrator.METHODS[:3]:
+    got = values(scene_d, sensor_d, method, 40_000, 2).reshape(4, 4)
+    assert abs(got.sum() / by_form.sum() - 1) < 0.02 and np.allclose(got / by_form, 1, atol=0.12), (method, got / by_form)
+tilted = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),), distribution=around, axis=(1, 0, -1))])
+got = values(tilted, pt_scene.TexelSensor(tilted, [0], 2), "light", 20_000, 2).reshape(2, 2)
+assert got[:, 1].sum() > 2 * got[:, 0].sum()                         # aimed towards +x
+two_planes = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),), distribution=quarter)])
+got = values(two_planes, pt_scene.TexelSensor(two_planes, [0], 9), "light", 60_000, 2).reshape(9, 9)
+assert got[4, 7] + got[4, 1] > 2.5 * (got[7, 4] + got[1, 4])           # the bright plane holds the X axis
+
+# ---- a surface with the Lambertian file is a Lambertian emitter: as the cone of 90°, with every method
+lamp_face = rect((-10, -10, 80), (0, 20, 0), (20, 0, 0))             # shines down
+by_cone = scene_of([wall, lamp_face], [WHITE, BLACK], [pt_scene.SourceSpec("a", 1.0, 90, "front", entities=(1,))])
+by_file = scene_of([wall, lamp_face], [WHITE, BLACK], [pt_scene.SourceSpec("a", 1.0, entities=(1,), distribution=around)])
+reference = values(by_cone, pt_scene.TexelSensor(by_cone, [0], 3), "light", 80_000, 3)
+for method in pt_integrator.METHODS[:3]:
+    got = values(by_file, pt_scene.TexelSensor(by_file, [0], 3), method, 40_000, 3)
+    assert abs(got.sum() / reference.sum() - 1) < 0.02 and np.allclose(got / reference, 1, atol=0.08), (method, got / reference)
+camera_d = pt_scene.Camera((0, 0, 20), (0, 0, 80), (0, 1, 0), 10.0, 2, 2)      # looks at the lamp: 1 / (pi 400)
+assert abs(values(by_file, camera_d, "path", 4_000, 2).mean() * math.pi * 400 - 1) < 0.03
+
 # ---- samples steered by weights: any shares of the texels / pixels give the same values – here
 # shares that differ by up to a factor of 100, on the plane under the point source
 shares = np.random.default_rng(5).uniform(0.01, 1.0, 16)
@@ -667,6 +744,36 @@ model = [
     {"id": 15, "name": "axis", "attributes": {}, "geometry": {"type": "curve", "degree": 1, "knots": [0, 0, 1, 1],
                                                               "points": [0, 0, 0, 0, 0, 1]}},
 ]
+lumen_row = {"name": "lamp", "flux": 683.0, "unit": "lm", "spectrum": "555"}                # 683 lm at 555 nm: 1 W
+assert abs(pt_setup.build_scene(model, {**params, "sources": [lumen_row]}).flux - 1) < 1e-12
+try:
+    pt_setup.build_scene(model, {**params, "sources": [{**lumen_row, "spectrum": "900"}]})
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "none of its wavelengths is visible" in str(e), e
+import tempfile  # noqa: E402
+
+luminaire = Path(tempfile.mkdtemp()) / "lamp.ies"
+luminaire.write_text(ies([0], [1000 * lambert]))
+files = pt_setup.Distributions()
+with_file = pt_setup.build_scene(model, {**params, "sources": [{"name": "lamp", "flux": 2.0, "distribution": str(luminaire)}]},
+                                 files=files)
+assert list(with_file.src_is_measured) == [True] and files.get(str(luminaire)) is with_file.src_measured[0]
+assert pt_setup.parse_axis("1; 0 , -1") == (1.0, 0.0, -1.0) and pt_setup.parse_axis("") == (0.0, 0.0, -1.0)
+for text in ("0, 0", "0, 0, 0", "down"):
+    try:
+        pt_setup.parse_axis(text)
+        raise AssertionError("not refused")
+    except ValueError:
+        pass
+try:
+    pt_setup.build_scene(model, {**params, "sources": [{"name": "lamp", "flux": 2.0, "distribution": "/no/such/file.ies"}]})
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "luminaire file" in str(e), e
+green = pt_setup.photometric({"values": np.array([2.0, 0.0]), "channels": np.array([[1.0, 0.0], [1.0, 0.0]]),
+                              "error": np.array([0.2, 0.0])}, [555, 900])
+assert np.allclose(green["values"], [683, 0]) and np.allclose(green["error"], [68.3, 0]) and np.allclose(green["channels"][1], 0)
 arc = {"type": "curve", "degree": 2, "knots": [0, 0, 0, 1, 1, 1], "points": [10, 0, 60, 10, 10, 60, 0, 10, 60],
        "weights": [1, math.sqrt(0.5), 1]}                           # a quarter circle of radius 10
 line = pt_setup.polyline(arc)
@@ -815,6 +922,14 @@ try:
     raise AssertionError("not refused")
 except UserError as e:
     assert "write wavelengths in nm" in str(e), e
+p.update(per_wavelength=False, sources=pt_setup.DEFAULT_SOURCES, units="photometric (lm)")
+before = len(cad.fields), cad.tables[-1]
+plugin.irradiance(cad)                                               # in lumens: 550 nm, 679.55 lm/W
+plugin.camera_image(cad)
+assert cad.fields[before[0]][0] == "Ev floor" and cad.fields[before[0]][2]["unit"] == "lx"
+assert cad.images[-1][0] == "Luminance – light tracing" and cad.images[-1][2]["unit"] == "cd/m²"
+assert any("(679.551 lm)" in line for line in cad.logs)
+p.update(units="radiometric (W)")
 p.update(per_wavelength=False, sources=pt_setup.DEFAULT_SOURCES, export=str(folder / "plugin"), samples=40_000)
 plugin.irradiance(cad)                                               # 40 000 samples: two batches, so with an error
 plugin.camera_image(cad)

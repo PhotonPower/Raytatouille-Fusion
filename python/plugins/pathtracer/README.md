@@ -40,6 +40,14 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
      nothing along it (intensity Φ sin θ / π² at the angle θ to the wire). The curves of one
      source share its flux by length. Like points they are not visible to the camera.
    - One source is on objects of one kind (surfaces, curves or points).
+   - *Flux in* W or lm: lumens are turned into watts through the eye's sensitivity V(λ) at the
+     source's wavelengths (683 lm/W at 555 nm).
+   - *Luminaire file*: the path of an IES (LM-63, type C) or EULUMDAT (.ldt) file. Surfaces and
+     points then emit with its measured distribution instead of the cone: θ from the surface
+     normal (the file's "straight down"; *Side* back: from the other side), for points from
+     *Axis*; the C0 plane holds the world's X axis (Y if the axis is along X). A surface sends
+     the distribution from each of its points. Only the shape of the file is used – the flux
+     stays the table's.
    - A source also has its material (it reflects light like any other object).
    - *Wavelengths*: the lines a source emits, in nm, each with an optional share of its flux –
      `550`, `486.1, 587.6, 656.3` or `450:1, 550:2, 650:1`. Every path carries one wavelength;
@@ -60,6 +68,10 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    pixels; *Show camera* draws the viewing pyramid. *Camera image* shows the radiance in
    W/(m² sr) in the *Image* window (a pinhole camera; *White at percentile* sets the grey scale).
    Point sources themselves are not visible, the light they cast is.
+
+**Light as the eye sees it.** *Results in* photometric: every wavelength is weighted with V(λ) –
+the textures show the illuminance in lx, the camera the luminance in cd/m², the table lumens.
+The log always names the sources' flux in W and in lm.
 
 **How good is it?** The table of *Irradiance* shows the noise of each face's flux, and the log
 the noise of a typical texel or pixel: the standard error in percent, estimated from the spread
@@ -120,11 +132,12 @@ diffuse box, a glass plate).
   jobs do not depend on the number of processes, so the result does not either.
 - **Modules** (no CAD in them, usable from scripts): `pt_nurbs` (NURBS evaluation), `pt_mesh`
   (tessellation, masks, areas), `pt_bvh` (intersection), `pt_bsdf` (materials), `pt_scene`
-  (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_parallel` and
+  (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_photometry` (luminaire files,
+  V(λ)), `pt_parallel` and
   `pt_worker` (several processes), `pt_setup` (model and panel → scene).
 
 ## Not yet
 
 Continuous spectra and colours, measured materials and rough glass, glass touching glass,
-sources with a measured distribution, a lens
+a lens
 camera with depth of field, a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).

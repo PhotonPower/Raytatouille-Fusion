@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pt_bsdf  # noqa: E402
 import pt_integrator  # noqa: E402
 import pt_parallel  # noqa: E402
+import pt_photometry  # noqa: E402
 import pt_scene  # noqa: E402
 import pt_setup  # noqa: E402
 
@@ -35,10 +36,13 @@ _MATERIAL = {
 }
 _SOURCE = {
     "name": Param.text("", label="Name"),
-    "flux": Param.number(1.0, min=0.0, decimals=6, unit="W", label="Flux"),
+    "flux": Param.number(1.0, min=0.0, decimals=6, label="Flux"),
+    "unit": Param.choice(["W", "lm"], "W", label="in"),
     "half_angle": Param.number(90.0, min=0.01, max=90.0, decimals=2, unit="°", label="Half-angle"),
     "side": Param.choice(["front", "back", "both"], "front", label="Side"),
     "spectrum": Param.text("550", label="Wavelengths / nm"),
+    "distribution": Param.text("", label="Luminaire file (.ies, .ldt)"),
+    "axis": Param.text("0, 0, -1", label="Axis (points)"),
 }
 
 
@@ -60,7 +64,12 @@ class PathTracerPlugin(Plugin):
                                            "(half-angle 90°: Lambertian) and share the flux by area; points emit "
                                            "evenly into all directions, curves like a thin glowing wire and "
                                            "share the flux by length. Wavelengths: lines in nm, each with an "
-                                           "optional share of the flux – 550 or 450:1, 550:2, 650:1"),
+                                           "optional share of the flux – 550 or 450:1, 550:2, 650:1. Flux in W "
+                                           "or in lm (through the eye's sensitivity at the wavelengths). "
+                                           "Luminaire file: the path of an IES or EULUMDAT file – surfaces and "
+                                           "points then emit with its distribution (theta from the normal; "
+                                           "points: from Axis) instead of the cone; its shape only, the flux "
+                                           "stays the table's"),
         "assign_source": Param.text("lamp", label="Source for the selection", group="Sources",
                                     description="Used by \"Selection: make it a source\""),
         "method": Param.choice(list(pt_setup.METHODS), "light tracing", label="Method", group="Computation",
@@ -94,6 +103,9 @@ class PathTracerPlugin(Plugin):
                              group="Computation",
                              description="Irradiance and Camera image also write their numbers (values, standard "
                                          "errors, per wavelength) as <file>-irradiance.npz / <file>-camera.npz"),
+        "units": Param.choice(list(pt_setup.UNITS), "radiometric (W)", label="Results in", group="Computation",
+                              description="photometric: weighted with the eye's sensitivity V(lambda) – "
+                                          "illuminance in lx, luminance in cd/m², flux in lm"),
         "per_wavelength": Param.boolean(False, label="Also per wavelength", group="Computation",
                                         description="Besides the sum over all wavelengths, a texture / an image for "
                                                     "each wavelength of the sources"),
@@ -121,6 +133,7 @@ class PathTracerPlugin(Plugin):
 
     def __init__(self):
         self.cache = pt_setup.MeshCache()
+        self.files = pt_setup.Distributions()
 
     # ------------------------------------------------------------------ assignments
     @staticmethod
@@ -173,12 +186,13 @@ class PathTracerPlugin(Plugin):
     def _scene(self, ctx) -> pt_scene.Scene:
         ctx.progress(0.0, "preparing the model")
         try:
-            scene = pt_setup.build_scene(ctx.entities(), ctx.params, self.cache)
+            scene = pt_setup.build_scene(ctx.entities(), ctx.params, self.cache, self.files)
         except ValueError as e:
             raise UserError(str(e)) from None
         mesh = scene.mesh
+        lumens = scene.flux * pt_photometry.lumens_per_watt(scene.wavelengths, scene.channel_prob)
         ctx.log(f"{mesh.triangles} triangles on {len(mesh.face_area)} faces; {len(scene.src_flux)} source(s), "
-                f"{scene.flux:.6g} W at {', '.join(f'{nm:g}' for nm in scene.wavelengths)} nm"
+                f"{scene.flux:.6g} W ({lumens:.6g} lm) at {', '.join(f'{nm:g}' for nm in scene.wavelengths)} nm"
                 + (f"; {len(scene.flipped)} face(s) turned outwards" if scene.flipped else ""))
         return scene
 
@@ -206,6 +220,8 @@ class PathTracerPlugin(Plugin):
         ctx.log(f"{what}, {method}: {out['samples']:,} samples, {out['rays']:,} rays in {seconds:.1f} s "
                 f"({out['rays'] / seconds:,.0f} rays/s, {out['processes']} process(es))")
         note = "" if out["samples"] >= p["samples"] else f" (stopped at {out['samples']:,} samples)"
+        if p["units"].startswith("photometric"):
+            out = pt_setup.photometric(out, scene.wavelengths)
         return out, note
 
     @staticmethod
@@ -219,7 +235,8 @@ class PathTracerPlugin(Plugin):
     def _info(ctx, scene, out: dict) -> dict:
         p = ctx.params
         return {"method": p["method"], "samples": out["samples"], "longest_path": p["depth"], "seed": p["seed"],
-                "flux_W": scene.flux, "wavelengths": [float(nm) for nm in scene.wavelengths]}
+                "flux_W": scene.flux, "wavelengths": [float(nm) for nm in scene.wavelengths],
+                "units": pt_setup.UNITS[p["units"]]}
 
     @staticmethod
     def _export(ctx, write) -> None:
@@ -233,6 +250,7 @@ class PathTracerPlugin(Plugin):
     @action("Irradiance", description="Irradiance as a texture on the faces (W/m²), with the chosen method")
     def irradiance(self, ctx):
         p = ctx.params
+        unit = pt_setup.UNITS[p["units"]]
         scene = self._scene(ctx)
         try:
             sensor = pt_scene.TexelSensor(scene, pt_setup.sensor_faces(scene, p["irradiance_on"]), p["texels"])
@@ -248,20 +266,22 @@ class PathTracerPlugin(Plugin):
             several = sum(1 for g in faces if g["entity"] == f["entity"]) > 1
             name = names.get(f["entity"], str(f["entity"])) + (f" · face {f['face'] + 1}" if several else "")
             finite = f["values"][np.isfinite(f["values"])]
-            ctx.field(run, f"E {name}", f["entity"], f["values"], f["w"], f["h"], face=f["face"], unit="W/m²",
+            ctx.field(run, f"{unit['E']} {name}", f["entity"], f["values"], f["w"], f["h"], face=f["face"],
+                      unit=unit["irradiance"],
                       colormap="inferno", value_range=(0.0, top) if p["common_scale"] and top > 0 else None)
             rows.append([name, f["area"], f["flux"], f["flux"] / f["area"] * 1e6 if f["area"] > 0 else 0.0,
                          float(finite.max()) if finite.size else 0.0,
                          f"{100 * f['noise']:.2g}" if np.isfinite(f["noise"]) else ""])
-        ctx.table(run, "Irradiance per face", ["Face", "Area / mm²", "Flux / W", "Mean E / W/m²", "Max E / W/m²",
-                                               "Noise of the flux / %"], rows)
+        ctx.table(run, "Irradiance per face",
+                  ["Face", "Area / mm²", f"Flux / {unit['flux']}", f"Mean {unit['E']} / {unit['irradiance']}",
+                   f"Max {unit['E']} / {unit['irradiance']}", "Noise of the flux / %"], rows)
         self._noise(ctx, out, "texel")
         self._export(ctx, lambda path: pt_setup.export_irradiance(path, sensor, out, names, self._info(ctx, scene, out)))
         if p["per_wavelength"] and len(scene.wavelengths) > 1:
             for nm, flux in zip(scene.wavelengths, out["channels"]):
                 for f, row in zip(pt_setup.irradiance(sensor, flux), rows):
-                    ctx.field(run, f"E {row[0]} · {nm:g} nm", f["entity"], f["values"], f["w"], f["h"], face=f["face"],
-                              unit="W/m²", colormap="inferno")
+                    ctx.field(run, f"{unit['E']} {row[0]} · {nm:g} nm", f["entity"], f["values"], f["w"], f["h"],
+                              face=f["face"], unit=unit["irradiance"], colormap="inferno")
         return f"Irradiance on {len(faces)} face(s), {out['samples']:,} samples{note}"
 
     def _camera(self, ctx) -> pt_scene.Camera:
@@ -275,6 +295,7 @@ class PathTracerPlugin(Plugin):
     @action("Camera image", description="The radiance seen by the camera (W/(m² sr)), with the chosen method")
     def camera_image(self, ctx):
         p = ctx.params
+        unit = pt_setup.UNITS[p["units"]]
         camera = self._camera(ctx)
         scene = self._scene(ctx)
         out, note = self._render(ctx, scene, camera, "Camera image")
@@ -282,15 +303,15 @@ class PathTracerPlugin(Plugin):
         positive = values[values > 0]
         white = float(np.percentile(positive, p["camera_white"])) if positive.size else 1.0
         run = ctx.result_set(f"Camera image – {p['method']}{note}")
-        ctx.image(run, f"Radiance – {p['method']}", values, camera.w, camera.h, extent=(0, camera.w, 0, camera.h),
-                  x_label="x / pixel", y_label="y / pixel", colormap="grey", unit="W/(m² sr)",
+        ctx.image(run, f"{unit['L']} – {p['method']}", values, camera.w, camera.h, extent=(0, camera.w, 0, camera.h),
+                  x_label="x / pixel", y_label="y / pixel", colormap="grey", unit=unit["radiance"],
                   value_range=(0.0, white), description=f"{out['samples']:,} samples, paths up to {p['depth']} "
                                                         f"segments{note}")
         if p["per_wavelength"] and len(scene.wavelengths) > 1:
             for nm, channel in zip(scene.wavelengths, out["channels"]):
-                ctx.image(run, f"Radiance {nm:g} nm – {p['method']}", channel * 1e6, camera.w, camera.h,
+                ctx.image(run, f"{unit['L']} {nm:g} nm – {p['method']}", channel * 1e6, camera.w, camera.h,
                           extent=(0, camera.w, 0, camera.h), x_label="x / pixel", y_label="y / pixel",
-                          colormap="grey", unit="W/(m² sr)", description=f"{nm:g} nm{note}")
+                          colormap="grey", unit=unit["radiance"], description=f"{nm:g} nm{note}")
         self._noise(ctx, out, "pixel")
         self._export(ctx, lambda path: pt_setup.export_image(path, camera, out, self._info(ctx, scene, out)))
         return f"Camera image {camera.w} × {camera.h}, {out['samples']:,} samples{note}"
