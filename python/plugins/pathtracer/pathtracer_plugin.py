@@ -54,7 +54,8 @@ class PathTracerPlugin(Plugin):
         "sources": Param.table(_SOURCE, pt_setup.DEFAULT_SOURCES, label="Sources", group="Sources",
                                description="Surfaces emit with constant radiance into a cone around the normal "
                                            "(half-angle 90°: Lambertian) and share the flux by area; points emit "
-                                           "evenly into all directions. Wavelengths: lines in nm, each with an "
+                                           "evenly into all directions, curves like a thin glowing wire and "
+                                           "share the flux by length. Wavelengths: lines in nm, each with an "
                                            "optional share of the flux – 550 or 450:1, 550:2, 650:1"),
         "assign_source": Param.text("lamp", label="Source for the selection", group="Sources",
                                     description="Used by \"Selection: make it a source\""),
@@ -119,20 +120,20 @@ class PathTracerPlugin(Plugin):
             ctx.set_attribute(e["id"], pt_setup.MATERIAL, name)
         return f"{len(found)} object(s): material {name}"
 
-    @action("Selection: make it a source", description="Makes the selected surfaces, bodies and points emit as the "
-                                                        "source named in \"Source for the selection\"")
+    @action("Selection: make it a source", description="Makes the selected surfaces, bodies, curves and points "
+                                                        "emit as the source named in \"Source for the selection\"")
     def set_source(self, ctx):
         name = ctx.params["assign_source"].strip()
         if name not in [str(s.get("name", "")).strip() for s in ctx.params["sources"]]:
             raise UserError(f"The source {name!r} is not in the table of sources.")
-        found = self._selected(ctx, _SURFACES + ["point"])
+        found = self._selected(ctx, _SURFACES + ["curve", "point"])
         for e in found:
             ctx.set_attribute(e["id"], pt_setup.SOURCE, name)
         return f"{len(found)} object(s): source {name}"
 
     @action("Selection: no material, no source", description="Removes material and source from the selected objects")
     def clear(self, ctx):
-        found = self._selected(ctx, _SURFACES + ["point"])
+        found = self._selected(ctx, _SURFACES + ["curve", "point"])
         for e in found:
             ctx.set_attribute(e["id"], pt_setup.MATERIAL, None)
             ctx.set_attribute(e["id"], pt_setup.SOURCE, None)

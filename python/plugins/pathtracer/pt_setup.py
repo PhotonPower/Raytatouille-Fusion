@@ -10,6 +10,7 @@ import numpy as np
 
 import pt_bsdf
 import pt_mesh
+import pt_nurbs
 import pt_scene
 
 MATERIAL = "pt.material"        # attribute of an object: name of a material of the panel
@@ -85,9 +86,19 @@ def assignments(entities: list[dict], params: dict) -> list[list]:
         kind = _kind(e)
         if kind in pt_mesh.SURFACE_KINDS:
             rows.append([label(e), kind, _attr(e, MATERIAL) or f"({params['default_material']})", _attr(e, SOURCE)])
-        elif kind == "point" and _attr(e, SOURCE):
+        elif kind in ("point", "curve") and _attr(e, SOURCE):
             rows.append([label(e), kind, "", _attr(e, SOURCE)])
     return rows
+
+
+def polyline(curve: dict) -> np.ndarray:
+    """Points along a curve dict, close enough for a wire source (32 per knot span; the corners
+    of a polyline exactly)."""
+    degree = int(curve["degree"])
+    spans = pt_nurbs.distinct_knots(degree, curve["knots"])
+    if degree > 1:
+        spans = np.unique(np.concatenate([np.linspace(a, b, 33) for a, b in zip(spans[:-1], spans[1:])]))
+    return pt_nurbs.curve_points(curve, spans)
 
 
 class MeshCache:
@@ -137,11 +148,13 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
         on = tuple(k for k, e in enumerate(surf) if _attr(e, SOURCE) == name)
         points = tuple(tuple(e["geometry"]["point"]) for e in active(entities)
                        if _kind(e) == "point" and _attr(e, SOURCE) == name)
+        curves = tuple(polyline(e["geometry"]) for e in active(entities)
+                       if _kind(e) == "curve" and _attr(e, SOURCE) == name)
         specs.append(pt_scene.SourceSpec(name, float(row.get("flux", 0.0)), float(row.get("half_angle", 90.0)),
-                                         str(row.get("side", "front")), on, points,
+                                         str(row.get("side", "front")), on, points, curves,
                                          parse_spectrum(row.get("spectrum", ""))))
-    if not any(s.entities or s.points for s in specs):
-        raise ValueError("no object is a source: select a surface, a body or a point and choose "
+    if not any(s.entities or s.points or s.curves for s in specs):
+        raise ValueError("no object is a source: select a surface, a body, a curve or a point and choose "
                          "\"Selection: make it a source\"")
     tol = float(params.get("tolerance", 0.01))
     mesh = cache.get(surf, tol) if cache is not None else pt_mesh.build(surf, tol)

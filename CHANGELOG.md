@@ -45,6 +45,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   is seen through glass or in a mirror.
   Wavelengths: sources emit lines with shares of their flux, glass disperses by its Abbe number,
   results as the sum or per wavelength.
+  Curves as sources: thin glowing wires (filaments, lines of LEDs).
 - **Camera image** (Raytracer): the irradiance on the last surface of each path from many rays
   (default 200 000 per field and wavelength, millions possible), square pixels over the
   sensor, shown in the new **Image** window and optionally on the surface in 3D. The quick
