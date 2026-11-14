@@ -265,6 +265,45 @@ def test_points(dist: Distribution, cutoff: Cutoff) -> list[list]:
     return rows
 
 
+# ------------------------------------------------------------------ UN R148: light-signalling lamps
+# Standard light distributions (Annex 3): H, V in degrees and the percentage of the minimum
+# intensity required on the axis; and that minimum and the maximum in any direction for a single
+# lamp (Tables 3, 4, 6, 7, 8), cd. The regulation decides, not these tables.
+_STANDARD = tuple([(h, v, 20.0) for v in (10.0, -10.0) for h in (-5.0, 5.0)]
+                  + [(h, v, pct) for v in (5.0, -5.0) for h, pct in ((-20.0, 10.0), (-10.0, 20.0), (0.0, 70.0),
+                                                                    (10.0, 20.0), (20.0, 10.0))]
+                  + [(-10.0, 0.0, 35.0), (-5.0, 0.0, 90.0), (0.0, 0.0, 100.0), (5.0, 0.0, 90.0), (10.0, 0.0, 35.0)])
+_DAYTIME = tuple([(h, 10.0, 20.0) for h in (-5.0, 0.0, 5.0)]
+                 + [(h, v, pct) for v in (5.0, -5.0) for h, pct in ((-20.0, 10.0), (-10.0, 20.0), (0.0, 70.0),
+                                                                   (10.0, 20.0), (20.0, 10.0))]
+                 + [(-20.0, 0.0, 25.0), (-10.0, 0.0, 70.0), (-5.0, 0.0, 90.0), (0.0, 0.0, 100.0), (5.0, 0.0, 90.0),
+                    (10.0, 0.0, 70.0), (20.0, 0.0, 25.0)])
+SIGNAL_LAMPS: dict[str, tuple[float, float, tuple]] = {
+    "front position lamp (A)": (4.0, 140.0, _STANDARD),
+    "rear position lamp (R1)": (4.0, 17.0, _STANDARD),
+    "stop lamp (S1)": (60.0, 260.0, _STANDARD),
+    "direction indicator, front (1)": (175.0, 1000.0, _STANDARD),
+    "direction indicator, rear (2a)": (50.0, 500.0, _STANDARD),
+    "daytime running lamp (RL)": (400.0, 1200.0, _DAYTIME),
+}
+
+
+def signal_points(dist: Distribution, function: str, half: float = 0.5) -> list[list]:
+    """Rows point, H, V, intensity / cd, required, verdict for a light-signalling lamp of UN R148:
+    the points of its standard light distribution (the mean over ± `half` degrees) and the highest
+    intensity in any direction."""
+    minimum, maximum, grid = SIGNAL_LAMPS[function]
+    rows = []
+    for h, v, percent in sorted(grid, key=lambda g: (-g[1], g[0])):
+        value = dist.at(h, v, half, half)
+        need = minimum * percent / 100.0
+        name = f"{abs(h):g}°{'L' if h < 0 else 'R' if h > 0 else ''} {abs(v):g}°{'U' if v > 0 else 'D' if v < 0 else ''}"
+        rows.append([name.strip(), h, v, round(value, 2), f"≥ {need:g} cd ({percent:g} %)", "ok" if value >= need else "not met"])
+    top = float(dist.measured(half, half).max())
+    rows.append(["maximum", "", "", round(top, 2), f"≤ {maximum:g} cd", "ok" if top <= maximum else "not met"])
+    return rows
+
+
 def glare(dist: Distribution, cutoff: Cutoff, clearance: float = 0.2) -> float:
     """The highest intensity (cd, over a photometer's window) more than `clearance` degrees above
     the cut-off line."""
