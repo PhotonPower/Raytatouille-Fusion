@@ -61,6 +61,7 @@ class Scene:
         faces should be turned so that their front is the outside (closed bodies)."""
         self.mesh = mesh
         self.materials = materials
+        self.exact = True               # normals of the surfaces themselves where rays hit curved faces
         self.bvh = pt_bvh.BVH(mesh.v0, mesh.e1, mesh.e2)
         lo, hi = self.bvh.bmin[0], self.bvh.bmax[0]
         self.size = float(np.linalg.norm(hi - lo))

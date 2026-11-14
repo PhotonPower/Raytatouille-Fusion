@@ -76,6 +76,11 @@ class PathTracerPlugin(Plugin):
         "tolerance": Param.number(0.01, min=1e-6, max=100.0, decimals=6, unit="mm", label="Mesh tolerance",
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
+        "exact_normals": Param.boolean(True, label="Exact normals on curved faces", group="Computation",
+                                       description="Where a ray hits a curved face, the normal of the surface "
+                                                   "itself at the point the ray meets it (instead of one "
+                                                   "interpolated over the triangle): exact directions for "
+                                                   "mirrors and lenses"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
         "adaptive": Param.boolean(True, label="Adaptive sampling", group="Computation",
                                   description="Path tracing, bidirectional and photon mapping move their samples "

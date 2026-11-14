@@ -56,6 +56,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   Samples are spread evenly over texels, pixels and sources (less noise for the same samples).
   *Adaptive sampling*: samples move to the texels / pixels that are still uncertain.
   Coloured materials: reflectance (glass: absorption) by wavelength.
+  Exact normals where rays hit curved faces (the NURBS surface itself, not the triangle).
 - **Camera image** (Raytracer): the irradiance on the last surface of each path from many rays
   (default 200 000 per field and wavelength, millions possible), square pixels over the
   sensor, shown in the new **Image** window and optionally on the surface in 3D. The quick

@@ -108,7 +108,7 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         idx, dk, o, t, tri, b1, b2 = idx[got], dk[got], o[got], t[got], tri[got], b1[got], b2[got]
         if not idx.size:
             break
-        ns, uv = mesh.shade(tri, b1, b2)
+        ns, uv = mesh.shade_exact(tri, b1, b2, o, dk, t) if scene.exact else mesh.shade(tri, b1, b2)
         ng = mesh.ng[tri]
         cs = -_dot(ns, dk)
         good = cs * -_dot(ng, dk) > 0                        # same side for both normals

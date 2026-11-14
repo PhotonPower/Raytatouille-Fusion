@@ -80,9 +80,10 @@ def _lines(spans: np.ndarray, per_span: int) -> np.ndarray:
     return np.concatenate(parts + [spans[-1:]])
 
 
-def _subdivisions(surface: dict, tol: float, limit: int) -> tuple[np.ndarray, np.ndarray]:
+def _subdivisions(surface: dict, tol: float, limit: int):
     """Grid lines in u and v so that the triangles stay within `tol` of the surface (estimated
-    from second differences of a sample with 8 steps per knot span)."""
+    from second differences of a sample with 8 steps per knot span), and whether the surface is
+    curved at all (else the triangles are the surface)."""
     ku = nb.distinct_knots(int(surface["degree_u"]), surface["knots_u"])
     kv = nb.distinct_knots(int(surface["degree_v"]), surface["knots_v"])
     n = 8
@@ -95,12 +96,15 @@ def _subdivisions(surface: dict, tol: float, limit: int) -> tuple[np.ndarray, np
 
     twist = float(np.linalg.norm(s[1:, 1:] - s[1:, :-1] - s[:-1, 1:] + s[:-1, :-1], axis=-1).max())
     out = []
+    size = float(np.linalg.norm(s.reshape(-1, 3).max(axis=0) - s.reshape(-1, 3).min(axis=0)))
+    curved = False
     for d2, spans in ((second(s), ku), (second(s.transpose(1, 0, 2)), kv)):
         err = max(d2 / 8.0, twist / 4.0)                # at the sample step
+        curved = curved or err > 1e-12 * max(size, 1e-300)
         m = int(np.ceil(n * np.sqrt(err / tol))) if err > 0 else 1
         m = max(1, min(m, max(1, limit // (len(spans) - 1))))
         out.append(_lines(spans, m))
-    return out[0], out[1]
+    return out[0], out[1], curved
 
 
 def _overlap(lines_a: np.ndarray, lines_b: np.ndarray) -> np.ndarray:
@@ -120,6 +124,7 @@ class FaceGrid:
     mask: np.ndarray | None              # (res, res) [v, u] or None (untrimmed)
     length_u: float = 0.0                # mean arc length along u and v / mm
     length_v: float = 0.0
+    curved: bool = False                 # the surface is not flat: the triangles only come close to it
     quad_tri: np.ndarray | None = None   # (len(ug)-1, len(vg)-1, 2): the two triangles of a grid cell,
     #                                      numbered within the face (-1: left out) – below / above its diagonal
     max_density: float = 0.0             # largest area density of a triangle (mm² per unit of uv)
@@ -150,7 +155,7 @@ def _tessellate(face: dict, tol: float, mask_res: int, limit: int = 192):
     Triangles of grid cells entirely outside the trimming are left out."""
     surface = face["surface"]
     dom = nb.surface_domain(surface)
-    us, vs = _subdivisions(surface, tol, limit)
+    us, vs, curved = _subdivisions(surface, tol, limit)
     loops = ([face["outer"]] if face.get("outer") else []) + list(face.get("holes") or [])
     if loops and (len(us) < 9 or len(vs) < 9):          # masks need a parametrisation that is
         ku = nb.distinct_knots(int(surface["degree_u"]), surface["knots_u"])   # not too coarse
@@ -180,6 +185,7 @@ def _tessellate(face: dict, tol: float, mask_res: int, limit: int = 192):
                     trim_mask(loops, dom, mask_res) if loops else None,
                     float(np.linalg.norm(np.diff(s, axis=0), axis=-1).sum(axis=0).mean()),
                     float(np.linalg.norm(np.diff(s, axis=1), axis=-1).sum(axis=1).mean()))
+    grid.curved = curved
     keep = grid.areas(ug, vg) > 0 if loops else np.ones(cell.shape, dtype=bool)
 
     def corners(arr):
@@ -223,6 +229,7 @@ class Mesh:
     mask_off: np.ndarray = None          # (F,) offset into masks
     masks: np.ndarray = None             # all masks, flat
     entity_ids: list[int] = field(default_factory=list)
+    surfaces: list = field(default_factory=list)             # per face: the surface itself (pt_nurbs.Surface)
 
     @property
     def triangles(self) -> int:
@@ -261,6 +268,46 @@ class Mesh:
         length = np.linalg.norm(n, axis=1)
         bad = (length < 1e-12) | (np.einsum("ij,ij->i", n, ng) <= 0)
         n = np.where(bad[:, None], ng, n / np.where(length > 0, length, 1.0)[:, None])
+        return n, uv
+
+    def shade_exact(self, tri: np.ndarray, b1: np.ndarray, b2: np.ndarray, o: np.ndarray, d: np.ndarray,
+                    t: np.ndarray):
+        """As shade, for rays o + t d that hit the triangles: on curved faces the normal and (u, v)
+        of the point where the ray meets the surface itself (Newton's method from the hit of the
+        triangle) – exact directions for mirrors and lenses, however coarse the triangles. Where
+        that fails (the ray misses the surface at its rim) the triangle's values stay."""
+        n, uv = self.shade(tri, b1, b2)
+        if not self.surfaces:
+            return n, uv
+        face = self.face[tri]
+        for f in np.unique(face):
+            if not self.grids[f].curved:
+                continue
+            sel = np.nonzero(face == f)[0]
+            surface = self.surfaces[f]
+            u0, u1, v0, v1 = surface.domain
+            u, v, s = u0 + uv[sel, 0] * (u1 - u0), v0 + uv[sel, 1] * (v1 - v0), t[sel].copy()
+            oo, dd = o[sel], d[sel]
+            scale = float(np.sqrt(self.face_area[f])) or 1.0
+            good = np.ones(len(sel), dtype=bool)
+            for _ in range(6):
+                p, pu, pv = surface.at(u, v)
+                miss = p - oo - s[:, None] * dd
+                jac = np.stack([pu, pv, -dd], axis=2)
+                det = np.linalg.det(jac)
+                good &= np.abs(det) > 1e-14 * scale * scale
+                step = np.linalg.solve(np.where(good[:, None, None], jac, np.eye(3)), -miss[:, :, None])[:, :, 0]
+                u, v, s = np.clip(u + step[:, 0], u0, u1), np.clip(v + step[:, 1], v0, v1), s + step[:, 2]
+            p, pu, pv = surface.at(u, v)
+            normal = np.cross(pu, pv)
+            length = np.linalg.norm(normal, axis=1)
+            good &= (np.linalg.norm(p - oo - s[:, None] * dd, axis=1) < 1e-9 * scale) & (length > 1e-12 * scale) & (s > 0)
+            normal = normal / np.where(length > 0, length, 1.0)[:, None]
+            side = np.einsum("ij,ij->i", normal, self.ng[tri[sel]])
+            normal = normal * np.where(side < 0, -1.0, 1.0)[:, None]         # the triangle's side
+            new_uv = np.column_stack([(u - u0) / (u1 - u0), (v - v0) / (v1 - v0)])
+            good &= (np.abs(side) > 0.5) & (np.abs(new_uv - uv[sel]).max(axis=1) < 0.25)    # near the triangle
+            n[sel[good]], uv[sel[good]] = normal[good], new_uv[good]
         return n, uv
 
     def flip_faces(self, faces) -> None:
@@ -365,12 +412,13 @@ def build(entities: list[dict], tol: float) -> Mesh:
     if not todo:
         raise ValueError("no surfaces to trace")
     res = mask_resolution(sum(1 for _, _, f in todo if f.get("outer") or f.get("holes")))
-    parts, grids, ent, idx, first, areas = [], [], [], [], [0], []
+    parts, grids, ent, idx, first, areas, surfaces = [], [], [], [], [0], [], []
     mask_res, mask_off, masks, offset = [], [], [], 0
     for k, i, f in todo:
         v0, e1, e2, vn, vt, grid = _tessellate(f, tol, res)
         parts.append((v0, e1, e2, vn, vt))
         grids.append(grid)
+        surfaces.append(nb.Surface(f["surface"]))
         ent.append(k)
         idx.append(i)
         first.append(first[-1] + len(v0))
@@ -393,4 +441,4 @@ def build(entities: list[dict], tol: float) -> Mesh:
                 np.asarray(first, dtype=np.int64), grids, np.asarray(mask_res, dtype=np.int64),
                 np.asarray(mask_off, dtype=np.int64),
                 np.concatenate(masks) if masks else np.zeros(0, dtype=bool),
-                [int(e.get("id", k)) for k, e in enumerate(entities)])
+                [int(e.get("id", k)) for k, e in enumerate(entities)], surfaces)

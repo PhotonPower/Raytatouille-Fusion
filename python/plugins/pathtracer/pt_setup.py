@@ -180,7 +180,9 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
     tol = float(params.get("tolerance", 0.01))
     mesh = cache.get(surf, tol) if cache is not None else pt_mesh.build(surf, tol)
     closed = tuple(k for k, e in enumerate(surf) if _kind(e) == "shell")
-    return pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
+    scene = pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
+    scene.exact = bool(params.get("exact_normals", True))
+    return scene
 
 
 def sensor_faces(scene: pt_scene.Scene, ids) -> list[int]:
