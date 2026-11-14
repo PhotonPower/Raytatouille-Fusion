@@ -398,6 +398,23 @@ for bad, message in ((dict(lens_x=-10.0), "inside the mirror"), (dict(thickness=
     except al_design.DesignError as e:
         assert message in str(e), e
 
+# ---- signal lamps: the standard light distribution of UN R148, lamps with the coil across the axis
+flat = al_photometry.Distribution(np.arange(-39.875, 40, 0.25), np.arange(-19.875, 20, 0.25), np.full((160, 320), 100.0),
+                                  1.0, 1.0, 1.0)
+table = al_photometry.signal_points(flat, "stop lamp (S1)")                   # 100 cd everywhere: a stop lamp
+assert len(table) == 20 and all(row[-1] == "ok" for row in table) and table[-1][0] == "maximum"
+assert [row for row in table if row[1:3] == [0.0, 0.0]][0][4].startswith("≥ 60 cd")
+assert [row for row in table if row[1:3] == [-20.0, 5.0]][0][4].startswith("≥ 6 cd")
+front = al_photometry.signal_points(flat, "direction indicator, front (1)")   # too weak about the axis (175 cd),
+assert {row[0] for row in front if row[-1] != "ok"} == {"0° 0°", "5°L 0°", "5°R 0°", "0° 5°U", "0° 5°D"}   # enough further out
+assert al_photometry.signal_points(flat, "rear position lamp (R1)")[-1][-1] == "not met"      # at most 17 cd
+assert len(al_photometry.signal_points(flat, "daytime running lamp (RL)")) == 21
+p21w = al_optics.LAMPS["P21W"]
+assert not p21w.axial and al_optics.Filament.of(p21w).axis[1] == 1.0
+stop, stop_dist = lens_beam((0.0, 0.0, 12.0, 6.0), lamp=p21w)[:2]             # a pillow lens before a P21W
+assert stop_dist.intensity.max() > 500 and abs((stop_dist.intensity.sum(axis=0) * stop_dist.h).sum()) < \
+    0.01 * stop_dist.intensity.sum()
+
 # ---- the plugin's actions through nfcad's Context, CAD played by a recording host
 class Host:
     """Answers the requests of nfcad.Context as CAD would, and keeps what the plugin sent."""
@@ -496,7 +513,17 @@ try:
     raise AssertionError("strips of a paraboloid")
 except al_plugin.UserError:
     pass
+ctx.params.update({"lamp": "P21W", "test_points": "stop lamp (S1)"})          # a signal lamp
+host.results = []
+assert "stop lamp (S1)" in plugin.light_distribution(ctx)
+assert host.results == ["image", "table", "curve", "curve"]
 ctx.params["system"] = al_plugin.CLEAR
+try:
+    plugin.reflector(ctx)
+    raise AssertionError("facets for a transverse coil")
+except al_plugin.UserError as e:
+    assert "along the axis" in str(e)
+ctx.params.update({"lamp": "H7", "test_points": al_plugin.LOW_BEAM})
 # left-hand traffic: the zones are mirrored, the lamp of the panel is used
 ctx.params.update({"traffic": al_plugin.LEFT, "lamp": "H4 (low beam)", "frame_curves": []})
 plugin.set_default_zones(ctx)

@@ -29,6 +29,7 @@ from al_spline import curve_points
 
 RIGHT, LEFT = "right-hand", "left-hand"
 CLEAR, PATTERNED = "clear lens: facetted reflector", "patterned lens: paraboloid and lens"
+LOW_BEAM = "low beam (UN R112, class B)"
 
 _ELEMENT = {
     "y_from": Param.number(-500.0, decimals=1, unit="mm", label="y from"),
@@ -87,14 +88,18 @@ class AutomotiveLighting(Plugin):
                                            "Patterned lens: a paraboloid mirror, the elements of the lens in front "
                                            "of it deflect and spread the light (groups Frame, Lamp and Lens)"),
         "lamp": Param.choice([*LAMPS, CUSTOM], "H7", label="Lamp", group="Lamp",
-                             description="lamps with a filament along the axis: its length / diameter and luminous "
-                                         "flux after UN/ECE R37 (nominal values); Custom takes the fields below"),
+                             description="filament length / diameter and luminous flux after UN/ECE R37 (nominal "
+                                         "values); Custom takes the fields below. P21W, PY21W, R10W, R5W have "
+                                         "the filament across the axis: for the patterned lens only"),
         "custom_length": Param.number(4.1, min=0.1, max=30.0, decimals=2, unit="mm", label="Custom: filament length",
                                       group="Lamp"),
         "custom_diameter": Param.number(1.3, min=0.05, max=10.0, decimals=2, unit="mm",
                                         label="Custom: filament diameter", group="Lamp"),
         "custom_flux": Param.number(1500.0, min=1.0, max=100000.0, decimals=0, unit="lm", label="Custom: luminous flux",
                                     group="Lamp"),
+        "custom_across": Param.boolean(False, label="Custom: filament across the axis", group="Lamp",
+                                       description="horizontal, at right angles to the lamp axis (signal lamps); for "
+                                                   "the patterned lens only"),
         "position": Param.point((0.0, 0.0, 0.0), label="Filament centre", group="Lamp",
                                 description="the light leaves along +X, +Z is up"),
         "traffic": Param.choice([RIGHT, LEFT], RIGHT, label="Traffic", group="Cut-off",
@@ -164,6 +169,11 @@ class AutomotiveLighting(Plugin):
         "reflectance_connections": Param.number(0.85, min=0.0, max=1.0, decimals=2,
                                                 label="Reflectance of the connecting faces", group="Analysis",
                                                 description="0: their light does not count (masked or matt walls)"),
+        "test_points": Param.choice([LOW_BEAM, *al_photometry.SIGNAL_LAMPS], LOW_BEAM, label="Test points",
+                                    group="Analysis",
+                                    description="the table of Light distribution: the low beam's points, or the "
+                                                "standard light distribution of a signal lamp (UN R148) with its "
+                                                "minimum on the axis and its maximum"),
         "sampling": Param.number(1.0, min=0.2, max=10.0, decimals=2, unit="mm", label="Mirror points every",
                                  group="Analysis", description="lattice of the light distribution"),
         "image_points": Param.integer(150, min=1, max=5000, label="Filament images (number)", group="Analysis"),
@@ -175,7 +185,7 @@ class AutomotiveLighting(Plugin):
         if params["lamp"] != CUSTOM:
             return LAMPS[params["lamp"]]
         return Lamp(CUSTOM, float(params["custom_length"]), float(params["custom_diameter"]),
-                    float(params["custom_flux"]))
+                    float(params["custom_flux"]), axial=not params["custom_across"])
 
     @staticmethod
     def cutoff_of(params: dict) -> Cutoff:
@@ -254,6 +264,9 @@ class AutomotiveLighting(Plugin):
     def reflector(self, ctx) -> al_reflector.Reflector:
         """The reflector of the panel; kept until a setting changes."""
         p = ctx.params
+        if not self.lamp_of(p).axial:
+            raise UserError("The facetted reflector needs a lamp with its filament along the axis (H1, H4, H7, …); "
+                            "lamps with the filament across it work with System: patterned lens.")
         try:
             frame = self.frame_of(ctx)
             settings = al_reflector.Settings(self.lamp_of(p), self.cutoff_of(p), zones_of(p["zones"]),
@@ -348,33 +361,50 @@ class AutomotiveLighting(Plugin):
             ctx.check_cancel()
             ctx.progress(0.9 + 0.1 * fraction, text)
 
+        function = ctx.params["test_points"]
+        # a signal lamp is measured up to ± 20° / ± 10° about its axis, coarser than a cut-off needs
+        field = {} if function == LOW_BEAM else {"h_range": (-40.0, 40.0), "v_range": (-20.0, 20.0), "dv": 0.25}
         if patterned:
             P, N, A = r.samples(float(ctx.params["sampling"]))
             transmittance = float(ctx.params["lens_transmittance"])
             dist = al_photometry.intensity(r.settings.lamp, r.filament, P, N, A,
                                            np.full(len(P), float(ctx.params["reflectance"])),
                                            after=lambda origins, d: r.through(origins, d, transmittance),
-                                           n_axial=8, n_around=16, progress=progress)
+                                           n_axial=8, n_around=16, progress=progress, **field)
         else:
             dist = al_photometry.light_distribution(
                 r, spacing=float(ctx.params["sampling"]), reflectance=float(ctx.params["reflectance"]),
-                reflectance_connections=float(ctx.params["reflectance_connections"]), progress=progress)
+                reflectance_connections=float(ctx.params["reflectance_connections"]), progress=progress, **field)
         run = ctx.result_set(f"Low beam {r.settings.lamp.name}")
         ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
                   extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
                   description=("mirror, then the lens (no light from the steps between its elements)" if patterned
                                else "single reflection at the facets and the connecting faces")
                   + "; 625 cd = 1 lx at 25 m")
-        ctx.table(run, "R112 test points (class B, passing beam)",
-                  ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
-                  al_photometry.test_points(dist, cutoff))
-        side = -2.5 if cutoff.right_hand_traffic else 2.5
+        if function == LOW_BEAM:
+            ctx.table(run, "R112 test points (class B, passing beam)",
+                      ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
+                      al_photometry.test_points(dist, cutoff))
+        else:
+            ctx.table(run, f"R148 standard light distribution, {function}",
+                      ["point", "H / °", "V / °", "I / cd", "required", ""],
+                      al_photometry.signal_points(dist, function))
+        # the cuts: through the cut-off and the 50 m line of a low beam, through the axis of a signal lamp
+        side = 0.0 if function != LOW_BEAM else -2.5 if cutoff.right_hand_traffic else 2.5
+        level = -0.86 if function == LOW_BEAM else 0.0
         columns = (dist.h >= side - 0.5) & (dist.h <= side + 0.5)
         ctx.curve(run, f"Vertical cut at H = {side:g}°", dist.v, dist.intensity[:, columns].mean(axis=1),
                   x_label="V / °", y_label="I / cd")
-        rows = (dist.v >= -0.96) & (dist.v <= -0.76)
-        ctx.curve(run, "Horizontal cut at V = -0.86°", dist.h, dist.intensity[rows].mean(axis=0),
+        rows = (dist.v >= level - 0.25) & (dist.v <= level + 0.25)
+        ctx.curve(run, f"Horizontal cut at V = {level:g}°", dist.h, dist.intensity[rows].mean(axis=0),
                   x_label="H / °", y_label="I / cd")
+        if function != LOW_BEAM:
+            failed = [row[0] for row in al_photometry.signal_points(dist, function) if row[-1] != "ok"]
+            ctx.log(f"flux: lamp {dist.flux_lamp:.0f} lm, onto the mirror {dist.flux_mirror:.0f} lm, in the beam "
+                    f"{dist.flux_beam:.0f} lm; maximum {dist.intensity.max():.0f} cd; {function}: "
+                    + ("all points met" if not failed else "not met: " + ", ".join(failed)))
+            return (f"{dist.flux_beam:.0f} lm in the beam ({100.0 * dist.flux_beam / dist.flux_lamp:.0f} %), maximum "
+                    f"{dist.intensity.max():.0f} cd, {function}: " + ("met" if not failed else f"{len(failed)} not met"))
         g, v_cut = al_photometry.sharpness(dist, cutoff)
         glare = al_photometry.glare(dist, cutoff)
         ctx.log(f"flux: lamp {dist.flux_lamp:.0f} lm, onto the mirror {dist.flux_mirror:.0f} lm, in the beam "

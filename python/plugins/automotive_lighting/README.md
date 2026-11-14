@@ -1,7 +1,8 @@
 # Automotive Lighting plugin
 
-Headlamps and signal lamps for filament lamps (H1, H4, H7, H8, H9, H11, HB3, HB4 or your own data –
-lamps with the filament along the axis), in two systems (*System* in the panel):
+Headlamps and signal lamps for filament lamps (H1, H4, H7, H8, H9, H11, HB3, HB4 with the filament
+along the axis; P21W, PY21W, R10W, R5W with the filament across it, for the patterned lens; or your
+own data), in two systems (*System* in the panel):
 
 - **Clear lens: facetted reflector.** The mirror is facetted so that the low beam gets its
   **cut-off line** from the mirror alone, and the facets are joined to one surface that can be
@@ -32,7 +33,8 @@ and V upwards.
   radius at their foot and head.
 - *Lens* (patterned lens only): position, thickness, refractive index, transmittance, element
   size, the position of the mirror's focus and the **elements**.
-- *Analysis*: reflectance of the mirror and of the connecting faces (0: masked or matt walls),
+- *Analysis*: the **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
+  reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
 
 **Zones.** A zone is a sector about the lamp axis (azimuth 0° = left, 90° = up, 180° = right, seen
@@ -163,8 +165,16 @@ error).
 every element as trimmed NURBS faces (`al.part` = `mirror`, `lens`, `element`) in the group
 *Headlamp &lt;lamp&gt;*. *Filament images* and *Light distribution* trace from the coil to the mirror
 and through the lens (refraction at both sides, *Transmittance*; a ray that misses the lens or is
-totally reflected in it is lost). The table of R112 points refers to a low beam; for other lamps
-read the image and the cuts.
+totally reflected in it is lost).
+
+**Signal lamps.** With *Analysis → Test points* set to a signal lamp, *Light distribution* shows
+the points of its standard light distribution of UN R148 (± 20° horizontally, ± 10° vertically:
+the percentage of the minimum intensity required on the axis) and the highest intensity in any
+direction, for a single lamp: front position lamp (4 … 140 cd), rear position lamp (4 … 17 cd),
+stop lamp S1 (60 … 260 cd), direction indicator front 1 (175 … 1000 cd) and rear 2a
+(50 … 500 cd), daytime running lamp (400 … 1200 cd, its own grid). The cuts then go through the
+axis. The colour of the lens is part of *Transmittance* (a red or amber lens passes a fraction of
+the lamp's flux); the lamps P21W, PY21W, R10W and R5W have their filament across the axis.
 
 Not modelled: the walls between neighbouring elements (the steps of the prisms) and their stray
 light, an inclined or curved lens, reflections at the glass.
@@ -174,8 +184,9 @@ light, an inclined or curved lens, reflections at the glass.
 - Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
   connecting faces, nothing shades (a wall does not shadow the facet behind it), no light leaving
   the lamp directly, no bulb glass, no cover lens. The cut-off is sharper than a real lamp's.
-- Filaments along the lamp axis only. With a transverse filament (H3, fog lamps) both ends of the
-  coil touch a horizontal cut-off over whole areas of the mirror; that case needs its own treatment.
+- The facetted reflector needs a filament along the lamp axis. With a transverse filament (H3, fog
+  lamps) both ends of the coil touch a horizontal cut-off over whole areas of the mirror; that
+  case needs its own treatment. The patterned lens takes both.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp
   axis; the strips must be wider than their connecting faces (both are reported).
 - The frame should be convex or nearly so; the lamp axis is +X; the faces are separate trimmed
