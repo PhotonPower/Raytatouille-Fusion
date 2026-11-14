@@ -1,9 +1,16 @@
 # Automotive Lighting plugin
 
-The reflector of a **clear-lens headlamp**: for a filament lamp (H1, H4, H7, H8, H9, H11, HB3, HB4
-or your own data – lamps with the filament along the axis) the mirror is facetted so that the low beam gets its **cut-off line** from the
-mirror alone, and the facets are joined to one surface that can be moulded. Needs only NumPy in
-the plugin environment.
+Headlamps and signal lamps for filament lamps (H1, H4, H7, H8, H9, H11, HB3, HB4 or your own data –
+lamps with the filament along the axis), in two systems (*System* in the panel):
+
+- **Clear lens: facetted reflector.** The mirror is facetted so that the low beam gets its
+  **cut-off line** from the mirror alone, and the facets are joined to one surface that can be
+  moulded. Most of this page.
+- **Patterned lens: paraboloid and lens** (Streuscheibe). A paraboloid mirror and, in front of it,
+  a lens whose inner side is a grid of elements – prisms, cylinder lenses, pillows – that turn and
+  spread the light. See *Patterned lens* below.
+
+Needs only NumPy in the plugin environment.
 
 Coordinates: **+X** is the driving direction (the light leaves along +X), **+Y** left, **+Z** up; the
 centre of the filament lies at *Filament centre*. On the measuring screen H is positive to the right
@@ -13,7 +20,8 @@ and V upwards.
 
 - *Lamp*: the filament as a cylinder (length, diameter) and its luminous flux; nominal flux of
   UN/ECE R37, typical coil dimensions – check them against the lamp's sheet, or enter them under
-  *Custom*. H4: the low-beam coil above its shield (light only into the upper 195°).
+  *Custom*. H4: the low-beam coil above its shield – light passes only over the shield's edges
+  (taken 2.5 mm from the axis), into the upper 195°.
 - *Cut-off*: right- or left-hand traffic, the height of the horizontal part (−0.57° = 1 %), the
   rise (15°) and the position of the kink.
 - *Frame*: the outline of the mirror seen along X – closed curves drawn in CAD (*Frame (curves)*,
@@ -22,6 +30,8 @@ and V upwards.
   (0: whole strips; else every strip is cut into rows of this length) and the **zones**.
 - *Connecting faces*: on / off, the draft angle of the walls between the facets and the fillet
   radius at their foot and head.
+- *Lens* (patterned lens only): position, thickness, refractive index, transmittance, element
+  size, the position of the mirror's focus and the **elements**.
 - *Analysis*: reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
 
@@ -123,6 +133,41 @@ junction – the smallest angle is logged); bands and facets join within about 0
 take 10 – 15 % of the mirror with the default settings and send their light elsewhere – the
 light distribution shows it as stray light above the cut-off. Lower steps mean narrower walls:
 narrower strips, a smaller spread per strip, or neighbouring zones with similar aims.
+
+## Patterned lens
+
+*System → patterned lens*. The mirror is the paraboloid of *Reflector → Focal length* within the
+frame, outside the lamp hole; *Lens → Mirror focus behind the filament centre* moves its focus
+(H4: the low-beam coil sits before the focus, so the upper half of the mirror, which alone gets
+light past the shield, sends it below the horizon). The lens is a plate at *Lens in front of the
+filament* with a plane outer side; its inner side is a grid of cells (*Element width / height*,
+one cell centred on the lamp axis).
+
+**Elements.** Each row of the table holds a region (y to the left, z up, about the lamp axis) and
+what the cells with their centre in it do; the first row that holds a cell counts.
+
+- *deflect H / V*: by how much the cell turns the light in its middle – a prism.
+- *spread ± H / V*: by how much more at its borders, running linearly across the cell (its left
+  part to the left, its upper part upwards; negative: the other way round, the rays cross) – a
+  cylinder lens with one spread, a pillow with both.
+- All 0: plane glass.
+
+For a point of a cell, the ray that comes from the filament centre by way of the mirror
+(direction d) is to leave the lens turned by these angles (direction t). The direction g inside
+the glass follows from t by refraction at the plane outer side, and the inner surface gets the
+normal N ∝ d − n g (Snell's law in vector form). Its slopes are integrated over the cell and the
+cell's surface is the Bézier patch of degree 5 closest to that (the log gives the largest slope
+error).
+
+*Generate reflector* adds the mirror (exact, with the lamp hole), the outer side of the lens and
+every element as trimmed NURBS faces (`al.part` = `mirror`, `lens`, `element`) in the group
+*Headlamp &lt;lamp&gt;*. *Filament images* and *Light distribution* trace from the coil to the mirror
+and through the lens (refraction at both sides, *Transmittance*; a ray that misses the lens or is
+totally reflected in it is lost). The table of R112 points refers to a low beam; for other lamps
+read the image and the cuts.
+
+Not modelled: the walls between neighbouring elements (the steps of the prisms) and their stray
+light, an inclined or curved lens, reflections at the glass.
 
 ## Limits of this version
 

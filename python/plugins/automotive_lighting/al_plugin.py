@@ -1,4 +1,5 @@
-"""Automotive Lighting plugin: the facetted reflector of a clear-lens headlamp (low beam).
+"""Automotive Lighting plugin: headlamps and signal lamps for filament lamps – the facetted
+reflector of a clear-lens headlamp (low beam), or a paraboloid with a patterned lens (al_lens).
 
 For a filament lamp (H7, H4, …) and the frame of the reflector, the mirror is cut into zones and
 strips; every strip is a surface whose filament images touch the cut-off line (al_design); walls
@@ -18,6 +19,7 @@ import numpy as np
 from nfcad import Param, Plugin, UserError, action
 
 import al_layout
+import al_lens
 import al_photometry
 import al_reflector
 from al_design import DesignError
@@ -26,6 +28,18 @@ from al_optics import CUSTOM, HORIZONTAL, LAMPS, RISING, Cutoff, Lamp
 from al_spline import curve_points
 
 RIGHT, LEFT = "right-hand", "left-hand"
+CLEAR, PATTERNED = "clear lens: facetted reflector", "patterned lens: paraboloid and lens"
+
+_ELEMENT = {
+    "y_from": Param.number(-500.0, decimals=1, unit="mm", label="y from"),
+    "y_to": Param.number(500.0, decimals=1, unit="mm", label="y to"),
+    "z_from": Param.number(-500.0, decimals=1, unit="mm", label="z from"),
+    "z_to": Param.number(500.0, decimals=1, unit="mm", label="z to"),
+    "deflect_h": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="deflect H"),
+    "deflect_v": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="deflect V"),
+    "spread_h": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="spread ± H"),
+    "spread_v": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="spread ± V"),
+}
 
 _ZONE = {
     "from": Param.number(0.0, min=-360.0, max=360.0, decimals=1, unit="°", label="from azimuth"),
@@ -68,6 +82,10 @@ def zones_of(rows: list[dict]) -> tuple[Zone, ...]:
 
 class AutomotiveLighting(Plugin):
     params = {
+        "system": Param.choice([CLEAR, PATTERNED], CLEAR, label="System", group="System",
+                               description="clear lens: the facets of the mirror shape the beam and its cut-off. "
+                                           "Patterned lens: a paraboloid mirror, the elements of the lens in front "
+                                           "of it deflect and spread the light (groups Frame, Lamp and Lens)"),
         "lamp": Param.choice([*LAMPS, CUSTOM], "H7", label="Lamp", group="Lamp",
                              description="lamps with a filament along the axis: its length / diameter and luminous "
                                          "flux after UN/ECE R37 (nominal values); Custom takes the fields below"),
@@ -113,6 +131,27 @@ class AutomotiveLighting(Plugin):
         "knot_spacing": Param.number(1.5, min=0.3, max=10.0, decimals=2, unit="mm", label="Surface knots every",
                                      group="Reflector", description="of the facets' B-splines; smaller: closer to "
                                                                     "the computed strips, more control points"),
+        "lens_x": Param.number(75.0, min=1.0, max=1000.0, decimals=1, unit="mm", label="Lens in front of the filament",
+                               group="Lens", description="the base plane of its inner side"),
+        "lens_thickness": Param.number(3.0, min=0.5, max=50.0, decimals=2, unit="mm", label="Thickness", group="Lens"),
+        "lens_index": Param.number(1.49, min=1.01, max=3.0, decimals=3, label="Refractive index", group="Lens",
+                                   description="PMMA 1.49, polycarbonate 1.59, glass about 1.52"),
+        "lens_transmittance": Param.number(0.92, min=0.0, max=1.0, decimals=2, label="Transmittance", group="Lens"),
+        "cell_width": Param.number(10.0, min=0.5, max=500.0, decimals=2, unit="mm", label="Element width", group="Lens"),
+        "cell_height": Param.number(10.0, min=0.5, max=500.0, decimals=2, unit="mm", label="Element height",
+                                    group="Lens"),
+        "focus_behind": Param.number(0.0, min=-50.0, max=50.0, decimals=2, unit="mm",
+                                     label="Mirror focus behind the filament centre", group="Lens",
+                                     description="0: the filament sits in the focus of the paraboloid (its focal "
+                                                 "length: Reflector → Focal length)"),
+        "elements": Param.table(_ELEMENT, [{"y_from": -500.0, "y_to": 500.0, "z_from": -500.0, "z_to": 500.0,
+                                            "deflect_h": 0.0, "deflect_v": -1.0, "spread_h": 15.0, "spread_v": 4.0}],
+                                label="Elements", group="Lens",
+                                description="what the cells of the lens do, by the place of their centre (the first "
+                                            "row that holds it; y to the left, z up, about the lamp axis): by how "
+                                            "much the light is turned in the cell's middle and the half spread "
+                                            "about that; all 0: plane glass; a negative spread turns the element "
+                                            "round (crossing rays)"),
         "connect": Param.boolean(True, label="Connecting faces", group="Connecting faces",
                                  description="walls with draft and fillets between the facets: one mirror surface "
                                              "that can be moulded; off: the bare facets with steps between them"),
@@ -161,6 +200,57 @@ class AutomotiveLighting(Plugin):
             raise UserError("Frame: a chosen curve no longer exists – choose the frame again.")
         return al_layout.chain(curves)
 
+    def lens_system(self, ctx) -> al_lens.LensSystem:
+        """The paraboloid and lens of the panel; kept until a setting changes."""
+        p = ctx.params
+        try:
+            frame = self.frame_of(ctx)
+            elements = tuple(al_lens.Element(float(r["y_from"]), float(r["y_to"]), float(r["z_from"]), float(r["z_to"]),
+                                             float(r["deflect_h"]), float(r["deflect_v"]), float(r["spread_h"]),
+                                             float(r["spread_v"])) for r in p["elements"])
+            settings = al_lens.LensSettings(self.lamp_of(p), self.cutoff_of(p), elements, focal=float(p["focal"]),
+                                            focus_behind=float(p["focus_behind"]), hole_radius=float(p["hole_radius"]),
+                                            lens_x=float(p["lens_x"]), thickness=float(p["lens_thickness"]),
+                                            index=float(p["lens_index"]), cell_width=float(p["cell_width"]),
+                                            cell_height=float(p["cell_height"]))
+            key = hashlib.sha256(repr(settings).encode() + frame.tobytes()).hexdigest()
+            if getattr(self, "_lens", (None, None))[0] != key:
+                def progress(fraction: float, text: str) -> None:
+                    ctx.check_cancel()
+                    ctx.progress(0.9 * fraction, text)
+
+                self._lens = (key, al_lens.build(settings, frame, progress))
+        except DesignError as e:
+            raise UserError(str(e)) from e
+        return self._lens[1]
+
+    def _replace_parts(self, ctx, name: str) -> int:
+        """Removes what the plugin generated before; the model-tree group for the new parts."""
+        for e in ctx.entities():
+            if (e.get("attributes") or {}).get("al.part"):
+                ctx.remove(e["id"])
+        return next((g["id"] for g in ctx.groups() if g["name"] == name), None) or ctx.add_group(name)
+
+    def _generate_lens(self, ctx):
+        system = self.lens_system(ctx)
+        s = system.settings
+        origin = tuple(float(v) for v in ctx.params["position"])
+        group = self._replace_parts(ctx, f"Headlamp {s.lamp.name}")
+        ctx.add(al_reflector.filament_surface(system.filament, origin), f"Filament {s.lamp.name}",
+                {"al.part": "filament"}, group)
+        faces = al_lens.faces(system, origin)
+        for k, (kind, name, geometry) in enumerate(faces):
+            ctx.check_cancel()
+            ctx.add(geometry, name, {"al.part": kind}, group)
+            ctx.progress(0.9 + 0.1 * (k + 1) / len(faces), "adding the faces …")
+        for w in system.warnings:
+            ctx.log(f"warning: {w}")
+        ctx.log(f"paraboloid f = {s.focal:g} mm; lens at x = {s.lens_x + origin[0]:g} mm, {s.thickness:g} mm thick, "
+                f"n = {s.index:g}: {system.cells} elements of {s.cell_width:g} x {s.cell_height:g} mm, their surfaces "
+                f"from {system.sag[0]:.2f} to {system.sag[1]:.2f} mm about the base plane (slopes within "
+                f"{system.fit_error:.1e} of the wanted ones)")
+        return f"paraboloid and lens with {system.cells} elements"
+
     def reflector(self, ctx) -> al_reflector.Reflector:
         """The reflector of the panel; kept until a setting changes."""
         p = ctx.params
@@ -186,13 +276,11 @@ class AutomotiveLighting(Plugin):
     @action("Generate reflector", description="The mirror as trimmed NURBS faces – the facets and the connecting "
                                               "faces between them – and the filament")
     def generate(self, ctx):
+        if ctx.params["system"] == PATTERNED:
+            return self._generate_lens(ctx)
         r = self.reflector(ctx)
         origin = tuple(float(v) for v in ctx.params["position"])
-        for e in ctx.entities():           # a new reflector replaces the last one
-            if (e.get("attributes") or {}).get("al.part"):
-                ctx.remove(e["id"])
-        name = f"Reflector {r.settings.lamp.name}"
-        group = next((g["id"] for g in ctx.groups() if g["name"] == name), None) or ctx.add_group(name)
+        group = self._replace_parts(ctx, f"Reflector {r.settings.lamp.name}")   # a new reflector replaces the last
         ctx.add(al_reflector.filament_surface(r.filament, origin), f"Filament {r.settings.lamp.name}",
                 {"al.part": "filament"}, group)
         faces = al_reflector.faces(r, origin)
@@ -232,11 +320,15 @@ class AutomotiveLighting(Plugin):
     @action("Filament images", description="The filament images of points all over the mirror on the measuring "
                                            "screen, with the cut-off line")
     def filament_images(self, ctx):
-        r = self.reflector(ctx)
         count = int(ctx.params["image_points"])
-        spacing = max(0.5, math.sqrt(r.area / count))
-        P, N, _, _ = r.samples(spacing, kinds=(al_reflector.FACET,))
-        images = al_photometry.filament_images(P, N, r.filament)
+        if ctx.params["system"] == PATTERNED:
+            r = self.lens_system(ctx)
+            P, N, _ = r.samples(max(0.5, math.sqrt(al_layout.area(r.frame) / count)))
+            images = al_photometry.filament_images(P, N, r.filament, after=r.through)
+        else:
+            r = self.reflector(ctx)
+            P, N, _, _ = r.samples(max(0.5, math.sqrt(r.area / count)), kinds=(al_reflector.FACET,))
+            images = al_photometry.filament_images(P, N, r.filament)
         h_range, v_range = (-45.0, 45.0), (-15.0, 5.0)
         values, width, height = al_photometry.draw_images(images, r.settings.cutoff, h_range, v_range)
         run = ctx.result_set(f"Filament images {r.settings.lamp.name}")
@@ -248,21 +340,31 @@ class AutomotiveLighting(Plugin):
     @action("Light distribution", description="Luminous intensity of the low beam, the test points of UN/ECE R112 "
                                               "and the sharpness of the cut-off")
     def light_distribution(self, ctx):
-        r = self.reflector(ctx)
+        patterned = ctx.params["system"] == PATTERNED
+        r = self.lens_system(ctx) if patterned else self.reflector(ctx)
         cutoff = r.settings.cutoff
 
         def progress(fraction: float, text: str) -> None:
             ctx.check_cancel()
             ctx.progress(0.9 + 0.1 * fraction, text)
 
-        dist = al_photometry.light_distribution(r, spacing=float(ctx.params["sampling"]),
-                                                reflectance=float(ctx.params["reflectance"]),
-                                                reflectance_connections=float(ctx.params["reflectance_connections"]),
-                                                progress=progress)
+        if patterned:
+            P, N, A = r.samples(float(ctx.params["sampling"]))
+            transmittance = float(ctx.params["lens_transmittance"])
+            dist = al_photometry.intensity(r.settings.lamp, r.filament, P, N, A,
+                                           np.full(len(P), float(ctx.params["reflectance"])),
+                                           after=lambda origins, d: r.through(origins, d, transmittance),
+                                           n_axial=8, n_around=16, progress=progress)
+        else:
+            dist = al_photometry.light_distribution(
+                r, spacing=float(ctx.params["sampling"]), reflectance=float(ctx.params["reflectance"]),
+                reflectance_connections=float(ctx.params["reflectance_connections"]), progress=progress)
         run = ctx.result_set(f"Low beam {r.settings.lamp.name}")
         ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
                   extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
-                  description="single reflection at the facets and the connecting faces; 625 cd = 1 lx at 25 m")
+                  description=("mirror, then the lens (no light from the steps between its elements)" if patterned
+                               else "single reflection at the facets and the connecting faces")
+                  + "; 625 cd = 1 lx at 25 m")
         ctx.table(run, "R112 test points (class B, passing beam)",
                   ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
                   al_photometry.test_points(dist, cutoff))
@@ -285,6 +387,8 @@ class AutomotiveLighting(Plugin):
 
     @action("Show strips", description="The start curve and some characteristic strips of every facet as lines")
     def show_strips(self, ctx):
+        if ctx.params["system"] == PATTERNED:
+            raise UserError("Strips belong to the facetted reflector (System: clear lens).")
         r = self.reflector(ctx)
         origin = np.asarray(ctx.params["position"], dtype=float)
         run = ctx.result_set(f"Strips {r.settings.lamp.name}")
