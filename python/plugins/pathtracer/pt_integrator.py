@@ -228,7 +228,7 @@ def eye_subpaths(scene, sensor, n: int, k: int, rng, stop_rough: bool = False, c
     path.point = e["point"]
     path.beta[0] = 1.0 / e["pdf_pos"]
     path.pf[0] = e["pdf_pos"]
-    path.valid[0] = True
+    path.valid[0] = e["exists"]
     _walk(scene, sensor, path, e, e["beta"], rng, radiance=True, stop_rough=stop_rough)
     return path
 
@@ -345,7 +345,7 @@ def _weight(scene, sensor, light: Path, eye: Path | None, s: int, t: int, j: np.
         _, dens = scene.emitted(src, eye.ns[t - 1, j], eye.wo[t - 1, j])
         pf[1] = dens * eye.cos(t - 2, j, eye.wo[t - 1, j]) / gap2(eye, t - 1)
     else:
-        pr[n - 1] = sensor.pdf_pos(count)
+        pr[n - 1] = sensor.pdf_pos_at(light.tex[s - 1, j])
         _, dens, _ = sensor.response(light.ns[s - 1, j], light.wo[s - 1, j])
         pr[n - 2] = dens * light.cos(s - 2, j, light.wo[s - 1, j]) / gap2(light, s - 1)
 
@@ -424,24 +424,37 @@ def batch_size(k_light: int, k_eye: int) -> int:
     return int(np.clip(100e6 / (170 * (k_light + k_eye + 1)), 10_000, 100_000))
 
 
+def adapts(method: str, camera: bool) -> bool:
+    """Whether the method draws samples from the sensor, so that they can be steered."""
+    return method in ("path", "bidir") or (method == "photon" and camera)
+
+
 def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 0, batch: int | None = None,
-           progress=None, cancelled=None, radius: float = 0.0) -> dict:
+           progress=None, cancelled=None, radius: float = 0.0, adaptive: bool = False, weights=None) -> dict:
     """Estimates the sensor's values with `samples` pairs of subpaths; paths have up to `depth`
     segments (source – … – sensor). Returns {"values": per texel the flux / W or per pixel the
     radiance / W/(mm² sr), "channels": the same per wavelength of scene.wavelengths (their sum is
     "values"), "error": the standard error of the values (from the spread of the batches; None
     with a single batch), "samples": done, "rays": traced}. progress(fraction) and cancelled()
-    are called between batches; a cancelled run returns what it has."""
+    are called between batches; a cancelled run returns what it has.
+
+    adaptive: after every batch the sensor moves its samples to the texels / pixels that are
+    still uncertain (sensor.adapt; path tracing, bidirectional and photon mapping). weights: the
+    shares of the texels / pixels to start with (default: by area / even). Every batch is drawn
+    with shares fixed before it, so the mean of the batches stays right."""
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}")
     if depth < 1:
         raise ValueError("paths need at least one segment")
+    sensor.reset()
+    if weights is not None:
+        sensor.set_weights(weights)
     if method == "photon":
         if sensor.camera:
             import pt_photon
 
             return pt_photon.render(scene, sensor, samples, depth, seed=seed, radius=radius, progress=progress,
-                                    cancelled=cancelled)
+                                    cancelled=cancelled, adaptive=adaptive)
         method = "light"            # on faces the texels already collect the photons
     rng = np.random.default_rng(seed)
     k_light, k_eye = lengths(method, sensor.camera, depth)
@@ -463,6 +476,8 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
             _detector_deposits(scene, sensor, light, eye, method, depth, accum)
         done += n
         spread.add(accum, n)
+        if adaptive and adapts(method, sensor.camera) and spread.batches >= 2 and done < samples:
+            sensor.adapt(spread.error(done))
         if progress is not None:
             progress(done / samples)
         if cancelled is not None and cancelled():

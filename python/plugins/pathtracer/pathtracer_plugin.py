@@ -74,6 +74,10 @@ class PathTracerPlugin(Plugin):
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
+        "adaptive": Param.boolean(True, label="Adaptive sampling", group="Computation",
+                                  description="Path tracing, bidirectional and photon mapping move their samples "
+                                              "to the texels / pixels whose values are still uncertain (the result "
+                                              "stays right: every batch is drawn with shares fixed before it)"),
         "processes": Param.integer(0, min=0, max=256, label="Processes", group="Computation",
                                    description="Processor cores used by larger computations. 0: half of the "
                                                "cores, at most 4 – every process needs memory for the scene "
@@ -181,12 +185,12 @@ class PathTracerPlugin(Plugin):
         try:
             out = pt_parallel.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
                                      seed=p["seed"], processes=p["processes"], radius=p["photon_radius"],
-                                     progress=progress, cancelled=ctx.cancelled)
+                                     adaptive=p["adaptive"], progress=progress, cancelled=ctx.cancelled)
         except OSError as e:                                 # no worker processes here: do without
             ctx.log(f"worker processes could not be started ({e}); computing in one process")
             out = pt_integrator.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
-                                       seed=p["seed"], radius=p["photon_radius"], progress=progress,
-                                       cancelled=ctx.cancelled)
+                                       seed=p["seed"], radius=p["photon_radius"], adaptive=p["adaptive"],
+                                       progress=progress, cancelled=ctx.cancelled)
             out["processes"] = 1
         if "radius" in out:
             ctx.log(f"photon mapping: {out['passes']} passes, last radius {out['radius']:.4g} mm")
