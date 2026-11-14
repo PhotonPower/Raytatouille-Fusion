@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pt_bsdf  # noqa: E402
 import pt_integrator  # noqa: E402
+import pt_parallel  # noqa: E402
 import pt_scene  # noqa: E402
 import pt_setup  # noqa: E402
 
@@ -73,6 +74,10 @@ class PathTracerPlugin(Plugin):
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
+        "processes": Param.integer(0, min=0, max=256, label="Processes", group="Computation",
+                                   description="Processor cores used by larger computations. 0: half of the "
+                                               "cores, at most 4 – every process needs memory for the scene "
+                                               "and its paths (some hundred MB)"),
         "export": Param.file("", filter="NumPy archive (*.npz)", save=True, label="Also write to file",
                              group="Computation",
                              description="Irradiance and Camera image also write their numbers (values, standard "
@@ -173,13 +178,21 @@ class PathTracerPlugin(Plugin):
         def progress(f: float) -> None:
             ctx.progress(0.02 + 0.96 * f, f"{what}, {method}: {int(round(f * p['samples'])):,} of {p['samples']:,}")
 
-        out = pt_integrator.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"], seed=p["seed"],
-                                   progress=progress, cancelled=ctx.cancelled, radius=p["photon_radius"])
+        try:
+            out = pt_parallel.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
+                                     seed=p["seed"], processes=p["processes"], radius=p["photon_radius"],
+                                     progress=progress, cancelled=ctx.cancelled)
+        except OSError as e:                                 # no worker processes here: do without
+            ctx.log(f"worker processes could not be started ({e}); computing in one process")
+            out = pt_integrator.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
+                                       seed=p["seed"], radius=p["photon_radius"], progress=progress,
+                                       cancelled=ctx.cancelled)
+            out["processes"] = 1
         if "radius" in out:
             ctx.log(f"photon mapping: {out['passes']} passes, last radius {out['radius']:.4g} mm")
         seconds = max(time.time() - start, 1e-9)
         ctx.log(f"{what}, {method}: {out['samples']:,} samples, {out['rays']:,} rays in {seconds:.1f} s "
-                f"({out['rays'] / seconds:,.0f} rays/s)")
+                f"({out['rays'] / seconds:,.0f} rays/s, {out['processes']} process(es))")
         note = "" if out["samples"] >= p["samples"] else f" (stopped at {out['samples']:,} samples)"
         return out, note
 

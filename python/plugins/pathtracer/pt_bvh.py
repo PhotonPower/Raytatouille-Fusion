@@ -1,6 +1,6 @@
 """Ray – triangle intersection for many rays at once: a bounding volume hierarchy (built level by
-level: triangles that are large for their node are set apart, the others split at the median
-along the longest axis) and a traversal that advances all rays together, one node per ray and
+level: triangles that are large for their node are set apart, the others split along the longest
+axis where the surface area heuristic puts the cut) and a traversal that advances all rays together, one node per ray and
 step, nearer child first. NumPy only."""
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import numpy as np
 
 LEAF = 4
+BINS = 16
 
 
 def _ranges(op, values: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
@@ -61,9 +62,43 @@ class BVH:
             n_big = np.bincount(label, weights=big, minlength=len(ids)).astype(np.int64)
             by_size = (n_big > 0) & (n_big < lens) & (depth < 48)
             big = big * by_size[label]
-            perm = np.lexsort((c[pos, ax[label]], big, label))
-            order[pos] = order[pos][perm]
+            coord = c[pos, ax[label]]
+            perm = np.lexsort((coord, big, label))
             mid = np.where(by_size, e - n_big, s + lens // 2)
+            # the others: where the surface area heuristic puts the cut (boxes of the two sides x their
+            # numbers of triangles, tried between BINS slices along the longest axis); the median
+            # if no cut separates anything
+            tri = order[pos]
+            lo_node = _ranges(np.minimum, c, s, e)[np.arange(len(ids)), ax]
+            width = extent[np.arange(len(ids)), ax]
+            slot = np.clip(((coord - lo_node[label]) / np.where(width > 0, width, 1.0)[label] * BINS).astype(np.int64),
+                           0, BINS - 1)
+            key = label * BINS + slot
+            number = np.bincount(key, minlength=len(ids) * BINS).reshape(len(ids), BINS)
+            bin_lo = np.full((len(ids) * BINS, 3), np.inf)
+            bin_hi = np.full((len(ids) * BINS, 3), -np.inf)
+            np.minimum.at(bin_lo, key, lo[tri])
+            np.maximum.at(bin_hi, key, hi[tri])
+            bin_lo, bin_hi = bin_lo.reshape(len(ids), BINS, 3), bin_hi.reshape(len(ids), BINS, 3)
+
+            def surface(a, b):
+                d = np.clip(b - a, 0.0, None)
+                return d[..., 0] * d[..., 1] + d[..., 1] * d[..., 2] + d[..., 2] * d[..., 0]
+
+            a_left = surface(np.minimum.accumulate(bin_lo, axis=1), np.maximum.accumulate(bin_hi, axis=1))[:, :-1]
+            a_right = surface(np.minimum.accumulate(bin_lo[:, ::-1], axis=1)[:, ::-1],
+                              np.maximum.accumulate(bin_hi[:, ::-1], axis=1)[:, ::-1])[:, 1:]
+            n_left = np.cumsum(number, axis=1)[:, :-1]
+            with np.errstate(invalid="ignore"):
+                cost = np.where((n_left > 0) & (n_left < lens[:, None]),
+                                a_left * n_left + a_right * (lens[:, None] - n_left), np.inf)
+            cut = np.argmin(cost, axis=1)
+            by_area = ~by_size & np.isfinite(cost[np.arange(len(ids)), cut])
+            if by_area.any():
+                side = (slot > cut[label]).astype(np.int64) * by_area[label] + big
+                perm = np.lexsort((coord, side, label))
+                mid = np.where(by_area, s + n_left[np.arange(len(ids)), cut], mid)
+            order[pos] = order[pos][perm]
             cs = np.column_stack([s, mid]).ravel()          # children, left then right, in order
             ce = np.column_stack([mid, e]).ravel()
             first = len(start)

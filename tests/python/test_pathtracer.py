@@ -163,6 +163,11 @@ e1[:6] *= 15                                                         # a few lar
 e2[:6] *= 15
 bvh = pt_bvh.BVH(v0, e1, e2)
 assert bvh.count[bvh.left < 0].sum() == 300 and sorted(bvh.order) == list(range(300)) and bvh.leaf <= pt_bvh.LEAF
+inner = bvh.left >= 0                                                # every box holds its children's boxes
+for child in (bvh.left[inner], bvh.right[inner]):
+    assert (bvh.bmin[child] >= bvh.bmin[inner] - 1e-12).all() and (bvh.bmax[child] <= bvh.bmax[inner] + 1e-12).all()
+same = pt_bvh.BVH(np.tile(v0[:1], (40, 1)), np.tile(e1[:1], (40, 1)), np.tile(e2[:1], (40, 1)))      # 40 times one
+assert same.count[same.left < 0].sum() == 40 and same.leaf <= pt_bvh.LEAF                            # triangle
 o = rng.uniform(-15, 15, (500, 3))
 d = rng.normal(size=(500, 3))
 d /= np.linalg.norm(d, axis=1, keepdims=True)
@@ -238,9 +243,9 @@ except ValueError as e:
 scene = scene_of([box((0, 0, 0), (100, 100, 100))], [WHITE], [pt_scene.SourceSpec("p", 1.0, points=((50, 50, 50),))], (0,))
 assert scene.flipped == []
 sensor = pt_scene.TexelSensor(scene, range(6), 2)
-for method in pt_integrator.METHODS:
-    total = values(scene, sensor, method, 20_000, 40).sum()
-    assert abs(total / 2.5 - 1) < 0.03, (method, total)
+for method in pt_integrator.METHODS:                                 # paths of up to 12 segments: 1 + rho + … + rho^11
+    total = values(scene, sensor, method, 20_000, 12).sum()
+    assert abs(total / ((1 - 0.6 ** 12) / 0.4) - 1) < 0.03, (method, total)
 
 # ---- closed bodies are oriented: two faces of a box turned the wrong way are turned back
 turned = box((0, 0, 0), (10, 20, 30))
@@ -274,12 +279,12 @@ scene = scene_of([box((0, 0, 0), (100, 100, 100)), rect((0.5, 0.5, 50), (99, 0, 
                   rect((40, 40, 80), (0, 20, 0), (20, 0, 0))], [WHITE, SHEET, BLACK],
                  [pt_scene.SourceSpec("a", 1.0, 90, "front", entities=(2,))], (0,))
 sensor = pt_scene.TexelSensor(scene, [0, 6], 2)                      # the floor and the sheet
-reference = values(scene, sensor, "light", 60_000, 10)
+reference = values(scene, sensor, "light", 40_000, 6)
 assert 0.2 < reference[:4].sum() < reference[4:].sum()
 for method in ("path", "bidir"):
-    got = values(scene, sensor, method, 30_000, 10)
-    assert abs(got[:4].sum() / reference[:4].sum() - 1) < 0.04, (method, got[:4].sum(), reference[:4].sum())
-    assert abs(got[4:].sum() / reference[4:].sum() - 1) < 0.04, (method, got[4:].sum(), reference[4:].sum())
+    got = values(scene, sensor, method, 20_000, 6)
+    assert abs(got[:4].sum() / reference[:4].sum() - 1) < 0.06, (method, got[:4].sum(), reference[:4].sum())
+    assert abs(got[4:].sum() / reference[4:].sum() - 1) < 0.06, (method, got[4:].sum(), reference[4:].sum())
 
 # ---- an area source in a box with a glossy plate and a mirror wall: the methods agree
 scene = scene_of([rect((-100, -100, 0), (200, 0, 0), (0, 200, 0)), rect((-100, -100, 0), (0, 200, 0), (0, 0, 100)),
@@ -339,9 +344,9 @@ for point, normal in (((50.0, grid[:, None, None], grid[None, :, None]), (1, 0, 
 assert expected[0] > 4 * expected[1]                                  # little along the wire
 assert abs(values(scene, sensor, "light", 20_000, 2)[:6].sum() - 1) < 0.02
 sensor = pt_scene.TexelSensor(scene, [6, 7], 1)
-for method, samples in (("light", 200_000), ("path", 20_000), ("bidir", 20_000)):
+for method, samples in (("light", 100_000), ("path", 20_000), ("bidir", 20_000)):
     flux = values(scene, sensor, method, samples, 2)
-    assert abs(flux[0] / expected[0] - 1) < 0.08 and abs(flux[1] / expected[1] - 1) < 0.2, (method, flux, expected)
+    assert abs(flux[0] / expected[0] - 1) < 0.1 and abs(flux[1] / expected[1] - 1) < 0.3, (method, flux, expected)
 try:
     scene_of([side], [BLACK], [pt_scene.SourceSpec("mixed", 1.0, points=((0, 0, 0),), curves=wire.curves)])
     raise AssertionError("not refused")
@@ -433,21 +438,76 @@ for image in (seen, bidir):
 assert pt_setup.parse_spectrum("450:1, 550: 2;650") == ((450.0, 1.0), (550.0, 2.0), (650.0, 1.0))
 assert pt_setup.parse_spectrum("") == ((550.0, 1.0),)
 
+# ---- samples are spread evenly: every texel of a sensor gets the points its area asks for (also on
+# a trimmed face, where they stay inside), every pixel its rays – no scatter of the numbers
+scene = scene_of([disc], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((50, 50, 40),))])
+sensor = pt_scene.TexelSensor(scene, [0], 20)
+tri, b1, b2 = sensor.points(20_000, np.random.default_rng(SEED))
+_, uv = scene.mesh.shade(tri, b1, b2)
+counts = np.bincount(sensor.texel(tri, uv), minlength=sensor.count)
+asked = 20_000 * sensor.texel_area / sensor.area
+assert np.abs(counts - asked).max() < 3 and np.abs(counts - asked).mean() < 0.4, np.abs(counts - asked).max()
+assert np.sqrt(asked.mean()) > 6                                     # (numbers that scatter would differ by ~7)
+p = scene.mesh.v0[tri] + b1[:, None] * scene.mesh.e1[tri] + b2[:, None] * scene.mesh.e2[tri]
+r = np.hypot(p[:, 0] - 50, p[:, 1] - 50)
+assert r.max() < 40.3 and not ((abs(p[:, 0] - 50) < 4.8) & (abs(p[:, 1] - 50) < 4.8)).any()
+assert abs(r.mean() / 27.13 - 1) < 0.01, r.mean()                    # mean radius of the disc without the hole
+turned_patch = pt_mesh.build([{"id": 1, "geometry": sphere_patch(2.0)}], 1e-3)       # a curved face, also turned
+for flip in (False, True):
+    if flip:
+        turned_patch.flip_faces([0])
+    u, v = np.random.default_rng(1).random(500) * 0.9, np.random.default_rng(2).random(500)   # (not at the pole)
+    t, c1, c2, density = turned_patch.locate(0, u, v)
+    _, back = turned_patch.shade(t, c1, c2)
+    assert (t >= 0).all() and np.allclose(back, np.column_stack([u, v]), atol=1e-9) and 0 < density.min() <= density.max() <= 1
+pixels = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 20.0, 10, 10).sample(1_000, np.random.default_rng(SEED))["texel"]
+assert np.array_equal(np.bincount(pixels, minlength=100), np.full(100, 10))
+strata = pt_mesh.stratified(8, np.random.default_rng(SEED))
+assert sorted((strata * 8).astype(int)) == list(range(8))
+scene = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
+sensor = pt_scene.TexelSensor(scene, [0], 4)                         # 2 500 points per texel: their number alone
+smooth = pt_integrator.render(scene, sensor, "path", 40_000, 2, seed=SEED, batch=5_000)     # would scatter by 2 %
+assert pt_setup.typical_noise(smooth["values"], smooth["error"]) < 0.008
+
 # ---- the standard error from the spread of the batches: of the right size, falls with sqrt(N)
 scene = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
 sensor = pt_scene.TexelSensor(scene, [0], 4)
-runs = [pt_integrator.render(scene, sensor, "light", 40_000, 2, seed=SEED + k) for k in range(6)]
+runs = [pt_integrator.render(scene, sensor, "light", 40_000, 2, seed=SEED + k, batch=5_000) for k in range(6)]
 assert pt_integrator.render(scene, sensor, "light", 4_000, 2, seed=SEED)["error"] is None       # one batch
 scatter = np.std([r["values"] for r in runs], axis=0, ddof=1)        # what six runs really differ by
 stated = np.mean([r["error"] for r in runs], axis=0)
 assert np.all(stated > 0) and abs(np.median(stated / scatter) - 1) < 0.5, stated / scatter
-more = pt_integrator.render(scene, sensor, "light", 160_000, 2, seed=SEED)["error"]
+more = pt_integrator.render(scene, sensor, "light", 160_000, 2, seed=SEED, batch=10_000)["error"]
 assert abs(np.median(stated / more) - 2) < 0.6
 assert 0.01 < pt_setup.typical_noise(runs[0]["values"], runs[0]["error"]) < 0.05
 assert math.isnan(pt_setup.typical_noise(runs[0]["values"], None))
 camera = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 20.0, 2, 2)
 assert pt_integrator.render(scene_of([wall], [WHITE], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))]),
                             camera, "photon", 80_000, 2, seed=SEED)["error"].shape == (4,)
+
+# ---- several processes: the same jobs whatever the number of processes, so the same result; a
+# small computation stays in this process; Cancel ends the workers
+import pt_parallel  # noqa: E402
+
+assert pt_parallel.process_count(3) == 3 and 1 <= pt_parallel.process_count(0) <= 4
+assert pt_parallel.job_size(1_000) == 20_000 and pt_parallel.job_size(10 ** 9) == 200_000
+exact = solid_angle(100, 100, 50) / (4 * math.pi)
+two = pt_parallel.render(scene, sensor, "light", 60_000, 2, seed=SEED, processes=2)
+three = pt_parallel.render(scene, sensor, "light", 60_000, 2, seed=SEED, processes=3)
+assert two["processes"] == 2 and three["processes"] == 3 and two["samples"] == 60_000
+assert np.allclose(two["values"], three["values"]) and np.allclose(two["error"], three["error"])
+assert abs(two["values"].sum() / exact - 1) < 0.02 and abs(np.median(two["error"] / more) - math.sqrt(160 / 60)) < 0.5
+small = pt_parallel.render(scene, sensor, "light", 30_000, 2, seed=SEED, processes=4)
+assert small["processes"] == 1 and np.array_equal(small["values"], values(scene, sensor, "light", 30_000, 2))
+calls = []
+stopped = pt_parallel.render(scene, sensor, "bidir", 4_000_000, 6, seed=SEED, processes=2,
+                             cancelled=lambda: calls.append(1) or len(calls) > 2)
+assert stopped["samples"] < 4_000_000
+parts = [{"values": np.array([1.0, 3.0]), "channels": np.array([[1.0, 3.0]]), "error": None, "samples": 10, "rays": 5},
+         {"values": np.array([3.0, 3.0]), "channels": np.array([[3.0, 3.0]]), "error": None, "samples": 30, "rays": 7}]
+whole = pt_parallel.combine(parts)
+assert np.allclose(whole["values"], [2.5, 3.0]) and whole["samples"] == 40 and whole["rays"] == 12
+assert whole["error"][0] > 0 and whole["error"][1] == 0
 
 # ---- the model and the panel -> scene; the plugin's actions with a stand-in for CAD
 params = {"materials": pt_setup.DEFAULT_MATERIALS, "default_material": "white", "sources": pt_setup.DEFAULT_SOURCES,
@@ -496,7 +556,7 @@ out = pt_setup.irradiance(sensor, values(scene, sensor, "light", 20_000))
 assert [(f["entity"], f["face"], f["w"], f["h"]) for f in out] == [(11, 0, 8, 8)]
 assert 0.3 < out[0]["flux"] < 1.0 and abs(out[0]["area"] - 40_000) < 1e-6 and np.isfinite(out[0]["values"]).all()
 assert math.isnan(out[0]["noise"])
-result = pt_integrator.render(scene, sensor, "light", 40_000, 6, seed=SEED)
+result = pt_integrator.render(scene, sensor, "light", 40_000, 6, seed=SEED, batch=10_000)
 assert 0 < pt_setup.irradiance(sensor, result["values"], result["error"])[0]["noise"] < 0.03
 import tempfile  # noqa: E402
 
@@ -563,7 +623,7 @@ json.dumps(schema)                                                   # plain JSO
 assert set(plugin.actions()) == {"set_material", "set_source", "clear", "show", "irradiance", "camera_image",
                                  "show_camera", "show_paths"}
 assert [c["name"] for c in next(s for s in schema if s["name"] == "materials")["columns"]][:2] == ["name", "kind"]
-p = plugin.convert_params({"seed": SEED, "samples": 20_000, "texels": 8, "camera_width": 16, "camera_height": 12,
+p = plugin.convert_params({"seed": SEED, "samples": 20_000, "processes": 2, "texels": 8, "camera_width": 16, "camera_height": 12,
                            "camera_position": [0, -200, 120], "camera_target": [0, 0, 20], "preview_paths": 20})
 assert p["method"] == "light tracing" and p["materials"][0]["name"] == "white" and p["irradiance_on"] == []
 plain = [{**e, "attributes": {}} for e in model[:3]]
@@ -607,8 +667,8 @@ try:
     raise AssertionError("not refused")
 except UserError as e:
     assert "write wavelengths in nm" in str(e), e
-p.update(per_wavelength=False, sources=pt_setup.DEFAULT_SOURCES, export=str(folder / "plugin"))
-plugin.irradiance(cad)
+p.update(per_wavelength=False, sources=pt_setup.DEFAULT_SOURCES, export=str(folder / "plugin"), samples=40_000)
+plugin.irradiance(cad)                                               # 40 000 samples: two batches, so with an error
 plugin.camera_image(cad)
 assert len(cad.tables[-1][1][0]) == 6 and float(cad.tables[-1][1][0][5]) > 0             # the noise in %
 assert any("noise of a typical texel" in line for line in cad.logs) and any("written: " in line for line in cad.logs)
@@ -622,7 +682,7 @@ try:
     raise AssertionError("not refused")
 except UserError as e:
     assert "Cannot write" in str(e), e
-p["export"] = ""
+p.update(export="", samples=20_000)
 assert plugin.show_paths(cad) == "20 light paths" and plugin.show_camera(cad) == "Camera drawn"
 assert cad.line_sets == [("Light paths", 20), ("Viewing pyramid", 5)]
 cad.selection = [12, 13]

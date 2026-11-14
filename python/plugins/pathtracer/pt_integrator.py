@@ -445,8 +445,8 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
         method = "light"            # on faces the texels already collect the photons
     rng = np.random.default_rng(seed)
     k_light, k_eye = lengths(method, sensor.camera, depth)
-    if batch is None:                   # eight batches at least where the samples allow: for the error
-        batch = min(batch_size(k_light, k_eye), max(samples // 8, 5_000))
+    if batch is None:                   # eight batches where the samples allow, for the error – but no
+        batch = min(batch_size(k_light, k_eye), max(samples // 8, 20_000))       # small ones: they are slow
     accum = np.zeros(len(scene.wavelengths) * sensor.count)
     spread = Spread(sensor.count, len(scene.wavelengths))
     done = rays = 0

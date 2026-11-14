@@ -95,12 +95,18 @@ diffuse box, a glass plate).
   trimming is a mask over (u, v) (512² cells per face; fewer with very many faces), tested at
   every hit. Normals are interpolated over the triangles. Closed bodies are oriented by counting
   crossings, so that their front is the outside.
-- **Tracing.** A bounding volume hierarchy and a traversal that advances all rays of a batch
-  together (NumPy). Expect roughly 10⁵ … 10⁶ rays per second.
+- **Tracing.** A bounding volume hierarchy (built with the surface area heuristic, large
+  triangles set apart) and a traversal that advances all rays of a batch together (NumPy). Expect roughly 10⁵ … 10⁶ rays per second and processor core.
+- **Sampling.** The points on sensor faces, the camera's rays and the choice of the source are
+  spread evenly (stratified): every texel and every pixel gets the number of samples its size
+  asks for instead of a number that scatters.
+- **Several cores.** Larger computations are cut into jobs that worker processes render
+  (*Processes*; 0: half of the cores, at most 4 – every process needs some hundred MB). The
+  jobs do not depend on the number of processes, so the result does not either.
 - **Modules** (no CAD in them, usable from scripts): `pt_nurbs` (NURBS evaluation), `pt_mesh`
   (tessellation, masks, areas), `pt_bvh` (intersection), `pt_bsdf` (materials), `pt_scene`
-  (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_setup`
-  (model and panel → scene).
+  (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_parallel` and
+  `pt_worker` (several processes), `pt_setup` (model and panel → scene).
 
 ## Not yet
 
