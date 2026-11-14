@@ -370,8 +370,21 @@ assert 20 < wide_h2[1] - wide_h2[0] < 30 and 5 < wide_v2[1] - wide_v2[0] < 12 an
 assert pillow.cells == pillow.used.sum() > 20 and pillow.whole.sum() < pillow.cells
 # a ray through the lens: beside it or into a wall it is lost; the patches are what the trace sees
 origins = np.array([[0.0, 3.0, 4.0], [0.0, 300.0, 0.0]])
-out, factor = pillow.through(origins, np.tile([1.0, 0.0, 0.0], (2, 1)), 0.9)
-assert factor[0] == 0.9 and factor[1] == 0.0 and abs(np.linalg.norm(out[0]) - 1) < 1e-12
+out, factor, wall = pillow.through(origins, np.tile([1.0, 0.0, 0.0], (2, 1)), 0.9)
+assert factor[0] == 0.9 and factor[1] == 0.0 and abs(np.linalg.norm(out[0]) - 1) < 1e-12 and not wall.any()
+# walls between the elements: prisms have a step at every border, rays that meet it are lost
+assert dist_p.flux_walls == 0.0 and 0.0 < dist_s.flux_walls < 0.2 * dist_s.flux_mirror
+edge = prism.y0 + 3 * prism.settings.cell_width                               # a border between two prisms
+step = prism.inner(np.array([edge - 1e-6, edge + 1e-6]), np.array([1.0, 1.0]))[0]
+assert abs(step[0] - step[1]) > 0.5
+depth = prism.settings.lens_x + 0.5 * (step[0] + step[1])                     # half way up the wall
+oblique = np.tile(al_optics.direction(-0.2, 0.0), (3, 1))                     # rays running towards +y
+targets = np.array([[depth, edge, 1.0], [depth, edge - 3.0, 1.0], [depth, edge + 3.0, 1.0]])
+_, factor, wall = prism.through(targets - 50.0 * oblique, oblique, 1.0)       # at the wall, and well beside it
+assert wall[0] and factor[0] == 0.0 and not wall[1] and not wall[2] and factor[1] == factor[2] == 1.0
+walls = [f for f in al_lens.faces(prism) if f[0] == "wall"]
+assert len(walls) > prism.cells and walls[0][2]["surface"]["degree_u"] == 1 and len(walls[0][2]["surface"]["points"]) == 36
+assert not [f for f in al_lens.faces(plane) if f[0] == "wall"]                # plane glass has none
 h4, low_beam = lens_beam((0, 0, 0, 0), lamp=al_optics.LAMPS["H4 (low beam)"], focus_behind=4.0)[:2]
 assert max(map(abs, h4.sag)) < 1e-9                                           # no deflection: plane glass
 left_side = low_beam.h < -1.0                                                 # H4: the coil before the focus, its
@@ -529,6 +542,7 @@ host.model, host.results = [], []
 assert "elements" in plugin.generate(ctx)
 kinds = [e["attributes"]["al.part"] for e in host.model]
 assert kinds.count("mirror") == 1 and kinds.count("lens") == 1 and kinds.count("element") >= 15
+assert kinds.count("wall") >= 15
 plugin.filament_images(ctx)
 plugin.light_distribution(ctx)
 assert host.results == ["image", "image", "table", "curve", "curve"], host.results

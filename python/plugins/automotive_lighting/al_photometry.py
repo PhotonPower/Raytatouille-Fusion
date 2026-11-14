@@ -49,7 +49,7 @@ def filament_images(P: np.ndarray, n: np.ndarray, fil: Filament, after=None) -> 
         d = reflect(d / np.linalg.norm(d, axis=1, keepdims=True), normal)
         d = d[d[:, 0] > 1e-6]
         if after is not None and len(d):
-            d, factor = after(np.repeat(p[None, :], len(d), axis=0), d)
+            d, factor, *_ = after(np.repeat(p[None, :], len(d), axis=0), d)
             d = d[(factor > 0.0) & (d[:, 0] > 1e-6)]
         if len(d) < 3:
             continue
@@ -100,6 +100,7 @@ class Distribution:
     flux_mirror: float             # lm that reach the mirror
     flux_lamp: float
     flux_connections: float = 0.0  # lm of the beam that come from the connecting faces
+    flux_walls: float = 0.0        # lm that meet the walls between the elements of a lens (lost)
 
     def at(self, h_deg: float, v_deg: float, half_h: float = 0.25, half_v: float = 0.1) -> float:
         """Mean intensity in a small window about a point (a photometer's aperture)."""
@@ -142,10 +143,11 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
     """The luminous intensity of a mirror given by points P, unit normals N, areas A and reflectances
     rho: rays from every sample of the coil's surface to every mirror point. `connection`: points
     whose light is counted as stray light of connecting faces; after(origins, directions) ->
-    directions, factors: what follows the mirror (a lens), factor 0 for a lost ray."""
+    directions, factors[, walls]: what follows the mirror (a lens), factor 0 for a lost ray, and
+    optionally which rays met a wall there."""
     if connection is None:
         connection = np.zeros(len(P), dtype=bool)
-    flux_connections = 0.0
+    flux_connections = flux_walls = 0.0
     Q, nu, dA = fil.surface_samples(n_axial, n_around)
     luminance = lamp.flux / (math.pi * dA * len(Q))        # lm / (sr mm²)
     nh = int(round((h_range[1] - h_range[0]) / dh))
@@ -179,7 +181,9 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
         w = w * rho[start:start + chunk, None]
         if after is not None:
             rows = np.nonzero(ok)[0]
-            passed, factor = after(p[rows], out[ok])
+            passed, factor, *walls = after(p[rows], out[ok])
+            if walls:
+                flux_walls += float(w[ok][walls[0]].sum())
             out[ok] = passed
             w[ok] *= factor
             ok &= (w > 0.0) & (out[..., 0] > 1e-6)
@@ -197,7 +201,8 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
     th, tv = np.tan(np.radians(h))[None, :], np.tan(np.radians(v))[:, None]
     # solid angle of a cell: dh dv / (1 + h² + v²)^(3/2) in the tangents, dh = dH / cos² H
     omega = (math.radians(dh) * (1 + th ** 2)) * (math.radians(dv) * (1 + tv ** 2)) / (1 + th ** 2 + tv ** 2) ** 1.5
-    return Distribution(h, v, flux.reshape(nv, nh) / omega, flux_beam, flux_mirror, lamp.flux, flux_connections)
+    return Distribution(h, v, flux.reshape(nv, nh) / omega, flux_beam, flux_mirror, lamp.flux, flux_connections,
+                        flux_walls)
 
 
 # ------------------------------------------------------------------ UN/ECE R112, class B passing beam

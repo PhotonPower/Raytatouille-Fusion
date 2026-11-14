@@ -407,6 +407,9 @@ class AutomotiveLighting(Plugin):
         rows = (dist.v >= level - 0.25) & (dist.v <= level + 0.25)
         ctx.curve(run, f"Horizontal cut at V = {level:g}°", dist.h, dist.intensity[rows].mean(axis=0),
                   x_label="H / °", y_label="I / cd")
+        if patterned:
+            ctx.log(f"walls between the lens elements: {dist.flux_walls:.0f} lm meet them and are lost "
+                    f"({100.0 * dist.flux_walls / max(dist.flux_mirror, 1e-9):.1f} % of the light from the mirror)")
         if function != LOW_BEAM:
             failed = [row[0] for row in al_photometry.signal_points(dist, function) if row[-1] != "ok"]
             ctx.log(f"flux: lamp {dist.flux_lamp:.0f} lm, onto the mirror {dist.flux_mirror:.0f} lm, in the beam "
