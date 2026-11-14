@@ -13,7 +13,8 @@ refraction there, and the inner surface must have the normal
 which gives its slopes ∂x/∂y and ∂x/∂z; they are integrated over the cell (through its centre) and
 the cell's surface is the Bézier patch of degree 5 closest to that. The cells are independent:
 between neighbours a step remains, closed by a wall along X. A ray that meets a wall – in the air
-before the elements or in the glass behind them – is lost for the beam.
+before the elements or in the glass behind them – is mirrored there once (with the glass' reflectance
+at that angle, or totally) and goes on as stray light.
 
 The lens may lean back (rake), run back to one side (sweep) and be domed (a sphere's radius): its
 outer side is that shape, its inner side the same shape `thickness` behind it (measured along X)
@@ -90,6 +91,17 @@ def refract(d: np.ndarray, normal: np.ndarray, ratio: float) -> tuple[np.ndarray
     ok = (k > 0.0) & (c > 0.0)
     out = ratio * d + (np.sqrt(np.maximum(k, 0.0)) - ratio * c)[..., None] * normal
     return out, ok
+
+
+def fresnel(cos_in, n_from: float, n_to: float) -> np.ndarray:
+    """Reflectance of a smooth surface for unpolarised light arriving with the cosine `cos_in` to
+    the normal, from the index n_from into n_to (1 where the reflection is total)."""
+    cos_in = np.asarray(cos_in, dtype=float)
+    sin2 = (n_from / n_to) ** 2 * (1.0 - cos_in * cos_in)
+    cos_out = np.sqrt(np.maximum(1.0 - sin2, 0.0))
+    rs = ((n_from * cos_in - n_to * cos_out) / np.maximum(n_from * cos_in + n_to * cos_out, 1e-300)) ** 2
+    rp = ((n_from * cos_out - n_to * cos_in) / np.maximum(n_from * cos_out + n_to * cos_in, 1e-300)) ** 2
+    return np.where(sin2 >= 1.0, 1.0, 0.5 * (rs + rp))
 
 
 @dataclass
@@ -183,15 +195,19 @@ class LensSystem:
         inside = (iy >= 0) & (iy < self.ny) & (iz >= 0) & (iz < self.nz)
         return iy, iz, inside & self.used[np.clip(iy, 0, self.ny - 1), np.clip(iz, 0, self.nz - 1)]
 
-    def _wall(self, start: np.ndarray, v: np.ndarray, end_yz: tuple, in_air: bool) -> np.ndarray:
+    def _wall(self, start: np.ndarray, v: np.ndarray, end_yz: tuple, in_air: bool):
         """Whether straight paths from `start` (n, 3) along v to the points end_yz meet a wall between
         two elements: where a path passes from one cell to its neighbour it must still be in the air
-        before both surfaces (in_air) or already in the glass behind both."""
+        before both surfaces (in_air) or already in the glass behind both. Returns the mask, the
+        points on the walls (n, 3) and the walls' normal axis (1: y, 2: z; 0 where a path crosses a
+        corner or a whole cell)."""
         s = self.settings
         ia, ja, used_a = self.cell(start[:, 1], start[:, 2])
         ib, jb, used_b = self.cell(*end_yz)
         moved = ((ia != ib) | (ja != jb)) & used_a & used_b
         hit = moved & ((np.abs(ia - ib) + np.abs(ja - jb)) > 1)             # across a corner or a whole cell
+        where = np.zeros((len(hit), 3))
+        normal_axis = np.zeros(len(hit), dtype=int)
         for axis, (a, b, first, size) in enumerate(((ia, ib, self.y0, s.cell_width), (ja, jb, self.z0, s.cell_height))):
             rows = np.flatnonzero(moved & ~hit & (a != b))
             if not len(rows):
@@ -206,57 +222,98 @@ class LensSystem:
             behind[:, axis] += side
             x = point[:, 0] - s.lens_x
             h0, h1 = self.inner(before[:, 0], before[:, 1])[0], self.inner(behind[:, 0], behind[:, 1])[0]
-            hit[rows] = (x > np.minimum(h0, h1) - 1e-9) if in_air else (x < np.maximum(h0, h1) + 1e-9)
-        return hit
+            met = (x > np.minimum(h0, h1) - 1e-9) if in_air else (x < np.maximum(h0, h1) + 1e-9)
+            hit[rows] = met
+            where[rows[met]] = point[met]
+            normal_axis[rows[met]] = 1 + axis
+        return hit, where, normal_axis
 
-    def through(self, origins: np.ndarray, d: np.ndarray, transmittance: float = 1.0):
-        """Rays (origins (n, 3), unit directions (n, 3)) through the lens: the directions behind it,
-        a factor per ray – `transmittance`, or 0 for a ray that misses the lens, meets a wall between
-        two elements or is totally reflected – and which rays met a wall."""
+    def _leave(self, x_in, y, z, glass):
+        """From points in the glass along `glass` to the outer side and out: directions, passed."""
         s = self.settings
-        forward = d[:, 0] > 1e-6
-        dx = np.where(forward, d[:, 0], 1.0)
-        t = (s.lens_x - origins[:, 0]) / dx
-        for _ in range(3):                                                  # onto the lens' shape …
-            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
-            t = (s.lens_x + self.shape(y, z)[0] - origins[:, 0]) / dx
-        for _ in range(2):                                                  # … and onto its elements
-            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
-            sag, dy, dz, inside, whole = self.inner(y, z)
-            t = (s.lens_x + sag - origins[:, 0]) / dx
-        normal = np.stack([np.ones_like(dy), -dy, -dz], axis=1)
-        normal /= np.linalg.norm(normal, axis=1, keepdims=True)
-        glass, ok1 = refract(d, normal, 1.0 / s.index)
-        # through the glass to the outer side
         gx = np.where(glass[:, 0] > 1e-6, glass[:, 0], 1.0)
-        x_in = s.lens_x + sag
         tg = s.thickness / gx
         for _ in range(3):
-            yo, zo = y + tg * glass[:, 1], z + tg * glass[:, 2]
-            ox, oy, oz = self.shape(yo, zo)
+            ox, oy, oz = self.shape(y + tg * glass[:, 1], z + tg * glass[:, 2])
             tg = (s.lens_x + s.thickness + ox - x_in) / gx
         outer = np.stack([np.ones_like(oy), -oy, -oz], axis=1)
         outer /= np.linalg.norm(outer, axis=1, keepdims=True)
-        out, ok2 = refract(glass, outer, s.index)
-        ok2 &= (glass[:, 0] > 1e-6) & (tg > 0.0)
+        out, ok = refract(glass, outer, s.index)
+        return out, ok & (glass[:, 0] > 1e-6) & (tg > 0.0)
+
+    def _pass(self, origins: np.ndarray, d: np.ndarray):
+        """One way through the lens without regard to walls: the directions behind it, which rays
+        pass, and for the walls: (mask, points, axes) met in the air and in the glass, and the
+        directions in the glass."""
+        s = self.settings
+        forward = d[:, 0] > 1e-6
+        dx = np.where(forward, d[:, 0], 1.0)
+        t = np.maximum((s.lens_x - origins[:, 0]) / dx, 0.0)                 # (a ray mirrored at a wall starts
+        for _ in range(3):                                                  # among the elements) onto the shape …
+            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
+            t = np.maximum((s.lens_x + self.shape(y, z)[0] - origins[:, 0]) / dx, 0.0)
+        for _ in range(2):                                                  # … and onto the elements
+            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
+            sag, dy, dz, inside, whole = self.inner(y, z)
+            t_before, t = t, np.maximum((s.lens_x + sag - origins[:, 0]) / dx, 0.0)
+        normal = np.stack([np.ones_like(dy), -dy, -dz], axis=1)
+        normal /= np.linalg.norm(normal, axis=1, keepdims=True)
+        glass, ok1 = refract(d, normal, 1.0 / s.index)
+        x_in = s.lens_x + sag
+        out, ok2 = self._leave(x_in, y, z, glass)
         ok = forward & inside & ok1 & ok2
         cut = np.flatnonzero(ok & ~whole)                                   # only cells at the rim need the outline
         if len(cut):
             ok[cut] = al_layout.contains(self._outline, np.column_stack([y[cut], z[cut]]))
-        # walls: the path in the air from where the elements begin, and in the glass to where they end
+        # walls: the path in the air from where the elements begin, and in the glass to where they end.
+        # A ray that finds no surface point in one cell – the point it is sent to lies in the next
+        # one, whose surface lies elsewhere – runs into the wall between the two on its way there.
         form = s.lens_x + self.shape(y, z)[0]
         hit = np.column_stack([x_in, y, z])
-        back = np.maximum(x_in - (form + self.sag[0] - 0.01), 0.0) / dx
-        wall = self._wall(hit - back[:, None] * d, d, (y, z), True)
-        # a ray that finds no surface point in one cell – the point it is sent to lies in the next
-        # one, whose surface lies elsewhere – runs into the wall between the two
+        front = np.maximum(np.minimum((form + self.sag[0] - 0.01 - origins[:, 0]) / dx, np.minimum(t, t_before)), 0.0)
+        far = np.maximum(t, t_before)
+        air = self._wall(origins + front[:, None] * d, d,
+                         (origins[:, 1] + far * d[:, 1], origins[:, 2] + far * d[:, 2]), True)
         ia, ja, _ = self.cell(y, z)
         ib, jb, _ = self.cell(origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2])
-        wall |= (ia != ib) | (ja != jb)
+        air = (air[0] | (ia != ib) | (ja != jb), air[1], air[2])
+        gx = np.where(glass[:, 0] > 1e-6, glass[:, 0], 1.0)
         on = np.maximum(form + self.sag[1] + 0.01 - x_in, 0.0) / gx
-        wall |= self._wall(hit, glass, (y + on * glass[:, 1], z + on * glass[:, 2]), False)
-        wall &= ok
-        return out, np.where(ok & ~wall, transmittance, 0.0), wall
+        in_glass = self._wall(hit, glass, (y + on * glass[:, 1], z + on * glass[:, 2]), False)
+        return out, ok, air, in_glass, glass
+
+    def through(self, origins: np.ndarray, d: np.ndarray, transmittance: float = 1.0):
+        """Rays (origins (n, 3), unit directions (n, 3)) through the lens: the directions behind it,
+        a factor per ray and which rays met a wall between two elements. The factor is
+        `transmittance`; 0 for a ray that misses the lens or is totally reflected at its outer side.
+        A ray that meets a wall is mirrored there once – from the air with the reflectance of the
+        glass at that angle, in the glass totally or with its reflectance – and goes on as stray
+        light; what enters or leaves through the wall is lost."""
+        s = self.settings
+        out, ok, air, in_glass, glass = self._pass(origins, d)
+        wall = (air[0] | in_glass[0]) & ok
+        factor = np.where(ok & ~wall, transmittance, 0.0)
+        rows = np.flatnonzero(wall & air[0] & (air[2] > 0))                 # mirrored in the air, then through
+        if len(rows):
+            axis = air[2][rows]
+            mirrored = d[rows].copy()
+            mirrored[np.arange(len(rows)), axis] *= -1.0
+            share = fresnel(np.abs(d[rows, axis]), 1.0, s.index)
+            again, passed, air2, glass2, _ = self._pass(air[1][rows] + 1e-6 * mirrored, mirrored)
+            passed &= ~air2[0] & ~glass2[0]
+            out[rows[passed]] = again[passed]
+            factor[rows[passed]] = transmittance * share[passed]
+        rows = np.flatnonzero(wall & ~air[0] & (in_glass[2] > 0))           # mirrored in the glass, then out
+        if len(rows):
+            axis = in_glass[2][rows]
+            mirrored = glass[rows].copy()
+            mirrored[np.arange(len(rows)), axis] *= -1.0
+            share = fresnel(np.abs(glass[rows, axis]), s.index, 1.0)
+            point = in_glass[1][rows]
+            again, passed = self._leave(point[:, 0], point[:, 1], point[:, 2], mirrored)
+            out[rows[passed]] = again[passed]
+            factor[rows[passed]] = transmittance * share[passed]
+        return out, factor, wall
 
     @property
     def _outline(self) -> np.ndarray:

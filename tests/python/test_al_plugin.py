@@ -363,11 +363,16 @@ lens_frame = al_layout.rounded_rectangle(80.0, 50.0, 8.0)
 everywhere = (-1e3, 1e3, -1e3, 1e3)
 
 
-def lens_beam(element, lamp=H7, **kw):
+def lens_beam(element, lamp=H7, stray=False, **kw):
     system = al_lens.build(al_lens.LensSettings(lamp, cut, (al_lens.Element(*everywhere, *element),), **kw), lens_frame)
     Pm, Nm, Am = system.samples(2.0)
+
+    def after(origins, d):       # without the stray light of the walls, unless asked for: the beam itself
+        out, factor, wall = system.through(origins, d, 0.9)
+        return out, factor if stray else np.where(wall, 0.0, factor), wall
+
     dist = al_photometry.intensity(lamp, system.filament, Pm, Nm, Am, np.full(len(Pm), 0.85), n_axial=6, n_around=12,
-                                   after=lambda origins, d: system.through(origins, d, 0.9))
+                                   after=after)
     col, row = dist.intensity.sum(axis=0), dist.intensity.sum(axis=1)
     centre = float((col * dist.h).sum() / col.sum()), float((row * dist.v).sum() / row.sum())
 
@@ -399,8 +404,15 @@ assert abs(step[0] - step[1]) > 0.5
 depth = prism.settings.lens_x + 0.5 * (step[0] + step[1])                     # half way up the wall
 oblique = np.tile(al_optics.direction(-0.2, 0.0), (3, 1))                     # rays running towards +y
 targets = np.array([[depth, edge, 1.0], [depth, edge - 3.0, 1.0], [depth, edge + 3.0, 1.0]])
-_, factor, wall = prism.through(targets - 50.0 * oblique, oblique, 1.0)       # at the wall, and well beside it
-assert wall[0] and factor[0] == 0.0 and not wall[1] and not wall[2] and factor[1] == factor[2] == 1.0
+out, factor, wall = prism.through(targets - 50.0 * oblique, oblique, 1.0)     # at the wall, and well beside it
+assert wall[0] and not wall[1] and not wall[2] and factor[1] == factor[2] == 1.0
+assert 0.0 < factor[0] < 1.0 and out[0, 1] * out[1, 1] < 0                    # mirrored at the wall: stray light, to
+assert abs(np.linalg.norm(out[0]) - 1.0) < 1e-9                               # the other side, with part of its flux
+assert abs(al_lens.fresnel(1.0, 1.0, 1.5) - 0.04) < 1e-12 and al_lens.fresnel(0.1, 1.5, 1.0) == 1.0
+assert al_lens.fresnel(0.1, 1.0, 1.5) > 0.5 > al_lens.fresnel(0.7, 1.0, 1.5)
+with_stray = lens_beam((0.0, -1.0, 12.0, 3.0), stray=True)[1]
+assert dist_s.flux_connections == 0.0 and 0.0 < with_stray.flux_connections < with_stray.flux_walls   # part goes on
+assert abs(with_stray.flux_beam - dist_s.flux_beam - with_stray.flux_connections) < 1e-6
 walls = [f for f in al_lens.faces(prism) if f[0] == "wall"]
 assert len(walls) > prism.cells and walls[0][2]["surface"]["degree_u"] == 1 and len(walls[0][2]["surface"]["points"]) == 36
 assert not [f for f in al_lens.faces(plane) if f[0] == "wall"]                # plane glass has none

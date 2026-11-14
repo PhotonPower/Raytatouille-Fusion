@@ -100,7 +100,8 @@ class Distribution:
     flux_mirror: float             # lm that reach the mirror
     flux_lamp: float
     flux_connections: float = 0.0  # lm of the beam that come from the connecting faces
-    flux_walls: float = 0.0        # lm that meet the walls between the elements of a lens (lost)
+    flux_walls: float = 0.0        # lm that meet the walls between the elements of a lens (what of it goes
+                                   # on into the beam, as stray light, is part of flux_connections)
 
     def at(self, h_deg: float, v_deg: float, half_h: float = 0.25, half_v: float = 0.1) -> float:
         """Mean intensity in a small window about a point (a photometer's aperture)."""
@@ -182,8 +183,9 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
         if after is not None:
             rows = np.nonzero(ok)[0]
             passed, factor, *walls = after(p[rows], out[ok])
-            if walls:
+            if walls:        # what meets the walls of a lens, and what of it goes on as stray light
                 flux_walls += float(w[ok][walls[0]].sum())
+                flux_connections += float((w[ok] * factor)[walls[0] & (passed[:, 0] > 1e-6)].sum())
             out[ok] = passed
             w[ok] *= factor
             ok &= (w > 0.0) & (out[..., 0] > 1e-6)
