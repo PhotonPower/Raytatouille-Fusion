@@ -139,6 +139,12 @@ class AutomotiveLighting(Plugin):
         "lens_x": Param.number(75.0, min=1.0, max=1000.0, decimals=1, unit="mm", label="Lens in front of the filament",
                                group="Lens", description="the base plane of its inner side"),
         "lens_thickness": Param.number(3.0, min=0.5, max=50.0, decimals=2, unit="mm", label="Thickness", group="Lens"),
+        "lens_rake": Param.number(0.0, min=-60.0, max=60.0, decimals=1, unit="°", label="Rake", group="Lens",
+                                  description="the lens leans back: its top towards the mirror"),
+        "lens_sweep": Param.number(0.0, min=-60.0, max=60.0, decimals=1, unit="°", label="Sweep", group="Lens",
+                                   description="the lens runs back towards the left (negative: towards the right)"),
+        "lens_radius": Param.number(0.0, min=0.0, max=100000.0, decimals=1, unit="mm", label="Dome radius",
+                                    group="Lens", description="domed outwards as a sphere of this radius; 0: flat"),
         "lens_index": Param.number(1.49, min=1.01, max=3.0, decimals=3, label="Refractive index", group="Lens",
                                    description="PMMA 1.49, polycarbonate 1.59, glass about 1.52"),
         "lens_transmittance": Param.number(0.92, min=0.0, max=1.0, decimals=2, label="Transmittance", group="Lens"),
@@ -222,7 +228,8 @@ class AutomotiveLighting(Plugin):
                                             focus_behind=float(p["focus_behind"]), hole_radius=float(p["hole_radius"]),
                                             lens_x=float(p["lens_x"]), thickness=float(p["lens_thickness"]),
                                             index=float(p["lens_index"]), cell_width=float(p["cell_width"]),
-                                            cell_height=float(p["cell_height"]))
+                                            cell_height=float(p["cell_height"]), rake=float(p["lens_rake"]),
+                                            sweep=float(p["lens_sweep"]), radius=float(p["lens_radius"]))
             key = hashlib.sha256(repr(settings).encode() + frame.tobytes()).hexdigest()
             if getattr(self, "_lens", (None, None))[0] != key:
                 def progress(fraction: float, text: str) -> None:
@@ -255,10 +262,12 @@ class AutomotiveLighting(Plugin):
             ctx.progress(0.9 + 0.1 * (k + 1) / len(faces), "adding the faces …")
         for w in system.warnings:
             ctx.log(f"warning: {w}")
-        ctx.log(f"paraboloid f = {s.focal:g} mm; lens at x = {s.lens_x + origin[0]:g} mm, {s.thickness:g} mm thick, "
-                f"n = {s.index:g}: {system.cells} elements of {s.cell_width:g} x {s.cell_height:g} mm, their surfaces "
-                f"from {system.sag[0]:.2f} to {system.sag[1]:.2f} mm about the base plane (slopes within "
-                f"{system.fit_error:.1e} of the wanted ones)")
+        form = ", ".join(text for value, text in ((s.rake, f"rake {s.rake:g}°"), (s.sweep, f"sweep {s.sweep:g}°"),
+                                                  (s.radius, f"dome radius {s.radius:g} mm")) if value) or "flat, upright"
+        ctx.log(f"paraboloid f = {s.focal:g} mm; lens at x = {s.lens_x + origin[0]:g} mm on the axis ({form}), "
+                f"{s.thickness:g} mm thick, n = {s.index:g}: {system.cells} elements of {s.cell_width:g} x "
+                f"{s.cell_height:g} mm, their surfaces from {system.sag[0]:.2f} to {system.sag[1]:.2f} mm about the "
+                f"lens' shape (slopes within {system.fit_error:.1e} of the wanted ones)")
         return f"paraboloid and lens with {system.cells} elements"
 
     def reflector(self, ctx) -> al_reflector.Reflector:
@@ -398,6 +407,9 @@ class AutomotiveLighting(Plugin):
         rows = (dist.v >= level - 0.25) & (dist.v <= level + 0.25)
         ctx.curve(run, f"Horizontal cut at V = {level:g}°", dist.h, dist.intensity[rows].mean(axis=0),
                   x_label="H / °", y_label="I / cd")
+        if patterned:
+            ctx.log(f"walls between the lens elements: {dist.flux_walls:.0f} lm meet them and are lost "
+                    f"({100.0 * dist.flux_walls / max(dist.flux_mirror, 1e-9):.1f} % of the light from the mirror)")
         if function != LOW_BEAM:
             failed = [row[0] for row in al_photometry.signal_points(dist, function) if row[-1] != "ok"]
             ctx.log(f"flux: lamp {dist.flux_lamp:.0f} lm, onto the mirror {dist.flux_mirror:.0f} lm, in the beam "

@@ -370,8 +370,21 @@ assert 20 < wide_h2[1] - wide_h2[0] < 30 and 5 < wide_v2[1] - wide_v2[0] < 12 an
 assert pillow.cells == pillow.used.sum() > 20 and pillow.whole.sum() < pillow.cells
 # a ray through the lens: beside it or into a wall it is lost; the patches are what the trace sees
 origins = np.array([[0.0, 3.0, 4.0], [0.0, 300.0, 0.0]])
-out, factor = pillow.through(origins, np.tile([1.0, 0.0, 0.0], (2, 1)), 0.9)
-assert factor[0] == 0.9 and factor[1] == 0.0 and abs(np.linalg.norm(out[0]) - 1) < 1e-12
+out, factor, wall = pillow.through(origins, np.tile([1.0, 0.0, 0.0], (2, 1)), 0.9)
+assert factor[0] == 0.9 and factor[1] == 0.0 and abs(np.linalg.norm(out[0]) - 1) < 1e-12 and not wall.any()
+# walls between the elements: prisms have a step at every border, rays that meet it are lost
+assert dist_p.flux_walls == 0.0 and 0.0 < dist_s.flux_walls < 0.2 * dist_s.flux_mirror
+edge = prism.y0 + 3 * prism.settings.cell_width                               # a border between two prisms
+step = prism.inner(np.array([edge - 1e-6, edge + 1e-6]), np.array([1.0, 1.0]))[0]
+assert abs(step[0] - step[1]) > 0.5
+depth = prism.settings.lens_x + 0.5 * (step[0] + step[1])                     # half way up the wall
+oblique = np.tile(al_optics.direction(-0.2, 0.0), (3, 1))                     # rays running towards +y
+targets = np.array([[depth, edge, 1.0], [depth, edge - 3.0, 1.0], [depth, edge + 3.0, 1.0]])
+_, factor, wall = prism.through(targets - 50.0 * oblique, oblique, 1.0)       # at the wall, and well beside it
+assert wall[0] and factor[0] == 0.0 and not wall[1] and not wall[2] and factor[1] == factor[2] == 1.0
+walls = [f for f in al_lens.faces(prism) if f[0] == "wall"]
+assert len(walls) > prism.cells and walls[0][2]["surface"]["degree_u"] == 1 and len(walls[0][2]["surface"]["points"]) == 36
+assert not [f for f in al_lens.faces(plane) if f[0] == "wall"]                # plane glass has none
 h4, low_beam = lens_beam((0, 0, 0, 0), lamp=al_optics.LAMPS["H4 (low beam)"], focus_behind=4.0)[:2]
 assert max(map(abs, h4.sag)) < 1e-9                                           # no deflection: plane glass
 left_side = low_beam.h < -1.0                                                 # H4: the coil before the focus, its
@@ -397,6 +410,30 @@ for bad, message in ((dict(lens_x=-10.0), "inside the mirror"), (dict(thickness=
         raise AssertionError(f"{bad} not refused")
     except al_design.DesignError as e:
         assert message in str(e), e
+
+# a lens that leans back, runs back to one side, is domed: a plate of that shape turns nothing, prisms on
+# it turn the beam as on a flat lens
+flat_width = wide_h[1] - wide_h[0]
+for form in (dict(rake=20.0), dict(rake=15.0, sweep=-25.0), dict(radius=250.0), dict(rake=10.0, sweep=10.0, radius=400.0)):
+    plate, _, centre, wide, _ = lens_beam((0, 0, 0, 0), **form)
+    assert max(map(abs, plate.sag)) < 1e-9 and abs(centre[0]) < 0.1 and abs(centre[1]) < 0.1, (form, centre)
+    assert abs(wide[1] - wide[0] - flat_width) < 1.0
+    turned, _, centre, _, _ = lens_beam((5.0, -2.0, 0, 0), **form)
+    assert abs(centre[0] - 5.0) < 0.2 and abs(centre[1] + 2.0) < 0.2 and turned.fit_error < 1e-3, (form, centre)
+raked = lens_beam((0.0, 0.0, 10.0, 3.0), rake=20.0, radius=300.0)[0]
+x0, slope_y, slope_z = raked.shape(np.array([0.0, 0.0]), np.array([0.0, 10.0]))
+assert x0[0] == 0.0 and x0[1] < -3.0 and abs(slope_z[0] + tan(20.0)) < 1e-12 and slope_y[0] == 0.0
+outer_face = al_lens.faces(raked)[1][2]["surface"]
+ctrl = np.array(outer_face["points"]).reshape(outer_face["num_u"], outer_face["num_v"], 3)
+Bu = al_spline.basis_matrix(np.array(outer_face["knots_u"]), outer_face["num_u"], 3, np.array([12.0]))
+Bv = al_spline.basis_matrix(np.array(outer_face["knots_v"]), outer_face["num_v"], 3, np.array([-7.0]))
+expected = raked.settings.lens_x + raked.settings.thickness + raked.shape(np.array([12.0]), np.array([-7.0]))[0][0]
+assert np.allclose(np.einsum("i,ijk,j->k", Bu[0], ctrl, Bv[0]), [expected, 12.0, -7.0], atol=1e-4)
+try:
+    lens_beam((0, 0, 0, 0), rake=50.0, lens_x=20.0)
+    raise AssertionError("a lens through the mirror")
+except al_design.DesignError as e:
+    assert "inside the mirror" in str(e)
 
 # ---- signal lamps: the standard light distribution of UN R148, lamps with the coil across the axis
 flat = al_photometry.Distribution(np.arange(-39.875, 40, 0.25), np.arange(-19.875, 20, 0.25), np.full((160, 320), 100.0),
@@ -505,6 +542,7 @@ host.model, host.results = [], []
 assert "elements" in plugin.generate(ctx)
 kinds = [e["attributes"]["al.part"] for e in host.model]
 assert kinds.count("mirror") == 1 and kinds.count("lens") == 1 and kinds.count("element") >= 15
+assert kinds.count("wall") >= 15
 plugin.filament_images(ctx)
 plugin.light_distribution(ctx)
 assert host.results == ["image", "image", "table", "curve", "curve"], host.results
