@@ -36,6 +36,12 @@ class Settings:
     knot_spacing: float = 1.5      # mm, of the facets' B-splines
     margin: float = 3.5            # mm, the facets reach this far beyond their cells
 
+    @property
+    def strip_shift(self) -> float:
+        """A coil across the axis: a strip border lies on the lamp axis (every facet keeps to one
+        side of the coil's image, al_design); else a strip is centred there."""
+        return 0.0 if self.lamp.axial else 0.5
+
 
 @dataclass
 class Part:
@@ -144,7 +150,8 @@ def build(settings: Settings, frame: np.ndarray, progress=None) -> Reflector:
     share = 0.7 if settings.connect else 1.0
     for _ in range(3):
         cells = al_layout.layout(frame, settings.hole_radius, list(settings.zones), settings.cutoff,
-                                 settings.focal, settings.strip_width, settings.margin, settings.facet_length)
+                                 settings.focal, settings.strip_width, settings.margin, settings.facet_length,
+                                 settings.strip_shift)
         facets: list = [None] * len(cells)
         warnings = []
         by_key = {c.key: i for i, c in enumerate(cells)}

@@ -1,8 +1,8 @@
 # Automotive Lighting plugin
 
 Headlamps and signal lamps for filament lamps (H1, H4, H7, H8, H9, H11, HB3, HB4 with the filament
-along the axis; P21W, PY21W, R10W, R5W with the filament across it, for the patterned lens; or your
-own data), in two systems (*System* in the panel):
+along the axis; H3, P21W, PY21W, R10W, R5W with the filament across it; or your own data), in two
+systems (*System* in the panel):
 
 - **Clear lens: facetted reflector.** The mirror is facetted so that the low beam gets its
   **cut-off line** from the mirror alone, and the facets are joined to one surface that can be
@@ -110,6 +110,15 @@ Where the long edge of the filament image is parallel to the cut-off, the end of
 touches changes; the surface is smooth there but its curvature jumps (the strips are integrated
 with the change located inside the step).
 
+**A coil across the axis** (H3, fog lamps: *Cut-off → Rise* 0, one zone or an upper and a lower
+one). The image of such a coil lies along a horizontal cut-off – both its ends touch – where the
+mirror's normal has no part along the coil. One such line runs across the strips near the lamp
+axis' level: the strips cross it and change the touching end, as above. The other runs along
+the strips, where a facet looks straight ahead sideways; the strips of its two sides run into
+each other there. So a strip border lies on the lamp axis (not a strip's middle), and every facet
+keeps to one side of that line: where its aim would bring it across, the aim is moved on (the log
+names these facets – those next to the lamp axis, whose beams then cross).
+
 ## Connecting faces
 
 Neighbouring facets meet with a step that changes along their border (each facet starts on the
@@ -194,9 +203,8 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 - Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
   connecting faces, nothing shades (a wall does not shadow the facet behind it), no light leaving
   the lamp directly, no bulb glass, no cover lens. The cut-off is sharper than a real lamp's.
-- The facetted reflector needs a filament along the lamp axis. With a transverse filament (H3, fog
-  lamps) both ends of the coil touch a horizontal cut-off over whole areas of the mirror; that
-  case needs its own treatment. The patterned lens takes both.
+- A filament across the axis (H3) in the facetted reflector is meant for a horizontal cut-off (fog
+  lamps): see *A coil across the axis*; with the rising branch it is untried.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp
   axis; the strips must be wider than their connecting faces (both are reported).
 - The frame should be convex or nearly so; the lamp axis is +X; the faces are separate trimmed

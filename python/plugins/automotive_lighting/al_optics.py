@@ -24,8 +24,7 @@ class Lamp:
     length: float                 # mm, filament (coil) length
     diameter: float               # mm, coil diameter
     flux: float                   # lm at the test voltage
-    axial: bool = True            # coil along the lamp axis (X); else transverse (along Y) – for the patterned
-                                  # lens only: on facets both coil ends would touch the cut-off over whole areas
+    axial: bool = True            # coil along the lamp axis (X); else across it (along Y)
     window: tuple[float, float] | None = None   # a shield under the coil: light leaves only where it passes
     shield_radius: float = 0.0    # the cylinder of this radius about the axis at an azimuth atan2(z, y) in the window / deg
     note: str = ""
@@ -44,7 +43,8 @@ LAMPS: dict[str, Lamp] = {
     "H11": Lamp("H11", 4.5, 1.3, 1350.0, note="55 W, axial coil"),
     "HB3": Lamp("HB3", 4.2, 1.4, 1700.0, note="60 W, axial coil"),
     "HB4": Lamp("HB4", 5.1, 1.4, 1000.0, note="51 W, axial coil"),
-    # signal lamps: the coil lies across the axis – for the patterned lens, not for the facetted reflector
+    "H3": Lamp("H3", 5.0, 1.4, 1450.0, axial=False, note="55 W, transverse coil (fog lamps)"),
+    # signal lamps: the coil lies across the axis
     "P21W": Lamp("P21W", 5.0, 1.0, 460.0, axial=False, note="21 W, transverse coil"),
     "PY21W": Lamp("PY21W", 5.0, 1.0, 280.0, axial=False, note="21 W amber, transverse coil"),
     "R10W": Lamp("R10W", 4.0, 0.8, 125.0, axial=False, note="10 W, transverse coil"),

@@ -415,11 +415,13 @@ def row_curve(frame: StripFrame, q: float, keep_above: bool, inset: float = 0.0)
 
 
 def layout(frame_poly: np.ndarray, hole_radius: float, zones: list[Zone], cutoff: Cutoff, focal: float,
-           strip_width: float, margin: float = 1.5, facet_length: float = 0.0) -> list[Cell]:
+           strip_width: float, margin: float = 1.5, facet_length: float = 0.0, shift: float = 0.0) -> list[Cell]:
     """The cells of the reflector: every zone cut into strips of `strip_width` (measured where the
     strips pass the lamp axis' level) and, with a `facet_length`, every strip into rows of that
     length (the row 0 about the lamp axis' level), within the frame and outside the lamp hole. Each
-    cell's facet covers the cell's bounding rectangle in the zone's frame plus `margin`."""
+    cell's facet covers the cell's bounding rectangle in the zone's frame plus `margin`. The strip k
+    reaches from (k - 1/2 + shift) to (k + 1/2 + shift) widths: shift 0 centres a strip on the lamp
+    axis, 1/2 puts a border there."""
     if strip_width <= 0.0:
         raise DesignError("the strip width must be positive")
     if area(frame_poly) < 0:
@@ -433,10 +435,10 @@ def layout(frame_poly: np.ndarray, hole_radius: float, zones: list[Zone], cutoff
         if not pieces:
             continue
         c_all = np.concatenate([frame.strip_coordinate(*frame.pq(p[:, 0], p[:, 1])) for p in pieces])
-        k_lo = math.floor(c_all.min() / strip_width + 0.5)
-        k_hi = math.floor(c_all.max() / strip_width + 0.5)
+        k_lo = math.floor(c_all.min() / strip_width + 0.5 - shift)
+        k_hi = math.floor(c_all.max() / strip_width + 0.5 - shift)
         for k in range(k_lo, k_hi + 1):
-            c0, c1 = (k - 0.5) * strip_width, (k + 0.5) * strip_width
+            c0, c1 = (k - 0.5 + shift) * strip_width, (k + 0.5 + shift) * strip_width
             strip = pieces
             for curve in (strip_curve(frame, c0, True), strip_curve(frame, c1, False)):
                 if curve is None:
@@ -459,7 +461,8 @@ def layout(frame_poly: np.ndarray, hole_radius: float, zones: list[Zone], cutoff
                 both = np.concatenate(pq)
                 rect = (both[:, 0].min() - margin, both[:, 0].max() + margin,
                         both[:, 1].min() - margin, both[:, 1].max() + margin)
-                spec = FacetSpec(m, frame, (c0, c1), (t_right, t_left), rect, _deepest_q(rect[2], rect[3]))
+                q_start = _deepest_q(rect[2], rect[3])
+                spec = FacetSpec(m, frame, (c0, c1), (t_right, t_left), rect, q_start)
                 cells.append(Cell(zi, k, spec, part, j, facet_length > 0.0))
     if not cells:
         raise DesignError("no reflector area: the zones do not cover the frame outside the lamp hole")

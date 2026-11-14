@@ -89,8 +89,8 @@ class AutomotiveLighting(Plugin):
                                            "of it deflect and spread the light (groups Frame, Lamp and Lens)"),
         "lamp": Param.choice([*LAMPS, CUSTOM], "H7", label="Lamp", group="Lamp",
                              description="filament length / diameter and luminous flux after UN/ECE R37 (nominal "
-                                         "values); Custom takes the fields below. P21W, PY21W, R10W, R5W have "
-                                         "the filament across the axis: for the patterned lens only"),
+                                         "values); Custom takes the fields below. H3, P21W, PY21W, R10W, R5W "
+                                         "have the filament across the axis"),
         "custom_length": Param.number(4.1, min=0.1, max=30.0, decimals=2, unit="mm", label="Custom: filament length",
                                       group="Lamp"),
         "custom_diameter": Param.number(1.3, min=0.05, max=10.0, decimals=2, unit="mm",
@@ -98,8 +98,8 @@ class AutomotiveLighting(Plugin):
         "custom_flux": Param.number(1500.0, min=1.0, max=100000.0, decimals=0, unit="lm", label="Custom: luminous flux",
                                     group="Lamp"),
         "custom_across": Param.boolean(False, label="Custom: filament across the axis", group="Lamp",
-                                       description="horizontal, at right angles to the lamp axis (signal lamps); for "
-                                                   "the patterned lens only"),
+                                       description="horizontal, at right angles to the lamp axis (H3, signal "
+                                                   "lamps)"),
         "position": Param.point((0.0, 0.0, 0.0), label="Filament centre", group="Lamp",
                                 description="the light leaves along +X, +Z is up"),
         "traffic": Param.choice([RIGHT, LEFT], RIGHT, label="Traffic", group="Cut-off",
@@ -273,9 +273,6 @@ class AutomotiveLighting(Plugin):
     def reflector(self, ctx) -> al_reflector.Reflector:
         """The reflector of the panel; kept until a setting changes."""
         p = ctx.params
-        if not self.lamp_of(p).axial:
-            raise UserError("The facetted reflector needs a lamp with its filament along the axis (H1, H4, H7, …); "
-                            "lamps with the filament across it work with System: patterned lens.")
         try:
             frame = self.frame_of(ctx)
             settings = al_reflector.Settings(self.lamp_of(p), self.cutoff_of(p), zones_of(p["zones"]),

@@ -24,6 +24,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   UN R148 (position, stop, direction indicator, daytime running lamps) as test points, and the
   lamps P21W, PY21W, R10W, R5W. The lens may lean back, run back to one side and be domed;
   the walls between its elements are faces of their own and take their share of the light.
+  The facetted reflector also takes lamps with the filament across the axis (H3: fog lamps).
   ([python/plugins/automotive_lighting](python/plugins/automotive_lighting/README.md))
 - **Layer stacks** in the node workflow: the FourierGrating plugin provides `fg.stack` (coatings,
   filters, mirror layers between two media, exact per ray), with an RTT-Fusion that has it.
