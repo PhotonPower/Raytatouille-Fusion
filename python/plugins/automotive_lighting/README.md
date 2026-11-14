@@ -18,7 +18,8 @@ and V upwards.
   rise (15°) and the position of the kink.
 - *Frame*: the outline of the mirror seen along X – closed curves drawn in CAD (*Frame (curves)*,
   joined end to end) or a rounded rectangle – and the radius of the lamp hole.
-- *Reflector*: the focal length of the base paraboloid, the strip width and the **zones**.
+- *Reflector*: the focal length of the base paraboloid, the strip width, the **facet length**
+  (0: whole strips; else every strip is cut into rows of this length) and the **zones**.
 - *Connecting faces*: on / off, the draft angle of the walls between the facets and the fillet
   radius at their foot and head.
 - *Analysis*: reflectance of the mirror and of the connecting faces (0: masked or matt walls),
@@ -83,6 +84,12 @@ make the strips cross, which is reported. A steep part of the mirror cannot thro
 across its own wall: where the zone's aim asks for that, the aim is held back (the log names the
 facets).
 
+**Rows.** The aim of a facet holds on its start curve and drifts away from it; a long strip aimed
+with a wide spread narrows its spread towards the rim. With a *facet length* every strip is cut
+into rows (straight across the strip, the row 0 about the lamp axis' level). Each row is a facet of
+its own, with the zone's aims on its own start curve; from the lamp axis' level outwards every row
+starts where the row before it ends, so only a low step and a crease remain between rows.
+
 The **strip borders** follow the characteristics of a facet aimed at the middle of the zone's
 aims: sections of the base paraboloid with parallel planes, which are straight lines in the front
 view for a zone aimed straight ahead and circles otherwise.
@@ -105,10 +112,11 @@ the raw profile G – one facet for ξ < 0, the other for ξ > 0 – turned into
 
 Where the step vanishes the wall does too, and only the crease between the facets is rounded.
 The profiles of all stations along a border make a **band**, a bicubic B-spline that runs out
-into the facets on both sides; the facets are trimmed back to it. There are two levels: the bands
-between the strips of a zone, then the bands along the rays between two zones – their two sides
-are the zones as built so far, strips and bands – so the junctions are covered too. All bands
-between zones have one width.
+into the facets on both sides; the facets are trimmed back to it. There are three levels, the
+sides of each being what the levels before have built: the bands between the rows of a strip,
+then those between the strips of a zone, then those along the rays between two zones – so the
+junctions are covered too. Along a border the stations lie closer (0.1 mm instead of 0.5 mm)
+where a wall of a lower level meets it. All bands between zones have one width.
 
 What to expect: the walls keep the draft angle (a little less only where two walls meet at a
 junction – the smallest angle is logged); bands and facets join within about 0.01 mm; the bands

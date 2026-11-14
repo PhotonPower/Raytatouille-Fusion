@@ -243,6 +243,38 @@ rows_c = {row[0]: row for row in al_photometry.test_points(dist_c, cut)}
 assert rows_c["50R"][3] > 10000 and rows_c["B50L"][3] < 350                # stray light of the walls stays low
 g_c, v_c = al_photometry.sharpness(dist_c, cut)
 assert g_c > 0.13 and abs(v_c + 0.57) < 0.2
+# ---- strips cut into rows: a third level of connecting faces, every further row starts where the last ends
+breaks = al_transitions.stations((0.0, 20.0), [8.0])
+assert breaks[0] == 0.0 and breaks[-1] == 20.0 and np.all(np.diff(breaks) > 0)
+assert np.diff(breaks)[(breaks[:-1] > 6) & (breaks[1:] < 10)].max() < 0.11 and np.diff(breaks).max() > 0.4
+uneven = al_spline.Graph((0.0, 20.0), (-1.0, 1.0), 0, 5, breaks)
+uneven.interpolate(np.sin(uneven.sites_p)[:, None] + uneven.sites_q[None, :] ** 2)
+assert abs(uneven.evaluate(np.array([7.3]), np.array([0.4]))[0][0] - (math.sin(7.3) + 0.16)) < 1e-4
+rr = al_reflector.build(al_reflector.Settings(H7, cut, al_plugin.zones_of(al_plugin.default_zones(True)),
+                                              strip_width=15.0, hole_radius=10.0, facet_length=20.0),
+                        al_layout.rounded_rectangle(100.0, 64.0, 12.0))
+assert len(rr.cells) > len(rc.cells) and {c.row for c in rr.cells} >= {-1, 0, 1} and rr.cutoff_error < 0.1
+assert len(rr.transitions.row_bands) > 5 and rr.transitions.bands[0] in rr.transitions.zone_bands
+outer = next(c for c in rr.cells if c.row == 2)                             # it starts on the row before it
+inner_facet = rr.facets[[c.key for c in rr.cells].index((outer.zone, outer.strip, 1))]
+y_, z_ = al_design.start_middle(outer.spec)
+assert abs(inner_facet.evaluate(np.array([y_]), np.array([z_]))[0][0] - outer.spec.anchor) < 1e-12
+gap = abs(rr.facets[rr.cells.index(outer)].evaluate(np.array([y_]), np.array([z_]))[0][0] - outer.spec.anchor)
+assert gap < 1e-3, gap
+parts = rr.parts()
+hits = sum(al_layout.contains(poly, probe).astype(int) for p in parts for poly in p.polygons)
+assert np.array_equal(hits, inside.astype(int))                             # the parts tile the frame
+assert abs(sum(p.area for p in parts) - rr.area) < 0.05
+for start, end in (((-45.0, 20.0), (45.0, 21.0)), ((-30.0, -30.0), (35.0, 30.0)), ((-22.0, -30.0), (-21.0, 30.0))):
+    s_ = np.linspace(0.0, 1.0, 12001)
+    y_, z_ = start[0] + s_ * (end[0] - start[0]), start[1] + s_ * (end[1] - start[1])
+    x_, steep = mirror_x(y_, z_)
+    ok = np.isfinite(x_[1:]) & np.isfinite(x_[:-1])
+    ds = math.hypot(end[0] - start[0], end[1] - start[1]) / 12000
+    jump = np.abs(np.diff(x_))[ok] - 1.5 * ds * np.maximum(steep[1:], steep[:-1])[ok]
+    assert jump.max() < 2e-3, jump.max()                                    # continuous across rows, strips, zones
+parts = rc.parts()
+
 for bad, message in ((dict(fillet=4.0), "narrow"), (dict(hole_radius=1.0), "lamp hole")):
     try:
         al_reflector.build(al_reflector.Settings(H7, cut, al_plugin.zones_of(al_plugin.default_zones(True)),
