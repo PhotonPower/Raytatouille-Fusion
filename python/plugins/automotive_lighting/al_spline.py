@@ -100,9 +100,18 @@ class Graph:
     Greville abscissae. The control points of (p, q) at the Greville abscissae make the
     parameterisation exact: (u, v) = (p, q) in mm."""
 
-    def __init__(self, p_range: tuple[float, float], q_range: tuple[float, float], n_p: int, n_q: int):
-        self.n_p, self.n_q = int(n_p), int(n_q)
-        self.knots_p = clamped_uniform_knots(self.n_p, DEGREE, *p_range)
+    def __init__(self, p_range: tuple[float, float], q_range: tuple[float, float], n_p: int, n_q: int,
+                 breaks_p: np.ndarray | None = None):
+        """`breaks_p`: the knot spans along p (increasing, from p_range[0] to p_range[1]) instead of
+        n_p - 3 equal ones – dense where the surface has detail."""
+        self.n_q = int(n_q)
+        if breaks_p is None:
+            self.n_p = int(n_p)
+            self.knots_p = clamped_uniform_knots(self.n_p, DEGREE, *p_range)
+        else:
+            breaks_p = np.asarray(breaks_p, dtype=float)
+            self.n_p = len(breaks_p) + DEGREE - 1
+            self.knots_p = np.concatenate([[breaks_p[0]] * DEGREE, breaks_p, [breaks_p[-1]] * DEGREE])
         self.knots_q = clamped_uniform_knots(self.n_q, DEGREE, *q_range)
         self.sites_p = greville(self.knots_p, self.n_p, DEGREE)
         self.sites_q = greville(self.knots_q, self.n_q, DEGREE)

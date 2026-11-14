@@ -221,6 +221,7 @@ class FacetSpec:
     aim_range: tuple[float, float]  # aim (tangent of H) at these borders
     rect: tuple[float, float, float, float]   # p0, p1, q0, q1 the facet must cover
     q_start: float                 # section of the start curve
+    anchor: float | None = None    # x of the middle of the start curve (None: on the base paraboloid)
 
 
 @dataclass
@@ -260,6 +261,12 @@ def _hermite(x: np.ndarray, y: np.ndarray, d: np.ndarray, xq: np.ndarray) -> tup
     out = np.where(left, y[0] + d[0] * (xq - x[0]), out)
     out = np.where(right, y[-1] + d[-1] * (xq - x[-1]), out)
     return out, bool(inside.all())
+
+
+def start_middle(spec: FacetSpec) -> tuple[float, float]:
+    """(y, z) of the middle of the facet's start curve."""
+    fr = spec.frame
+    return fr.yz(float(fr.p_of(0.5 * (spec.c_range[0] + spec.c_range[1]), spec.q_start)), spec.q_start)
 
 
 def build_facet(spec: FacetSpec, fil: Filament, *, step: float = 0.5, knot_spacing: float = 1.5,
@@ -339,7 +346,7 @@ def build_facet(spec: FacetSpec, fil: Filament, *, step: float = 0.5, knot_spaci
     def start_curve(p_from: float, n_steps: int, dp: float) -> tuple[np.ndarray, np.ndarray]:
         ps = p_from + dp * np.arange(n_steps + 1)
         xs = np.empty(n_steps + 1)
-        xs[0] = base_x(fr.focal, p_from * p_from + spec.q_start ** 2)
+        xs[0] = base_x(fr.focal, p_from * p_from + spec.q_start ** 2) if spec.anchor is None else spec.anchor
         for i in range(n_steps):
             p, x = ps[i], xs[i]
             k1 = slope_T(p, x)

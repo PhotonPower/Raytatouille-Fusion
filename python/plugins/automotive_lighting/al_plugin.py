@@ -100,6 +100,11 @@ class AutomotiveLighting(Plugin):
                               description="of the base paraboloid the facets start on (focus at the filament centre)"),
         "strip_width": Param.number(10.0, min=1.0, max=200.0, decimals=1, unit="mm", label="Strip width",
                                     group="Reflector"),
+        "facet_length": Param.number(0.0, min=0.0, max=500.0, decimals=1, unit="mm", label="Facet length",
+                                     group="Reflector",
+                                     description="cuts every strip into facets of this length (0: whole strips). "
+                                                 "Each facet starts anew with its aims, so the spread holds all "
+                                                 "over the mirror – at the price of more connecting faces"),
         "zones": Param.table(_ZONE, default_zones(), label="Zones", group="Reflector",
                              description="sectors about the lamp axis (azimuth 0° = left, 90° = up, 180° = right, seen "
                                          "in the driving direction), each up to the next one's start. Aim: where the "
@@ -163,6 +168,7 @@ class AutomotiveLighting(Plugin):
             frame = self.frame_of(ctx)
             settings = al_reflector.Settings(self.lamp_of(p), self.cutoff_of(p), zones_of(p["zones"]),
                                              focal=float(p["focal"]), strip_width=float(p["strip_width"]),
+                                             facet_length=float(p["facet_length"]),
                                              hole_radius=float(p["hole_radius"]), knot_spacing=float(p["knot_spacing"]),
                                              connect=bool(p["connect"]), draft=float(p["draft"]),
                                              fillet=float(p["fillet"]))
@@ -195,13 +201,13 @@ class AutomotiveLighting(Plugin):
             attributes = {"al.part": "facet" if part.kind == al_reflector.FACET else "connection"}
             if part.cell >= 0:
                 cell = r.cells[part.cell]
-                attributes.update({"al.zone": cell.zone + 1, "al.strip": cell.strip,
+                attributes.update({"al.zone": cell.zone + 1, "al.strip": cell.strip, "al.row": cell.row,
                                    "al.branch": r.settings.zones[cell.zone].branch})
             ctx.add(geometry, part.label, attributes, group)
             ctx.progress(0.9 + 0.1 * (k + 1) / len(faces), "adding the faces …")
         for w in r.warnings:
             ctx.log(f"warning: {w}")
-        held = [f"{c.zone + 1}.{c.strip}" for c, f in zip(r.cells, r.facets) if f.aim_limited]
+        held = [c.name for c, f in zip(r.cells, r.facets) if f.aim_limited]
         if held:
             ctx.log(f"aim held back in {len(held)} facets ({', '.join(held[:12])}{' …' if len(held) > 12 else ''}): "
                     "the mirror there cannot throw its light as far sideways as the zone asks")
@@ -214,7 +220,7 @@ class AutomotiveLighting(Plugin):
             t = r.transitions
             parts = r.parts()
             lost = sum(p.area for p in parts if p.kind != al_reflector.FACET)
-            _, N, _, index = r.samples(0.25, kinds=(al_reflector.STRIP_BAND, al_reflector.ZONE_BAND))
+            _, N, _, index = r.samples(0.25, kinds=(al_reflector.ROW_BAND, al_reflector.STRIP_BAND, al_reflector.ZONE_BAND))
             steepest = float(np.max(np.hypot(N[:, 1], N[:, 2]) / N[:, 0])) if len(N) else 0.0
             ctx.log(f"{len(t.bands)} connecting faces: steps up to {t.max_step:.2f} mm, fillet radius {t.radius:g} mm, "
                     f"smallest draft angle {math.degrees(math.atan2(1.0, steepest)):.1f}° (set: {t.draft:g}°; less "

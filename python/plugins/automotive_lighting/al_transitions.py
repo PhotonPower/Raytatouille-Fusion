@@ -14,9 +14,10 @@ Where the step vanishes the wall does too and only a crease is rounded. The prof
 stations along a border make a band – a bicubic B-spline over (u along, ξ across) that runs into
 the facets on both sides; the facets are trimmed back to the band.
 
-Two levels: the bands between the strips of a zone first (they reach up to the zone's rays), then
-the bands along the rays between two zones, whose two sides are the zones as built so far – strips
-and their bands – so that the junctions are covered by one surface. NumPy only."""
+Three levels, each one's two sides being what the levels before have built: the bands between the
+rows of a strip (if the strips are cut into rows), then those between the strips of a zone, then
+those along the rays between two zones – so that every junction is covered by one surface. Along
+a border the stations lie closer where a lower level's wall meets it. NumPy only."""
 
 from __future__ import annotations
 
@@ -32,8 +33,9 @@ from al_spline import DEGREE, Graph, basis_matrix
 
 FINE = 0.04            # mm, raster of the profiles across a border (at most radius / 8)
 SITE = 0.1             # mm, spacing of a band's B-spline sites across the border
-ALONG_STRIP = 0.5      # mm, stations along a border between two strips
-ALONG_ZONE = 0.1       # mm, stations along a border between two zones (strips' walls cross it)
+COARSE = 0.5           # mm, stations along a border
+DENSE = 0.1            # mm, where the wall of a lower level meets it, within NEAR of that place
+NEAR = 2.5             # mm
 TOLERANCE = 0.003      # mm: a band reaches as far as its profile differs from the two sides by more
 TAPER = 0.2            # mm: beyond that the profile runs out into the sides (the band's rim lies on them)
 
@@ -198,9 +200,10 @@ class Band:
     border: object
     graph: Graph                   # x(u, ξ)
     half_width: float
-    zones: tuple[int, ...]         # one zone: between two of its strips; two: between these zones
-    strip: int = 0                 # between strips `strip - 1` and `strip`
+    zones: tuple[int, ...]         # one zone: between two of its strips or rows; two: between these zones
+    strip: int = 0                 # between the strips `strip - 1` and `strip`; of a row band: its strip
     step: float = 0.0              # largest step along the border, mm
+    row: int | None = None         # a row band: between the rows `row - 1` and `row` of `strip`
     polygons: list[np.ndarray] = field(default_factory=list)   # its part of the front view
 
     def covers(self, y, z) -> np.ndarray:
@@ -243,8 +246,7 @@ class Profiles:
     """The blended profiles of the stations along one border, before the band is cut to width."""
 
     border: object
-    u_range: tuple[float, float]
-    n_u: int
+    breaks: np.ndarray             # knot spans along the border
     xi: np.ndarray                 # fine raster across
     F: np.ndarray                  # (n_u, len(xi)) blended
     G: np.ndarray                  # the two sides as they are
@@ -254,17 +256,16 @@ class Profiles:
     cramped: bool = False          # the profile would reach further than its window has room for
 
 
-def profiles(border, u_range: tuple[float, float], along: float, draft_deg: float, radius: float,
+def profiles(border, breaks: np.ndarray, draft_deg: float, radius: float,
              side_a, side_b, margin: float, room: float, mirror, extra: float = 0.0) -> Profiles | None:
-    """The blended profiles along `border` for u in u_range. side_a(y, z) and side_b give x of the
+    """The blended profiles along `border` at the stations of `breaks` (the knot spans along u, see
+    stations()). side_a(y, z) and side_b give x of the
     two sides (for ξ < 0 and ξ > 0). `margin`: how far beyond their cells the sides are defined;
     `room`: the width of the narrower strip beside the border; mirror(y, z): whether a point belongs
     to the mirror (what the sides are beyond the frame or in the lamp hole does not count);
     `extra`: more room across, for the walls of strips that end at this border. None where nothing
     is to connect."""
-    spans = max(1, math.ceil((u_range[1] - u_range[0]) / along))
-    n_u = spans + 3
-    stations = Graph(u_range, (-1.0, 1.0), n_u, 4).sites_p
+    stations = Graph((breaks[0], breaks[-1]), (-1.0, 1.0), 0, 4, breaks).sites_p
     # the step at the border first: it sets the room the wall and its fillets need
     h = 0.01
     near = np.array([-1.5 * h, -0.5 * h, 0.5 * h, 1.5 * h])
@@ -300,7 +301,29 @@ def profiles(border, u_range: tuple[float, float], along: float, draft_deg: floa
     reach = _reach((np.abs(F - G) > TOLERANCE) & mirror(y.ravel(), z.ravel()).reshape(y.shape), half, h)
     reach = max(reach, 2.0 * h)                  # a step, however low, gets its band
     cramped = reach + TAPER > usable             # runs out into the sides earlier than it should
-    return Profiles(border, u_range, n_u, xi, F, G, step, min(reach, usable - TAPER), window, cramped)
+    return Profiles(border, breaks, xi, F, G, step, min(reach, usable - TAPER), window, cramped)
+
+
+def stations(u_range: tuple[float, float], crossings=()) -> np.ndarray:
+    """Knot spans along a border: COARSE, and DENSE within NEAR of every crossing (u of a place where
+    a wall of a lower level meets the border)."""
+    u0, u1 = u_range
+    dense = sorted((max(u0, c - NEAR), min(u1, c + NEAR)) for c in crossings if u0 - NEAR < c < u1 + NEAR)
+    merged: list[list[float]] = []
+    for a, b in dense:
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    out = [u0]
+    position = u0
+    for a, b in merged + [[u1, u1]]:
+        if a > position:                                     # a calm stretch
+            out += list(np.linspace(position, a, max(1, math.ceil((a - position) / COARSE)) + 1)[1:])
+        if b > a:                                            # a stretch with a crossing
+            out += list(np.linspace(a, b, max(1, math.ceil((b - a) / DENSE)) + 1)[1:])
+        position = max(position, b)
+    return np.array(out)
 
 
 def _reach(changed: np.ndarray, half: int, h: float) -> float:
@@ -321,19 +344,19 @@ def _reach(changed: np.ndarray, half: int, h: float) -> float:
     return reach * h
 
 
-def band_of(pr: Profiles, half_width: float, zones: tuple[int, ...], strip: int = 0) -> "Band":
+def band_of(pr: Profiles, half_width: float, zones: tuple[int, ...], strip: int = 0, row: int | None = None) -> "Band":
     """The band of the profiles, |ξ| <= half_width (at least their reach + TAPER): the blended
     profile within the reach, running out into the two sides up to the rim."""
     weight = np.clip((half_width - np.abs(pr.xi)) / TAPER, 0.0, 1.0)
     weight = weight * weight * (3.0 - 2.0 * weight)
     profile = pr.G + weight[None, :] * (pr.F - pr.G)
     n_xi = max(4, round(2.0 * half_width / SITE) + 3)
-    graph = Graph(pr.u_range, (-half_width, half_width), pr.n_u, n_xi)
-    values = np.empty((pr.n_u, n_xi))
-    for i in range(pr.n_u):
+    graph = Graph((pr.breaks[0], pr.breaks[-1]), (-half_width, half_width), 0, n_xi, pr.breaks)
+    values = np.empty((graph.n_p, n_xi))
+    for i in range(graph.n_p):
         values[i] = np.interp(graph.sites_q, pr.xi, profile[i])
     graph.interpolate(values)
-    return Band(pr.border, graph, half_width, zones, strip, pr.step)
+    return Band(pr.border, graph, half_width, zones, strip, pr.step, row)
 
 
 def _width(reach: float) -> float:
@@ -345,6 +368,7 @@ def _width(reach: float) -> float:
 class Transitions:
     draft: float                   # degrees between the walls and the demoulding direction X
     radius: float                  # mm, fillets
+    row_bands: list[Band]
     strip_bands: list[Band]
     zone_bands: list[Band]
     cell_polygons: list[list[np.ndarray]]     # per cell: what is left of it between the bands
@@ -353,14 +377,19 @@ class Transitions:
 
     @property
     def bands(self) -> list[Band]:
-        return self.zone_bands + self.strip_bands        # in the order of their priority
+        return self.zone_bands + self.strip_bands + self.row_bands       # in the order of their priority
+
+
+def row_border(frame: StripFrame, q: float) -> LineBorder:
+    """The border q = const between two rows of a strip; ξ grows with q."""
+    return LineBorder(np.array(frame.yz(0.0, q)), frame.e_p)
 
 
 def _u_range(border, polys: list[np.ndarray]) -> tuple[float, float] | None:
     if not polys:
         return None
     u = np.concatenate([border.uxi(p[:, 0], p[:, 1])[0] for p in polys])
-    return float(u.min()), float(u.max())
+    return (float(u.min()), float(u.max())) if u.max() - u.min() > 1e-6 else None
 
 
 def _within(border, half_width: float, polys: list[np.ndarray]) -> list[np.ndarray]:
@@ -371,61 +400,148 @@ def _within(border, half_width: float, polys: list[np.ndarray]) -> list[np.ndarr
     return polys
 
 
+def _crossings(border, u_range: tuple[float, float], who_a, who_b) -> list[float]:
+    """u of the places along a border where the part beside it changes: who_a(y, z) and who_b name
+    the part (an integer) just beside the border on either side."""
+    u = np.linspace(u_range[0], u_range[1], max(2, int((u_range[1] - u_range[0]) / 0.05) + 1))
+    out: list[float] = []
+    for who, xi in ((who_a, -0.02), (who_b, 0.02)):
+        ids = who(*border.yz(u, np.full_like(u, xi)))
+        change = np.flatnonzero(np.diff(ids) != 0)
+        out += list(0.5 * (u[change] + u[change + 1]))
+    return out
+
+
 def build(reflector, draft_deg: float, radius: float, progress=None) -> Transitions:
     """The bands of `reflector` (al_reflector.Reflector). Raises NeedsMargin if its facets do not
     reach far enough beyond their cells."""
     s = reflector.settings
     zones = list(s.zones)
     cells, facets = reflector.cells, reflector.facets
-    by_strip = {(c.zone, c.strip): i for i, c in enumerate(cells)}
+    by_key = {c.key: i for i, c in enumerate(cells)}
     frames = {c.zone: c.spec.frame for c in cells}
-
-    def facet_height(index: int):
-        return lambda y, z: facets[index].evaluate(y, z)[0]
-
+    rows_of: dict[tuple[int, int], np.ndarray] = {}
+    for zi, k in sorted({(c.zone, c.strip) for c in cells}):
+        rows_of[(zi, k)] = np.array(sorted(c.row for c in cells if (c.zone, c.strip) == (zi, k)))
+    strips_of = {zi: np.array(sorted(k for (z, k) in rows_of if z == zi)) for zi in frames}
+    length = s.facet_length
+    warnings: list[str] = []
     outline = al_layout.simplified(reflector.frame, 0.05)       # only to tell the mirror from what lies beyond
 
     def mirror(y, z):
         return al_layout.contains(outline, np.column_stack([y, z])) & (np.hypot(y, z) >= s.hole_radius)
 
+    def strip_region(zi: int, k: int, zone_polys, widths=(0.0, 0.0)) -> list[np.ndarray]:
+        polys = zone_polys
+        for curve in (al_layout.strip_curve(frames[zi], (k - 0.5) * s.strip_width, True, widths[0]),
+                      al_layout.strip_curve(frames[zi], (k + 0.5) * s.strip_width, False, widths[1])):
+            if curve is None:
+                continue
+            polys = [] if isinstance(curve, str) else al_layout.clip_all(polys, curve)
+        return polys
+
+    def row_of(zi: int, k: int):
+        """The row (of those the strip has) at points."""
+        frame, existing = frames[zi], rows_of[(zi, k)]
+
+        def who(y, z):
+            if length <= 0.0:
+                return np.zeros(np.shape(y), dtype=int)
+            j = np.floor(frame.pq(y, z)[1] / length + 0.5).astype(int)
+            return existing[np.argmin(np.abs(np.ravel(j)[:, None] - existing[None, :]), axis=1)].reshape(np.shape(y))
+
+        return who
+
+    def strip_at(zi: int):
+        frame, existing = frames[zi], strips_of[zi]
+
+        def who(y, z):
+            k = np.floor(frame.strip_coordinate(*frame.pq(y, z)) / s.strip_width + 0.5).astype(int)
+            return existing[np.argmin(np.abs(np.ravel(k)[:, None] - existing[None, :]), axis=1)].reshape(np.shape(y))
+
+        return who
+
+    regions = {zi: al_layout.zone_region(reflector.frame, zone) for zi, zone in enumerate(zones)}
+
+    # ---- level 0: between the rows of a strip
+    row_bands: list[Band] = []
+    pairs = [key for key in sorted(by_key) if (key[0], key[1], key[2] - 1) in by_key]
+    for count, (zi, k, j) in enumerate(pairs):
+        if progress is not None:
+            progress(0.3 * count / max(len(pairs), 1), "connecting the rows …")
+        border = row_border(frames[zi], (j - 0.5) * length)
+        near = al_layout.outside_hole(_within(border, s.margin, strip_region(zi, k, regions[zi])), s.hole_radius)
+        u_range = _u_range(border, near)
+        if u_range is None:
+            continue
+        a, b = facets[by_key[(zi, k, j - 1)]], facets[by_key[(zi, k, j)]]
+        pr = profiles(border, stations(u_range), draft_deg, radius, lambda y, z, f=a: f.evaluate(y, z)[0],
+                      lambda y, z, f=b: f.evaluate(y, z)[0], s.margin, min(length, s.strip_width), mirror)
+        if pr is not None:
+            row_bands.append(band_of(pr, _width(pr.reach), (zi,), k, j))
+            if pr.cramped:
+                warnings.append(f"zone {zi + 1}, strip {k}, between the rows {j - 1} and {j}: the connecting face "
+                                f"over a step of {pr.step:.2f} mm needs more room than it has – it ends earlier")
+    row_bands_of: dict[tuple[int, int], list[Band]] = {}
+    for band in row_bands:
+        row_bands_of.setdefault((band.zones[0], band.strip), []).append(band)
+
+    def strip_height(zi: int, k: int):
+        """x of a strip as built so far: its rows with the bands between them."""
+        who = row_of(zi, k)
+
+        def height(y, z):
+            shape = np.shape(y)
+            y, z = np.ravel(y), np.ravel(z)
+            j = who(y, z)
+            x = np.empty(len(y))
+            for value in np.unique(j):
+                sel = j == value
+                x[sel] = facets[by_key[(zi, k, int(value))]].evaluate(y[sel], z[sel])[0]
+            for band in row_bands_of.get((zi, k), []):
+                sel = band.covers(y, z)
+                if sel.any():
+                    x[sel] = band.evaluate(y[sel], z[sel])[0]
+            return x.reshape(shape)
+
+        return height
+
     # ---- level 1: between the strips of a zone
     strip_bands: list[Band] = []
-    warnings: list[str] = []
-    regions = {zi: al_layout.zone_region(reflector.frame, zone) for zi, zone in enumerate(zones)}
-    pairs = [(zi, k) for (zi, k) in sorted(by_strip) if (zi, k - 1) in by_strip]
-    for count, (zi, k) in enumerate(pairs):
+    pairs2 = [(zi, k) for (zi, k) in sorted(rows_of) if (zi, k - 1) in rows_of]
+    for count, (zi, k) in enumerate(pairs2):
         if progress is not None:
-            progress(0.5 * count / max(len(pairs), 1), "connecting the strips …")
+            progress(0.3 + 0.4 * count / max(len(pairs2), 1), "connecting the strips …")
         border = strip_border(frames[zi], (k - 0.5) * s.strip_width)
         # the stations cover the band at its full width (it may end askew at a ray or the frame)
         near = al_layout.outside_hole(_within(border, s.margin, regions[zi]), s.hole_radius)
         u_range = _u_range(border, near)
-        if u_range is None or u_range[1] - u_range[0] < 1e-6:
+        if u_range is None:
             continue
-        pr = profiles(border, u_range, ALONG_STRIP, draft_deg, radius, facet_height(by_strip[(zi, k - 1)]),
-                      facet_height(by_strip[(zi, k)]), s.margin, s.strip_width, mirror)
+        crossings = _crossings(border, u_range, row_of(zi, k - 1), row_of(zi, k)) if length > 0.0 else []
+        pr = profiles(border, stations(u_range, crossings), draft_deg, radius, strip_height(zi, k - 1),
+                      strip_height(zi, k), s.margin, s.strip_width, mirror, extra=0.8 if crossings else 0.0)
         if pr is not None:
             strip_bands.append(band_of(pr, _width(pr.reach), (zi,), k))
             if pr.cramped:
                 warnings.append(f"zone {zi + 1}, between the strips {k - 1} and {k}: the connecting face over a "
                                 f"step of {pr.step:.2f} mm needs more room than it has (facets nearly as steep "
-                                "as the draft angle allows?) – it ends earlier")
+                                "as the draft angle allows, or a row's wall joins it) – it ends earlier")
     bands_of = {zi: [b for b in strip_bands if b.zones == (zi,)] for zi in range(len(zones))}
 
     def zone_height(zi: int):
         """x of a zone as built so far: its strips with the bands between them."""
-        frame = frames[zi]
-        existing = np.array(sorted(k for (z, k) in by_strip if z == zi))
+        who = strip_at(zi)
+        heights = {int(k): strip_height(zi, int(k)) for k in strips_of[zi]}
 
         def height(y, z):
             shape = np.shape(y)
             y, z = np.ravel(y), np.ravel(z)
-            k = np.floor(frame.strip_coordinate(*frame.pq(y, z)) / s.strip_width + 0.5).astype(int)
-            k = existing[np.argmin(np.abs(k[:, None] - existing[None, :]), axis=1)]     # the nearest strip there is
+            k = who(y, z)
             x = np.empty(len(y))
             for value in np.unique(k):
                 sel = k == value
-                x[sel] = facets[by_strip[(zi, int(value))]].evaluate(y[sel], z[sel])[0]
+                x[sel] = heights[int(value)](y[sel], z[sel])
             for band in bands_of[zi]:
                 sel = band.covers(y, z)
                 if sel.any():
@@ -433,6 +549,21 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
             return x.reshape(shape)
 
         return height
+
+    def part_at(zi: int):
+        """A number for the strip and row at points of a zone."""
+        who = strip_at(zi)
+        row_who = {int(k): row_of(zi, int(k)) for k in strips_of[zi]}
+
+        def ids(y, z):
+            k = who(y, z)
+            j = np.zeros(len(k), dtype=int)
+            for value in np.unique(k):
+                sel = k == value
+                j[sel] = row_who[int(value)](y[sel], z[sel])
+            return k * 100003 + j
+
+        return ids
 
     # ---- level 2: along the rays between two zones; all of one width, so the zones' corners at the
     # lamp axis stay simple
@@ -444,15 +575,16 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
             if before is None or zi not in frames or before not in frames:
                 continue
             if progress is not None:
-                progress(0.5 + 0.5 * zi / len(zones), "connecting the zones …")
+                progress(0.7 + 0.3 * zi / len(zones), "connecting the zones …")
             border = ray_border(zone.az_from)
             near = al_layout.clip(reflector.frame, Line(border.along, 0.0))      # the ray's side of the lamp axis
             near = al_layout.outside_hole(_within(border, s.margin, near), s.hole_radius)
             u_range = _u_range(border, near)
-            if u_range is None or u_range[1] - u_range[0] < 1e-6:
+            if u_range is None:
                 continue
-            pr = profiles(border, u_range, ALONG_ZONE, draft_deg, radius, zone_height(before), zone_height(zi),
-                          s.margin, s.strip_width, mirror, extra=0.8)
+            crossings = _crossings(border, u_range, part_at(before), part_at(zi))
+            pr = profiles(border, stations(u_range, crossings), draft_deg, radius, zone_height(before),
+                          zone_height(zi), s.margin, s.strip_width, mirror, extra=0.8)
             if pr is not None:
                 found.append((pr, before, zi))
                 if pr.cramped:
@@ -467,7 +599,8 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
             raise DesignError(f"the lamp hole (radius {s.hole_radius:g} mm) is too small for the connecting faces "
                               f"between the zones, which meet at the lamp axis: at least {need:.1f} mm")
 
-    # ---- the front view: zone bands first, strip bands between them, the cells keep the rest
+    # ---- the front view: zone bands first, strip bands between them, row bands within the strips,
+    # the cells keep the rest
     inner = {zi: al_layout.zone_region(reflector.frame, zone, inset=ray_width if zone_bands else 0.0)
              for zi, zone in enumerate(zones)}
     for band in zone_bands:
@@ -477,16 +610,21 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
         band.polygons = al_layout.outside_hole(_within(band.border, band.half_width, inner[band.zones[0]]),
                                                s.hole_radius)
     width = {(b.zones[0], b.strip): b.half_width for b in strip_bands}
+    row_width = {(b.zones[0], b.strip, b.row): b.half_width for b in row_bands}
+    strip_inner = {(zi, k): strip_region(zi, k, inner[zi], (width.get((zi, k), 0.0), width.get((zi, k + 1), 0.0)))
+                   for (zi, k) in rows_of}
+    for band in row_bands:
+        band.polygons = al_layout.outside_hole(
+            _within(band.border, band.half_width, strip_inner[(band.zones[0], band.strip)]), s.hole_radius)
     cell_polygons = []
     for cell in cells:
-        frame = cell.spec.frame
-        c0, c1 = cell.spec.c_range
-        polys = inner[cell.zone]
-        for curve in (al_layout.strip_curve(frame, c0, True, width.get((cell.zone, cell.strip), 0.0)),
-                      al_layout.strip_curve(frame, c1, False, width.get((cell.zone, cell.strip + 1), 0.0))):
-            if curve is None:
-                continue
-            polys = [] if isinstance(curve, str) else al_layout.clip_all(polys, curve)
+        polys = strip_inner[(cell.zone, cell.strip)]
+        if length > 0.0:
+            frame = cell.spec.frame
+            polys = al_layout.clip_all(polys, al_layout.row_curve(frame, (cell.row - 0.5) * length, True,
+                                                                  row_width.get(cell.key, 0.0)))
+            polys = al_layout.clip_all(polys, al_layout.row_curve(
+                frame, (cell.row + 0.5) * length, False, row_width.get((cell.zone, cell.strip, cell.row + 1), 0.0)))
         cell_polygons.append(al_layout.outside_hole(polys, s.hole_radius))
-    step = max([b.step for b in strip_bands + zone_bands], default=0.0)
-    return Transitions(draft_deg, radius, strip_bands, zone_bands, cell_polygons, step, warnings)
+    step = max([b.step for b in row_bands + strip_bands + zone_bands], default=0.0)
+    return Transitions(draft_deg, radius, row_bands, strip_bands, zone_bands, cell_polygons, step, warnings)
