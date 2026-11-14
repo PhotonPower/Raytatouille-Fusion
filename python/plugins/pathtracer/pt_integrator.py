@@ -12,6 +12,7 @@ differ only in the set of (s, t) they use:
   path    path tracing from the sensor: s = 0 (the path hits a source) and s = 1 (connection to a
           point of a source, "next event estimation")
   bidir   bidirectional path tracing: all of them
+  photon  photon mapping (pt_photon) for camera images; for irradiance on faces the same as light
 
 When several ways can produce the same path, their results are combined with weights (multiple
 importance sampling, balance heuristic) that add up to one – so every method estimates the
@@ -27,7 +28,7 @@ import numpy as np
 
 import pt_bsdf
 
-METHODS = ("light", "path", "bidir")
+METHODS = ("light", "path", "bidir", "photon")
 
 
 def enabled(method: str, camera: bool, s: int, t: int) -> bool:
@@ -78,8 +79,10 @@ def _dot(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.einsum("ij,ij->i", a, b)
 
 
-def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radiance: bool) -> None:
-    """Follows the rays leaving vertex 0 through the scene: vertices 1 … of the subpaths."""
+def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radiance: bool,
+          stop_rough: bool = False) -> None:
+    """Follows the rays leaving vertex 0 through the scene: vertices 1 … of the subpaths.
+    stop_rough: a subpath ends at its first vertex that is not specular."""
     k_max, n = path.valid.shape
     mesh, mats = scene.mesh, scene.materials
     alive = start["ok"].copy()
@@ -135,6 +138,8 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         _, _, p_rev = mats.eval(m, ns, -dk, wi)
         path.pr[k - 1, idx] = p_rev * path.cos(k - 1, idx, dk) / dist2
         ok = (weight > 0) & (_dot(ns, wi) * _dot(ng, wi) > 0)
+        if stop_rough:
+            ok &= spec
         if k >= 3:                                           # Russian roulette on dim paths
             q = np.where(spec, 1.0, np.clip(weight, 0.1, 1.0))
             ok &= rng.random(len(idx)) < q
@@ -209,8 +214,9 @@ def light_subpaths(scene, sensor, n: int, k: int, rng) -> Path:
     return path
 
 
-def eye_subpaths(scene, sensor, n: int, k: int, rng) -> Path:
-    """n subpaths from the sensor with up to k vertices."""
+def eye_subpaths(scene, sensor, n: int, k: int, rng, stop_rough: bool = False) -> Path:
+    """n subpaths from the sensor with up to k vertices (stop_rough: only as far as the first
+    vertex that is not specular)."""
     path = Path(max(k, 1), n)
     e = sensor.sample(n, rng)
     path.p[0], path.ns[0], path.ng[0], path.tex[0] = e["p"], e["ns"], e["ng"], e["texel"]
@@ -218,7 +224,7 @@ def eye_subpaths(scene, sensor, n: int, k: int, rng) -> Path:
     path.beta[0] = 1.0 / e["pdf_pos"]
     path.pf[0] = e["pdf_pos"]
     path.valid[0] = True
-    _walk(scene, sensor, path, e, e["beta"], rng, radiance=True)
+    _walk(scene, sensor, path, e, e["beta"], rng, radiance=True, stop_rough=stop_rough)
     return path
 
 
@@ -389,7 +395,7 @@ def batch_size(k_light: int, k_eye: int) -> int:
 
 
 def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 0, batch: int | None = None,
-           progress=None, cancelled=None) -> dict:
+           progress=None, cancelled=None, radius: float = 0.0) -> dict:
     """Estimates the sensor's values with `samples` pairs of subpaths; paths have up to `depth`
     segments (source – … – sensor). Returns {"values": per texel the flux / W or per pixel the
     radiance / W/(mm² sr), "samples": done, "rays": traced}. progress(fraction) and cancelled()
@@ -398,6 +404,13 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
         raise ValueError(f"unknown method {method!r}")
     if depth < 1:
         raise ValueError("paths need at least one segment")
+    if method == "photon":
+        if sensor.camera:
+            import pt_photon
+
+            return pt_photon.render(scene, sensor, samples, depth, seed=seed, radius=radius, progress=progress,
+                                    cancelled=cancelled)
+        method = "light"            # on faces the texels already collect the photons
     rng = np.random.default_rng(seed)
     k_light, k_eye = lengths(method, sensor.camera, depth)
     if batch is None:

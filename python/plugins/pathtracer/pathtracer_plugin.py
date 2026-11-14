@@ -55,7 +55,9 @@ class PathTracerPlugin(Plugin):
                                     description="Used by \"Selection: make it a source\""),
         "method": Param.choice(list(pt_setup.METHODS), "light tracing", label="Method", group="Computation",
                                description="light tracing: from the sources; path tracing: from the sensor, with "
-                                           "connections to the sources; bidirectional: both, combined"),
+                                           "connections to the sources; bidirectional: both, combined; photon "
+                                           "mapping: camera images with light through glass and off mirrors "
+                                           "(for the irradiance it is light tracing)"),
         "samples": Param.integer(500_000, min=1_000, max=2_000_000_000, label="Samples", group="Computation",
                                  description="Paths (pairs of a light and an eye path); the noise falls with "
                                              "the square root"),
@@ -65,6 +67,10 @@ class PathTracerPlugin(Plugin):
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
+        "photon_radius": Param.number(0.0, min=0.0, decimals=4, unit="mm", label="Photon radius",
+                                      group="Computation",
+                                      description="Photon mapping: the first search radius; it shrinks from pass to "
+                                                  "pass. 0: chosen from the number of photons"),
         "irradiance_on": Param.entity(kinds=_SURFACES, multiple=True, label="Irradiance on", group="Irradiance",
                                       description="Empty: every surface of the model"),
         "texels": Param.integer(64, min=1, max=1024, label="Texels (longer side)", group="Irradiance"),
@@ -154,7 +160,9 @@ class PathTracerPlugin(Plugin):
             ctx.progress(0.02 + 0.96 * f, f"{what}, {method}: {int(round(f * p['samples'])):,} of {p['samples']:,}")
 
         out = pt_integrator.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"], seed=p["seed"],
-                                   progress=progress, cancelled=ctx.cancelled)
+                                   progress=progress, cancelled=ctx.cancelled, radius=p["photon_radius"])
+        if "radius" in out:
+            ctx.log(f"photon mapping: {out['passes']} passes, last radius {out['radius']:.4g} mm")
         seconds = max(time.time() - start, 1e-9)
         ctx.log(f"{what}, {method}: {out['samples']:,} samples, {out['rays']:,} rays in {seconds:.1f} s "
                 f"({out['rays'] / seconds:,.0f} rays/s)")

@@ -2,8 +2,8 @@
 
 Light transport on the CAD model in Raytatouille Fusion: some objects are **light sources**, the
 others get **materials**; the plugin computes the **irradiance as a texture** on the faces and –
-with a camera – an **image**. Three methods estimate the same quantities and can be compared:
-light tracing, path tracing and bidirectional path tracing. Needs only `numpy` in the plugin
+with a camera – an **image**. Several methods estimate the same quantities and can be compared:
+light tracing, path tracing, bidirectional path tracing and photon mapping. Needs only `numpy` in the plugin
 environment.
 
 Lengths are mm (the document's unit), power is W. One channel: radiometric, no colour and no
@@ -61,8 +61,13 @@ the camera). *Longest path* limits its segments (1: direct light only).
 | **light tracing** | particles start at the sources and are followed; they leave their flux in the texels they land in, and every point they reach is connected to the camera | irradiance maps, light through lenses and off mirrors (caustics) | camera images of mirrors and glass (they stay black: a pinhole is never hit by chance) |
 | **path tracing** | paths start at the sensor (points on the faces, or the camera's pixels); every point is connected to a point on a source, and paths that hit a source count too | camera images, large diffuse sources | small or narrow sources behind mirrors or glass; point sources seen through them are not found at all |
 | **bidirectional** | both kinds of paths, every point of one connected to every point of the other; each way of making a path is weighted by how well it samples that path (multiple importance sampling) | scenes where neither of the others is good everywhere | costs most per sample |
+| **photon mapping** | camera images only: light paths leave their flux ("photons") on the surfaces; camera paths are followed through mirrors and glass to the first other surface, and the light there is estimated from the photons within a radius that shrinks from pass to pass | light through glass or off mirrors that is also *seen* through glass or in a mirror – paths no connection can make (the caustic at the bottom of a glass) | blurs over the radius (a small error that vanishes with the passes); for the irradiance on faces it is the same as light tracing |
 
-The three agree within their noise wherever a method can produce every path (tests:
+
+*Photon radius* is the first search radius (0: chosen so that about 30 photons lie around a
+point); the log shows the last one.
+
+The first three agree within their noise wherever a method can produce every path (tests:
 `tests/python/test_pathtracer.py`, with closed-form cases – point source over a plane, a closed
 diffuse box, a glass plate).
 
@@ -76,7 +81,8 @@ diffuse box, a glass plate).
   together (NumPy). Expect roughly 10⁵ … 10⁶ rays per second.
 - **Modules** (no CAD in them, usable from scripts): `pt_nurbs` (NURBS evaluation), `pt_mesh`
   (tessellation, masks, areas), `pt_bvh` (intersection), `pt_bsdf` (materials), `pt_scene`
-  (sources, sensors), `pt_integrator` (the estimator), `pt_setup` (model and panel → scene).
+  (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_setup`
+  (model and panel → scene).
 
 ## Not yet
 
