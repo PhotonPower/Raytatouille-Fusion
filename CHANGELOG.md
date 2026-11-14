@@ -20,7 +20,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   holds all over the mirror.
   **Patterned lens** (Streuscheibe): a second system – a paraboloid mirror and a lens whose inner
   side is a grid of elements (prisms, cylinder lenses, pillows) that turn and spread the light –
-  with the ray trace through the lens.
+  with the ray trace through the lens. **Signal lamps**: the standard light distribution of
+  UN R148 (position, stop, direction indicator, daytime running lamps) as test points, and the
+  lamps P21W, PY21W, R10W, R5W.
   ([python/plugins/automotive_lighting](python/plugins/automotive_lighting/README.md))
 - **Layer stacks** in the node workflow: the FourierGrating plugin provides `fg.stack` (coatings,
   filters, mirror layers between two media, exact per ray), with an RTT-Fusion that has it.
