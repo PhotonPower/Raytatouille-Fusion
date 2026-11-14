@@ -11,6 +11,10 @@ side. One channel (radiometric, no colour). Kinds:
                Fresnel reflection and refraction; `absorption` (1/mm) inside (Beer–Lambert).
                With an Abbe number `abbe` the index depends on the wavelength: `ior` is n_d
                (587.56 nm), n = A + B / lambda² through n_d and the dispersion n_F − n_C
+
+A `spectrum` – pairs (wavelength / nm, value) – replaces the reflectance (diffuse, mirror, glossy)
+or the absorption (glass) by values that depend on the wavelength: straight lines between the
+pairs, the first / last value outside them.
   detector     no surface at all for the light: rays pass as if it were not there. Only a place
                to measure the irradiance (the scene keeps such faces out of the tracing)
 
@@ -38,7 +42,10 @@ class Materials:
     absorption: np.ndarray               # 1/mm
     names: list[str]
     abbe: np.ndarray | None = None       # Abbe number V_d of glass (0: the index is constant)
+    spectra: list | None = None          # per material: pairs (nm, value) or None
     ior_table: np.ndarray | None = None  # index [material, wavelength], set by wavelengths()
+    rho_table: np.ndarray | None = None  # reflectance [material, wavelength]
+    absorb_table: np.ndarray | None = None
 
     @staticmethod
     def from_rows(rows: list[dict]) -> "Materials":
@@ -48,6 +55,7 @@ class Materials:
             raise ValueError("no materials")
         names = []
         cols: dict[str, list[float]] = {k: [] for k in ("kind", "rho", "tau", "exp", "ior", "abs", "abbe")}
+        spectra = []
         for row in rows:
             name = str(row.get("name", "")).strip()
             kind = str(row.get("kind", "diffuse")).strip().lower()
@@ -74,6 +82,15 @@ class Materials:
             if abbe < 0:
                 raise ValueError(f"material {name!r}: negative Abbe number")
             cols["abbe"].append(abbe)
+            pairs = sorted((float(nm), float(v)) for nm, v in (row.get("spectrum") or ()))
+            if pairs and kind in ("absorber", "detector"):
+                pairs = []
+            for nm, v in pairs:
+                if nm <= 0 or v < 0 or (kind != "glass" and v + tau > 1 + 1e-12):
+                    raise ValueError(f"material {name!r}: its spectrum needs wavelengths above 0 and values "
+                                     + ("that are not negative" if kind == "glass" else
+                                        "in 0 … 1 (with the transmittance)"))
+            spectra.append(pairs or None)
             names.append(name)
             cols["kind"].append(KINDS.index(kind))
             cols["rho"].append(rho)
@@ -83,7 +100,7 @@ class Materials:
             cols["abs"].append(absorb)
         return Materials(np.asarray(cols["kind"], dtype=np.int64), np.asarray(cols["rho"]), np.asarray(cols["tau"]),
                          np.asarray(cols["exp"]), np.asarray(cols["ior"]), np.asarray(cols["abs"]), names,
-                         np.asarray(cols["abbe"]))
+                         np.asarray(cols["abbe"]), spectra)
 
     def wavelengths(self, nm) -> np.ndarray:
         """Sets and returns the refractive index of every material at the wavelengths (nm):
@@ -95,16 +112,34 @@ class Materials:
         with np.errstate(divide="ignore", invalid="ignore"):
             b = np.where(abbe > 0, (self.ior - 1) / (abbe * (1 / f ** 2 - 1 / c ** 2)), 0.0)[:, None]
         self.ior_table = nd + b * (1 / lam ** 2 - 1 / dd ** 2)
+        count = len(np.atleast_1d(nm))
+        self.rho_table = np.repeat(self.reflectance[:, None], count, axis=1)
+        self.absorb_table = np.repeat(self.absorption[:, None], count, axis=1)
+        for k, pairs in enumerate(self.spectra or []):
+            if pairs:
+                at = np.interp(np.atleast_1d(np.asarray(nm, dtype=float)), [p[0] for p in pairs], [p[1] for p in pairs])
+                (self.absorb_table if self.kind[k] == GLASS else self.rho_table)[k] = at
         return self.ior_table
+
+    def _rho(self, m: np.ndarray, channel) -> np.ndarray:
+        if channel is None or self.rho_table is None:
+            return self.reflectance[m]
+        return self.rho_table[m, channel]
+
+    def absorbs(self, m: np.ndarray, channel=None) -> np.ndarray:
+        """Absorption (1/mm) of the materials m at the paths' wavelengths."""
+        if channel is None or self.absorb_table is None:
+            return self.absorption[m]
+        return self.absorb_table[m, channel]
 
     def specular(self, m: np.ndarray) -> np.ndarray:
         k = self.kind[m]
         return (k == MIRROR) | (k == GLASS)
 
     # ------------------------------------------------------------------ evaluation
-    def eval(self, m: np.ndarray, n: np.ndarray, wo: np.ndarray, wi: np.ndarray):
+    def eval(self, m: np.ndarray, n: np.ndarray, wo: np.ndarray, wi: np.ndarray, channel=None):
         """f(wo, wi) in 1/sr and the densities (per solid angle) of sampling wi from wo and wo
-        from wi. Zero for specular materials."""
+        from wi. Zero for specular materials. channel: number of each path's wavelength."""
         k = self.kind[m]
         co = np.einsum("ij,ij->i", n, wo)
         ci = np.einsum("ij,ij->i", n, wi)
@@ -114,7 +149,7 @@ class Materials:
         p_rev = np.zeros(len(m))
         d = np.nonzero(k == DIFFUSE)[0]
         if d.size:
-            rho, tau = self.reflectance[m[d]], self.transmittance[m[d]]
+            rho, tau = self._rho(m[d], None if channel is None else channel[d]), self.transmittance[m[d]]
             part = np.where(same[d], rho, tau)
             total = rho + tau
             pick = np.divide(part, total, out=np.zeros(len(d)), where=total > 0)
@@ -127,7 +162,7 @@ class Materials:
             # cosine between wi and the mirror direction of wo (symmetric in wo and wi)
             c = np.clip(2 * co[g] * ci[g] - np.einsum("ij,ij->i", wo[g], wi[g]), 0.0, 1.0)
             lobe = c ** e
-            f[g] = self.reflectance[m[g]] * (e + 2) / (2 * np.pi) * lobe
+            f[g] = self._rho(m[g], None if channel is None else channel[g]) * (e + 2) / (2 * np.pi) * lobe
             p_fwd[g] = (e + 1) / (2 * np.pi) * lobe
             p_rev[g] = p_fwd[g]
         return f, p_fwd, p_rev
@@ -150,7 +185,7 @@ class Materials:
 
         d = np.nonzero(k == DIFFUSE)[0]
         if d.size:
-            rho, tau = self.reflectance[m[d]], self.transmittance[m[d]]
+            rho, tau = self._rho(m[d], None if channel is None else channel[d]), self.transmittance[m[d]]
             total = rho + tau
             reflect = u3[d] * total < rho
             axis = n[d] * (side[d] * np.where(reflect, 1.0, -1.0))[:, None]
@@ -161,7 +196,7 @@ class Materials:
         s = np.nonzero(k == MIRROR)[0]
         if s.size:
             wi[s] = 2 * co[s][:, None] * n[s] - wo[s]
-            weight[s] = self.reflectance[m[s]]
+            weight[s] = self._rho(m[s], None if channel is None else channel[s])
         g = np.nonzero(k == GLOSSY)[0]
         if g.size:
             e = self.exponent[m[g]]
@@ -171,7 +206,8 @@ class Materials:
             ci = np.einsum("ij,ij->i", n[g], w)
             ok = ci * co[g] > 0
             wi[g] = w
-            weight[g] = np.where(ok, self.reflectance[m[g]] * (e + 2) / (e + 1) * np.abs(ci), 0.0)
+            weight[g] = np.where(ok, self._rho(m[g], None if channel is None else channel[g]) * (e + 2) / (e + 1)
+                                 * np.abs(ci), 0.0)
             pdf[g] = (e + 1) / (2 * np.pi) * cos_a ** e
         t = np.nonzero(k == GLASS)[0]
         if t.size:

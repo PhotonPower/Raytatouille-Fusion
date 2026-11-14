@@ -120,9 +120,10 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         dist2 = np.sum((p - path.p[k - 1, idx]) ** 2, axis=1)
         m = scene.tri_material[tri]
         b = beta[idx]
-        inside = (mats.kind[m] == pt_bsdf.GLASS) & (cs < 0) & (mats.absorption[m] > 0)
+        absorb = mats.absorbs(m, path.channel[idx])
+        inside = (mats.kind[m] == pt_bsdf.GLASS) & (cs < 0) & (absorb > 0)
         if inside.any():                                     # the segment ran through absorbing glass
-            b = np.where(inside, b * np.exp(-mats.absorption[m] * np.sqrt(dist2)), b)
+            b = np.where(inside, b * np.exp(-absorb * np.sqrt(dist2)), b)
         path.p[k, idx], path.ns[k, idx], path.ng[k, idx], path.wo[k, idx] = p, ns, ng, -dk
         path.m[k, idx] = m
         if sensor is not None and not sensor.camera:
@@ -136,7 +137,7 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         if k == k_max - 1:
             break
         wi, weight, pd = mats.sample(m, ns, -dk, rng, radiance, path.channel[idx])
-        _, _, p_rev = mats.eval(m, ns, -dk, wi)
+        _, _, p_rev = mats.eval(m, ns, -dk, wi, path.channel[idx])
         path.pr[k - 1, idx] = p_rev * path.cos(k - 1, idx, dk) / dist2
         ok = (weight > 0) & (_dot(ns, wi) * _dot(ng, wi) > 0)
         if stop_rough:
@@ -270,13 +271,15 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
             fy, dens_y = scene.emitted(light.src[0, j], light.ns[0, j], w)
             dens_y_rev = None
         else:
-            fy, dens_y, dens_y_rev = mats.eval(light.m[s - 1, j], light.ns[s - 1, j], light.wo[s - 1, j], w)
+            fy, dens_y, dens_y_rev = mats.eval(light.m[s - 1, j], light.ns[s - 1, j], light.wo[s - 1, j], w,
+                                               light.channel[j])
         if t == 1:
             fz, dens_z, pixel = sensor.response(eye.ns[0, j], -w)
             tex = eye.tex[0, j] if pixel is None else pixel
             dens_z_rev = None
         else:
-            fz, dens_z, dens_z_rev = mats.eval(eye.m[t - 1, j], eye.ns[t - 1, j], eye.wo[t - 1, j], -w)
+            fz, dens_z, dens_z_rev = mats.eval(eye.m[t - 1, j], eye.ns[t - 1, j], eye.wo[t - 1, j], -w,
+                                               light.channel[j])
             tex = eye.tex[0, j]
         cy, cz = light.cos(s - 1, j, w), eye.cos(t - 1, j, w)
         c = light.beta[s - 1, j] * fy * cy * cz / np.where(near, dist2, 1.0) * fz * eye.beta[t - 1, j]

@@ -474,6 +474,51 @@ sensor = pt_scene.TexelSensor(scene, [0], 4)                         # 2 500 poi
 smooth = pt_integrator.render(scene, sensor, "path", 40_000, 2, seed=SEED, batch=5_000)     # would scatter by 2 %
 assert pt_setup.typical_noise(smooth["values"], smooth["error"]) < 0.008
 
+# ---- materials that depend on the wavelength: a closed box whose paint reflects 0.2 at 450 nm and 0.6
+# at 650 nm, a source with both lines – each wavelength arrives as its own series 1 + rho + rho² + …
+paints = pt_bsdf.Materials.from_rows([
+    {"name": "paint", "kind": "diffuse", "spectrum": ((650, 0.6), (450, 0.2))},
+    {"name": "tinted", "kind": "glass", "ior": 1.5, "spectrum": ((450, 0.05), (650, 0.0))},
+    {"name": "black", "kind": "absorber"}])
+assert np.allclose(paints.wavelengths([400, 450, 550, 650, 700])[0], 1.5)
+assert np.allclose(paints.rho_table[0], [0.2, 0.2, 0.4, 0.6, 0.6]) and np.allclose(paints.absorb_table[1], [0.05, 0.05, 0.025, 0, 0])
+lines = pt_scene.SourceSpec("p", 1.0, points=((50, 50, 50),), spectrum=((450, 1), (650, 1)))
+colour_mesh = pt_mesh.build([{"id": 1, "geometry": box((0, 0, 0), (100, 100, 100))}], 1e-3)
+coloured = pt_scene.Scene(colour_mesh, paints, np.array([0]), [lines], (0,))
+colour_sensor = pt_scene.TexelSensor(coloured, range(6), 2)
+series = [0.5 * (1 - rho ** 12) / (1 - rho) for rho in (0.2, 0.6)]
+for method in pt_integrator.METHODS[:3]:
+    got = pt_integrator.render(coloured, colour_sensor, method, 20_000, 12, seed=SEED)["channels"].sum(axis=1)
+    assert np.allclose(got / series, 1, atol=0.04), (method, got / series)
+colour_mesh = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(
+    [box((0, 0, 0), (100, 100, 100)), rect((-100, -100, -1), (300, 0, 0), (0, 300, 0))])], 1e-3)
+coloured = pt_scene.Scene(colour_mesh, paints, np.array([0, 0]), [pt_scene.SourceSpec("p", 1.0, points=((50, 50, 150),),
+                                                                            spectrum=((450, 1), (650, 1)))], (0,))
+colour_camera = pt_scene.Camera((50, 50, 400), (50, 50, 100), (0, 1, 0), 5.0, 2, 2)       # the top of the box, lit directly
+for method in ("path", "photon"):
+    seen = pt_integrator.render(coloured, colour_camera, method, 40_000, 2, seed=SEED)["channels"].mean(axis=1)
+    assert abs(seen[0] / seen[1] - 0.2 / 0.6) < 0.04, (method, seen)
+# tinted glass that absorbs 0.05 / mm at 450 nm and nothing at 650 nm: the plate in the beam again
+colour_mesh = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(
+    [box((-50, -50, 0), (50, 50, 10)), rect((-1, -1, -20), (2, 0, 0), (0, 2, 0)), rect((-40, -40, 30), (80, 0, 0), (0, 80, 0))])], 1e-3)
+coloured = pt_scene.Scene(colour_mesh, paints, np.array([1, 2, 2]),
+                       [pt_scene.SourceSpec("beam", 1.0, 0.5, "front", entities=(1,), spectrum=((450, 1), (650, 1)))], (0,))
+got = pt_integrator.render(coloured, pt_scene.TexelSensor(coloured, [7], 2), "light", 40_000, 30, seed=SEED)["channels"].sum(axis=1)
+assert np.allclose(got * 2, [0.96 ** 2 * inner / (1 - 0.04 ** 2 * inner ** 2), 0.96 / 1.04], atol=0.015), got * 2
+for bad, why in (({"name": "x", "kind": "diffuse", "transmittance": 0.5, "spectrum": ((500, 0.6),)}, "0 … 1"),
+                 ({"name": "x", "kind": "glass", "spectrum": ((500, -1.0),)}, "not negative")):
+    try:
+        pt_bsdf.Materials.from_rows([bad])
+        raise AssertionError("not refused")
+    except ValueError as e:
+        assert why in str(e), e
+assert pt_setup.parse_values("450:0.2; 650 : 0.9,") == ((450.0, 0.2), (650.0, 0.9)) and pt_setup.parse_values("") == ()
+try:
+    pt_setup.parse_values("450, 650")
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "values at wavelengths" in str(e), e
+
 # ---- samples steered by weights: any shares of the texels / pixels give the same values – here
 # shares that differ by up to a factor of 100, on the plane under the point source
 shares = np.random.default_rng(5).uniform(0.01, 1.0, 16)
@@ -593,6 +638,8 @@ cache = pt_setup.MeshCache()
 scene = pt_setup.build_scene(model, params, cache)
 assert scene.mesh.entity_ids == [11, 12, 13] and len(scene.mesh.face_area) == 8
 assert pt_setup.build_scene(model, params, cache).mesh is scene.mesh                      # not tessellated again
+red = scene.materials.names.index("red paint")                       # a default material with a spectrum
+assert np.allclose(scene.materials.rho_table[red], np.interp(scene.wavelengths, [450, 550, 600, 650], [0.05, 0.1, 0.6, 0.8]))
 assert [scene.materials.names[m] for m in scene.tri_material[scene.mesh.face_first[:3]]] == ["white", "black", "glass"]
 assert pt_setup.sensor_faces(scene, [13]) == list(range(2, 8)) and len(pt_setup.sensor_faces(scene, [])) == 8
 assert pt_setup.assignments(model, params) == [["floor", "surface", "(white)", ""], ["lamp", "surface", "black", "lamp"],

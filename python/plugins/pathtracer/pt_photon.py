@@ -139,7 +139,7 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
                 ok = (pk[ph] + t[q] <= depth) & (np.abs(np.einsum("ij,ij->i", p_ns[ph], ns[q])) > 0.5) \
                     & (p_channel[ph] == channel[q])
                 q, ph = q[ok], ph[ok]
-                f, _, _ = mats.eval(m[q], ns[q], wo[q], p_wo[ph])
+                f, _, _ = mats.eval(m[q], ns[q], wo[q], p_wo[ph], channel[q])
                 total += np.bincount(q, weights=f * p_beta[ph], minlength=len(j))
             total /= scene.channel_prob[channel]             # the path stands for all wavelengths
             accum += np.bincount(slot[j], weights=eye.beta[t, j] * total / (np.pi * r2 * count),
