@@ -163,6 +163,11 @@ e1[:6] *= 15                                                         # a few lar
 e2[:6] *= 15
 bvh = pt_bvh.BVH(v0, e1, e2)
 assert bvh.count[bvh.left < 0].sum() == 300 and sorted(bvh.order) == list(range(300)) and bvh.leaf <= pt_bvh.LEAF
+inner = bvh.left >= 0                                                # every box holds its children's boxes
+for child in (bvh.left[inner], bvh.right[inner]):
+    assert (bvh.bmin[child] >= bvh.bmin[inner] - 1e-12).all() and (bvh.bmax[child] <= bvh.bmax[inner] + 1e-12).all()
+same = pt_bvh.BVH(np.tile(v0[:1], (40, 1)), np.tile(e1[:1], (40, 1)), np.tile(e2[:1], (40, 1)))      # 40 times one
+assert same.count[same.left < 0].sum() == 40 and same.leaf <= pt_bvh.LEAF                            # triangle
 o = rng.uniform(-15, 15, (500, 3))
 d = rng.normal(size=(500, 3))
 d /= np.linalg.norm(d, axis=1, keepdims=True)
