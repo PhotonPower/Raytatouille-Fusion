@@ -100,6 +100,12 @@ diffuse box, a glass plate).
 - **Sampling.** The points on sensor faces, the camera's rays and the choice of the source are
   spread evenly (stratified): every texel and every pixel gets the number of samples its size
   asks for instead of a number that scatters.
+- **Adaptive sampling** (on by default; path tracing, bidirectional, photon mapping). After
+  every batch the samples move to the texels / pixels whose values are still uncertain: a texel
+  or pixel is picked in proportion to its standard error so far, 30 % of the samples stay evenly
+  spread. Every batch is drawn with shares fixed before it, so the result stays right – only
+  its noise is spread differently: less where it was large, a little more in the dark. With
+  several processes the first four jobs find the shares for all others.
 - **Several cores.** Larger computations are cut into jobs that worker processes render
   (*Processes*; 0: half of the cores, at most 4 – every process needs some hundred MB). The
   jobs do not depend on the number of processes, so the result does not either.

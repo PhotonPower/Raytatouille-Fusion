@@ -55,32 +55,37 @@ def combine(results: list[dict]) -> dict:
     return out
 
 
+PILOT = 4            # jobs that find out where the samples are needed, when sampling adapts
+
+
 def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 0, processes: int = 0,
-           radius: float = 0.0, progress=None, cancelled=None) -> dict:
+           radius: float = 0.0, adaptive: bool = False, progress=None, cancelled=None) -> dict:
     """As pt_integrator.render, on `processes` processor cores (0: see process_count). Small
-    computations and a single process run in this process. The result has "processes"."""
+    computations and a single process run in this process. The result has "processes".
+
+    adaptive: the first PILOT jobs adapt on their own; from their errors together the sensor's
+    shares for all other jobs are set (the same for any number of processes)."""
     count = process_count(processes)
     size = job_size(samples)
     if count <= 1 or samples < 2 * size:
         out = pt_integrator.render(scene, sensor, method, samples, depth, seed=seed, radius=radius,
-                                   progress=progress, cancelled=cancelled)
+                                   adaptive=adaptive, progress=progress, cancelled=cancelled)
         return {**out, "processes": 1}
-    jobs: queue.Queue = queue.Queue()
-    number = 0
-    for start in range(0, samples, size):
-        jobs.put({"method": method, "samples": min(size, samples - start), "depth": depth,
-                  "seed": seed * 1_000_003 + number, "radius": radius})
-        number += 1
+    todo = [{"method": method, "samples": min(size, samples - start), "depth": depth,
+             "seed": seed * 1_000_003 + number, "radius": radius, "adaptive": adaptive}
+            for number, start in enumerate(range(0, samples, size))]
+    number = len(todo)
     count = min(count, number)
+    steer = adaptive and pt_integrator.adapts(method, sensor.camera) and number > PILOT
+    jobs: queue.Queue = queue.Queue()
     results: queue.Queue = queue.Queue()
     stop = threading.Event()
 
     def serve(process) -> None:                              # one thread per worker: job out, result in
         try:
-            while not stop.is_set():
-                try:
-                    job = jobs.get_nowait()
-                except queue.Empty:
+            while True:
+                job = jobs.get()
+                if job is None or stop.is_set():
                     return
                 pt_worker.write(process.stdin, job)
                 answer = pt_worker.read(process.stdout)
@@ -90,8 +95,28 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
 
     got: list[dict] = []
     failed = ""
+
+    def collect(until: int) -> bool:
+        """Waits until `until` jobs are back; False if cancelled or failed."""
+        nonlocal failed
+        while len(got) < until:
+            if cancelled is not None and cancelled():
+                return False
+            try:
+                answer = results.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if "failed" in answer:
+                failed = answer["failed"]
+                return False
+            got.append(answer)
+            if progress is not None:
+                progress(sum(r["samples"] for r in got) / samples)
+        return True
+
     with tempfile.TemporaryDirectory(prefix="pathtracer-") as folder:
         scene_file = Path(folder) / "scene.pickle"
+        sensor.reset()
         with open(scene_file, "wb") as f:
             pickle.dump((scene, sensor), f, protocol=4)
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -102,23 +127,20 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
         for t in threads:
             t.start()
         try:
-            while len(got) < number:
-                if cancelled is not None and cancelled():
-                    break
-                try:
-                    answer = results.get(timeout=0.2)
-                except queue.Empty:
-                    if not any(t.is_alive() for t in threads) and results.empty():
-                        break
-                    continue
-                if "failed" in answer:
-                    failed = answer["failed"]
-                    break
-                got.append(answer)
-                if progress is not None:
-                    progress(sum(r["samples"] for r in got) / samples)
+            first = PILOT if steer else number
+            for job in todo[:first]:
+                jobs.put(job)
+            if collect(first) and steer:
+                error = combine(got)["error"]
+                if error is not None:
+                    sensor.adapt(error)                      # from the pilot jobs together
+                for job in todo[first:]:
+                    jobs.put({**job, "adaptive": False, "weights": sensor.prob.copy()})
+                collect(number)
         finally:
             stop.set()
+            for _ in workers:
+                jobs.put(None)
             for w in workers:
                 if len(got) < number:                        # stopped early: do not wait for running jobs
                     w.kill()
@@ -132,6 +154,7 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
                         stream.close()
                     except OSError:
                         pass
+            sensor.reset()
     if failed:
         raise RuntimeError(f"path tracer worker: {failed}")
     if not got:                                              # cancelled before the first job came back

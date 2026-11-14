@@ -442,9 +442,12 @@ assert pt_setup.parse_spectrum("") == ((550.0, 1.0),)
 # a trimmed face, where they stay inside), every pixel its rays – no scatter of the numbers
 scene = scene_of([disc], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((50, 50, 40),))])
 sensor = pt_scene.TexelSensor(scene, [0], 20)
-tri, b1, b2 = sensor.points(20_000, np.random.default_rng(SEED))
+tri, b1, b2, chosen = sensor.points(20_000, np.random.default_rng(SEED))
+assert (tri >= 0).mean() > 0.999                                     # (none found: in slivers of texels)
+chosen, tri, b1, b2 = chosen[tri >= 0], tri[tri >= 0], b1[tri >= 0], b2[tri >= 0]
 _, uv = scene.mesh.shade(tri, b1, b2)
-counts = np.bincount(sensor.texel(tri, uv), minlength=sensor.count)
+assert (sensor.texel(tri, uv) == chosen).mean() > 0.999              # (a point exactly on a border may differ)
+counts = np.bincount(chosen, minlength=sensor.count)
 asked = 20_000 * sensor.texel_area / sensor.area
 assert np.abs(counts - asked).max() < 3 and np.abs(counts - asked).mean() < 0.4, np.abs(counts - asked).max()
 assert np.sqrt(asked.mean()) > 6                                     # (numbers that scatter would differ by ~7)
@@ -459,7 +462,9 @@ for flip in (False, True):
     u, v = np.random.default_rng(1).random(500) * 0.9, np.random.default_rng(2).random(500)   # (not at the pole)
     t, c1, c2, density = turned_patch.locate(0, u, v)
     _, back = turned_patch.shade(t, c1, c2)
-    assert (t >= 0).all() and np.allclose(back, np.column_stack([u, v]), atol=1e-9) and 0 < density.min() <= density.max() <= 1
+    assert (t >= 0).all() and np.allclose(back, np.column_stack([u, v]), atol=1e-9)
+    assert 0 < density.min() and density.max() <= turned_patch.grids[0].max_density * (1 + 1e-12)
+    assert abs(turned_patch.cell_density(0).max() - turned_patch.grids[0].max_density) < 1e-9
 pixels = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 20.0, 10, 10).sample(1_000, np.random.default_rng(SEED))["texel"]
 assert np.array_equal(np.bincount(pixels, minlength=100), np.full(100, 10))
 strata = pt_mesh.stratified(8, np.random.default_rng(SEED))
@@ -468,6 +473,53 @@ scene = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 
 sensor = pt_scene.TexelSensor(scene, [0], 4)                         # 2 500 points per texel: their number alone
 smooth = pt_integrator.render(scene, sensor, "path", 40_000, 2, seed=SEED, batch=5_000)     # would scatter by 2 %
 assert pt_setup.typical_noise(smooth["values"], smooth["error"]) < 0.008
+
+# ---- samples steered by weights: any shares of the texels / pixels give the same values – here
+# shares that differ by up to a factor of 100, on the plane under the point source
+shares = np.random.default_rng(5).uniform(0.01, 1.0, 16)
+for method in ("path", "bidir"):
+    even = pt_integrator.render(scene, sensor, method, 40_000, 2, seed=SEED)["values"]
+    skew = pt_integrator.render(scene, sensor, method, 40_000, 2, seed=SEED, weights=shares)["values"]
+    assert abs(skew.sum() / even.sum() - 1) < 0.01 and np.allclose(skew / even, 1, atol=0.06), (method, skew / even)
+    assert np.allclose(sensor.prob, shares / shares.sum())
+lit = scene_of([wall, rect((-100, 100, 0), (200, 0, 0), (0, 0, 150))], [WHITE, WHITE],
+               [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])                  # with a second wall: light
+both = pt_scene.TexelSensor(lit, [0, 1], 3)                                            # comes around, t = 0 counts
+reference = pt_integrator.render(lit, both, "light", 150_000, 4, seed=SEED)["values"]
+shares = np.random.default_rng(6).uniform(0.02, 1.0, both.count)
+for method in ("path", "bidir"):
+    skew = pt_integrator.render(lit, both, method, 60_000, 4, seed=SEED, weights=shares)["values"]
+    assert abs(skew.sum() / reference.sum() - 1) < 0.02 and np.allclose(skew / reference, 1, atol=0.12), (method, skew / reference)
+camera = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 40.0, 4, 4)
+shares = np.random.default_rng(7).uniform(0.01, 1.0, 16)
+even = pt_integrator.render(lit, camera, "path", 40_000, 3, seed=SEED)["values"]
+for method in ("path", "bidir", "photon"):
+    skew = pt_integrator.render(lit, camera, method, 40_000, 3, seed=SEED, weights=shares)["values"]
+    assert np.allclose(skew / even, 1, atol=0.1), (method, skew / even)
+assert np.allclose(camera.prob, shares / shares.sum())
+
+# ---- adaptive sampling: a camera that sees the lit floor in a small part of its image and nothing
+# around it moves its rays to the floor – the same image, less noise
+half = pt_scene.Camera((0, 0, 300), (0, 0, 0), (0, 1, 0), 110.0, 16, 8)
+plain = pt_integrator.render(lit, half, "path", 120_000, 3, seed=SEED, batch=10_000)
+steered = pt_integrator.render(lit, half, "path", 120_000, 3, seed=SEED, batch=10_000, adaptive=True)
+seen = plain["values"] > 0.1 * plain["values"].max()
+assert 15 <= seen.sum() <= 40 and half.prob[seen].sum() > 3 * seen.mean()          # the lit pixels get more
+
+
+def same(a: dict, b: dict, where) -> bool:
+    """Two results agree within their errors (six standard errors and 2 %)."""
+    return bool(np.all(np.abs(a["values"] - b["values"])[where]
+                       < (6 * np.hypot(a["error"], b["error"]) + 0.02 * b["values"])[where]))
+
+
+assert same(steered, plain, seen)
+less = (steered["error"][seen] ** 2).sum() / (plain["error"][seen] ** 2).sum()      # of the variance is left
+assert less < 0.8, less
+plain = pt_integrator.render(lit, both, "bidir", 80_000, 4, seed=SEED, batch=10_000, adaptive=True)["values"]
+assert abs(plain.sum() / reference.sum() - 1) < 0.02 and np.allclose(plain / reference, 1, atol=0.1)
+light_only = pt_integrator.render(lit, both, "light", 40_000, 4, seed=SEED, batch=10_000, adaptive=True)
+assert np.allclose(both.prob, both.texel_area / both.area)            # light tracing draws nothing from the sensor
 
 # ---- the standard error from the spread of the batches: of the right size, falls with sqrt(N)
 scene = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
@@ -496,10 +548,16 @@ two = pt_parallel.render(scene, sensor, "light", 60_000, 2, seed=SEED, processes
 three = pt_parallel.render(scene, sensor, "light", 60_000, 2, seed=SEED, processes=3)
 assert two["processes"] == 2 and three["processes"] == 3 and two["samples"] == 60_000
 assert np.allclose(two["values"], three["values"]) and np.allclose(two["error"], three["error"])
-assert abs(two["values"].sum() / exact - 1) < 0.02 and abs(np.median(two["error"] / more) - math.sqrt(160 / 60)) < 0.5
+assert abs(two["values"].sum() / exact - 1) < 0.02
+assert 0.6 < np.median(two["error"] / more) < 4                      # about sqrt(160 / 60), from three jobs only
 small = pt_parallel.render(scene, sensor, "light", 30_000, 2, seed=SEED, processes=4)
 assert small["processes"] == 1 and np.array_equal(small["values"], values(scene, sensor, "light", 30_000, 2))
 calls = []
+steered = pt_parallel.render(lit, half, "path", 160_000, 3, seed=SEED, processes=2, adaptive=True)   # 8 jobs, 4 pilot
+again = pt_parallel.render(lit, half, "path", 160_000, 3, seed=SEED, processes=3, adaptive=True)
+assert np.allclose(steered["values"], again["values"]) and steered["samples"] == 160_000
+whole = pt_integrator.render(lit, half, "path", 80_000, 3, seed=SEED)
+assert same(steered, whole, whole["values"] > 0.1 * whole["values"].max()) and np.allclose(half.prob, 1 / 128)
 stopped = pt_parallel.render(scene, sensor, "bidir", 4_000_000, 6, seed=SEED, processes=2,
                              cancelled=lambda: calls.append(1) or len(calls) > 2)
 assert stopped["samples"] < 4_000_000

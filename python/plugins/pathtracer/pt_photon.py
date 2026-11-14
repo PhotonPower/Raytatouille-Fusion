@@ -88,7 +88,7 @@ class PhotonGrid:
 
 
 def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: float = 0.0,
-           progress=None, cancelled=None) -> dict:
+           progress=None, cancelled=None, adaptive: bool = False) -> dict:
     """The camera's mean radiance per pixel (W/(mm² sr)) with `samples` camera paths and as many
     light paths, in passes; paths have up to `depth` segments. radius: the first search radius
     in mm (0: chosen from the number of photons and the area of the surfaces). Returns as
@@ -146,6 +146,8 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
                                  minlength=len(accum))
         done += count
         spread.add(accum, count)
+        if adaptive and spread.batches >= 2 and done < samples:
+            camera.adapt(spread.error(done))                 # more rays for the uncertain pixels
         passes += 1
         if r2 is not None:
             last_r2 = r2

@@ -351,8 +351,51 @@ class TexelSensor:
         self.texel_area = np.concatenate([mesh.texel_areas(int(f), w, h).ravel()
                                           for f, (w, h) in zip(self.faces, self.size)])
         self.area = float(mesh.face_area[self.faces].sum())
-        self.cum_area = np.cumsum(self.texel_area)
         self.crossed = bool(scene.face_virtual[self.faces].any())   # light passes some of the faces
+        self.texel_density = np.concatenate([self._densities(int(f), w, h) for f, (w, h) in zip(self.faces, self.size)])
+        self.reset()
+
+    def _densities(self, face: int, w: int, h: int) -> np.ndarray:
+        """Largest area density (mm² per unit of (u, v)) in every texel of a face, row by row."""
+        g = self.scene.mesh.grids[face]
+        cells = self.scene.mesh.cell_density(face)
+
+        def ranges(lines, count):                            # grid cells a texel touches: first, last
+            edges = np.arange(count + 1) / count
+            first = np.clip(np.searchsorted(lines, edges[:-1], side="right") - 1, 0, len(lines) - 2)
+            last = np.clip(np.searchsorted(lines, edges[1:], side="left") - 1, 0, len(lines) - 2)
+            return first, np.maximum(first, last)
+
+        u0, u1 = ranges(g.ug, w)
+        v0, v1 = ranges(g.vg, h)
+        along_u = np.stack([cells[a:b + 1].max(axis=0) for a, b in zip(u0, u1)])           # (w, grid v)
+        return np.stack([along_u[:, a:b + 1].max(axis=1) for a, b in zip(v0, v1)]).ravel()   # (h, w)
+
+    # ------------------------------------------------------------------ where the samples go
+    def reset(self) -> None:
+        """Points uniform by area: every texel is picked by its area."""
+        self.set_weights(self.texel_area)
+
+    def set_weights(self, weights: np.ndarray) -> None:
+        """Texels are picked in proportion to `weights` (points stay uniform within a texel)."""
+        weights = np.where(self.texel_area > 0, np.asarray(weights, dtype=float), 0.0)
+        self.prob = weights / weights.sum()
+        self.cum_prob = np.cumsum(self.prob)
+
+    def adapt(self, error: np.ndarray, floor: float = 0.3) -> None:
+        """More points where the irradiance is still uncertain. error: the standard error of the
+        flux per texel so far, got with the present choice. The sum of the variances of the
+        texels' irradiances is smallest when a texel is picked in proportion to (its error x
+        the root of its present share); `floor` of the points stay spread by area."""
+        usable = self.texel_area > 0.1 * np.median(self.texel_area[self.texel_area > 0])
+        with np.errstate(divide="ignore", invalid="ignore"):
+            want = np.where(usable, error / self.texel_area * np.sqrt(self.prob), 0.0)
+        if np.isfinite(want).all() and want.sum() > 0:
+            self.set_weights(floor * self.texel_area / self.texel_area.sum() + (1 - floor) * want / want.sum())
+
+    def pdf_pos_at(self, tex: np.ndarray) -> np.ndarray:
+        """Density (per mm²) with which the sensor picks a point of the texel."""
+        return self.prob[tex] / self.texel_area[tex]
 
     def texel(self, tri: np.ndarray, uv: np.ndarray) -> np.ndarray:
         """Texel of points on triangles (-1: not on a sensor face)."""
@@ -367,25 +410,30 @@ class TexelSensor:
         return out
 
     def sample(self, n: int, rng: np.random.Generator) -> dict:
-        """n rays from points uniform on the sensor faces, into both half-spaces by the cosine."""
+        """n rays from points on the sensor faces (see points), into both half-spaces by the
+        cosine. exists: False where no point was found (nothing may be made of such a sample)."""
         mesh = self.scene.mesh
-        tri, b1, b2 = self.points(n, rng)
+        tri, b1, b2, tex = self.points(n, rng)
+        exists = tri >= 0
+        tri = np.maximum(tri, 0)
+        pdf_pos = np.where(exists, self.pdf_pos_at(tex), 1.0)
         p = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
         ns, uv = mesh.shade(tri, b1, b2)
         ng = mesh.ng[tri]
         side = np.where(rng.random(n) < 0.5, 1.0, -1.0)
         d, cos = pt_bsdf._cosine(ns * side[:, None], rng.random(n), rng.random(n))
-        ok = (cos > 0) & (np.einsum("ij,ij->i", ng, d) * np.einsum("ij,ij->i", ns, d) > 0)
-        return {"p": p, "ns": ns, "ng": ng, "d": d, "texel": self.texel(tri, uv), "ok": ok,
-                "pdf_pos": np.full(n, 1.0 / self.area), "pdf_dir": cos / (2 * np.pi),
-                "beta": np.full(n, 2 * np.pi * self.area), "point": np.zeros(n, dtype=bool)}
+        ok = exists & (cos > 0) & (np.einsum("ij,ij->i", ng, d) * np.einsum("ij,ij->i", ns, d) > 0)
+        return {"p": p, "ns": ns, "ng": ng, "d": d, "texel": np.where(exists, tex, -1), "ok": ok, "exists": exists,
+                "pdf_pos": pdf_pos, "pdf_dir": cos / (2 * np.pi), "beta": 2 * np.pi / pdf_pos,
+                "point": np.zeros(n, dtype=bool)}
 
     def points(self, n: int, rng: np.random.Generator):
-        """n points uniform by area on the sensor faces – triangle, b1, b2 –, spread evenly over the
-        texels: every texel gets the number its area asks for (to within one) instead of a number
-        that scatters, which would be noise of its own in the texel's value."""
+        """n points on the sensor faces – triangle (-1: none found), b1, b2, texel. The texel is
+        picked by its share (reset, set_weights, adapt), the point uniform by area inside it. The
+        points are spread evenly: every texel gets the number its share asks for (to within one)
+        instead of a number that scatters, which would be noise of its own in the texel's value."""
         mesh = self.scene.mesh
-        tex = np.minimum(np.searchsorted(self.cum_area, pt_mesh.stratified(n, rng) * self.cum_area[-1], side="right"),
+        tex = np.minimum(np.searchsorted(self.cum_prob, pt_mesh.stratified(n, rng) * self.cum_prob[-1], side="right"),
                          self.count - 1)
         slot = np.searchsorted(self.first, tex, side="right") - 1
         w, h = self.w[slot], self.h[slot]
@@ -393,7 +441,7 @@ class TexelSensor:
         tri = np.full(n, -1, dtype=np.int64)
         b1, b2 = np.zeros(n), np.zeros(n)
         todo = np.arange(n)
-        for _ in range(64):         # evenly in the texel's (u, v), kept where the face is, by the area there
+        for _ in range(256):        # evenly in the texel's (u, v), kept where the face is, by the area there
             u = (i[todo] + rng.random(len(todo))) / w[todo]
             v = (j[todo] + rng.random(len(todo))) / h[todo]
             keep = rng.random(len(todo))
@@ -402,27 +450,20 @@ class TexelSensor:
                 sel = np.nonzero(slot[todo] == s)[0]
                 face = int(self.faces[s])
                 t, c1, c2, density = mesh.locate(face, u[sel], v[sel])
-                good = (t >= 0) & (keep[sel] < density) & mesh.inside(np.full(len(sel), face), u[sel], v[sel])
+                good = (t >= 0) & (keep[sel] * self.texel_density[tex[todo[sel]]] < density) \
+                    & mesh.inside(np.full(len(sel), face), u[sel], v[sel])
                 a = todo[sel[good]]
                 tri[a], b1[a], b2[a] = t[good], c1[good], c2[good]
                 ok[sel[good]] = True
             todo = todo[~ok]
             if not todo.size:
                 break
-        if todo.size:                                        # texels with hardly any area: anywhere on their face
-            for s in np.unique(slot[todo]):
-                a = todo[slot[todo] == s]
-                tri[a], b1[a], b2[a] = mesh.sample(self.faces[s:s + 1], len(a), rng)
-        return tri, b1, b2
+        return tri, b1, b2, tex                              # (left without: texels with hardly any area)
 
     def response(self, ns: np.ndarray, w: np.ndarray):
         """Importance into the direction w from a sensor point, the density of picking w, and
         the texel it belongs to (None: the point's own)."""
         return np.ones(len(w)), np.abs(np.einsum("ij,ij->i", ns, w)) / (2 * np.pi), None
-
-    def pdf_pos(self, n: int) -> np.ndarray:
-        return np.full(n, 1.0 / self.area)
-
 
 class Camera:
     """A pinhole camera at `position` looking at `target`; `fov`: full horizontal angle in
@@ -448,19 +489,44 @@ class Camera:
         self.count = self.w * self.h
         self.film = 4 * self.tan_x * self.tan_y              # film area at distance 1
         self.area = 1.0
+        self.reset()
+
+    # ------------------------------------------------------------------ where the samples go
+    def reset(self) -> None:
+        """Every pixel gets the same share of the rays."""
+        self.set_weights(np.ones(self.count))
+
+    def set_weights(self, weights: np.ndarray) -> None:
+        """Pixels are picked in proportion to `weights` (rays stay uniform within a pixel)."""
+        weights = np.asarray(weights, dtype=float)
+        self.prob = weights / weights.sum()
+        self.cum_prob = np.cumsum(self.prob)
+
+    def adapt(self, error: np.ndarray, floor: float = 0.3) -> None:
+        """More rays for the pixels that are still uncertain: picked in proportion to (their
+        standard error so far x the root of their present share), `floor` of the rays stay
+        spread evenly – that makes the sum of the pixels' variances smallest."""
+        want = error * np.sqrt(self.prob)
+        if np.isfinite(want).all() and want.sum() > 0:
+            self.set_weights(floor / self.count + (1 - floor) * want / want.sum())
+
+    def pdf_pos_at(self, tex: np.ndarray) -> np.ndarray:
+        return np.ones(len(tex))
 
     def sample(self, n: int, rng: np.random.Generator) -> dict:
-        # evenly over the pixels: each gets its share of the rays (to within one), jittered inside
-        pixel = np.minimum((pt_mesh.stratified(n, rng) * self.count).astype(np.int64), self.count - 1)
+        # spread over the pixels: each gets its share of the rays (to within one), jittered inside
+        pixel = np.minimum(np.searchsorted(self.cum_prob, pt_mesh.stratified(n, rng) * self.cum_prob[-1],
+                                           side="right"), self.count - 1)
         x = (2 * (pixel % self.w + rng.random(n)) / self.w - 1) * self.tan_x
         y = (2 * (pixel // self.w + rng.random(n)) / self.h - 1) * self.tan_y
         d = self.forward + x[:, None] * self.right + y[:, None] * self.up
         length = np.linalg.norm(d, axis=1)
         d /= length[:, None]
         cos = 1.0 / length
+        share = self.prob[pixel] * self.count                # of the rays, against an even spread
         return {"p": np.broadcast_to(self.position, (n, 3)).copy(), "ns": np.zeros((n, 3)), "ng": np.zeros((n, 3)),
-                "d": d, "texel": self._pixel(x, y), "ok": np.ones(n, dtype=bool), "pdf_pos": np.ones(n),
-                "pdf_dir": 1.0 / (self.film * cos ** 3), "beta": np.full(n, float(self.count)),
+                "d": d, "texel": pixel, "ok": np.ones(n, dtype=bool), "exists": np.ones(n, dtype=bool),
+                "pdf_pos": np.ones(n), "pdf_dir": share / (self.film * cos ** 3), "beta": self.count / share,
                 "point": np.ones(n, dtype=bool)}
 
     def _pixel(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -477,11 +543,8 @@ class Camera:
         c = np.where(front, cos, 1.0)
         pixel = np.where(front, self._pixel((w @ self.right) / c, (w @ self.up) / c), -1)
         inside = pixel >= 0
-        pdf = np.where(inside, 1.0 / (self.film * c ** 3), 0.0)
-        return pdf * self.count, pdf, pixel
-
-    def pdf_pos(self, n: int) -> np.ndarray:
-        return np.ones(n)
+        even = np.where(inside, 1.0 / (self.film * c ** 3), 0.0)
+        return even * self.count, even * self.prob[np.maximum(pixel, 0)] * self.count, pixel
 
     def frustum(self, length: float) -> np.ndarray:
         """Polylines of the viewing pyramid up to `length`: (points (10, 3)) – apex to the four

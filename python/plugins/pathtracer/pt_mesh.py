@@ -305,9 +305,8 @@ class Mesh:
 
     def locate(self, face: int, u: np.ndarray, v: np.ndarray):
         """The triangles of one face at the surface parameters (u, v) (normalised): triangle (-1:
-        none there), barycentric b1, b2, and the triangle's area density relative to the largest
-        of the face (points drawn evenly in (u, v) and kept with this probability are even by
-        area)."""
+        none there), barycentric b1, b2, and the triangle's area density (mm² per unit of (u, v);
+        points drawn evenly in (u, v) and kept in proportion to it are even by area)."""
         g = self.grids[face]
         iu = np.clip(np.searchsorted(g.ug, u, side="right") - 1, 0, len(g.ug) - 2)
         iv = np.clip(np.searchsorted(g.vg, v, side="right") - 1, 0, len(g.vg) - 2)
@@ -323,8 +322,15 @@ class Mesh:
         det = np.where(det == 0, 1.0, det)
         b1 = np.clip((ru * d2[:, 1] - rv * d2[:, 0]) / det, 0.0, 1.0)
         b2 = np.clip((d1[:, 0] * rv - d1[:, 1] * ru) / det, 0.0, 1.0 - b1)
-        density = np.where(tri >= 0, 2 * self.area[t] / (du * dv) / max(g.max_density, 1e-300), 0.0)
-        return tri, b1, b2, density
+        return tri, b1, b2, np.where(tri >= 0, 2 * self.area[t] / (du * dv), 0.0)
+
+    def cell_density(self, face: int) -> np.ndarray:
+        """Largest area density of the triangles in every grid cell of a face: (len(ug)-1, len(vg)-1)."""
+        g = self.grids[face]
+        cell = np.diff(g.ug)[:, None] * np.diff(g.vg)[None, :]
+        tri = g.quad_tri
+        dens = np.where(tri >= 0, 2 * self.area[self.face_first[face] + np.maximum(tri, 0)] / cell[..., None], 0.0)
+        return dens.max(axis=-1)
 
     def _cum_area(self) -> np.ndarray:
         if getattr(self, "_cum", None) is None or len(self._cum) != len(self.area):
