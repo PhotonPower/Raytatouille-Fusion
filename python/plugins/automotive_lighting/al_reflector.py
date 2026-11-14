@@ -13,11 +13,11 @@ import numpy as np
 
 import al_layout
 import al_transitions
-from al_design import DesignError, Facet, build_facet, cutoff_residual
+from al_design import DesignError, Facet, build_facet, cutoff_residual, start_middle
 from al_layout import Cell, Zone
 from al_optics import Cutoff, Filament, Lamp
 
-FACET, STRIP_BAND, ZONE_BAND = "facet", "strip band", "zone band"
+FACET, ROW_BAND, STRIP_BAND, ZONE_BAND = "facet", "row band", "strip band", "zone band"
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,7 @@ class Settings:
     zones: tuple[Zone, ...]
     focal: float = 25.0            # mm, base paraboloid (focus at the filament centre)
     strip_width: float = 10.0      # mm
+    facet_length: float = 0.0      # mm: the strips cut into facets of this length (0: whole strips)
     hole_radius: float = 12.0      # mm, lamp hole about the axis
     connect: bool = True           # connecting faces between the facets
     draft: float = 5.0             # degrees between their walls and the demoulding direction X
@@ -40,7 +41,7 @@ class Settings:
 class Part:
     """A face of the mirror: its polygons in the front view and its surface."""
 
-    kind: str                      # FACET, STRIP_BAND or ZONE_BAND
+    kind: str                      # FACET, ROW_BAND, STRIP_BAND or ZONE_BAND
     label: str
     polygons: list[np.ndarray]
     height: Callable               # (y, z) -> x, ∇x (n, 2)
@@ -74,9 +75,13 @@ class Reflector:
         for index, (cell, facet) in enumerate(zip(self.cells, self.facets)):
             polygons = self.transitions.cell_polygons[index] if self.transitions else cell.pieces
             if polygons:
-                out.append(Part(FACET, f"Facet {cell.zone + 1}.{cell.strip}", polygons, _facet_height(facet),
+                out.append(Part(FACET, f"Facet {cell.name}", polygons, _facet_height(facet),
                                 lambda origin, f=facet: facet_surface(f, origin), facet.spec.frame.pq, index))
         if self.transitions:
+            for band in self.transitions.row_bands:
+                if band.polygons:
+                    out.append(Part(ROW_BAND, f"Connection {band.zones[0] + 1}.{band.strip}.{band.row - 1}|{band.row}",
+                                    band.polygons, band.evaluate, band.surface, band.border.uxi))
             for band in self.transitions.strip_bands:
                 if band.polygons:
                     out.append(Part(STRIP_BAND, f"Connection {band.zones[0] + 1}.{band.strip - 1}|{band.strip}",
@@ -139,19 +144,29 @@ def build(settings: Settings, frame: np.ndarray, progress=None) -> Reflector:
     share = 0.7 if settings.connect else 1.0
     for _ in range(3):
         cells = al_layout.layout(frame, settings.hole_radius, list(settings.zones), settings.cutoff,
-                                 settings.focal, settings.strip_width, settings.margin)
-        facets, warnings = [], []
-        for i, cell in enumerate(cells):
+                                 settings.focal, settings.strip_width, settings.margin, settings.facet_length)
+        facets: list = [None] * len(cells)
+        warnings = []
+        by_key = {c.key: i for i, c in enumerate(cells)}
+        # along a strip from the lamp axis' level outwards: every further row starts where the row
+        # before it ends (in the middle of its start curve), so the step between rows stays low
+        order = sorted(range(len(cells)), key=lambda i: (cells[i].zone, cells[i].strip, abs(cells[i].row)))
+        for count, i in enumerate(order):
+            cell = cells[i]
             if progress is not None:
-                progress(share * i / len(cells), f"facet {i + 1} of {len(cells)}")
+                progress(share * count / len(cells), f"facet {count + 1} of {len(cells)}")
+            before = by_key.get((cell.zone, cell.strip, cell.row - (1 if cell.row > 0 else -1))) if cell.row else None
+            if before is not None and facets[before] is not None:
+                y, z = start_middle(cell.spec)
+                cell.spec = replace(cell.spec, anchor=float(facets[before].evaluate(np.array([y]), np.array([z]))[0][0]))
             try:
                 facet = build_facet(cell.spec, fil, step=settings.step, knot_spacing=settings.knot_spacing)
             except ValueError as e:
-                raise type(e)(f"zone {cell.zone + 1}, strip {cell.strip}: {e}") from e
+                raise type(e)(f"facet {cell.name} (zone.strip{'.row' if cell.rows else ''}): {e}") from e
             if facet.extrapolated:
-                warnings.append(f"zone {cell.zone + 1}, strip {cell.strip}: the strips do not reach every corner "
+                warnings.append(f"facet {cell.name}: the strips do not reach every corner "
                                 "of the facet (continued by their slope there)")
-            facets.append(facet)
+            facets[i] = facet
         reflector = Reflector(settings, frame, cells, facets, fil, warnings=warnings)
         if not settings.connect:
             break
