@@ -320,6 +320,34 @@ camera = pt_scene.Camera((0, 0, 300), (0, 0, 0), (0, 1, 0), 30.0, 2, 2)      # u
 image = values(scene, camera, "path", 20_000, 2).reshape(2, 2)
 assert image[:, 1].sum() > 3 * image[:, 0].sum() and abs(image[0].sum() / image[1].sum() - 1) < 0.1
 
+# ---- a curve as a source: a thin glowing wire along z, intensity Phi sin(theta) / pi². Detectors
+# across the wire and on its axis against the integral over the wire; everything arrives in a box
+wire = pt_scene.SourceSpec("wire", 1.0, curves=(np.array([[0.0, 0, -5], [0, 0, 0], [0, 0, 5]]),))
+side, top = rect((50, -10, -10), (0, 20, 0), (0, 0, 20)), rect((-10, -10, 50), (20, 0, 0), (0, 20, 0))
+scene = scene_of([box((-100, -100, -100), (100, 100, 100)), side, top], [BLACK, DETECTOR, DETECTOR], [wire], (0,))
+sensor = pt_scene.TexelSensor(scene, range(8), 1)
+grid = (np.arange(20) + 0.5) - 10                                    # 1 mm steps over a detector
+along = (np.arange(40) + 0.5) / 4 - 5                                # along the wire
+expected = []
+for point, normal in (((50.0, grid[:, None, None], grid[None, :, None]), (1, 0, 0)),
+                      ((grid[:, None, None], grid[None, :, None], 50.0), (0, 0, 1))):
+    dx, dy, dz = point[0] - 0.0, point[1] - 0.0, point[2] - along[None, None, :]
+    dist = np.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+    sin_theta = np.sqrt(dx ** 2 + dy ** 2) / dist                    # to the wire
+    cos_in = np.abs(dx * normal[0] + dz * normal[2]) / dist          # on the detector
+    expected.append(float((sin_theta * cos_in / dist ** 2 / math.pi ** 2).mean() * 400))
+assert expected[0] > 4 * expected[1]                                  # little along the wire
+assert abs(values(scene, sensor, "light", 20_000, 2)[:6].sum() - 1) < 0.02
+sensor = pt_scene.TexelSensor(scene, [6, 7], 1)
+for method, samples in (("light", 200_000), ("path", 20_000), ("bidir", 20_000)):
+    flux = values(scene, sensor, method, samples, 2)
+    assert abs(flux[0] / expected[0] - 1) < 0.08 and abs(flux[1] / expected[1] - 1) < 0.2, (method, flux, expected)
+try:
+    scene_of([side], [BLACK], [pt_scene.SourceSpec("mixed", 1.0, points=((0, 0, 0),), curves=wire.curves)])
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "different kinds" in str(e), e
+
 # ---- photon mapping (camera): the lit wall; on faces it is light tracing
 scene = scene_of([wall], [WHITE], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
 camera = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 2.0, 4, 4)
@@ -417,6 +445,16 @@ model = [
     {"id": 15, "name": "axis", "attributes": {}, "geometry": {"type": "curve", "degree": 1, "knots": [0, 0, 1, 1],
                                                               "points": [0, 0, 0, 0, 0, 1]}},
 ]
+arc = {"type": "curve", "degree": 2, "knots": [0, 0, 0, 1, 1, 1], "points": [10, 0, 60, 10, 10, 60, 0, 10, 60],
+       "weights": [1, math.sqrt(0.5), 1]}                           # a quarter circle of radius 10
+line = pt_setup.polyline(arc)
+assert len(line) == 33 and np.allclose(np.hypot(line[:, 0], line[:, 1]), 10) and np.allclose(line[:, 2], 60)
+filament = {"id": 16, "name": "filament", "attributes": {"pt.source": "glow"}, "geometry": arc}
+both = {**params, "sources": pt_setup.DEFAULT_SOURCES + [{"name": "glow", "flux": 3.0, "spectrum": "600"}]}
+lit = pt_setup.build_scene(model + [filament], both)
+assert list(lit.src_is_wire) == [False, True] and np.allclose(lit.src_prob, [0.25, 0.75])
+assert abs(lit.src_wires[1][2][-1] - math.pi * 5) < 5e-3 and list(lit.wavelengths) == [550, 600]
+assert pt_setup.assignments(model + [filament], both)[-1] == ["filament", "curve", "", "glow"]
 cache = pt_setup.MeshCache()
 scene = pt_setup.build_scene(model, params, cache)
 assert scene.mesh.entity_ids == [11, 12, 13] and len(scene.mesh.face_area) == 8

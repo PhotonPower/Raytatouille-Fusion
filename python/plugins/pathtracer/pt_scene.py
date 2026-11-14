@@ -6,6 +6,9 @@ Sources
              Lambertian emitter), from the front, the back or both sides; all surfaces of one
              source share its flux by area
   points     emit evenly into all directions; the points of one source share its flux
+  curves     emit like a thin glowing wire (a Lambertian cylinder): the intensity is
+             Phi sin(theta) / pi² at the angle theta to the wire; the curves of one source share
+             its flux by length
   spectrum   a source emits at single wavelengths (lines), each with a share of its flux. Every
              path carries one wavelength ("channel": its number in Scene.wavelengths); it matters
              where glass disperses, and the sensors keep the channels apart
@@ -47,6 +50,7 @@ class SourceSpec:
     side: str = "front"                  # front, back, both
     entities: tuple = ()                 # indices into the entity list of the mesh (surfaces)
     points: tuple = ()                   # (x, y, z) of point sources
+    curves: tuple = ()                   # polylines (arrays (m, 3)) of wire sources
     spectrum: tuple = ((550.0, 1.0),)    # lines (wavelength / nm, share of the flux – any scale)
 
 
@@ -156,14 +160,16 @@ class Scene:
         mesh = self.mesh
         flux, sin_max, sides, area, point, is_point, spectra = [], [], [], [], [], [], []
         faces: list[np.ndarray] = []
+        wires: dict[int, tuple] = {}                         # source -> segment starts, ends, cumulative length
         self.face_source = np.full(len(mesh.face_area), -1, dtype=np.int64)
         self.source_names = []
         for spec in specs:
             if spec.flux < 0:
                 raise ValueError(f"source {spec.name!r}: negative flux")
-            if spec.entities and spec.points:
-                raise ValueError(f"source {spec.name!r} is on surfaces and on points: use two sources")
-            if spec.flux == 0 or not (spec.entities or spec.points):
+            if sum(1 for group in (spec.entities, spec.points, spec.curves) if len(group)) > 1:
+                raise ValueError(f"source {spec.name!r} is on objects of different kinds (surfaces, points, "
+                                 f"curves): use one source for each kind")
+            if spec.flux == 0 or not (len(spec.entities) or len(spec.points) or len(spec.curves)):
                 continue
             lines: dict[float, float] = {}
             for nm, share in spec.spectrum:
@@ -195,6 +201,23 @@ class Scene:
                 is_point.append(False)
                 spectra.append(lines)
                 self.source_names.append(spec.name)
+            elif len(spec.curves):
+                starts = np.concatenate([np.asarray(c, dtype=float)[:-1] for c in spec.curves])
+                ends = np.concatenate([np.asarray(c, dtype=float)[1:] for c in spec.curves])
+                length = np.linalg.norm(ends - starts, axis=1)
+                keep = length > 0
+                if not keep.any():
+                    raise ValueError(f"source {spec.name!r}: its curves have no length")
+                wires[len(flux)] = (starts[keep], ends[keep], np.cumsum(length[keep]))
+                faces.append(np.zeros(0, dtype=np.int64))
+                flux.append(spec.flux)
+                sin_max.append(1.0)
+                sides.append(0)
+                area.append(1.0)
+                point.append((np.nan,) * 3)
+                is_point.append(True)
+                spectra.append(lines)
+                self.source_names.append(spec.name)
             else:
                 for p in spec.points:
                     faces.append(np.zeros(0, dtype=np.int64))
@@ -216,13 +239,17 @@ class Scene:
         self.src_point = np.asarray(point, dtype=float).reshape(-1, 3)
         self.src_is_point = np.asarray(is_point, dtype=bool)
         self.src_faces = faces
+        self.src_wires = wires
+        self.src_is_wire = np.asarray([k in wires for k in range(len(flux))], dtype=bool)
         self.flux = float(self.src_flux.sum())
         self.src_prob = self.src_flux / self.flux
         nsides = np.where(self.src_sides == 0, 2.0, 1.0)
-        # radiance of surfaces W/(mm² sr), intensity of points W/sr
+        # radiance of surfaces W/(mm² sr), intensity of points W/sr (wires: across the wire)
         self.src_radiance = np.where(self.src_is_point, self.src_flux / (4 * np.pi),
                                      self.src_flux / (nsides * self.src_area * np.pi * self.src_sin ** 2))
         self.src_dir_norm = np.where(self.src_is_point, 1 / (4 * np.pi), 1 / (nsides * np.pi * self.src_sin ** 2))
+        self.src_radiance[self.src_is_wire] = self.src_flux[self.src_is_wire] / np.pi ** 2
+        self.src_dir_norm[self.src_is_wire] = 1 / np.pi ** 2
         # wavelengths: the lines of all sources; per source the share of its flux in each
         self.wavelengths = np.asarray(sorted({nm for lines in spectra for nm, share in lines.items() if share > 0}))
         self.src_spectrum = np.asarray([[lines.get(nm, 0.0) for nm in self.wavelengths] for lines in spectra])
@@ -241,13 +268,15 @@ class Scene:
         return (np.abs(cos) >= self.src_cos[src]) & (np.abs(cos) > 0) & ((sides == 0) | (np.sign(cos) == sides))
 
     def emitted(self, src: np.ndarray, n: np.ndarray, w: np.ndarray):
-        """Radiance (points: intensity) of source `src` into the direction w and the density (per
-        solid angle) with which emission picks w; n: normal at the point (ignored for points)."""
+        """Radiance (points and wires: intensity) of source `src` into the direction w and the
+        density (per solid angle) with which emission picks w; n: normal at the point (wires: the
+        direction of the wire; ignored for points)."""
         cos = np.einsum("ij,ij->i", n, w)
         pt = self.src_is_point[src]
         ok = pt | self._emits(src, cos)
-        le = np.where(ok, self.src_radiance[src], 0.0)
-        pdf = np.where(ok, self.src_dir_norm[src] * np.where(pt, 1.0, np.abs(cos)), 0.0)
+        across = np.where(self.src_is_wire[src], np.sqrt(np.clip(1 - cos * cos, 0.0, None)), 1.0)   # sin(theta)
+        le = np.where(ok, self.src_radiance[src] * across, 0.0)
+        pdf = np.where(ok, self.src_dir_norm[src] * np.where(pt, across, np.abs(cos)), 0.0)
         return le, pdf
 
     def emit_pdf_pos(self, src: np.ndarray) -> np.ndarray:
@@ -268,6 +297,17 @@ class Scene:
         channel = (rng.random(n)[:, None] < np.cumsum(self.src_spectrum, axis=1)[src]).argmax(axis=1)
         for k in np.unique(src):
             sel = np.nonzero(src == k)[0]
+            if self.src_is_wire[k]:                          # a point on the wire, a direction as from the
+                starts, ends, cum = self.src_wires[k]        # surface of a thin Lambertian cylinder around it
+                seg = np.minimum(np.searchsorted(cum, u3[sel] * cum[-1], side="right"), len(cum) - 1)
+                p[sel] = starts[seg] + rng.random(len(sel))[:, None] * (ends[seg] - starts[seg])
+                along = ends[seg] - starts[seg]
+                along /= np.linalg.norm(along, axis=1, keepdims=True)
+                outward = pt_bsdf._around(along, np.zeros(len(sel)), 2 * np.pi * rng.random(len(sel)))
+                d[sel], _ = pt_bsdf._cosine(outward, u1[sel], u2[sel])
+                ns[sel] = along
+                cos[sel] = np.sqrt(np.clip(1 - np.einsum("ij,ij->i", along, d[sel]) ** 2, 0.0, None))
+                continue
             if self.src_is_point[k]:
                 p[sel] = self.src_point[k]
                 z = 1 - 2 * u1[sel]
@@ -282,7 +322,7 @@ class Scene:
             w, c = pt_bsdf.cone(normal * np.reshape(side, (-1, 1)), np.full(len(sel), self.src_sin[k]), u1[sel], u2[sel])
             d[sel], cos[sel] = w, c
         pt = self.src_is_point[src]
-        pdf_dir = self.src_dir_norm[src] * np.where(pt, 1.0, cos)
+        pdf_dir = self.src_dir_norm[src] * np.where(pt & ~self.src_is_wire[src], 1.0, cos)
         ok = pt | ((cos > 0) & (np.einsum("ij,ij->i", ng, d) * np.einsum("ij,ij->i", ns, d) > 0))
         return {"p": p, "ns": ns, "ng": ng, "src": src, "d": d, "pdf_pos": self.emit_pdf_pos(src),
                 "pdf_dir": pdf_dir, "ok": ok, "point": pt, "channel": channel}

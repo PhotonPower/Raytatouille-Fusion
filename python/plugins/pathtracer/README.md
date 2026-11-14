@@ -24,13 +24,17 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air. With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
    | `detector` | – | no surface for the light – it passes as if the object were not there; only a place to measure the irradiance (a measuring plane in free space). Not visible to the camera, cannot be a source |
 
-2. **Sources** (table in the panel: flux in W, half-angle, side). Select surfaces, bodies or
-   points, write a source's name into *Source for the selection* and choose *Selection: make it a
-   source*.
+2. **Sources** (table in the panel: flux in W, half-angle, side). Select surfaces, bodies, curves
+   or points, write a source's name into *Source for the selection* and choose *Selection: make
+   it a source*.
    - Surfaces emit with constant radiance into a cone around their normal – half-angle 90° is a
      Lambertian emitter, a small angle a beam. All surfaces of one source share its flux by area.
      *Side*: the front is the side of the surface normal; for closed bodies the outside.
    - Points emit evenly into all directions; the points of one source share its flux.
+   - Curves emit like a thin glowing wire (a filament, a line of LEDs): most across the wire,
+     nothing along it (intensity Φ sin θ / π² at the angle θ to the wire). The curves of one
+     source share its flux by length. Like points they are not visible to the camera.
+   - One source is on objects of one kind (surfaces, curves or points).
    - A source also has its material (it reflects light like any other object).
    - *Wavelengths*: the lines a source emits, in nm, each with an optional share of its flux –
      `550`, `486.1, 587.6, 656.3` or `450:1, 550:2, 650:1`. Every path carries one wavelength;
