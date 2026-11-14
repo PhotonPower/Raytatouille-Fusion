@@ -16,7 +16,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   points of UN/ECE R112 and the sharpness of the cut-off; *Show strips* draws the strips.
   **Connecting faces** (step 2): walls with a draft angle, rounded at foot and head, join the
   facets to one mirror surface that can be injection-moulded; their stray light is part of the
-  light distribution.
+  light distribution. **Facet length**: strips cut into rows of facets, so the spread of a zone
+  holds all over the mirror.
+  **Patterned lens** (Streuscheibe): a second system – a paraboloid mirror and a lens whose inner
+  side is a grid of elements (prisms, cylinder lenses, pillows) that turn and spread the light –
+  with the ray trace through the lens.
   ([python/plugins/automotive_lighting](python/plugins/automotive_lighting/README.md))
 - **Layer stacks** in the node workflow: the FourierGrating plugin provides `fg.stack` (coatings,
   filters, mirror layers between two media, exact per ray), with an RTT-Fusion that has it.

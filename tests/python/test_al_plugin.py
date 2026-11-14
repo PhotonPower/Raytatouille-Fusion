@@ -19,6 +19,7 @@ sys.path.insert(0, str(root / "python" / "plugins" / "automotive_lighting"))
 
 import al_design  # noqa: E402
 import al_layout  # noqa: E402
+import al_lens  # noqa: E402
 import al_optics  # noqa: E402
 import al_photometry  # noqa: E402
 import al_plugin  # noqa: E402
@@ -243,6 +244,38 @@ rows_c = {row[0]: row for row in al_photometry.test_points(dist_c, cut)}
 assert rows_c["50R"][3] > 10000 and rows_c["B50L"][3] < 350                # stray light of the walls stays low
 g_c, v_c = al_photometry.sharpness(dist_c, cut)
 assert g_c > 0.13 and abs(v_c + 0.57) < 0.2
+# ---- strips cut into rows: a third level of connecting faces, every further row starts where the last ends
+breaks = al_transitions.stations((0.0, 20.0), [8.0])
+assert breaks[0] == 0.0 and breaks[-1] == 20.0 and np.all(np.diff(breaks) > 0)
+assert np.diff(breaks)[(breaks[:-1] > 6) & (breaks[1:] < 10)].max() < 0.11 and np.diff(breaks).max() > 0.4
+uneven = al_spline.Graph((0.0, 20.0), (-1.0, 1.0), 0, 5, breaks)
+uneven.interpolate(np.sin(uneven.sites_p)[:, None] + uneven.sites_q[None, :] ** 2)
+assert abs(uneven.evaluate(np.array([7.3]), np.array([0.4]))[0][0] - (math.sin(7.3) + 0.16)) < 1e-4
+rr = al_reflector.build(al_reflector.Settings(H7, cut, al_plugin.zones_of(al_plugin.default_zones(True)),
+                                              strip_width=15.0, hole_radius=10.0, facet_length=20.0),
+                        al_layout.rounded_rectangle(100.0, 64.0, 12.0))
+assert len(rr.cells) > len(rc.cells) and {c.row for c in rr.cells} >= {-1, 0, 1} and rr.cutoff_error < 0.1
+assert len(rr.transitions.row_bands) > 5 and rr.transitions.bands[0] in rr.transitions.zone_bands
+outer = next(c for c in rr.cells if c.row == 2)                             # it starts on the row before it
+inner_facet = rr.facets[[c.key for c in rr.cells].index((outer.zone, outer.strip, 1))]
+y_, z_ = al_design.start_middle(outer.spec)
+assert abs(inner_facet.evaluate(np.array([y_]), np.array([z_]))[0][0] - outer.spec.anchor) < 1e-12
+gap = abs(rr.facets[rr.cells.index(outer)].evaluate(np.array([y_]), np.array([z_]))[0][0] - outer.spec.anchor)
+assert gap < 1e-3, gap
+parts = rr.parts()
+hits = sum(al_layout.contains(poly, probe).astype(int) for p in parts for poly in p.polygons)
+assert np.array_equal(hits, inside.astype(int))                             # the parts tile the frame
+assert abs(sum(p.area for p in parts) - rr.area) < 0.05
+for start, end in (((-45.0, 20.0), (45.0, 21.0)), ((-30.0, -30.0), (35.0, 30.0)), ((-22.0, -30.0), (-21.0, 30.0))):
+    s_ = np.linspace(0.0, 1.0, 12001)
+    y_, z_ = start[0] + s_ * (end[0] - start[0]), start[1] + s_ * (end[1] - start[1])
+    x_, steep = mirror_x(y_, z_)
+    ok = np.isfinite(x_[1:]) & np.isfinite(x_[:-1])
+    ds = math.hypot(end[0] - start[0], end[1] - start[1]) / 12000
+    jump = np.abs(np.diff(x_))[ok] - 1.5 * ds * np.maximum(steep[1:], steep[:-1])[ok]
+    assert jump.max() < 2e-3, jump.max()                                    # continuous across rows, strips, zones
+parts = rc.parts()
+
 for bad, message in ((dict(fillet=4.0), "narrow"), (dict(hole_radius=1.0), "lamp hole")):
     try:
         al_reflector.build(al_reflector.Settings(H7, cut, al_plugin.zones_of(al_plugin.default_zones(True)),
@@ -297,6 +330,73 @@ circle = {"type": "curve", "degree": 2, "knots": [0, 0, 0, 0.25, 0.25, 0.5, 0.5,
 pts = al_spline.curve_points(circle)
 assert np.allclose(np.hypot(pts[:, 1], pts[:, 2]), 40.0) and np.allclose(pts[:, 0], 5.0)
 
+
+# ---- a patterned lens in front of a paraboloid
+d_in = al_optics.direction(np.array([0.3, -0.1]), np.array([0.2, 0.0]))
+normal = np.array([1.0, 0.0, 0.0])
+d_glass, ok = al_lens.refract(d_in, normal, 1.0 / 1.5)
+assert ok.all() and np.allclose(np.linalg.norm(d_glass, axis=1), 1.0)
+assert np.allclose(np.sqrt(1 - d_in[:, 0] ** 2), 1.5 * np.sqrt(1 - d_glass[:, 0] ** 2))      # Snell's law
+assert np.allclose(al_lens.refract(d_glass, normal, 1.5)[0], d_in)                             # and back out
+assert not al_lens.refract(al_optics.direction(np.array([2.0]), np.array([0.0])), normal, 1.5)[1][0]   # total reflection
+assert np.allclose(al_lens._bernstein(np.linspace(0, 1, 7)).sum(axis=1), 1.0)
+lens_frame = al_layout.rounded_rectangle(80.0, 50.0, 8.0)
+everywhere = (-1e3, 1e3, -1e3, 1e3)
+
+
+def lens_beam(element, lamp=H7, **kw):
+    system = al_lens.build(al_lens.LensSettings(lamp, cut, (al_lens.Element(*everywhere, *element),), **kw), lens_frame)
+    Pm, Nm, Am = system.samples(2.0)
+    dist = al_photometry.intensity(lamp, system.filament, Pm, Nm, Am, np.full(len(Pm), 0.85), n_axial=6, n_around=12,
+                                   after=lambda origins, d: system.through(origins, d, 0.9))
+    col, row = dist.intensity.sum(axis=0), dist.intensity.sum(axis=1)
+    centre = float((col * dist.h).sum() / col.sum()), float((row * dist.v).sum() / row.sum())
+
+    def spread(x, a):       # the range that holds the middle 90 % of the light
+        c = np.cumsum(a) / a.sum()
+        return float(x[np.searchsorted(c, 0.05)]), float(x[np.searchsorted(c, 0.95)])
+
+    return system, dist, centre, spread(dist.h, col), spread(dist.v, row)
+
+
+plane, dist_p, centre, wide_h, wide_v = lens_beam((0, 0, 0, 0))                # a plane lens: the paraboloid's beam
+assert max(map(abs, plane.sag)) < 1e-9 and abs(centre[0]) < 0.05 and abs(centre[1]) < 0.05 and wide_h[1] - wide_h[0] < 8
+assert 0 < dist_p.flux_beam < 0.9 * dist_p.flux_mirror
+prism, _, centre, _, _ = lens_beam((5.0, -2.0, 0, 0))                         # prisms: the beam is turned
+assert abs(centre[0] - 5.0) < 0.1 and abs(centre[1] + 2.0) < 0.1 and prism.fit_error < 1e-9
+pillow, dist_s, centre, wide_h2, wide_v2 = lens_beam((0.0, -1.0, 12.0, 3.0))  # pillows: it is spread
+assert abs(centre[0]) < 0.2 and abs(centre[1] + 1.0) < 0.2 and pillow.fit_error < 0.01
+assert 20 < wide_h2[1] - wide_h2[0] < 30 and 5 < wide_v2[1] - wide_v2[0] < 12 and dist_s.intensity.max() < dist_p.intensity.max()
+assert pillow.cells == pillow.used.sum() > 20 and pillow.whole.sum() < pillow.cells
+# a ray through the lens: beside it or into a wall it is lost; the patches are what the trace sees
+origins = np.array([[0.0, 3.0, 4.0], [0.0, 300.0, 0.0]])
+out, factor = pillow.through(origins, np.tile([1.0, 0.0, 0.0], (2, 1)), 0.9)
+assert factor[0] == 0.9 and factor[1] == 0.0 and abs(np.linalg.norm(out[0]) - 1) < 1e-12
+h4, low_beam = lens_beam((0, 0, 0, 0), lamp=al_optics.LAMPS["H4 (low beam)"], focus_behind=4.0)[:2]
+assert max(map(abs, h4.sag)) < 1e-9                                           # no deflection: plane glass
+left_side = low_beam.h < -1.0                                                 # H4: the coil before the focus, its
+above = low_beam.intensity[low_beam.v > 0.5]                                  # shield below – light under the horizon,
+assert above[:, left_side].sum() < 0.01 * low_beam.intensity.sum()            # but for the 15° wedge on the right
+assert above[:, ~left_side].sum() > 5 * above[:, left_side].sum()
+assert low_beam.intensity[low_beam.v < 0].sum() > 0.85 * low_beam.intensity.sum()
+lens_faces = al_lens.faces(pillow, (1.0, 2.0, 3.0))
+assert [k for k, _, _ in lens_faces[:2]] == ["mirror", "lens"] and len(lens_faces) >= 2 + pillow.cells
+assert "holes" in lens_faces[0][2] and len(lens_faces[0][2]["surface"]["points"]) == 108
+kind, name, face = next(f for f in lens_faces if f[0] == "element" and "outer" not in f[2])
+patch = face["surface"]
+ctrl = np.array(patch["points"]).reshape(6, 6, 3)
+ya, yb, za, zb = patch["knots_u"][0], patch["knots_u"][-1], patch["knots_v"][0], patch["knots_v"][-1]
+ta, tb = 0.3, 0.8
+point = np.einsum("i,ijk,j->k", al_lens._bernstein(np.array([ta]))[0], ctrl, al_lens._bernstein(np.array([tb]))[0])
+y_, z_ = ya + ta * (yb - ya), za + tb * (zb - za)                             # the surface's (u, v) are the design's (y, z)
+sag = pillow.inner(np.array([y_]), np.array([z_]))[0][0]
+assert np.allclose(point, [pillow.settings.lens_x + sag + 1.0, y_ + 2.0, z_ + 3.0], atol=1e-7)
+for bad, message in ((dict(lens_x=-10.0), "inside the mirror"), (dict(thickness=0.5), "thick")):
+    try:
+        al_lens.build(al_lens.LensSettings(H7, cut, (al_lens.Element(*everywhere, 0, 0, 25, 25),), **bad), lens_frame)
+        raise AssertionError(f"{bad} not refused")
+    except al_design.DesignError as e:
+        assert message in str(e), e
 
 # ---- the plugin's actions through nfcad's Context, CAD played by a recording host
 class Host:
@@ -381,6 +481,22 @@ assert np.allclose(np.hypot(outline[:, 0], outline[:, 1]), 40.0) and al_layout.a
 ctx.params["connect"] = False
 assert abs(plugin.reflector(ctx).area - math.pi * (40.0 ** 2 - 12.0 ** 2)) < 2.0
 assert plugin.reflector(ctx).transitions is None
+# the other system: a paraboloid with a patterned lens
+ctx.params.update({"system": al_plugin.PATTERNED, "frame_curves": [], "position": (0.0, 0.0, 0.0), "cell_width": 12.5,
+                   "cell_height": 16.0})
+host.model, host.results = [], []
+assert "elements" in plugin.generate(ctx)
+kinds = [e["attributes"]["al.part"] for e in host.model]
+assert kinds.count("mirror") == 1 and kinds.count("lens") == 1 and kinds.count("element") >= 15
+plugin.filament_images(ctx)
+plugin.light_distribution(ctx)
+assert host.results == ["image", "image", "table", "curve", "curve"], host.results
+try:
+    plugin.show_strips(ctx)
+    raise AssertionError("strips of a paraboloid")
+except al_plugin.UserError:
+    pass
+ctx.params["system"] = al_plugin.CLEAR
 # left-hand traffic: the zones are mirrored, the lamp of the panel is used
 ctx.params.update({"traffic": al_plugin.LEFT, "lamp": "H4 (low beam)", "frame_curves": []})
 plugin.set_default_zones(ctx)

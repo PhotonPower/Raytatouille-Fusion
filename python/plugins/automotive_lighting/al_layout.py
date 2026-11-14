@@ -341,6 +341,17 @@ class Cell:
     strip: int
     spec: FacetSpec
     pieces: list[np.ndarray]       # polygons (y, z), counter-clockwise
+    row: int = 0                   # along the strip, if the strips are cut into facets of a length
+
+    @property
+    def key(self) -> tuple[int, int, int]:
+        return self.zone, self.strip, self.row
+
+    @property
+    def name(self) -> str:
+        return f"{self.zone + 1}.{self.strip}" + (f".{self.row}" if self.rows else "")
+
+    rows: bool = False             # whether the reflector's strips are cut into rows
 
     @property
     def area(self) -> float:
@@ -396,11 +407,19 @@ def _deepest_q(q_lo: float, q_hi: float) -> float:
     return float(min(max(0.0, q_lo), q_hi))
 
 
+def row_curve(frame: StripFrame, q: float, keep_above: bool, inset: float = 0.0) -> Line:
+    """The border q = const between two rows of a zone's strips, keeping q >= const (or <=), moved by
+    `inset` into the kept side."""
+    normal = frame.e_q if keep_above else -frame.e_q
+    return Line(normal, (q if keep_above else -q) + inset)
+
+
 def layout(frame_poly: np.ndarray, hole_radius: float, zones: list[Zone], cutoff: Cutoff, focal: float,
-           strip_width: float, margin: float = 1.5) -> list[Cell]:
+           strip_width: float, margin: float = 1.5, facet_length: float = 0.0) -> list[Cell]:
     """The cells of the reflector: every zone cut into strips of `strip_width` (measured where the
-    strips pass the lamp axis' level), within the frame and outside the lamp hole. Each cell's
-    facet covers the cell's bounding rectangle in the zone's frame plus `margin`."""
+    strips pass the lamp axis' level) and, with a `facet_length`, every strip into rows of that
+    length (the row 0 about the lamp axis' level), within the frame and outside the lamp hole. Each
+    cell's facet covers the cell's bounding rectangle in the zone's frame plus `margin`."""
     if strip_width <= 0.0:
         raise DesignError("the strip width must be positive")
     if area(frame_poly) < 0:
@@ -426,13 +445,22 @@ def layout(frame_poly: np.ndarray, hole_radius: float, zones: list[Zone], cutoff
             strip = outside_hole(strip, hole_radius)
             if not strip:
                 continue
-            pq = [np.stack(frame.pq(p[:, 0], p[:, 1]), axis=1) for p in strip]
-            both = np.concatenate(pq)
-            rect = (both[:, 0].min() - margin, both[:, 0].max() + margin,
-                    both[:, 1].min() - margin, both[:, 1].max() + margin)
-            q_start = _deepest_q(rect[2], rect[3])
-            spec = FacetSpec(m, frame, (c0, c1), (t_right, t_left), rect, q_start)
-            cells.append(Cell(zi, k, spec, strip))
+            rows = [(0, strip)]
+            if facet_length > 0.0:
+                q_all = np.concatenate([frame.pq(p[:, 0], p[:, 1])[1] for p in strip])
+                rows = []
+                for j in range(math.floor(q_all.min() / facet_length + 0.5), math.floor(q_all.max() / facet_length + 0.5) + 1):
+                    part = clip_all(clip_all(strip, row_curve(frame, (j - 0.5) * facet_length, True)),
+                                    row_curve(frame, (j + 0.5) * facet_length, False))
+                    if part:
+                        rows.append((j, part))
+            for j, part in rows:
+                pq = [np.stack(frame.pq(p[:, 0], p[:, 1]), axis=1) for p in part]
+                both = np.concatenate(pq)
+                rect = (both[:, 0].min() - margin, both[:, 0].max() + margin,
+                        both[:, 1].min() - margin, both[:, 1].max() + margin)
+                spec = FacetSpec(m, frame, (c0, c1), (t_right, t_left), rect, _deepest_q(rect[2], rect[3]))
+                cells.append(Cell(zi, k, spec, part, j, facet_length > 0.0))
     if not cells:
         raise DesignError("no reflector area: the zones do not cover the frame outside the lamp hole")
     return cells

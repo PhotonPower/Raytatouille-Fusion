@@ -1,0 +1,336 @@
+"""A headlamp or signal lamp with a patterned lens: a paraboloid mirror and, in front of it, a lens
+whose inner side is a grid of spreading elements (prisms, cylinder lenses, pillows).
+
+Every cell of the grid turns the light that reaches it: its middle by (deflect H, deflect V), its
+borders by ± the spread more – running linearly across the cell, its left part to the left, its
+upper part upwards. A cell with neither is plane glass. For a point of the cell, the ray that comes
+from the filament centre by way of the mirror (direction d) is to leave the lens in the direction t,
+d turned by these angles. The outer side of the lens is a plane; the direction g inside the glass follows from t by
+refraction there, and the inner surface must have the normal
+
+    N ∝ d − n g          (Snell's law in vector form, n: refractive index),
+
+which gives its slopes ∂x/∂y and ∂x/∂z; they are integrated over the cell (through its centre) and
+the cell's surface is the Bézier patch of degree 5 closest to that. The cells are independent:
+steps remain between them (the walls between the elements are not modelled).
+
+Coordinates as everywhere in the plugin: origin = filament centre, +X the driving direction, +Y
+left, +Z up. NumPy only."""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+
+import numpy as np
+
+import al_layout
+from al_design import DesignError
+from al_optics import Cutoff, Filament, Lamp, direction
+from al_spline import Graph
+
+DEGREE = 5
+NODES = 15             # per direction: where a cell's slopes are computed
+
+
+@dataclass(frozen=True)
+class Element:
+    """What the cells whose centre lies in y0 … y1, z0 … z1 do (degrees): by how much the light is
+    turned in the cell's middle, and the half spread horizontally and vertically."""
+
+    y0: float
+    y1: float
+    z0: float
+    z1: float
+    deflect_h: float = 0.0
+    deflect_v: float = 0.0
+    spread_h: float = 0.0
+    spread_v: float = 0.0
+
+
+@dataclass(frozen=True)
+class LensSettings:
+    lamp: Lamp
+    cutoff: Cutoff
+    elements: tuple[Element, ...]
+    focal: float = 25.0            # mm, of the paraboloid
+    focus_behind: float = 0.0      # mm: its focus lies this far behind the filament centre
+    hole_radius: float = 12.0      # mm, lamp hole
+    lens_x: float = 75.0           # mm, the inner side's base plane in front of the filament centre
+    thickness: float = 3.0         # mm
+    index: float = 1.49            # refractive index (PMMA; glass about 1.52)
+    cell_width: float = 10.0       # mm
+    cell_height: float = 10.0      # mm
+
+
+def _bernstein(t: np.ndarray, degree: int = DEGREE) -> np.ndarray:
+    """B[k, i] = the Bernstein polynomial i of `degree` at t_k (built up degree by degree)."""
+    t = np.asarray(t, dtype=float)
+    u = 1.0 - t
+    rows = [np.ones_like(t)]
+    for n in range(1, degree + 1):
+        rows = [u * rows[0]] + [u * rows[i] + t * rows[i - 1] for i in range(1, n)] + [t * rows[n - 1]]
+    return np.stack(rows, axis=1)
+
+
+def refract(d: np.ndarray, normal: np.ndarray, ratio: float) -> tuple[np.ndarray, np.ndarray]:
+    """Unit directions d (n, 3) refracted at surfaces with unit normals `normal` (n, 3 or 3) that
+    point along the light (normal · d > 0); ratio = index before / index after. Returns the new
+    directions and whether the ray passes (no total reflection)."""
+    c = np.sum(d * normal, axis=-1)
+    k = 1.0 - ratio * ratio * (1.0 - c * c)
+    ok = (k > 0.0) & (c > 0.0)
+    out = ratio * d + (np.sqrt(np.maximum(k, 0.0)) - ratio * c)[..., None] * normal
+    return out, ok
+
+
+@dataclass
+class LensSystem:
+    settings: LensSettings
+    frame: np.ndarray              # outline of mirror and lens in the front view (y, z)
+    filament: Filament
+    y0: float = 0.0                # the grid of cells: first edges and numbers
+    z0: float = 0.0
+    ny: int = 0
+    nz: int = 0
+    coeff: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, DEGREE + 1, DEGREE + 1)))   # sag, Bernstein
+    used: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))
+    whole: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))   # cells the outline does not cut
+    fit_error: float = 0.0         # largest slope error of the patches against the wanted slopes
+    sag: tuple[float, float] = (0.0, 0.0)
+    warnings: list[str] = field(default_factory=list)
+
+    # ---- the mirror
+    def mirror(self, y, z) -> tuple[np.ndarray, np.ndarray]:
+        """x of the paraboloid and its unit normals (towards the light)."""
+        s = self.settings
+        y, z = np.asarray(y, dtype=float), np.asarray(z, dtype=float)
+        x = (y * y + z * z) / (4.0 * s.focal) - s.focal - s.focus_behind
+        n = np.stack([np.ones_like(x), -y / (2.0 * s.focal), -z / (2.0 * s.focal)], axis=-1)
+        return x, n / np.linalg.norm(n, axis=-1, keepdims=True)
+
+    def chief(self, y, z) -> np.ndarray:
+        """The direction in which the mirror point above (y, z) sends the light of the filament centre."""
+        x, n = self.mirror(y, z)
+        d = np.stack([x, np.asarray(y, dtype=float), np.asarray(z, dtype=float)], axis=-1)
+        d = d / np.linalg.norm(d, axis=-1, keepdims=True)
+        return d - 2.0 * np.sum(d * n, axis=-1, keepdims=True) * n
+
+    def samples(self, spacing: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Mirror points on a front-view lattice within the frame, outside the lamp hole: positions,
+        unit normals, areas."""
+        lo, hi = self.frame.min(axis=0), self.frame.max(axis=0)
+        ys = (np.arange(math.floor(lo[0] / spacing), math.ceil(hi[0] / spacing)) + 0.5) * spacing
+        zs = (np.arange(math.floor(lo[1] / spacing), math.ceil(hi[1] / spacing)) + 0.5) * spacing
+        Y, Z = np.meshgrid(ys, zs, indexing="ij")
+        pts = np.stack([Y.ravel(), Z.ravel()], axis=1)
+        pts = pts[al_layout.contains(self.frame, pts) & (np.hypot(pts[:, 0], pts[:, 1]) >= self.settings.hole_radius)]
+        x, n = self.mirror(pts[:, 0], pts[:, 1])
+        return np.column_stack([x, pts]), n, spacing * spacing / n[:, 0]
+
+    # ---- the lens
+    def element(self, y: float, z: float) -> Element | None:
+        return next((e for e in self.settings.elements if e.y0 <= y < e.y1 and e.z0 <= z < e.z1), None)
+
+    def inner(self, y: np.ndarray, z: np.ndarray):
+        """Sag (x - lens_x) of the inner side and its slopes at points; `inside` marks the points
+        that lie on a cell."""
+        s = self.settings
+        iy = np.floor((y - self.y0) / s.cell_width).astype(int)
+        iz = np.floor((z - self.z0) / s.cell_height).astype(int)
+        inside = (iy >= 0) & (iy < self.ny) & (iz >= 0) & (iz < self.nz)
+        iy, iz = np.clip(iy, 0, self.ny - 1), np.clip(iz, 0, self.nz - 1)
+        inside &= self.used[iy, iz]
+        ta = (y - self.y0) / s.cell_width - iy
+        tb = (z - self.z0) / s.cell_height - iz
+        C = self.coeff[iy, iz]                                             # (n, 6, 6)
+        Ba, Bb = _bernstein(ta), _bernstein(tb)
+        low_a, low_b = _bernstein(ta, DEGREE - 1), _bernstein(tb, DEGREE - 1)
+        Db = np.zeros_like(Bb)                                             # d/dt of the Bernstein polynomials
+        Db[:, 1:] += DEGREE * low_b
+        Db[:, :-1] -= DEGREE * low_b
+        along_b = np.matmul(C, Bb[:, :, None])[:, :, 0]                    # (n, 6): the patch along a, at b
+        sag = np.sum(along_b * Ba, axis=1)
+        dy = DEGREE * np.sum((along_b[:, 1:] - along_b[:, :-1]) * low_a, axis=1) / s.cell_width
+        dz = np.sum(np.matmul(C, Db[:, :, None])[:, :, 0] * Ba, axis=1) / s.cell_height
+        return sag, dy, dz, inside, self.whole[iy, iz]
+
+    def through(self, origins: np.ndarray, d: np.ndarray, transmittance: float = 1.0):
+        """Rays (origins (n, 3), unit directions (n, 3)) through the lens: the directions behind it
+        and a factor per ray – `transmittance`, or 0 for a ray that misses the lens or is totally
+        reflected in it."""
+        s = self.settings
+        forward = d[:, 0] > 1e-6
+        dx = np.where(forward, d[:, 0], 1.0)
+        t = (s.lens_x - origins[:, 0]) / dx
+        for _ in range(2):                                                  # onto the inner surface
+            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
+            sag, dy, dz, inside, whole = self.inner(y, z)
+            t = (s.lens_x + sag - origins[:, 0]) / dx
+        normal = np.stack([np.ones_like(dy), -dy, -dz], axis=1)
+        normal /= np.linalg.norm(normal, axis=1, keepdims=True)
+        glass, ok1 = refract(d, normal, 1.0 / s.index)
+        out, ok2 = refract(glass, np.array([1.0, 0.0, 0.0]), s.index)
+        ok = forward & inside & ok1 & ok2
+        cut = np.flatnonzero(ok & ~whole)                                   # only cells at the rim need the outline
+        if len(cut):
+            ok[cut] = al_layout.contains(self._outline, np.column_stack([y[cut], z[cut]]))
+        return out, np.where(ok, transmittance, 0.0)
+
+    @property
+    def _outline(self) -> np.ndarray:
+        if not hasattr(self, "_simple"):
+            self._simple = al_layout.simplified(self.frame, 0.05)
+        return self._simple
+
+    @property
+    def cells(self) -> int:
+        return int(self.used.sum())
+
+
+def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSystem:
+    """The system within `frame` (front view about the lamp axis): the paraboloid and the lens with
+    its cells designed."""
+    s = settings
+    if s.index <= 1.0 or s.thickness <= 0.0 or s.cell_width <= 0.0 or s.cell_height <= 0.0:
+        raise DesignError("the lens needs a refractive index above 1, a thickness and a cell size")
+    if al_layout.area(frame) < 0:
+        frame = frame[::-1]
+    system = LensSystem(s, frame, Filament.of(s.lamp))
+    lo, hi = frame.min(axis=0), frame.max(axis=0)
+    deepest = float(system.mirror(frame[:, 0], frame[:, 1])[0].max())
+    if s.lens_x < deepest + 1.0:
+        raise DesignError(f"the lens (at x = {s.lens_x:g} mm) lies inside the mirror, whose rim reaches "
+                          f"x = {deepest:.1f} mm – move it further forward")
+    # cells: one is centred on the lamp axis
+    i0, i1 = math.floor(lo[0] / s.cell_width + 0.5), math.floor(hi[0] / s.cell_width + 0.5)
+    j0, j1 = math.floor(lo[1] / s.cell_height + 0.5), math.floor(hi[1] / s.cell_height + 0.5)
+    system.y0, system.z0 = (i0 - 0.5) * s.cell_width, (j0 - 0.5) * s.cell_height
+    system.ny, system.nz = i1 - i0 + 1, j1 - j0 + 1
+    system.coeff = np.zeros((system.ny, system.nz, DEGREE + 1, DEGREE + 1))
+    system.used = np.zeros((system.ny, system.nz), dtype=bool)
+    system.whole = np.zeros((system.ny, system.nz), dtype=bool)
+    t = np.linspace(0.0, 1.0, NODES)
+    fit = np.linalg.pinv(_bernstein(t))                                    # values at the nodes -> coefficients
+    B = _bernstein(t)
+    low = _bernstein(t, DEGREE - 1)
+    mid = NODES // 2
+    outline = al_layout.simplified(frame, 0.05)
+    without = 0
+    for i in range(system.ny):
+        if progress is not None:
+            progress(i / system.ny, "lens elements …")
+        for j in range(system.nz):
+            ya, za = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
+            corners = np.array([[ya, za], [ya + s.cell_width, za], [ya + s.cell_width, za + s.cell_height],
+                                [ya, za + s.cell_height], [ya + 0.5 * s.cell_width, za + 0.5 * s.cell_height]])
+            within = al_layout.contains(outline, corners)
+            if not within.any():
+                continue                                                    # (a cell the outline only grazes is left out)
+            edge = np.concatenate([corners[k] + np.linspace(0, 1, 9)[:, None] * (corners[(k + 1) % 4] - corners[k])
+                                   for k in range(4)])
+            system.whole[i, j] = bool(al_layout.contains(outline, edge).all())
+            e = system.element(ya + 0.5 * s.cell_width, za + 0.5 * s.cell_height)
+            if e is None:
+                without += 1
+                e = Element(0, 0, 0, 0)
+            Y, Z = np.meshgrid(ya + t * s.cell_width, za + t * s.cell_height, indexing="ij")
+            arrive = system.chief(Y, Z)
+            H = np.degrees(np.arctan(-arrive[..., 1] / arrive[..., 0])) + e.deflect_h \
+                - e.spread_h * (2.0 * t - 1.0)[:, None]                         # the left part to the left
+            V = np.degrees(np.arctan(arrive[..., 2] / arrive[..., 0])) + e.deflect_v \
+                + e.spread_v * (2.0 * t - 1.0)[None, :]                         # the upper part upwards
+            want = direction(np.tan(np.radians(H)), np.tan(np.radians(V)))
+            glass = np.empty_like(want)
+            glass[..., 1:] = want[..., 1:] / s.index                          # refraction at the plane outer side
+            glass[..., 0] = np.sqrt(1.0 - glass[..., 1] ** 2 - glass[..., 2] ** 2)
+            normal = arrive - s.index * glass
+            if np.any(normal[..., 0] >= -1e-6):
+                raise DesignError(f"the lens element at y = {ya + 0.5 * s.cell_width:.0f}, z = "
+                                  f"{za + 0.5 * s.cell_height:.0f} mm cannot bend the light that far – reduce "
+                                  "its deflection or spread")
+            sy, sz = -normal[..., 1] / normal[..., 0], -normal[..., 2] / normal[..., 0]
+            # the sag: along y through the cell's centre, then along z
+            da, db = s.cell_width / (NODES - 1), s.cell_height / (NODES - 1)
+            line = np.concatenate([[0.0], np.cumsum(0.5 * (sy[1:, mid] + sy[:-1, mid]) * da)])
+            up = np.concatenate([np.zeros((NODES, 1)), np.cumsum(0.5 * (sz[:, 1:] + sz[:, :-1]) * db, axis=1)], axis=1)
+            sag = line[:, None] + up - up[:, mid:mid + 1]
+            sag -= sag[mid, mid]
+            C = fit @ sag @ fit.T
+            system.coeff[i, j], system.used[i, j] = C, True
+            fy = DEGREE * (low @ (C[1:] - C[:-1]) @ B.T) / s.cell_width
+            fz = DEGREE * (B @ (C[:, 1:] - C[:, :-1]) @ low.T) / s.cell_height
+            system.fit_error = max(system.fit_error, float(np.abs(fy - sy).max()), float(np.abs(fz - sz).max()))
+    if not system.used.any():
+        raise DesignError("the lens has no cell within the frame")
+    if without:
+        system.warnings.append(f"{without} cells lie in no row of the element table: they are plane")
+    sags = system.coeff[system.used]
+    system.sag = (float(sags.min()), float(sags.max()))        # the control net bounds the surface
+    if s.thickness + system.sag[0] < 0.3:
+        raise DesignError(f"the lens elements are {-system.sag[0]:.1f} mm deep, more than the lens is thick "
+                          f"({s.thickness:g} mm) – a thicker lens, smaller cells or less deflection")
+    return system
+
+
+# ------------------------------------------------------------------ geometry for CAD
+def _loop(points: np.ndarray) -> dict:
+    pts = np.vstack([points, points[:1]])
+    n = len(pts)
+    return {"degree": 1, "knots": [0.0] + [k / (n - 1) for k in range(n)] + [1.0],
+            "points": [round(float(c), 8) for p in pts for c in (p[0], p[1], 0.0)]}
+
+
+def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, dict]]:
+    """(kind, name, trimmed surface): the mirror, the lens' outer side and every cell of its inner
+    side. All surfaces have the parameters (u, v) = (y, z) of the design."""
+    s = system.settings
+    ox, oy, oz = origin
+    lo, hi = system.frame.min(axis=0) - 1.0, system.frame.max(axis=0) + 1.0
+    out = []
+    # the mirror: a paraboloid is a polynomial of degree 2 – the bicubic graph is exact
+    g = Graph((lo[0], hi[0]), (lo[1], hi[1]), 6, 6)
+    Y, Z = np.meshgrid(g.sites_p, g.sites_q, indexing="ij")
+    g.interpolate(system.mirror(Y, Z)[0])
+    pts = np.stack([g.coeff + ox, Y + oy, Z + oz], axis=-1)
+    surface = {"degree_u": 3, "degree_v": 3, "knots_u": [float(k) for k in g.knots_p],
+               "knots_v": [float(k) for k in g.knots_q], "num_u": 6, "num_v": 6,
+               "points": [round(float(c), 8) for c in pts.reshape(-1)]}
+    mirror = {"type": "trimmed_surface", "surface": surface, "outer": [_loop(system.frame)], "label": "mirror"}
+    if s.hole_radius > 0.0:
+        n = max(24, math.ceil(2.0 * math.pi / math.sqrt(8.0 * al_layout.ARC_TOLERANCE / s.hole_radius)))
+        a = np.linspace(0.0, 2.0 * math.pi, n, endpoint=False)
+        mirror["holes"] = [[_loop(s.hole_radius * np.column_stack([np.cos(a), np.sin(a)]))]]
+    out.append(("mirror", "Mirror (paraboloid)", mirror))
+    # the outer side of the lens: a plane
+    plane = {"degree_u": 1, "degree_v": 1, "knots_u": [float(lo[0])] * 2 + [float(hi[0])] * 2,
+             "knots_v": [float(lo[1])] * 2 + [float(hi[1])] * 2, "num_u": 2, "num_v": 2,
+             "points": [round(float(c), 8) for y in (lo[0], hi[0]) for z in (lo[1], hi[1])
+                        for c in (s.lens_x + s.thickness + ox, y + oy, z + oz)]}
+    out.append(("lens", "Lens outer side", {"type": "trimmed_surface", "surface": plane,
+                                            "outer": [_loop(system.frame)], "label": "lens outer side"}))
+    # the cells: Bézier patches of degree 5
+    for i in range(system.ny):
+        for j in range(system.nz):
+            if not system.used[i, j]:
+                continue
+            ya, za = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
+            yb, zb = ya + s.cell_width, za + s.cell_height
+            cell = np.array([[ya, za], [yb, za], [yb, zb], [ya, zb]])
+            pieces = [system.frame]
+            for normal, offset in (((1.0, 0.0), ya), ((-1.0, 0.0), -yb), ((0.0, 1.0), za), ((0.0, -1.0), -zb)):
+                pieces = al_layout.clip_all(pieces, al_layout.Line(np.array(normal), offset))
+            if not pieces:
+                continue
+            ctrl = [(s.lens_x + system.coeff[i, j, a, b] + ox, ya + (yb - ya) * a / DEGREE + oy,
+                     za + (zb - za) * b / DEGREE + oz) for a in range(DEGREE + 1) for b in range(DEGREE + 1)]
+            patch = {"degree_u": DEGREE, "degree_v": DEGREE, "knots_u": [ya] * (DEGREE + 1) + [yb] * (DEGREE + 1),
+                     "knots_v": [za] * (DEGREE + 1) + [zb] * (DEGREE + 1), "num_u": DEGREE + 1, "num_v": DEGREE + 1,
+                     "points": [round(float(c), 8) for p in ctrl for c in p]}
+            for piece in pieces:
+                whole = abs(al_layout.area(piece) - al_layout.area(cell)) < 1e-6
+                face = {"type": "trimmed_surface", "surface": patch, "label": f"lens element {i}.{j}"}
+                if not whole:
+                    face["outer"] = [_loop(piece)]
+                out.append(("element", f"Lens element {i}.{j}", face))
+    return out
