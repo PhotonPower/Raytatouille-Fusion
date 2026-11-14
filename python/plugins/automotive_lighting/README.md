@@ -176,14 +176,16 @@ error).
 
 Neighbouring elements meet with a step – at every border of a row of prisms, less between
 pillows. It is closed by a **wall** along X, ruled between the rims of the two patches. A ray that
-meets a wall, in the air before the elements or in the glass behind them, is lost for the beam;
-*Light distribution* logs how much of the light from the mirror that is.
+meets a wall is mirrored there once and goes on as stray light: from the air before the elements
+with the reflectance of the glass at that – grazing – angle (what enters the wall is lost), in
+the glass behind them by total reflection (or with its reflectance). *Light distribution* logs how
+much of the light from the mirror meets the walls and how much of that goes on.
 
 *Generate reflector* adds the mirror (exact, with the lamp hole), the outer side of the lens, every
 element and every wall as trimmed NURBS faces (`al.part` = `mirror`, `lens`, `element`, `wall`) in
 the group *Headlamp &lt;lamp&gt;*. *Filament images* and *Light distribution* trace from the coil to the mirror
-and through the lens (refraction at both sides, *Transmittance*; a ray that misses the lens, meets
-a wall or is totally reflected in it is lost).
+and through the lens (refraction at both sides, *Transmittance*; a ray that misses the lens or is
+totally reflected at its outer side is lost; one that meets a wall is mirrored there).
 
 **Signal lamps.** With *Analysis → Test points* set to a signal lamp, *Light distribution* shows
 the points of its standard light distribution of UN R148 (± 20° horizontally, ± 10° vertically:
@@ -194,8 +196,8 @@ stop lamp S1 (60 … 260 cd), direction indicator front 1 (175 … 1000 cd) and 
 axis. The colour of the lens is part of *Transmittance* (a red or amber lens passes a fraction of
 the lamp's flux); the lamps P21W, PY21W, R10W and R5W have their filament across the axis.
 
-Not modelled: where the light that meets a wall goes (it is counted as lost, not as stray light),
-a draft angle or fillets of the walls, reflections at the glass. The dome is a sphere about a point on the lamp axis; the elements
+Not modelled: a second wall on the way of a mirrored ray (then it is lost), a draft angle or
+fillets of the walls, the reflections at the two sides of the lens. The dome is a sphere about a point on the lamp axis; the elements
 stand on the lens' shape along X (for a steep rake they are sheared, not perpendicular to it).
 
 ## Limits of this version
