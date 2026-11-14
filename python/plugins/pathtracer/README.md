@@ -21,7 +21,9 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    | `diffuse` | reflectance, transmittance | Lambertian reflection; with a transmittance also diffuse transmission (a diffuser sheet) |
    | `mirror` | reflectance | ideal mirror |
    | `glossy` | reflectance, roughness | a lobe around the mirror direction (normalised Phong, exponent 2/roughness² − 2) |
-   | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air. With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
+   | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed. Glass bodies may touch (a cemented pair: one surface between the two glasses, no air – faces within twice the mesh tolerance count as touching) and lie inside one another (a lens in a liquid). With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
+   | `metal` | reflectance, roughness | a rough metal: microfacets (GGX, width roughness²) that reflect *reflectance* head-on and more at grazing angles – brushed or blasted surfaces, with a highlight that stretches at flat angles (which `glossy` does not show) |
+   | `frosted` | index, roughness, absorption, Abbe number | rough glass: the same microfacets on a dielectric, so light is reflected and refracted into lobes instead of single directions – etched or sand-blasted glass, diffusers of glass. Body closed and in air, as for glass |
    | `detector` | – | no surface for the light – it passes as if the object were not there; only a place to measure the irradiance (a measuring plane in free space). Not visible to the camera, cannot be a source |
 
    *By wavelength* makes a material coloured: the reflectance (for glass: the absorption) at
@@ -66,8 +68,11 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
 
 4. **Camera.** Position, *Looks at* (both with *Pick*), up direction, horizontal field of view and
    pixels; *Show camera* draws the viewing pyramid. *Camera image* shows the radiance in
-   W/(m² sr) in the *Image* window (a pinhole camera; *White at percentile* sets the grey scale).
-   Point sources themselves are not visible, the light they cast is.
+   W/(m² sr) in the *Image* window (*White at percentile* sets the grey scale). With *Lens
+   radius* 0 the camera is a pinhole and everything is sharp; with a radius it has a lens that
+   is sharp at the *Focus distance* (0: the distance of *Looks at*) and blurs what is nearer or
+   farther. A pinhole does not see point sources themselves, only the light they cast; a lens
+   images them (light tracing or bidirectional).
 
 **Light as the eye sees it.** *Results in* photometric: every wavelength is weighted with V(λ) –
 the textures show the illuminance in lx, the camera the luminance in cd/m², the table lumens.
@@ -138,6 +143,5 @@ diffuse box, a glass plate).
 
 ## Not yet
 
-Continuous spectra and colours, measured materials and rough glass, glass touching glass,
-a lens
-camera with depth of field, a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).
+Continuous spectra and colours, measured materials, sources and cameras inside glass, a compiled
+intersection kernel, keeping results with the document (until then: *Also write to file*).

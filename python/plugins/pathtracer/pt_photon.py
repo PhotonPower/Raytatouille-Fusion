@@ -128,7 +128,7 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
         j = j[~eye.spec[last[j], j]]
         if j.size and pk.size:
             t = last[j]
-            x, ns, wo, m = eye.p[t, j], eye.ns[t, j], eye.wo[t, j], eye.m[t, j]
+            x, ns, wo, m, front = eye.p[t, j], eye.ns[t, j], eye.wo[t, j], eye.m[t, j], eye.outside[t, j]
             if r2 is None:
                 r2 = first_radius2(scene, light.p[pk, pj], x)
             grid = PhotonGrid(light.p[pk, pj], float(np.sqrt(r2)))
@@ -139,7 +139,7 @@ def render(scene, camera, samples: int, depth: int, *, seed: int = 0, radius: fl
                 ok = (pk[ph] + t[q] <= depth) & (np.abs(np.einsum("ij,ij->i", p_ns[ph], ns[q])) > 0.5) \
                     & (p_channel[ph] == channel[q])
                 q, ph = q[ok], ph[ok]
-                f, _, _ = mats.eval(m[q], ns[q], wo[q], p_wo[ph], channel[q])
+                f, _, _ = mats.eval(m[q], ns[q], wo[q], p_wo[ph], channel[q], outside=front[q])
                 total += np.bincount(q, weights=f * p_beta[ph], minlength=len(j))
             total /= scene.channel_prob[channel]             # the path stands for all wavelengths
             accum += np.bincount(slot[j], weights=eye.beta[t, j] * total / (np.pi * r2 * count),

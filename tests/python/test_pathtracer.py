@@ -639,6 +639,121 @@ for method in pt_integrator.METHODS[:3]:
 camera_d = pt_scene.Camera((0, 0, 20), (0, 0, 80), (0, 1, 0), 10.0, 2, 2)      # looks at the lamp: 1 / (pi 400)
 assert abs(values(by_file, camera_d, "path", 4_000, 2).mean() * math.pi * 400 - 1) < 0.03
 
+# ---- microfacets (rough metal, frosted glass): what sample() draws is what eval() says – the density,
+# the weight f |cos| / density, and the same path seen from the other end (light from wo instead of wi)
+rough = pt_bsdf.Materials.from_rows([
+    {"name": "metal", "kind": "metal", "reflectance": 0.9, "roughness": 0.5},
+    {"name": "frosted", "kind": "frosted", "ior": 1.5, "roughness": 0.5},
+    {"name": "fine", "kind": "frosted", "ior": 1.5, "roughness": 0.02},
+    {"name": "white", "kind": "diffuse", "reflectance": 0.6}, {"name": "black", "kind": "absorber"}])
+up = np.tile([0.0, 0.0, 1.0], (20_000, 1))
+for kind in (0, 1):
+    for towards in ((0.3, 0.0, 0.954), (0.8, 0.0, 0.6), (0.6, 0.0, -0.8)):          # also from inside the glass
+        out_ = np.tile(np.asarray(towards) / np.linalg.norm(towards), (20_000, 1))
+        which = np.full(20_000, kind)
+        for radiance in (True, False):
+            wi, weight, dens = rough.sample(which, up, out_, np.random.default_rng(SEED), radiance)
+            ok = weight > 0
+            f, forward, backward = rough.eval(which[ok], up[ok], out_[ok], wi[ok], None, radiance)
+            assert ok.mean() > 0.9 and np.allclose(forward, dens[ok], rtol=1e-9)
+            assert np.allclose(f * np.abs(wi[ok, 2]) / dens[ok], weight[ok], rtol=1e-9)
+            f2, forward2, _ = rough.eval(which[ok], up[ok], wi[ok], out_[ok], None, not radiance)
+            assert np.allclose(f2, f, rtol=1e-8) and np.allclose(forward2, backward, rtol=1e-8)
+            if not radiance:                                 # light is not made: at most what arrives leaves
+                assert 0.7 < weight.mean() <= 1.0 + 1e-9, (kind, towards, weight.mean())
+
+# ---- frosted glass and rough metal in scenes: the methods agree (connections reach these surfaces);
+# glass frosted very finely lets through what clear glass does
+lamp_face = rect((-10, -10, 80), (0, 20, 0), (20, 0, 0))
+mesh_r = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(
+    [wall, lamp_face, box((-60, -60, 30), (60, 60, 36)), rect((100, -100, 0), (0, 0, 100), (0, 200, 0))])], 1e-3)
+frost = pt_scene.Scene(mesh_r, rough, np.array([3, 4, 1, 0]), [pt_scene.SourceSpec("a", 1.0, 90, "front", entities=(1,))], (2,))
+sensor_r = pt_scene.TexelSensor(frost, [0], 2)
+reference = pt_integrator.render(frost, sensor_r, "light", 120_000, 6, seed=SEED)
+for method in ("path", "bidir"):
+    got = pt_integrator.render(frost, sensor_r, method, 60_000, 6, seed=SEED)
+    assert abs(got["values"].sum() / reference["values"].sum() - 1) < 0.03, (method, got["values"].sum(), reference["values"].sum())
+    assert np.allclose(got["values"] / reference["values"], 1, atol=0.08), (method, got["values"] / reference["values"])
+mesh_r = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(
+    [box((-50, -50, 0), (50, 50, 10)), rect((-1, -1, -20), (2, 0, 0), (0, 2, 0)), rect((-40, -40, 30), (80, 0, 0), (0, 80, 0))])], 1e-3)
+fine = pt_scene.Scene(mesh_r, rough, np.array([2, 4, 4]), [pt_scene.SourceSpec("beam", 1.0, 0.5, "front", entities=(1,))], (0,))
+total = pt_integrator.render(fine, pt_scene.TexelSensor(fine, [7], 2), "light", 30_000, 30, seed=SEED)["values"].sum()
+assert abs(total - 0.96 / 1.04) < 0.015, total
+
+# ---- a camera with a lens: a large even emitter looks the same sharp or blurred (its radiance); a
+# point source is imaged – into one pixel when in focus, into a disc when not, with the same light
+emitter = scene_of([rect((-100, -100, 0), (200, 0, 0), (0, 200, 0))], [BLACK],
+                   [pt_scene.SourceSpec("a", 1.0, 90, "front", entities=(0,))])
+for focus in (0.0, 30.0):
+    lens = pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 20.0, 4, 4, lens_radius=5.0, focus=focus)
+    assert not lens.pinhole and lens.focus == (focus or 100.0)
+    for method in pt_integrator.METHODS:
+        image = values(emitter, lens, method, 20_000, 3)
+        assert abs(image.mean() * math.pi * 40_000 - 1) < (0.1 if method == "light" else 0.03), (focus, method, image.mean())
+star = scene_of([rect((-100, -100, -50), (200, 0, 0), (0, 200, 0))], [BLACK],
+                [pt_scene.SourceSpec("p", 1.0, points=((0.5, 0.5, 0),))])
+shares = []
+for focus in (100.0, 50.0):
+    lens = pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 10.0, 17, 17, lens_radius=4.0, focus=focus)
+    image = values(star, lens, "light", 40_000, 1)
+    assert abs(image.sum() * lens.film / lens.count * 4 * math.pi * 1e4 - 1) < 0.03, image.sum()   # E at the lens: I / d²
+    assert np.allclose(values(star, lens, "bidir", 20_000, 1).sum() / image.sum(), 1, atol=0.03)
+    assert values(star, lens, "path", 2_000, 1).max() == 0           # no path from the lens hits a point
+    shares.append(image.max() / image.sum())
+assert shares[0] > 0.9 and shares[1] < 0.1, shares                   # one pixel; a disc of 8 mm at the source
+pinhole = pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 10.0, 17, 17)
+assert pinhole.pinhole and values(star, pinhole, "light", 2_000, 1).max() == 0      # no image without a lens
+try:
+    pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 10.0, 4, 4, lens_radius=-1.0)
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "must not be negative" in str(e), e
+
+# ---- glass at glass: bodies that touch have one surface between them (no air), a body inside another
+# is in that medium. A narrow beam through plates, against the sum over all reflections between the
+# surfaces: 1 / T − 1 = sum of R / (1 − R)
+glasses = pt_bsdf.Materials.from_rows([
+    {"name": "crown", "kind": "glass", "ior": 1.5}, {"name": "flint", "kind": "glass", "ior": 1.7},
+    {"name": "water", "kind": "glass", "ior": 1.33}, {"name": "dyed", "kind": "glass", "ior": 1.33, "absorption": 0.01},
+    {"name": "black", "kind": "absorber"}])
+
+
+def through_plates(bodies, kinds, contact=0.02, method="light", samples=30_000):
+    """The share of a beam along +z that arrives behind the bodies (boxes given by z from, z to, half width)."""
+    parts = [box((-w, -w, z0), (w, w, z1)) for z0, z1, w in bodies]
+    parts += [rect((-1, -1, -20), (2, 0, 0), (0, 2, 0)), rect((-40, -40, 80), (80, 0, 0), (0, 80, 0))]
+    mesh_ = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(parts)], 1e-3)
+    scene_ = pt_scene.Scene(mesh_, glasses, np.array(list(kinds) + [4, 4]),
+                            [pt_scene.SourceSpec("beam", 1.0, 0.5, "front", entities=(len(bodies),))],
+                            tuple(range(len(bodies))))
+    scene_.contact = contact
+    sensor_ = pt_scene.TexelSensor(scene_, [6 * len(bodies) + 1], 2)
+    return pt_integrator.render(scene_, sensor_, method, samples, 40, seed=SEED)["values"].sum()
+
+
+def all_orders(*reflectances):
+    return 1 / (1 + sum(r / (1 - r) for r in reflectances))
+
+
+def fresnel0(n1, n2):
+    return ((n1 - n2) / (n1 + n2)) ** 2
+
+
+one = all_orders(fresnel0(1, 1.5), fresnel0(1.5, 1))
+assert abs(through_plates([(0, 10, 50), (10, 20, 50)], [0, 0]) - one) < 0.01              # two plates of crown that
+assert abs(through_plates([(0, 10, 50), (10, 20, 50)], [0, 0], method="bidir", samples=10_000) - one) < 0.015   # touch: one
+doublet = all_orders(fresnel0(1, 1.5), fresnel0(1.5, 1.7), fresnel0(1.7, 1))
+for second in (10.0, 9.996, 10.004):                                 # touching, overlapping a little, a hair apart
+    assert abs(through_plates([(0, 10, 50), (second, 20, 50)], [0, 1]) - doublet) < 0.01, second
+    assert abs(through_plates([(second, 20, 50), (0, 10, 50)], [1, 0]) - doublet) < 0.01, second     # (other order)
+apart = all_orders(fresnel0(1, 1.5), fresnel0(1.5, 1), fresnel0(1, 1.7), fresnel0(1.7, 1))
+assert abs(through_plates([(0, 10, 50), (11, 21, 50)], [0, 1]) - apart) < 0.01 and doublet - apart > 0.03       # air between
+immersed = all_orders(fresnel0(1, 1.33), fresnel0(1.33, 1.5), fresnel0(1.5, 1.33), fresnel0(1.33, 1))
+assert abs(through_plates([(0, 30, 50), (10, 20, 30)], [2, 0]) - immersed) < 0.01          # crown in water
+assert abs(through_plates([(10, 20, 30), (0, 30, 50)], [0, 2]) - immersed) < 0.01
+dyed = through_plates([(0, 30, 50), (10, 20, 30)], [3, 0])           # the water absorbs on its 20 mm, the crown not
+assert abs(dyed / (immersed * math.exp(-0.2)) - 1) < 0.015, dyed
+
 # ---- samples steered by weights: any shares of the texels / pixels give the same values – here
 # shares that differ by up to a factor of 100, on the plane under the point source
 shares = np.random.default_rng(5).uniform(0.01, 1.0, 16)

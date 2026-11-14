@@ -36,6 +36,10 @@ DEFAULT_MATERIALS = [
      "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "BK7", "kind": "glass", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5168,
      "absorption": 0.0, "abbe": 64.17, "spectrum": ""},
+    {"name": "brushed metal", "kind": "metal", "reflectance": 0.9, "transmittance": 0.0, "roughness": 0.4, "ior": 1.5,
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
+    {"name": "frosted glass", "kind": "frosted", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.4, "ior": 1.5,
+     "absorption": 0.0, "abbe": 0.0, "spectrum": ""},
     {"name": "red paint", "kind": "diffuse", "reflectance": 0.5, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
      "absorption": 0.0, "abbe": 0.0, "spectrum": "450:0.05, 550:0.1, 600:0.6, 650:0.8"},
     {"name": "detector", "kind": "detector", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
@@ -241,6 +245,7 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
     closed = tuple(k for k, e in enumerate(surf) if _kind(e) == "shell")
     scene = pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
     scene.exact = bool(params.get("exact_normals", True))
+    scene.contact = max(scene.contact, 2 * tol)             # touching bodies' triangles differ by the tolerance
     return scene
 
 

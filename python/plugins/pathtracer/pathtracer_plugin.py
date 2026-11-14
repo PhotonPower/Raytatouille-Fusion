@@ -124,6 +124,12 @@ class PathTracerPlugin(Plugin):
                                    group="Camera"),
         "camera_width": Param.integer(320, min=8, max=4096, unit="px", label="Width", group="Camera"),
         "camera_height": Param.integer(240, min=8, max=4096, unit="px", label="Height", group="Camera"),
+        "camera_lens": Param.number(0.0, min=0.0, decimals=3, unit="mm", label="Lens radius", group="Camera",
+                                    description="0: a pinhole, everything sharp. Above: a lens of this radius – "
+                                                "sharp only at the focus distance (depth of field)"),
+        "camera_focus": Param.number(0.0, min=0.0, decimals=3, unit="mm", label="Focus distance", group="Camera",
+                                     description="Distance along the view at which a lens camera is sharp. "
+                                                 "0: the distance of \"Looks at\""),
         "camera_white": Param.number(99.5, min=50.0, max=100.0, decimals=1, unit="%", label="White at percentile",
                                      group="Camera",
                                      description="The brightest value of the grey scale: this share of the "
@@ -288,7 +294,8 @@ class PathTracerPlugin(Plugin):
         p = ctx.params
         try:
             return pt_scene.Camera(p["camera_position"], p["camera_target"], pt_setup.UP[p["camera_up"]],
-                                   p["camera_fov"], p["camera_width"], p["camera_height"])
+                                   p["camera_fov"], p["camera_width"], p["camera_height"],
+                                   p["camera_lens"], p["camera_focus"])
         except ValueError as e:
             raise UserError(str(e)) from None
 
