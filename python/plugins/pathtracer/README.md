@@ -68,8 +68,11 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
 
 4. **Camera.** Position, *Looks at* (both with *Pick*), up direction, horizontal field of view and
    pixels; *Show camera* draws the viewing pyramid. *Camera image* shows the radiance in
-   W/(m² sr) in the *Image* window (a pinhole camera; *White at percentile* sets the grey scale).
-   Point sources themselves are not visible, the light they cast is.
+   W/(m² sr) in the *Image* window (*White at percentile* sets the grey scale). With *Lens
+   radius* 0 the camera is a pinhole and everything is sharp; with a radius it has a lens that
+   is sharp at the *Focus distance* (0: the distance of *Looks at*) and blurs what is nearer or
+   farther. A pinhole does not see point sources themselves, only the light they cast; a lens
+   images them (light tracing or bidirectional).
 
 **Light as the eye sees it.** *Results in* photometric: every wavelength is weighted with V(λ) –
 the textures show the illuminance in lx, the camera the luminance in cd/m², the table lumens.
@@ -141,5 +144,4 @@ diffuse box, a glass plate).
 ## Not yet
 
 Continuous spectra and colours, measured materials, glass touching glass,
-a lens
-camera with depth of field, a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).
+a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).

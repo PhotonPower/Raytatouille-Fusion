@@ -680,6 +680,35 @@ fine = pt_scene.Scene(mesh_r, rough, np.array([2, 4, 4]), [pt_scene.SourceSpec("
 total = pt_integrator.render(fine, pt_scene.TexelSensor(fine, [7], 2), "light", 30_000, 30, seed=SEED)["values"].sum()
 assert abs(total - 0.96 / 1.04) < 0.015, total
 
+# ---- a camera with a lens: a large even emitter looks the same sharp or blurred (its radiance); a
+# point source is imaged – into one pixel when in focus, into a disc when not, with the same light
+emitter = scene_of([rect((-100, -100, 0), (200, 0, 0), (0, 200, 0))], [BLACK],
+                   [pt_scene.SourceSpec("a", 1.0, 90, "front", entities=(0,))])
+for focus in (0.0, 30.0):
+    lens = pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 20.0, 4, 4, lens_radius=5.0, focus=focus)
+    assert not lens.pinhole and lens.focus == (focus or 100.0)
+    for method in pt_integrator.METHODS:
+        image = values(emitter, lens, method, 20_000, 3)
+        assert abs(image.mean() * math.pi * 40_000 - 1) < (0.1 if method == "light" else 0.03), (focus, method, image.mean())
+star = scene_of([rect((-100, -100, -50), (200, 0, 0), (0, 200, 0))], [BLACK],
+                [pt_scene.SourceSpec("p", 1.0, points=((0.5, 0.5, 0),))])
+shares = []
+for focus in (100.0, 50.0):
+    lens = pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 10.0, 17, 17, lens_radius=4.0, focus=focus)
+    image = values(star, lens, "light", 40_000, 1)
+    assert abs(image.sum() * lens.film / lens.count * 4 * math.pi * 1e4 - 1) < 0.03, image.sum()   # E at the lens: I / d²
+    assert np.allclose(values(star, lens, "bidir", 20_000, 1).sum() / image.sum(), 1, atol=0.03)
+    assert values(star, lens, "path", 2_000, 1).max() == 0           # no path from the lens hits a point
+    shares.append(image.max() / image.sum())
+assert shares[0] > 0.9 and shares[1] < 0.1, shares                   # one pixel; a disc of 8 mm at the source
+pinhole = pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 10.0, 17, 17)
+assert pinhole.pinhole and values(star, pinhole, "light", 2_000, 1).max() == 0      # no image without a lens
+try:
+    pt_scene.Camera((0, 0, 100), (0, 0, 0), (0, 1, 0), 10.0, 4, 4, lens_radius=-1.0)
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "must not be negative" in str(e), e
+
 # ---- samples steered by weights: any shares of the texels / pixels give the same values – here
 # shares that differ by up to a factor of 100, on the plane under the point source
 shares = np.random.default_rng(5).uniform(0.01, 1.0, 16)

@@ -274,7 +274,7 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
             fy, dens_y, dens_y_rev = mats.eval(light.m[s - 1, j], light.ns[s - 1, j], light.wo[s - 1, j], w,
                                                light.channel[j], radiance=False)
         if t == 1:
-            fz, dens_z, pixel = sensor.response(eye.ns[0, j], -w)
+            fz, dens_z, pixel = sensor.response(eye.ns[0, j], -w, eye.p[0, j])
             tex = eye.tex[0, j] if pixel is None else pixel
             dens_z_rev = None
         else:
@@ -291,7 +291,7 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
         if t == 1:
             side_z |= eye.point[j]
         c = np.where(near & side_y & side_z & (tex >= 0), c, 0.0)
-        if camera and n == 2:                                # a point source has no image
+        if camera and n == 2 and sensor.pinhole:             # a point source has no image in a pinhole camera
             c = np.where(light.point[j], 0.0, c)
         k = np.nonzero(c > 0)[0]
         if k.size:
@@ -368,7 +368,7 @@ def _weight(scene, sensor, light: Path, eye: Path | None, s: int, t: int, j: np.
         if sp == n:
             return np.ones(count, dtype=bool)
         ok = ~spec[sp - 1] & ~spec[sp]
-        if sensor.camera and n == 2:
+        if sensor.camera and n == 2 and sensor.pinhole:
             ok = ok & ~light_point
         return ok
 

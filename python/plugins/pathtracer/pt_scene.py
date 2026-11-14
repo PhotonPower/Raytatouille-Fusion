@@ -20,7 +20,8 @@ Sources
 Sensors
   TexelSensor   irradiance on faces: the flux arriving (from both sides) in every texel; also on
                 faces with a detector material, which the light passes
-  Camera        a pinhole camera: radiance per pixel"""
+  Camera        a camera: radiance per pixel – through a pinhole, or through a thin lens that is
+                sharp at one distance (depth of field)"""
 
 from __future__ import annotations
 
@@ -530,21 +531,33 @@ class TexelSensor:
                 break
         return tri, b1, b2, tex                              # (left without: texels with hardly any area)
 
-    def response(self, ns: np.ndarray, w: np.ndarray):
+    def response(self, ns: np.ndarray, w: np.ndarray, p: np.ndarray | None = None):
         """Importance into the direction w from a sensor point, the density of picking w, and
         the texel it belongs to (None: the point's own)."""
         return np.ones(len(w)), np.abs(np.einsum("ij,ij->i", ns, w)) / (2 * np.pi), None
 
 class Camera:
-    """A pinhole camera at `position` looking at `target`; `fov`: full horizontal angle in
-    degrees; width x height pixels. Pixel (i, j): i to the right, j upwards."""
+    """A camera at `position` looking at `target`; `fov`: full horizontal angle in degrees;
+    width x height pixels. Pixel (i, j): i to the right, j upwards.
+
+    lens_radius 0: a pinhole – everything is sharp. Above 0: a thin lens of that radius (mm),
+    sharp at the distance `focus` along the view (0: the distance of `target`): every ray starts
+    at a point of the lens and runs through the point the pinhole's ray would meet at that
+    distance. A pixel's value is the mean radiance along its rays."""
     camera = True
 
-    def __init__(self, position, target, up, fov: float, width: int, height: int):
+    def __init__(self, position, target, up, fov: float, width: int, height: int, lens_radius: float = 0.0,
+                 focus: float = 0.0):
         self.position = np.asarray(position, dtype=float)
         forward = np.asarray(target, dtype=float) - self.position
         if np.linalg.norm(forward) < 1e-12:
             raise ValueError("camera: position and target are the same point")
+        if lens_radius < 0 or focus < 0:
+            raise ValueError("camera: the lens radius and the focus distance must not be negative")
+        self.lens_radius = float(lens_radius)
+        self.pinhole = self.lens_radius == 0
+        self.focus = float(focus) if focus > 0 else float(np.linalg.norm(forward))
+        self.lens_area = np.pi * self.lens_radius ** 2
         forward /= np.linalg.norm(forward)
         right = np.cross(forward, np.asarray(up, dtype=float))
         if np.linalg.norm(right) < 1e-9:
@@ -594,27 +607,47 @@ class Camera:
         d /= length[:, None]
         cos = 1.0 / length
         share = self.prob[pixel] * self.count                # of the rays, against an even spread
-        return {"p": np.broadcast_to(self.position, (n, 3)).copy(), "ns": np.zeros((n, 3)), "ng": np.zeros((n, 3)),
-                "d": d, "texel": pixel, "ok": np.ones(n, dtype=bool), "exists": np.ones(n, dtype=bool),
-                "pdf_pos": np.ones(n), "pdf_dir": share / (self.film * cos ** 3), "beta": self.count / share,
-                "point": np.ones(n, dtype=bool)}
+        if self.pinhole:
+            return {"p": np.broadcast_to(self.position, (n, 3)).copy(), "ns": np.zeros((n, 3)),
+                    "ng": np.zeros((n, 3)), "d": d, "texel": pixel, "ok": np.ones(n, dtype=bool),
+                    "exists": np.ones(n, dtype=bool), "pdf_pos": np.ones(n),
+                    "pdf_dir": share / (self.film * cos ** 3), "beta": self.count / share,
+                    "point": np.ones(n, dtype=bool)}
+        # a point of the lens, and from it through the point in focus that the pinhole's ray meets
+        sharp = self.position + d * (self.focus * length)[:, None]
+        r, phi = self.lens_radius * np.sqrt(rng.random(n)), 2 * np.pi * rng.random(n)
+        start = self.position + (r * np.cos(phi))[:, None] * self.right + (r * np.sin(phi))[:, None] * self.up
+        d = sharp - start
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        cos = d @ self.forward
+        normal = np.broadcast_to(self.forward, (n, 3)).copy()
+        return {"p": start, "ns": normal, "ng": normal.copy(), "d": d, "texel": pixel, "ok": np.ones(n, dtype=bool),
+                "exists": np.ones(n, dtype=bool), "pdf_pos": np.full(n, 1.0 / self.lens_area),
+                "pdf_dir": share / (self.film * cos ** 3), "beta": self.count / share,
+                "point": np.zeros(n, dtype=bool)}
 
     def _pixel(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         i = np.floor((x / self.tan_x + 1) * 0.5 * self.w).astype(np.int64)
         j = np.floor((y / self.tan_y + 1) * 0.5 * self.h).astype(np.int64)
         return np.where((i >= 0) & (i < self.w) & (j >= 0) & (j < self.h), j * self.w + i, -1)
 
-    def response(self, ns: np.ndarray, w: np.ndarray):
+    def response(self, ns: np.ndarray, w: np.ndarray, p: np.ndarray | None = None):
         """Importance of the camera into the direction w (the mean radiance of a pixel is the
-        integral of radiance x importance over the directions), the density with which the
-        camera picks w, and the pixel of w (-1: outside the image)."""
+        integral of radiance x importance over the directions – and the lens), the density with
+        which the camera picks w, and the pixel of w (-1: outside the image). p: the points of
+        the lens the directions start at (a lens camera)."""
         cos = w @ self.forward
         front = cos > 1e-9
         c = np.where(front, cos, 1.0)
-        pixel = np.where(front, self._pixel((w @ self.right) / c, (w @ self.up) / c), -1)
+        x, y = (w @ self.right) / c, (w @ self.up) / c
+        if not self.pinhole:                                 # the pixel: where the ray meets the plane in focus
+            off = p - self.position
+            x, y = x + (off @ self.right) / self.focus, y + (off @ self.up) / self.focus
+        pixel = np.where(front, self._pixel(x, y), -1)
         inside = pixel >= 0
         even = np.where(inside, 1.0 / (self.film * c ** 3), 0.0)
-        return even * self.count, even * self.prob[np.maximum(pixel, 0)] * self.count, pixel
+        importance = even * self.count if self.pinhole else even * self.count / (self.lens_area * c)
+        return importance, even * self.prob[np.maximum(pixel, 0)] * self.count, pixel
 
     def frustum(self, length: float) -> np.ndarray:
         """Polylines of the viewing pyramid up to `length`: (points (10, 3)) – apex to the four
