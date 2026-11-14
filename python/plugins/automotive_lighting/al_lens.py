@@ -14,6 +14,10 @@ which gives its slopes ∂x/∂y and ∂x/∂z; they are integrated over the cel
 the cell's surface is the Bézier patch of degree 5 closest to that. The cells are independent:
 steps remain between them (the walls between the elements are not modelled).
 
+The lens may lean back (rake), run back to one side (sweep) and be domed (a sphere's radius): its
+outer side is that shape, its inner side the same shape `thickness` behind it (measured along X)
+with the elements on it. The refraction at the outer side then uses the normal of the shape there.
+
 Coordinates as everywhere in the plugin: origin = filament centre, +X the driving direction, +Y
 left, +Z up. NumPy only."""
 
@@ -61,6 +65,9 @@ class LensSettings:
     index: float = 1.49            # refractive index (PMMA; glass about 1.52)
     cell_width: float = 10.0       # mm
     cell_height: float = 10.0      # mm
+    rake: float = 0.0              # degrees: the lens leans back, its top towards the mirror
+    sweep: float = 0.0             # degrees: it runs back towards the left (negative: the right)
+    radius: float = 0.0            # mm: domed outwards, a sphere of this radius (0: flat)
 
 
 def _bernstein(t: np.ndarray, degree: int = DEGREE) -> np.ndarray:
@@ -97,7 +104,7 @@ class LensSystem:
     used: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))
     whole: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))   # cells the outline does not cut
     fit_error: float = 0.0         # largest slope error of the patches against the wanted slopes
-    sag: tuple[float, float] = (0.0, 0.0)
+    sag: tuple[float, float] = (0.0, 0.0)     # the elements' depth and height about the lens' shape
     warnings: list[str] = field(default_factory=list)
 
     # ---- the mirror
@@ -129,12 +136,24 @@ class LensSystem:
         return np.column_stack([x, pts]), n, spacing * spacing / n[:, 0]
 
     # ---- the lens
+    def shape(self, y, z):
+        """The form of the lens: x relative to where the lamp axis meets it, and its slopes ∂x/∂y,
+        ∂x/∂z – of the inner side's base and of the outer side alike."""
+        s = self.settings
+        y, z = np.asarray(y, dtype=float), np.asarray(z, dtype=float)
+        ky, kz = -math.tan(math.radians(s.sweep)), -math.tan(math.radians(s.rake))
+        x, dy, dz = ky * y + kz * z, ky + 0.0 * y, kz + 0.0 * z
+        if s.radius > 0.0:
+            root = np.sqrt(np.maximum(s.radius ** 2 - y * y - z * z, 1e-12))
+            x, dy, dz = x + root - s.radius, dy - y / root, dz - z / root
+        return x, dy, dz
+
     def element(self, y: float, z: float) -> Element | None:
         return next((e for e in self.settings.elements if e.y0 <= y < e.y1 and e.z0 <= z < e.z1), None)
 
     def inner(self, y: np.ndarray, z: np.ndarray):
-        """Sag (x - lens_x) of the inner side and its slopes at points; `inside` marks the points
-        that lie on a cell."""
+        """x - lens_x of the inner side (the lens' shape with the elements on it) and its slopes at
+        points; `inside` marks the points that lie on a cell."""
         s = self.settings
         iy = np.floor((y - self.y0) / s.cell_width).astype(int)
         iz = np.floor((z - self.z0) / s.cell_height).astype(int)
@@ -163,14 +182,28 @@ class LensSystem:
         forward = d[:, 0] > 1e-6
         dx = np.where(forward, d[:, 0], 1.0)
         t = (s.lens_x - origins[:, 0]) / dx
-        for _ in range(2):                                                  # onto the inner surface
+        for _ in range(3):                                                  # onto the lens' shape …
+            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
+            t = (s.lens_x + self.shape(y, z)[0] - origins[:, 0]) / dx
+        for _ in range(2):                                                  # … and onto its elements
             y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
             sag, dy, dz, inside, whole = self.inner(y, z)
             t = (s.lens_x + sag - origins[:, 0]) / dx
         normal = np.stack([np.ones_like(dy), -dy, -dz], axis=1)
         normal /= np.linalg.norm(normal, axis=1, keepdims=True)
         glass, ok1 = refract(d, normal, 1.0 / s.index)
-        out, ok2 = refract(glass, np.array([1.0, 0.0, 0.0]), s.index)
+        # through the glass to the outer side
+        gx = np.where(glass[:, 0] > 1e-6, glass[:, 0], 1.0)
+        x_in = s.lens_x + sag
+        tg = s.thickness / gx
+        for _ in range(3):
+            yo, zo = y + tg * glass[:, 1], z + tg * glass[:, 2]
+            ox, oy, oz = self.shape(yo, zo)
+            tg = (s.lens_x + s.thickness + ox - x_in) / gx
+        outer = np.stack([np.ones_like(oy), -oy, -oz], axis=1)
+        outer /= np.linalg.norm(outer, axis=1, keepdims=True)
+        out, ok2 = refract(glass, outer, s.index)
+        ok2 &= (glass[:, 0] > 1e-6) & (tg > 0.0)
         ok = forward & inside & ok1 & ok2
         cut = np.flatnonzero(ok & ~whole)                                   # only cells at the rim need the outline
         if len(cut):
@@ -198,10 +231,12 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
         frame = frame[::-1]
     system = LensSystem(s, frame, Filament.of(s.lamp))
     lo, hi = frame.min(axis=0), frame.max(axis=0)
-    deepest = float(system.mirror(frame[:, 0], frame[:, 1])[0].max())
-    if s.lens_x < deepest + 1.0:
-        raise DesignError(f"the lens (at x = {s.lens_x:g} mm) lies inside the mirror, whose rim reaches "
-                          f"x = {deepest:.1f} mm – move it further forward")
+    if s.radius > 0.0 and s.radius < 1.05 * float(np.hypot(frame[:, 0], frame[:, 1]).max()):
+        raise DesignError(f"the lens' radius ({s.radius:g} mm) is smaller than the lens is wide")
+    gap = s.lens_x + system.shape(frame[:, 0], frame[:, 1])[0] - system.mirror(frame[:, 0], frame[:, 1])[0]
+    if gap.min() < 1.0:
+        raise DesignError(f"the lens (at x = {s.lens_x:g} mm on the axis) lies inside the mirror: at the rim it is "
+                          f"{-gap.min():.1f} mm behind it – move it further forward or lean it less")
     # cells: one is centred on the lamp axis
     i0, i1 = math.floor(lo[0] / s.cell_width + 0.5), math.floor(hi[0] / s.cell_width + 0.5)
     j0, j1 = math.floor(lo[1] / s.cell_height + 0.5), math.floor(hi[1] / s.cell_height + 0.5)
@@ -217,6 +252,7 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
     mid = NODES // 2
     outline = al_layout.simplified(frame, 0.05)
     without = 0
+    sag_lo, sag_hi = 0.0, 0.0
     for i in range(system.ny):
         if progress is not None:
             progress(i / system.ny, "lens elements …")
@@ -241,22 +277,27 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
             V = np.degrees(np.arctan(arrive[..., 2] / arrive[..., 0])) + e.deflect_v \
                 + e.spread_v * (2.0 * t - 1.0)[None, :]                         # the upper part upwards
             want = direction(np.tan(np.radians(H)), np.tan(np.radians(V)))
-            glass = np.empty_like(want)
-            glass[..., 1:] = want[..., 1:] / s.index                          # refraction at the plane outer side
-            glass[..., 0] = np.sqrt(1.0 - glass[..., 1] ** 2 - glass[..., 2] ** 2)
+            base, base_y, base_z = system.shape(Y, Z)
+            outer = np.stack([np.ones_like(base_y), -base_y, -base_z], axis=-1)
+            outer /= np.linalg.norm(outer, axis=-1, keepdims=True)
+            # the direction in the glass: the wanted ray followed backwards through the outer side
+            back, _ = refract(-want.reshape(-1, 3), -outer.reshape(-1, 3), 1.0 / s.index)
+            glass = -back.reshape(want.shape)
             normal = arrive - s.index * glass
             if np.any(normal[..., 0] >= -1e-6):
                 raise DesignError(f"the lens element at y = {ya + 0.5 * s.cell_width:.0f}, z = "
                                   f"{za + 0.5 * s.cell_height:.0f} mm cannot bend the light that far – reduce "
                                   "its deflection or spread")
             sy, sz = -normal[..., 1] / normal[..., 0], -normal[..., 2] / normal[..., 0]
-            # the sag: along y through the cell's centre, then along z
+            # the element on the lens' shape: its slopes along y through the cell's centre, then along z
+            ey, ez = sy - base_y, sz - base_z
             da, db = s.cell_width / (NODES - 1), s.cell_height / (NODES - 1)
-            line = np.concatenate([[0.0], np.cumsum(0.5 * (sy[1:, mid] + sy[:-1, mid]) * da)])
-            up = np.concatenate([np.zeros((NODES, 1)), np.cumsum(0.5 * (sz[:, 1:] + sz[:, :-1]) * db, axis=1)], axis=1)
+            line = np.concatenate([[0.0], np.cumsum(0.5 * (ey[1:, mid] + ey[:-1, mid]) * da)])
+            up = np.concatenate([np.zeros((NODES, 1)), np.cumsum(0.5 * (ez[:, 1:] + ez[:, :-1]) * db, axis=1)], axis=1)
             sag = line[:, None] + up - up[:, mid:mid + 1]
             sag -= sag[mid, mid]
-            C = fit @ sag @ fit.T
+            sag_lo, sag_hi = min(sag_lo, float(sag.min())), max(sag_hi, float(sag.max()))
+            C = fit @ (base + sag) @ fit.T
             system.coeff[i, j], system.used[i, j] = C, True
             fy = DEGREE * (low @ (C[1:] - C[:-1]) @ B.T) / s.cell_width
             fz = DEGREE * (B @ (C[:, 1:] - C[:, :-1]) @ low.T) / s.cell_height
@@ -265,8 +306,7 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
         raise DesignError("the lens has no cell within the frame")
     if without:
         system.warnings.append(f"{without} cells lie in no row of the element table: they are plane")
-    sags = system.coeff[system.used]
-    system.sag = (float(sags.min()), float(sags.max()))        # the control net bounds the surface
+    system.sag = (sag_lo, sag_hi)
     if s.thickness + system.sag[0] < 0.3:
         raise DesignError(f"the lens elements are {-system.sag[0]:.1f} mm deep, more than the lens is thick "
                           f"({s.thickness:g} mm) – a thicker lens, smaller cells or less deflection")
@@ -302,11 +342,15 @@ def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, di
         a = np.linspace(0.0, 2.0 * math.pi, n, endpoint=False)
         mirror["holes"] = [[_loop(s.hole_radius * np.column_stack([np.cos(a), np.sin(a)]))]]
     out.append(("mirror", "Mirror (paraboloid)", mirror))
-    # the outer side of the lens: a plane
-    plane = {"degree_u": 1, "degree_v": 1, "knots_u": [float(lo[0])] * 2 + [float(hi[0])] * 2,
-             "knots_v": [float(lo[1])] * 2 + [float(hi[1])] * 2, "num_u": 2, "num_v": 2,
-             "points": [round(float(c), 8) for y in (lo[0], hi[0]) for z in (lo[1], hi[1])
-                        for c in (s.lens_x + s.thickness + ox, y + oy, z + oz)]}
+    # the outer side of the lens: its shape (a plane is exact; a dome within about 1e-4 mm)
+    count = 4 if s.radius <= 0.0 else 16
+    g = Graph((lo[0], hi[0]), (lo[1], hi[1]), count, count)
+    Y, Z = np.meshgrid(g.sites_p, g.sites_q, indexing="ij")
+    g.interpolate(s.lens_x + s.thickness + system.shape(Y, Z)[0])
+    pts = np.stack([g.coeff + ox, Y + oy, Z + oz], axis=-1)
+    plane = {"degree_u": 3, "degree_v": 3, "knots_u": [float(k) for k in g.knots_p],
+             "knots_v": [float(k) for k in g.knots_q], "num_u": count, "num_v": count,
+             "points": [round(float(c), 8) for c in pts.reshape(-1)]}
     out.append(("lens", "Lens outer side", {"type": "trimmed_surface", "surface": plane,
                                             "outer": [_loop(system.frame)], "label": "lens outer side"}))
     # the cells: Bézier patches of degree 5
