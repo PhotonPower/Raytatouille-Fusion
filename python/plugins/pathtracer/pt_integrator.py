@@ -121,7 +121,7 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         m = scene.tri_material[tri]
         b = beta[idx]
         absorb = mats.absorbs(m, path.channel[idx])
-        inside = (mats.kind[m] == pt_bsdf.GLASS) & (cs < 0) & (absorb > 0)
+        inside = ((mats.kind[m] == pt_bsdf.GLASS) | (mats.kind[m] == pt_bsdf.FROSTED)) & (cs < 0) & (absorb > 0)
         if inside.any():                                     # the segment ran through absorbing glass
             b = np.where(inside, b * np.exp(-absorb * np.sqrt(dist2)), b)
         path.p[k, idx], path.ns[k, idx], path.ng[k, idx], path.wo[k, idx] = p, ns, ng, -dk
@@ -272,7 +272,7 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
             dens_y_rev = None
         else:
             fy, dens_y, dens_y_rev = mats.eval(light.m[s - 1, j], light.ns[s - 1, j], light.wo[s - 1, j], w,
-                                               light.channel[j])
+                                               light.channel[j], radiance=False)
         if t == 1:
             fz, dens_z, pixel = sensor.response(eye.ns[0, j], -w)
             tex = eye.tex[0, j] if pixel is None else pixel

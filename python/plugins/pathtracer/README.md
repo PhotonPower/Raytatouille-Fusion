@@ -22,6 +22,8 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    | `mirror` | reflectance | ideal mirror |
    | `glossy` | reflectance, roughness | a lobe around the mirror direction (normalised Phong, exponent 2/roughness² − 2) |
    | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air. With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
+   | `metal` | reflectance, roughness | a rough metal: microfacets (GGX, width roughness²) that reflect *reflectance* head-on and more at grazing angles – brushed or blasted surfaces, with a highlight that stretches at flat angles (which `glossy` does not show) |
+   | `frosted` | index, roughness, absorption, Abbe number | rough glass: the same microfacets on a dielectric, so light is reflected and refracted into lobes instead of single directions – etched or sand-blasted glass, diffusers of glass. Body closed and in air, as for glass |
    | `detector` | – | no surface for the light – it passes as if the object were not there; only a place to measure the irradiance (a measuring plane in free space). Not visible to the camera, cannot be a source |
 
    *By wavelength* makes a material coloured: the reflectance (for glass: the absorption) at
@@ -138,6 +140,6 @@ diffuse box, a glass plate).
 
 ## Not yet
 
-Continuous spectra and colours, measured materials and rough glass, glass touching glass,
+Continuous spectra and colours, measured materials, glass touching glass,
 a lens
 camera with depth of field, a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).
