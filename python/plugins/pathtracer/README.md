@@ -56,6 +56,16 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    W/(m² sr) in the *Image* window (a pinhole camera; *White at percentile* sets the grey scale).
    Point sources themselves are not visible, the light they cast is.
 
+**How good is it?** The table of *Irradiance* shows the noise of each face's flux, and the log
+the noise of a typical texel or pixel: the standard error in percent, estimated from the spread
+of the batches the result is the mean of. Four times the samples halve it. (Photon mapping
+also blurs; the noise does not show that.)
+
+**Numbers for other programs.** With a file in *Also write to file*, *Irradiance* and *Camera
+image* also write `<file>-irradiance.npz` / `<file>-camera.npz` (NumPy archives): the values, their
+standard errors, the parts per wavelength and a JSON text `info` with the run and the faces –
+`numpy.load(file)["E_<object id>_<face>"]` is the texture of a face in W/m².
+
 *Cancel* stops a computation after the current batch and shows what it has so far.
 `sim.inactive` objects take no part.
 
@@ -98,4 +108,4 @@ Continuous spectra and colours, reflectances that depend on the wavelength, meas
 and rough glass, glass touching glass,
 sources with a measured distribution, a lens
 camera with depth of field, the exact NURBS surface at a hit (instead of the triangle), a
-compiled intersection kernel, keeping results with the document.
+compiled intersection kernel, keeping results with the document (until then: *Also write to file*).

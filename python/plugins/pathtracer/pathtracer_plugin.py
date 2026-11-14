@@ -73,6 +73,10 @@ class PathTracerPlugin(Plugin):
                                   group="Computation",
                                   description="Largest distance of the triangles from the surfaces"),
         "seed": Param.integer(1, min=0, label="Random seed", group="Computation"),
+        "export": Param.file("", filter="NumPy archive (*.npz)", save=True, label="Also write to file",
+                             group="Computation",
+                             description="Irradiance and Camera image also write their numbers (values, standard "
+                                         "errors, per wavelength) as <file>-irradiance.npz / <file>-camera.npz"),
         "per_wavelength": Param.boolean(False, label="Also per wavelength", group="Computation",
                                         description="Besides the sum over all wavelengths, a texture / an image for "
                                                     "each wavelength of the sources"),
@@ -179,6 +183,28 @@ class PathTracerPlugin(Plugin):
         note = "" if out["samples"] >= p["samples"] else f" (stopped at {out['samples']:,} samples)"
         return out, note
 
+    @staticmethod
+    def _noise(ctx, out: dict, what: str) -> None:
+        noise = pt_setup.typical_noise(out["values"], out["error"])
+        if np.isfinite(noise):
+            ctx.log(f"noise of a typical {what}: {100 * noise:.2g} % (standard error; four times the samples "
+                    f"halve it)")
+
+    @staticmethod
+    def _info(ctx, scene, out: dict) -> dict:
+        p = ctx.params
+        return {"method": p["method"], "samples": out["samples"], "longest_path": p["depth"], "seed": p["seed"],
+                "flux_W": scene.flux, "wavelengths": [float(nm) for nm in scene.wavelengths]}
+
+    @staticmethod
+    def _export(ctx, write) -> None:
+        path = ctx.params["export"].strip()
+        if path:
+            try:
+                ctx.log(f"written: {write(path)}")
+            except OSError as e:
+                raise UserError(f"Cannot write {path}: {e}") from None
+
     @action("Irradiance", description="Irradiance as a texture on the faces (W/m²), with the chosen method")
     def irradiance(self, ctx):
         p = ctx.params
@@ -188,7 +214,7 @@ class PathTracerPlugin(Plugin):
         except ValueError as e:
             raise UserError(str(e)) from None
         out, note = self._render(ctx, scene, sensor, "Irradiance")
-        faces = pt_setup.irradiance(sensor, out["values"])
+        faces = pt_setup.irradiance(sensor, out["values"], out["error"])
         names = {e["id"]: pt_setup.label(e) for e in ctx.entities()}
         top = max((float(np.nanmax(f["values"])) for f in faces if np.isfinite(f["values"]).any()), default=0.0)
         run = ctx.result_set(f"Irradiance – {p['method']}{note}")
@@ -200,8 +226,12 @@ class PathTracerPlugin(Plugin):
             ctx.field(run, f"E {name}", f["entity"], f["values"], f["w"], f["h"], face=f["face"], unit="W/m²",
                       colormap="inferno", value_range=(0.0, top) if p["common_scale"] and top > 0 else None)
             rows.append([name, f["area"], f["flux"], f["flux"] / f["area"] * 1e6 if f["area"] > 0 else 0.0,
-                         float(finite.max()) if finite.size else 0.0])
-        ctx.table(run, "Irradiance per face", ["Face", "Area / mm²", "Flux / W", "Mean E / W/m²", "Max E / W/m²"], rows)
+                         float(finite.max()) if finite.size else 0.0,
+                         f"{100 * f['noise']:.2g}" if np.isfinite(f["noise"]) else ""])
+        ctx.table(run, "Irradiance per face", ["Face", "Area / mm²", "Flux / W", "Mean E / W/m²", "Max E / W/m²",
+                                               "Noise of the flux / %"], rows)
+        self._noise(ctx, out, "texel")
+        self._export(ctx, lambda path: pt_setup.export_irradiance(path, sensor, out, names, self._info(ctx, scene, out)))
         if p["per_wavelength"] and len(scene.wavelengths) > 1:
             for nm, flux in zip(scene.wavelengths, out["channels"]):
                 for f, row in zip(pt_setup.irradiance(sensor, flux), rows):
@@ -236,6 +266,8 @@ class PathTracerPlugin(Plugin):
                 ctx.image(run, f"Radiance {nm:g} nm – {p['method']}", channel * 1e6, camera.w, camera.h,
                           extent=(0, camera.w, 0, camera.h), x_label="x / pixel", y_label="y / pixel",
                           colormap="grey", unit="W/(m² sr)", description=f"{nm:g} nm{note}")
+        self._noise(ctx, out, "pixel")
+        self._export(ctx, lambda path: pt_setup.export_image(path, camera, out, self._info(ctx, scene, out)))
         return f"Camera image {camera.w} × {camera.h}, {out['samples']:,} samples{note}"
 
     # ------------------------------------------------------------------ previews
