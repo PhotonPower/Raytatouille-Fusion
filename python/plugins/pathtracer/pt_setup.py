@@ -245,6 +245,7 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
     closed = tuple(k for k, e in enumerate(surf) if _kind(e) == "shell")
     scene = pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
     scene.exact = bool(params.get("exact_normals", True))
+    scene.contact = max(scene.contact, 2 * tol)             # touching bodies' triangles differ by the tolerance
     return scene
 
 

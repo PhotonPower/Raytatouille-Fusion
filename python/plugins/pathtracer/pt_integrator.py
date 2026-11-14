@@ -26,8 +26,6 @@ from __future__ import annotations
 
 import numpy as np
 
-import pt_bsdf
-
 METHODS = ("light", "path", "bidir", "photon")
 
 
@@ -60,6 +58,7 @@ class Path:
         self.pf = np.zeros((k, n))
         self.pr = np.zeros((k, n))
         self.spec = np.zeros((k, n), dtype=bool)
+        self.outside = np.ones((k, n))                       # index in front of the vertex's surface (1: air)
         self.valid = np.zeros((k, n), dtype=bool)
         self.point = np.zeros(n, dtype=bool)                 # vertex 0 is a point (no surface)
         self.channel = np.zeros(n, dtype=np.int64)           # number of the path's wavelength
@@ -90,6 +89,10 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
     d = start["d"].copy()
     beta = beta0.copy()
     pdf = start["pdf_dir"].copy()
+    media = np.full((n, MEDIA), -1, dtype=np.int64)          # the glass bodies a path is inside, as entered
+    held = np.zeros(n, dtype=np.int64)
+    ghost = np.full(n, -1, dtype=np.int64)                   # a body just left through a touching one: its
+    #                                                          own surface, a hair ahead, is none any more
     for k in range(1, k_max):
         idx = np.nonzero(alive)[0]
         if not idx.size:
@@ -120,26 +123,70 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         dist2 = np.sum((p - path.p[k - 1, idx]) ** 2, axis=1)
         m = scene.tri_material[tri]
         b = beta[idx]
-        absorb = mats.absorbs(m, path.channel[idx])
-        inside = ((mats.kind[m] == pt_bsdf.GLASS) | (mats.kind[m] == pt_bsdf.FROSTED)) & (cs < 0) & (absorb > 0)
-        if inside.any():                                     # the segment ran through absorbing glass
-            b = np.where(inside, b * np.exp(-absorb * np.sqrt(dist2)), b)
+        glassy = scene.tri_glassy[tri]
+        top = np.where(held[idx] > 0, media[idx, np.maximum(held[idx] - 1, 0)], -1)
+        # the segment ran through the body entered last (a path that began inside one: the body it leaves)
+        medium = np.where(top >= 0, scene.entity_material[np.maximum(top, 0)], m)
+        absorb = np.where((top >= 0) | (glassy & (cs < 0)), mats.absorbs(medium, path.channel[idx]), 0.0)
+        if (absorb > 0).any():
+            b = b * np.exp(-absorb * np.sqrt(dist2))
+        outside = np.ones(len(idx))
+        straight = np.zeros(len(idx), dtype=bool)
+        contact = np.full(len(idx), -1, dtype=np.int64)
+        ending = np.full(len(idx), -1, dtype=np.int64)
+        body = scene.tri_entity[tri]
+        passed, ghost[idx] = ghost[idx], -1
+        if glassy.any():                                     # which medium lies in front of this surface?
+            g = np.nonzero(glassy)[0]
+            rows, own = idx[g], body[g]
+            stack, count = media[rows], held[rows]
+            inside_own = (stack == own[:, None]).any(axis=1)
+            on_top = top[g] == own
+            enters = cs[g] > 0
+            below = np.where(count >= 2, stack[np.arange(len(g)), np.maximum(count - 2, 0)], -1)
+            # entering a body the path is in already (it touched the one before), or leaving one
+            # that is not the innermost (two bodies overlap a little): no surface for the light
+            straight[g] = np.where(enters, inside_own, (inside_own & ~on_top) | (passed[g] == own))
+            beyond = np.where(enters, top[g], np.where(on_top, below, top[g]))
+            ask = ~enters & ~straight[g] & (beyond < 0)       # out into air – or into a body that touches?
+            if ask.any():
+                beyond[ask] = scene.touching(p[g[ask]], dk[g[ask]], own[ask])
+                contact[g[ask]] = beyond[ask]
+            ask = enters & ~straight[g] & (top[g] >= 0)       # into a body from inside another: does that end here?
+            if ask.any():
+                ending[g[ask]] = scene.touching(p[g[ask]], dk[g[ask]], top[g][ask], ends=True)
+            index = mats._ior(scene.entity_material[np.maximum(beyond, 0)], path.channel[rows])
+            outside[g] = np.where(beyond >= 0, index, 1.0)
+            gone = g[~enters & straight[g]]                  # left a body that was not the innermost
+            _leave(media, held, idx[gone], body[gone])
         path.p[k, idx], path.ns[k, idx], path.ng[k, idx], path.wo[k, idx] = p, ns, ng, -dk
+        path.outside[k, idx] = outside
         path.m[k, idx] = m
         if sensor is not None and not sensor.camera:
             path.tex[k, idx] = sensor.texel(tri, uv)
         path.src[k, idx] = scene.face_source[mesh.face[tri]]
         path.beta[k, idx] = b
         path.pf[k, idx] = pdf[idx] * np.abs(cs) / dist2
-        spec = mats.specular(m)
+        spec = mats.specular(m) | straight
         path.spec[k, idx] = spec
         path.valid[k, idx] = True
         if k == k_max - 1:
             break
-        wi, weight, pd = mats.sample(m, ns, -dk, rng, radiance, path.channel[idx])
-        _, _, p_rev = mats.eval(m, ns, -dk, wi, path.channel[idx])
+        wi, weight, pd = mats.sample(m, ns, -dk, rng, radiance, path.channel[idx], outside, straight)
+        _, _, p_rev = mats.eval(m, ns, -dk, wi, path.channel[idx], outside=outside)
         path.pr[k - 1, idx] = p_rev * path.cos(k - 1, idx, dk) / dist2
         ok = (weight > 0) & (_dot(ns, wi) * _dot(ng, wi) > 0)
+        through = glassy & ~straight & (_dot(ns, wi) * cs < 0)           # the path went through the surface
+        if through.any():
+            out_ = through & (cs < 0)
+            _leave(media, held, idx[out_], body[out_])
+            swap = through & (cs > 0) & (ending >= 0)        # the body it was in ended at this surface
+            _leave(media, held, idx[swap], ending[swap])
+            ghost[idx[swap]] = ending[swap]
+            into = np.where(through & (cs > 0), body, np.where(out_, contact, -1))
+            rows = idx[into >= 0]
+            media[rows, np.minimum(held[rows], MEDIA - 1)] = into[into >= 0]
+            held[rows] = np.minimum(held[rows] + 1, MEDIA)
         if stop_rough:
             ok &= spec
         if k >= 3:                                           # Russian roulette on dim paths
@@ -150,6 +197,24 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         d[idx] = wi
         pdf[idx] = pd
         alive[idx] = ok
+
+
+MEDIA = 4            # glass bodies a path can be inside of at once
+
+
+def _leave(media: np.ndarray, held: np.ndarray, rows: np.ndarray, body: np.ndarray) -> None:
+    """Takes `body` off the list of bodies the paths `rows` are inside (if it is on it)."""
+    if not len(rows):
+        return
+    stack = media[rows]
+    hit = stack == body[:, None]
+    found = hit.any(axis=1)
+    at = hit.argmax(axis=1)
+    for c in range(MEDIA - 1):
+        stack[:, c] = np.where(found & (c >= at), stack[:, c + 1], stack[:, c])
+    stack[found, MEDIA - 1] = -1
+    media[rows] = stack
+    held[rows] -= found
 
 
 def _crossings(scene, sensor, path: Path, k: int, idx, o, d, tmax, pdf, beta) -> list[dict]:
@@ -272,14 +337,14 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
             dens_y_rev = None
         else:
             fy, dens_y, dens_y_rev = mats.eval(light.m[s - 1, j], light.ns[s - 1, j], light.wo[s - 1, j], w,
-                                               light.channel[j], radiance=False)
+                                               light.channel[j], radiance=False, outside=light.outside[s - 1, j])
         if t == 1:
             fz, dens_z, pixel = sensor.response(eye.ns[0, j], -w, eye.p[0, j])
             tex = eye.tex[0, j] if pixel is None else pixel
             dens_z_rev = None
         else:
             fz, dens_z, dens_z_rev = mats.eval(eye.m[t - 1, j], eye.ns[t - 1, j], eye.wo[t - 1, j], -w,
-                                               light.channel[j])
+                                               light.channel[j], outside=eye.outside[t - 1, j])
             tex = eye.tex[0, j]
         cy, cz = light.cos(s - 1, j, w), eye.cos(t - 1, j, w)
         c = light.beta[s - 1, j] * fy * cy * cz / np.where(near, dist2, 1.0) * fz * eye.beta[t - 1, j]

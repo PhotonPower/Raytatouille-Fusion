@@ -21,7 +21,7 @@ wavelengths, the results are sums over them or one per wavelength; no colours.
    | `diffuse` | reflectance, transmittance | Lambertian reflection; with a transmittance also diffuse transmission (a diffuser sheet) |
    | `mirror` | reflectance | ideal mirror |
    | `glossy` | reflectance, roughness | a lobe around the mirror direction (normalised Phong, exponent 2/roughness² − 2) |
-   | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air. With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
+   | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed. Glass bodies may touch (a cemented pair: one surface between the two glasses, no air – faces within twice the mesh tolerance count as touching) and lie inside one another (a lens in a liquid). With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
    | `metal` | reflectance, roughness | a rough metal: microfacets (GGX, width roughness²) that reflect *reflectance* head-on and more at grazing angles – brushed or blasted surfaces, with a highlight that stretches at flat angles (which `glossy` does not show) |
    | `frosted` | index, roughness, absorption, Abbe number | rough glass: the same microfacets on a dielectric, so light is reflected and refracted into lobes instead of single directions – etched or sand-blasted glass, diffusers of glass. Body closed and in air, as for glass |
    | `detector` | – | no surface for the light – it passes as if the object were not there; only a place to measure the irradiance (a measuring plane in free space). Not visible to the camera, cannot be a source |
@@ -143,5 +143,5 @@ diffuse box, a glass plate).
 
 ## Not yet
 
-Continuous spectra and colours, measured materials, glass touching glass,
-a compiled intersection kernel, keeping results with the document (until then: *Also write to file*).
+Continuous spectra and colours, measured materials, sources and cameras inside glass, a compiled
+intersection kernel, keeping results with the document (until then: *Also write to file*).

@@ -83,8 +83,13 @@ class Scene:
         self.size = float(np.linalg.norm(hi - lo))
         self.eps = 1e-7 * max(self.size, 1e-12)
         self.flipped = self._orient(closed) if len(closed) else []
-        self.face_material = np.asarray(entity_material, dtype=np.int64)[mesh.face_entity]
+        self.entity_material = np.asarray(entity_material, dtype=np.int64)
+        self.face_material = self.entity_material[mesh.face_entity]
         self.tri_material = self.face_material[mesh.face]
+        self.tri_entity = mesh.face_entity[mesh.face]
+        kinds = materials.kind[self.tri_material]
+        self.tri_glassy = (kinds == pt_bsdf.GLASS) | (kinds == pt_bsdf.FROSTED)
+        self.contact = 1e-5 * self.size       # glass bodies whose surfaces lie this close touch (no air between)
         # detectors are no surfaces for the light: they get a BVH of their own, used only to find
         # where rays cross them
         virtual = materials.kind[self.tri_material] == pt_bsdf.DETECTOR
@@ -111,6 +116,26 @@ class Scene:
             return np.zeros(len(o), dtype=bool)
         return self.bvh.intersect(o, target - o, 1.0, any_hit=True,
                                   accept=self._accept if self.mesh.masks.size else None)[1] >= 0
+
+    def touching(self, p: np.ndarray, d: np.ndarray, body: np.ndarray, ends: bool = False) -> np.ndarray:
+        """Glass surfaces within `contact` of the points p along the directions d. Default: where
+        rays leave the bodies `body` – the other glass body whose surface they enter there (its
+        entity; -1: none, air). ends: where rays inside the bodies `body` enter another – whether
+        `body` ends there too (its entity; -1: it goes on, the other lies inside it)."""
+        if self.bvh is None or self.contact <= 0 or not len(p):
+            return np.full(len(p), -1, dtype=np.int64)
+        masked = bool(self.mesh.masks.size)
+
+        def accept(ray, t, b1, b2):
+            facing = np.einsum("ij,ij->i", self.mesh.ng[t], d[ray])
+            if ends:
+                ok = (self.tri_entity[t] == body[ray]) & (facing > 0)
+            else:
+                ok = self.tri_glassy[t] & (self.tri_entity[t] != body[ray]) & (facing < 0)
+            return ok & self.mesh.accept(t, b1, b2) if masked else ok
+
+        _, tri, _, _ = self.bvh.intersect(p - d * self.contact, d, 2 * self.contact, accept=accept)
+        return np.where(tri >= 0, self.tri_entity[np.maximum(tri, 0)], -1)
 
     def crossing(self, o: np.ndarray, d: np.ndarray, tmax: np.ndarray):
         """Nearest crossing of a detector before tmax: t, triangle (-1: none), b1, b2."""

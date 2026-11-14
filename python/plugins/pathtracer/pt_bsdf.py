@@ -149,12 +149,13 @@ class Materials:
         return self.ior_table[m, channel]
 
     def eval(self, m: np.ndarray, n: np.ndarray, wo: np.ndarray, wi: np.ndarray, channel=None,
-             radiance: bool = True):
+             radiance: bool = True, outside=None):
         """f(wo, wi) in 1/sr and the densities (per solid angle) of sampling wi from wo and wo
         from wi. Zero for specular materials. channel: number of each path's wavelength.
         radiance: wo points towards the sensor and the light arrives from wi (a vertex of an eye
         subpath); False: the light arrives from wo (a vertex of a light subpath) – it matters
-        for refraction through frosted glass, where radiance changes with the square of the index."""
+        for refraction through frosted glass, where radiance changes with the square of the index.
+        outside: the index in front of each surface (default 1, air; another glass that touches)."""
         k = self.kind[m]
         co = np.einsum("ij,ij->i", n, wo)
         ci = np.einsum("ij,ij->i", n, wi)
@@ -196,9 +197,10 @@ class Materials:
         if t.size:
             alpha = self.alpha[m[t]]
             ior = self._ior(m[t], None if channel is None else channel[t])
-            eta_o = np.where(co[t] > 0, 1.0, ior)             # index on the side of wo, of wi, beyond wo's side
-            eta_i = np.where(ci[t] > 0, 1.0, ior)
-            beyond = np.where(co[t] > 0, ior, 1.0)
+            front = 1.0 if outside is None else outside[t]
+            eta_o = np.where(co[t] > 0, front, ior)           # index on the side of wo, of wi, beyond wo's side
+            eta_i = np.where(ci[t] > 0, front, ior)
+            beyond = np.where(co[t] > 0, ior, front)
             h = np.where(same[t][:, None], wo[t] + wi[t], eta_o[:, None] * wo[t] + eta_i[:, None] * wi[t])
             length = np.linalg.norm(h, axis=1)
             h = h / np.maximum(length, 1e-300)[:, None]
@@ -222,11 +224,13 @@ class Materials:
 
     # ------------------------------------------------------------------ sampling
     def sample(self, m: np.ndarray, n: np.ndarray, wo: np.ndarray, rng: np.random.Generator, radiance: bool,
-               channel: np.ndarray | None = None):
+               channel: np.ndarray | None = None, outside=None, straight=None):
         """A scattered direction wi for each point: (wi, weight, pdf) with weight = f |cos| / pdf
         (0: absorbed) and pdf per solid angle (0 for specular materials). `radiance`: the path
         comes from the sensor (refraction then scales by the squared ratio of the indices).
-        `channel`: number of each path's wavelength (see wavelengths())."""
+        `channel`: number of each path's wavelength (see wavelengths()). outside: the index in
+        front of each surface (default 1). straight: where the path goes on unchanged (a surface
+        between two parts of the same medium)."""
         count = len(m)
         k = self.kind[m]
         co = np.einsum("ij,ij->i", n, wo)
@@ -273,7 +277,8 @@ class Materials:
             g_o = _g1(alpha, co[g])
             metal = k[g] == METAL
             ior = self._ior(m[g], None if channel is None else channel[g])
-            eta = np.where(co[g] >= 0, 1.0 / ior, ior)             # n(side of wo) / n(other side)
+            front = 1.0 if outside is None else outside[g]
+            eta = np.where(co[g] >= 0, front / ior, ior / front)   # n(side of wo) / n(other side)
             f0 = self._rho(m[g], None if channel is None else channel[g])
             fresnel = np.where(metal, f0 + (1 - f0) * (1 - woh) ** 5, _fresnel(woh, eta))
             reflect = metal | (u3[g] < fresnel)
@@ -286,8 +291,8 @@ class Materials:
             wi[g] = w
             weight[g] = np.where(ok, g_i * np.where(metal, fresnel, np.where(reflect | (not radiance), 1.0, eta ** 2)),
                                  0.0)
-            eta_o = np.where(co[g] >= 0, 1.0, ior)
-            eta_i = np.where(co[g] >= 0, ior, 1.0)
+            eta_o = np.where(co[g] >= 0, front, ior)
+            eta_i = np.where(co[g] >= 0, ior, front)
             with np.errstate(divide="ignore", invalid="ignore"):
                 through = (1 - fresnel) * g_o * woh * dist / aco * eta_i ** 2 * cos_t / (eta_o * woh - eta_i * cos_t) ** 2
             pdf[g] = np.where(reflect, np.where(metal, 1.0, fresnel) * g_o * dist / (4 * aco),
@@ -295,7 +300,8 @@ class Materials:
         t = np.nonzero(k == GLASS)[0]
         if t.size:
             ior = self._ior(m[t], None if channel is None else channel[t])
-            eta = np.where(co[t] >= 0, 1.0 / ior, ior)             # n(side of wo) / n(other side)
+            front = 1.0 if outside is None else outside[t]
+            eta = np.where(co[t] >= 0, front / ior, ior / front)   # n(side of wo) / n(other side)
             cos_o = np.abs(co[t])
             sin2 = eta ** 2 * (1 - cos_o ** 2)
             cos_t = np.sqrt(np.clip(1 - sin2, 0.0, None))
@@ -306,6 +312,8 @@ class Materials:
             refr = -eta[:, None] * wo[t] + (eta * cos_o - cos_t)[:, None] * nn
             wi[t] = np.where(reflect[:, None], refl, refr)
             weight[t] = np.where(reflect | (not radiance), 1.0, eta ** 2)
+        if straight is not None and straight.any():
+            wi[straight], weight[straight], pdf[straight] = -wo[straight], 1.0, 0.0
         return wi, weight, pdf
 
 

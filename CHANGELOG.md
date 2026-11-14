@@ -63,6 +63,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   lumens; results in lx and cd/m² (weighted with V(λ)).
   Materials `metal` (rough metal) and `frosted` (rough glass): GGX microfacets.
   Camera with a lens: sharp at a focus distance, blurred elsewhere.
+  Glass bodies that touch (cemented surfaces) or lie inside one another (immersion).
 - **Camera image** (Raytracer): the irradiance on the last surface of each path from many rays
   (default 200 000 per field and wavelength, millions possible), square pixels over the
   sensor, shown in the new **Image** window and optionally on the surface in 3D. The quick

@@ -709,6 +709,51 @@ try:
 except ValueError as e:
     assert "must not be negative" in str(e), e
 
+# ---- glass at glass: bodies that touch have one surface between them (no air), a body inside another
+# is in that medium. A narrow beam through plates, against the sum over all reflections between the
+# surfaces: 1 / T − 1 = sum of R / (1 − R)
+glasses = pt_bsdf.Materials.from_rows([
+    {"name": "crown", "kind": "glass", "ior": 1.5}, {"name": "flint", "kind": "glass", "ior": 1.7},
+    {"name": "water", "kind": "glass", "ior": 1.33}, {"name": "dyed", "kind": "glass", "ior": 1.33, "absorption": 0.01},
+    {"name": "black", "kind": "absorber"}])
+
+
+def through_plates(bodies, kinds, contact=0.02, method="light", samples=30_000):
+    """The share of a beam along +z that arrives behind the bodies (boxes given by z from, z to, half width)."""
+    parts = [box((-w, -w, z0), (w, w, z1)) for z0, z1, w in bodies]
+    parts += [rect((-1, -1, -20), (2, 0, 0), (0, 2, 0)), rect((-40, -40, 80), (80, 0, 0), (0, 80, 0))]
+    mesh_ = pt_mesh.build([{"id": k + 1, "geometry": g} for k, g in enumerate(parts)], 1e-3)
+    scene_ = pt_scene.Scene(mesh_, glasses, np.array(list(kinds) + [4, 4]),
+                            [pt_scene.SourceSpec("beam", 1.0, 0.5, "front", entities=(len(bodies),))],
+                            tuple(range(len(bodies))))
+    scene_.contact = contact
+    sensor_ = pt_scene.TexelSensor(scene_, [6 * len(bodies) + 1], 2)
+    return pt_integrator.render(scene_, sensor_, method, samples, 40, seed=SEED)["values"].sum()
+
+
+def all_orders(*reflectances):
+    return 1 / (1 + sum(r / (1 - r) for r in reflectances))
+
+
+def fresnel0(n1, n2):
+    return ((n1 - n2) / (n1 + n2)) ** 2
+
+
+one = all_orders(fresnel0(1, 1.5), fresnel0(1.5, 1))
+assert abs(through_plates([(0, 10, 50), (10, 20, 50)], [0, 0]) - one) < 0.01              # two plates of crown that
+assert abs(through_plates([(0, 10, 50), (10, 20, 50)], [0, 0], method="bidir", samples=10_000) - one) < 0.015   # touch: one
+doublet = all_orders(fresnel0(1, 1.5), fresnel0(1.5, 1.7), fresnel0(1.7, 1))
+for second in (10.0, 9.996, 10.004):                                 # touching, overlapping a little, a hair apart
+    assert abs(through_plates([(0, 10, 50), (second, 20, 50)], [0, 1]) - doublet) < 0.01, second
+    assert abs(through_plates([(second, 20, 50), (0, 10, 50)], [1, 0]) - doublet) < 0.01, second     # (other order)
+apart = all_orders(fresnel0(1, 1.5), fresnel0(1.5, 1), fresnel0(1, 1.7), fresnel0(1.7, 1))
+assert abs(through_plates([(0, 10, 50), (11, 21, 50)], [0, 1]) - apart) < 0.01 and doublet - apart > 0.03       # air between
+immersed = all_orders(fresnel0(1, 1.33), fresnel0(1.33, 1.5), fresnel0(1.5, 1.33), fresnel0(1.33, 1))
+assert abs(through_plates([(0, 30, 50), (10, 20, 30)], [2, 0]) - immersed) < 0.01          # crown in water
+assert abs(through_plates([(10, 20, 30), (0, 30, 50)], [0, 2]) - immersed) < 0.01
+dyed = through_plates([(0, 30, 50), (10, 20, 30)], [3, 0])           # the water absorbs on its 20 mm, the crown not
+assert abs(dyed / (immersed * math.exp(-0.2)) - 1) < 0.015, dyed
+
 # ---- samples steered by weights: any shares of the texels / pixels give the same values – here
 # shares that differ by up to a factor of 100, on the plane under the point source
 shares = np.random.default_rng(5).uniform(0.01, 1.0, 16)
