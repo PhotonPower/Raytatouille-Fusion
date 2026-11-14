@@ -180,6 +180,10 @@ class AutomotiveLighting(Plugin):
                                     description="the table of Light distribution: the low beam's points, or the "
                                                 "standard light distribution of a signal lamp (UN R148) with its "
                                                 "minimum on the axis and its maximum"),
+        "shadows": Param.boolean(True, label="Shadows of the steps", group="Analysis",
+                                 description="facetted reflector with connecting faces: a ray that a step of the "
+                                             "mirror stops – on its way from the coil or after the reflection – is "
+                                             "left out of the light distribution (takes longer)"),
         "sampling": Param.number(1.0, min=0.2, max=10.0, decimals=2, unit="mm", label="Mirror points every",
                                  group="Analysis", description="lattice of the light distribution"),
         "image_points": Param.integer(150, min=1, max=5000, label="Filament images (number)", group="Analysis"),
@@ -380,7 +384,11 @@ class AutomotiveLighting(Plugin):
         else:
             dist = al_photometry.light_distribution(
                 r, spacing=float(ctx.params["sampling"]), reflectance=float(ctx.params["reflectance"]),
-                reflectance_connections=float(ctx.params["reflectance_connections"]), progress=progress, **field)
+                reflectance_connections=float(ctx.params["reflectance_connections"]),
+                shadows=bool(ctx.params["shadows"]), progress=progress, **field)
+            if ctx.params["shadows"] and r.transitions is not None:
+                ctx.log(f"shadows of the steps: {dist.flux_shadow:.0f} lm of the light onto the mirror are stopped "
+                        f"by a step ({100.0 * dist.flux_shadow / max(dist.flux_mirror, 1e-9):.1f} %)")
         run = ctx.result_set(f"Low beam {r.settings.lamp.name}")
         ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
                   extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
