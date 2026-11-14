@@ -12,7 +12,8 @@ refraction there, and the inner surface must have the normal
 
 which gives its slopes ∂x/∂y and ∂x/∂z; they are integrated over the cell (through its centre) and
 the cell's surface is the Bézier patch of degree 5 closest to that. The cells are independent:
-steps remain between them (the walls between the elements are not modelled).
+between neighbours a step remains, closed by a wall along X. A ray that meets a wall – in the air
+before the elements or in the glass behind them – is lost for the beam.
 
 The lens may lean back (rake), run back to one side (sweep) and be domed (a sphere's radius): its
 outer side is that shape, its inner side the same shape `thickness` behind it (measured along X)
@@ -174,10 +175,44 @@ class LensSystem:
         dz = np.sum(np.matmul(C, Db[:, :, None])[:, :, 0] * Ba, axis=1) / s.cell_height
         return sag, dy, dz, inside, self.whole[iy, iz]
 
+    def cell(self, y, z):
+        """Indices of the cell at points and whether it is one of the lens."""
+        s = self.settings
+        iy = np.floor((y - self.y0) / s.cell_width).astype(int)
+        iz = np.floor((z - self.z0) / s.cell_height).astype(int)
+        inside = (iy >= 0) & (iy < self.ny) & (iz >= 0) & (iz < self.nz)
+        return iy, iz, inside & self.used[np.clip(iy, 0, self.ny - 1), np.clip(iz, 0, self.nz - 1)]
+
+    def _wall(self, start: np.ndarray, v: np.ndarray, end_yz: tuple, in_air: bool) -> np.ndarray:
+        """Whether straight paths from `start` (n, 3) along v to the points end_yz meet a wall between
+        two elements: where a path passes from one cell to its neighbour it must still be in the air
+        before both surfaces (in_air) or already in the glass behind both."""
+        s = self.settings
+        ia, ja, used_a = self.cell(start[:, 1], start[:, 2])
+        ib, jb, used_b = self.cell(*end_yz)
+        moved = ((ia != ib) | (ja != jb)) & used_a & used_b
+        hit = moved & ((np.abs(ia - ib) + np.abs(ja - jb)) > 1)             # across a corner or a whole cell
+        for axis, (a, b, first, size) in enumerate(((ia, ib, self.y0, s.cell_width), (ja, jb, self.z0, s.cell_height))):
+            rows = np.flatnonzero(moved & ~hit & (a != b))
+            if not len(rows):
+                continue
+            border = first + np.maximum(a[rows], b[rows]) * size
+            along = v[rows, 1 + axis]
+            tau = (border - start[rows, 1 + axis]) / np.where(along != 0.0, along, 1.0)
+            point = start[rows] + tau[:, None] * v[rows]
+            side = np.where(b[rows] > a[rows], 1.0, -1.0) * 1e-7 * size      # just beyond the border
+            before, behind = point[:, 1:].copy(), point[:, 1:].copy()
+            before[:, axis] -= side
+            behind[:, axis] += side
+            x = point[:, 0] - s.lens_x
+            h0, h1 = self.inner(before[:, 0], before[:, 1])[0], self.inner(behind[:, 0], behind[:, 1])[0]
+            hit[rows] = (x > np.minimum(h0, h1) - 1e-9) if in_air else (x < np.maximum(h0, h1) + 1e-9)
+        return hit
+
     def through(self, origins: np.ndarray, d: np.ndarray, transmittance: float = 1.0):
-        """Rays (origins (n, 3), unit directions (n, 3)) through the lens: the directions behind it
-        and a factor per ray – `transmittance`, or 0 for a ray that misses the lens or is totally
-        reflected in it."""
+        """Rays (origins (n, 3), unit directions (n, 3)) through the lens: the directions behind it,
+        a factor per ray – `transmittance`, or 0 for a ray that misses the lens, meets a wall between
+        two elements or is totally reflected – and which rays met a wall."""
         s = self.settings
         forward = d[:, 0] > 1e-6
         dx = np.where(forward, d[:, 0], 1.0)
@@ -208,7 +243,20 @@ class LensSystem:
         cut = np.flatnonzero(ok & ~whole)                                   # only cells at the rim need the outline
         if len(cut):
             ok[cut] = al_layout.contains(self._outline, np.column_stack([y[cut], z[cut]]))
-        return out, np.where(ok, transmittance, 0.0)
+        # walls: the path in the air from where the elements begin, and in the glass to where they end
+        form = s.lens_x + self.shape(y, z)[0]
+        hit = np.column_stack([x_in, y, z])
+        back = np.maximum(x_in - (form + self.sag[0] - 0.01), 0.0) / dx
+        wall = self._wall(hit - back[:, None] * d, d, (y, z), True)
+        # a ray that finds no surface point in one cell – the point it is sent to lies in the next
+        # one, whose surface lies elsewhere – runs into the wall between the two
+        ia, ja, _ = self.cell(y, z)
+        ib, jb, _ = self.cell(origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2])
+        wall |= (ia != ib) | (ja != jb)
+        on = np.maximum(form + self.sag[1] + 0.01 - x_in, 0.0) / gx
+        wall |= self._wall(hit, glass, (y + on * glass[:, 1], z + on * glass[:, 2]), False)
+        wall &= ok
+        return out, np.where(ok & ~wall, transmittance, 0.0), wall
 
     @property
     def _outline(self) -> np.ndarray:
@@ -377,4 +425,36 @@ def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, di
                 if not whole:
                     face["outer"] = [_loop(piece)]
                 out.append(("element", f"Lens element {i}.{j}", face))
+    # the walls between neighbouring cells: ruled along X between the two patches' rims
+    outline = al_layout.simplified(system.frame, 0.05)
+    fraction = np.arange(DEGREE + 1) / DEGREE
+    for i in range(system.ny):
+        for j in range(system.nz):
+            if not system.used[i, j]:
+                continue
+            ya, za = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
+            yb, zb = ya + s.cell_width, za + s.cell_height
+            for (ni, nj), mine, theirs, fixed, lo_v, hi_v, across in (
+                    ((i + 1, j), system.coeff[i, j, DEGREE, :], None, yb, za, zb, False),
+                    ((i, j + 1), system.coeff[i, j, :, DEGREE], None, zb, ya, yb, True)):
+                if ni >= system.ny or nj >= system.nz or not system.used[ni, nj]:
+                    continue
+                theirs = system.coeff[ni, nj, :, 0] if across else system.coeff[ni, nj, 0, :]
+                if np.abs(mine - theirs).max() < 1e-6:
+                    continue                                                # no step here
+                v = lo_v + (hi_v - lo_v) * np.linspace(0.0, 1.0, 33)
+                line = np.column_stack([v, np.full(33, fixed)] if across else [np.full(33, fixed), v])
+                on = v[al_layout.contains(outline, line)]
+                if len(on) < 2:
+                    continue
+                ctrl = [(s.lens_x + edge[b] + ox, (lo_v + (hi_v - lo_v) * fraction[b] if across else fixed) + oy,
+                         (fixed if across else lo_v + (hi_v - lo_v) * fraction[b]) + oz)
+                        for edge in (mine, theirs) for b in range(DEGREE + 1)]
+                wall = {"degree_u": 1, "degree_v": DEGREE, "knots_u": [0.0, 0.0, 1.0, 1.0],
+                        "knots_v": [lo_v] * (DEGREE + 1) + [hi_v] * (DEGREE + 1), "num_u": 2, "num_v": DEGREE + 1,
+                        "points": [round(float(c), 8) for p in ctrl for c in p]}
+                face = {"type": "trimmed_surface", "surface": wall, "label": f"lens wall {i}.{j}|{ni}.{nj}"}
+                if on[0] > lo_v or on[-1] < hi_v:                           # the outline ends the wall
+                    face["outer"] = [_loop(np.array([[0.0, on[0]], [1.0, on[0]], [1.0, on[-1]], [0.0, on[-1]]]))]
+                out.append(("wall", f"Lens wall {i}.{j}|{ni}.{nj}", face))
     return out
