@@ -433,8 +433,8 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
 
     def strip_region(zi: int, k: int, zone_polys, widths=(0.0, 0.0)) -> list[np.ndarray]:
         polys = zone_polys
-        for curve in (al_layout.strip_curve(frames[zi], (k - 0.5) * s.strip_width, True, widths[0]),
-                      al_layout.strip_curve(frames[zi], (k + 0.5) * s.strip_width, False, widths[1])):
+        for curve in (al_layout.strip_curve(frames[zi], (k - 0.5 + s.strip_shift) * s.strip_width, True, widths[0]),
+                      al_layout.strip_curve(frames[zi], (k + 0.5 + s.strip_shift) * s.strip_width, False, widths[1])):
             if curve is None:
                 continue
             polys = [] if isinstance(curve, str) else al_layout.clip_all(polys, curve)
@@ -456,7 +456,7 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
         frame, existing = frames[zi], strips_of[zi]
 
         def who(y, z):
-            k = np.floor(frame.strip_coordinate(*frame.pq(y, z)) / s.strip_width + 0.5).astype(int)
+            k = np.floor(frame.strip_coordinate(*frame.pq(y, z)) / s.strip_width + 0.5 - s.strip_shift).astype(int)
             return existing[np.argmin(np.abs(np.ravel(k)[:, None] - existing[None, :]), axis=1)].reshape(np.shape(y))
 
         return who
@@ -512,7 +512,7 @@ def build(reflector, draft_deg: float, radius: float, progress=None) -> Transiti
     for count, (zi, k) in enumerate(pairs2):
         if progress is not None:
             progress(0.3 + 0.4 * count / max(len(pairs2), 1), "connecting the strips …")
-        border = strip_border(frames[zi], (k - 0.5) * s.strip_width)
+        border = strip_border(frames[zi], (k - 0.5 + s.strip_shift) * s.strip_width)
         # the stations cover the band at its full width (it may end askew at a ray or the frame)
         near = al_layout.outside_hole(_within(border, s.margin, regions[zi]), s.hole_radius)
         u_range = _u_range(border, near)

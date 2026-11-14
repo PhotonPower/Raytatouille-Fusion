@@ -60,7 +60,7 @@ for branch in (al_optics.HORIZONTAL, al_optics.RISING):
     top = (al_photometry.reflect(d, n[:, None, :]) @ m).max(axis=1)
     assert top.max() < 1e-9 and top.min() > -2e-5, (top.min(), top.max())
     one = al_design._normal_scalar(*P[0], m, fil.axis, fil.half_length, fil.radius, float(aims[0]))
-    assert np.allclose(one, n[0], atol=1e-12)
+    assert np.allclose(one[:3], n[0], atol=1e-12)
 
 # ---- a facet: the characteristic strips keep F = 0 and form a surface with their normals
 m = cut.plane(al_optics.RISING)
@@ -97,7 +97,6 @@ assert wall.aim_limited and not facet.aim_limited
 x, n = wall.evaluate(np.array([79.0]), np.array([21.0]))
 chief = al_photometry.reflect(np.array([[x[0], 79.0, 21.0]]) / np.linalg.norm([x[0], 79.0, 21.0]), n)
 assert tan(-40) < al_optics.screen(chief)[0][0] < tan(-10)                  # further right than asked, still left
-assert "H3" not in al_optics.LAMPS                                          # transverse coils: not yet
 
 # ---- polygons: clipping with lines and circles
 square = np.array([[-10.0, -10.0], [10.0, -10.0], [10.0, 10.0], [-10.0, 10.0]])
@@ -331,6 +330,26 @@ pts = al_spline.curve_points(circle)
 assert np.allclose(np.hypot(pts[:, 1], pts[:, 2]), 40.0) and np.allclose(pts[:, 0], 5.0)
 
 
+# ---- a coil across the axis (H3, a fog lamp): a strip border on the lamp axis, every facet on one side of
+# the line where it looks straight ahead; the strips change the coil's end where they cross the axis' level
+h3 = al_optics.LAMPS["H3"]
+fog_cut = al_optics.Cutoff(v_deg=-1.15, rise_deg=0.0)
+fog = al_reflector.build(al_reflector.Settings(h3, fog_cut, (al_layout.Zone(0.0, 360.0, al_optics.HORIZONTAL, 20.0, -20.0),),
+                                               strip_width=10.0, hole_radius=10.0),
+                         al_layout.rounded_rectangle(100.0, 56.0, 10.0))
+assert fog.settings.strip_shift == 0.5 and {c.strip for c in fog.cells} >= {-1, 0}
+assert all(abs(c.spec.c_range[0] / 10.0 - round(c.spec.c_range[0] / 10.0)) < 1e-9 for c in fog.cells)   # borders at k · width
+held = {c.name for c, f in zip(fog.cells, fog.facets) if f.aim_limited}
+assert fog.cutoff_error < 0.1 and held == {"1.-1", "1.0"}, (fog.cutoff_error, held)   # the two beside the lamp axis
+Pf, Nf, _, _ = fog.samples(2.0, kinds=(al_reflector.FACET,))
+Qf = al_optics.Filament.of(h3).outline_samples(90)
+df = Pf[:, None, :] - Qf[None, :, :]
+df /= np.linalg.norm(df, axis=2, keepdims=True)
+top = (al_photometry.reflect(df, Nf[:, None, :]) @ fog_cut.plane(al_optics.HORIZONTAL)).max()
+assert np.degrees(np.arcsin(top)) < 0.1                                     # every image below the cut-off
+fog_dist = al_photometry.light_distribution(fog, spacing=2.0, n_axial=6, n_around=12, reflectance_connections=0.0)
+assert al_photometry.glare(fog_dist, fog_cut) == 0.0 and fog_dist.intensity.max() > 5000
+
 # ---- a patterned lens in front of a paraboloid
 d_in = al_optics.direction(np.array([0.3, -0.1]), np.array([0.2, 0.0]))
 normal = np.array([1.0, 0.0, 0.0])
@@ -555,13 +574,7 @@ ctx.params.update({"lamp": "P21W", "test_points": "stop lamp (S1)"})          # 
 host.results = []
 assert "stop lamp (S1)" in plugin.light_distribution(ctx)
 assert host.results == ["image", "table", "curve", "curve"]
-ctx.params["system"] = al_plugin.CLEAR
-try:
-    plugin.reflector(ctx)
-    raise AssertionError("facets for a transverse coil")
-except al_plugin.UserError as e:
-    assert "along the axis" in str(e)
-ctx.params.update({"lamp": "H7", "test_points": al_plugin.LOW_BEAM})
+ctx.params.update({"system": al_plugin.CLEAR, "lamp": "H7", "test_points": al_plugin.LOW_BEAM})
 # left-hand traffic: the zones are mirrored, the lamp of the panel is used
 ctx.params.update({"traffic": al_plugin.LEFT, "lamp": "H4 (low beam)", "frame_curves": []})
 plugin.set_default_zones(ctx)

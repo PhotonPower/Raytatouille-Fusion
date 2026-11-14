@@ -41,6 +41,7 @@ from al_spline import Graph
 
 
 MIN_ALONG = 0.5        # the strips of a facet keep at least this cosine (60°) to the direction of its strip
+MIN_SIDE = 0.03        # a facet for a coil across the axis keeps its normal's part along the coil at least this
 
 
 class DesignError(ValueError):
@@ -97,7 +98,7 @@ def _normal_scalar(px: float, py: float, pz: float, m, e, ell: float, rho: float
         sigma = new
         if done:
             break
-    return nx, ny, nz
+    return nx, ny, nz, a
 
 
 def cutoff_residual(P: np.ndarray, n: np.ndarray, m: np.ndarray, fil: Filament) -> np.ndarray:
@@ -324,6 +325,43 @@ def build_facet(spec: FacetSpec, fil: Filament, *, step: float = 0.5, knot_spaci
             limited[0] += 1
         return good
 
+    # A coil across the axis. Its image lies along a horizontal cut-off – both ends of the coil
+    # touch – where the mirror's normal has no part along the coil. One such line runs across the
+    # strips near the lamp axis' level; the strips cross it and change the end there (the step is
+    # split). The other runs along the strips, where a facet looks straight ahead sideways: the
+    # strips of its two sides run into each other there. So every facet keeps to one side of it –
+    # the side of its middle at the zone's middle aim – and where its aim would bring it across,
+    # the aim is moved on until it does not.
+    across = abs(float(fil.axis[0])) < 0.5
+    if across:
+        linear_aim = aim_at
+
+        def side_of(a: float, p: float, q: float) -> float:
+            """The normal's part along the coil for the aim a at a point of the base paraboloid."""
+            y, z = fr.yz(p, q)
+            nx, ny, nz, _ = _normal_scalar(base_x(fr.focal, p * p + q * q), y, z, m, fil.axis, fil.half_length,
+                                           fil.radius, a)
+            return nx * fil.axis[0] + ny * fil.axis[1] + nz * fil.axis[2]
+
+        side = 1.0 if side_of(a_mid, float(fr.p_of(0.5 * (c_lo + c_hi), spec.q_start)), spec.q_start) >= 0.0 else -1.0
+
+        def aim_at(p: float, q: float) -> float:        # noqa: F811 – the aim above, kept to one side
+            a = linear_aim(p, q)
+            if side * side_of(a, p, q) >= MIN_SIDE:
+                return a
+            way = 0.02 if side * (side_of(a + 0.02, p, q) - side_of(a - 0.02, p, q)) > 0.0 else -0.02
+            for _ in range(150):
+                a += way
+                if side * side_of(a, p, q) >= MIN_SIDE:
+                    break
+            else:
+                raise DesignError("a facet for a lamp with its filament across the axis cannot keep to one side of "
+                                  "the coil's image here – use narrower strips or aim the zone less widely")
+            s = (fr.strip_coordinate(p, q) - c_lo) / (c_hi - c_lo)
+            if 0.0 <= s <= 1.0:
+                limited[0] += 1
+            return a
+
     # grid along the strips: q_start is a node, the B-spline sites are nodes (knot spacing 3 h)
     h = step
     spans_q = max(1, round(knot_spacing / (3.0 * h)))
@@ -340,7 +378,7 @@ def build_facet(spec: FacetSpec, fil: Filament, *, step: float = 0.5, knot_spaci
 
     def slope_T(p: float, x: float) -> float:
         y, z = fr.yz(p, spec.q_start)
-        nx, ny, nz = _normal_scalar(x, y, z, m, fil.axis, fil.half_length, fil.radius, aim_at(p, spec.q_start))
+        nx, ny, nz, _ = _normal_scalar(x, y, z, m, fil.axis, fil.half_length, fil.radius, aim_at(p, spec.q_start))
         return -(ny * e_p3[1] + nz * e_p3[2]) / nx
 
     def start_curve(p_from: float, n_steps: int, dp: float) -> tuple[np.ndarray, np.ndarray]:
