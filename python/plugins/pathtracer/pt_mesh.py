@@ -18,6 +18,13 @@ import pt_nurbs as nb
 SURFACE_KINDS = ("surface", "trimmed_surface", "shell")
 
 
+def stratified(n: int, rng: np.random.Generator) -> np.ndarray:
+    """n numbers in [0, 1), one in each n-th of the interval, in random order: each is uniform, but
+    together they cover the interval evenly – choices made with them come out in (almost) exactly
+    their expected numbers instead of numbers that scatter."""
+    return rng.permutation((np.arange(n) + rng.random(n)) / n)
+
+
 def faces_of(geometry: dict) -> list[dict]:
     """The faces of an entity's geometry as trimmed-surface dicts ({"surface", "outer", "holes"})."""
     kind = geometry.get("type")
@@ -113,6 +120,9 @@ class FaceGrid:
     mask: np.ndarray | None              # (res, res) [v, u] or None (untrimmed)
     length_u: float = 0.0                # mean arc length along u and v / mm
     length_v: float = 0.0
+    quad_tri: np.ndarray | None = None   # (len(ug)-1, len(vg)-1, 2): the two triangles of a grid cell,
+    #                                      numbered within the face (-1: left out) – below / above its diagonal
+    max_density: float = 0.0             # largest area density of a triangle (mm² per unit of uv)
 
     def areas(self, lines_u: np.ndarray, lines_v: np.ndarray) -> np.ndarray:
         """Area / mm² of the face inside every cell of the grid lines_u x lines_v (normalised):
@@ -176,8 +186,14 @@ def _tessellate(face: dict, tol: float, mask_res: int, limit: int = 192):
         return arr[:-1, :-1], arr[1:, :-1], arr[1:, 1:], arr[:-1, 1:]
 
     out = []
-    for (i0, i1, i2), area in (((0, 1, 2), area1), ((0, 2, 3), area2)):
+    grid.quad_tri = np.full(cell.shape + (2,), -1, dtype=np.int64)
+    count = 0
+    for which, ((i0, i1, i2), area) in enumerate((((0, 1, 2), area1), ((0, 2, 3), area2))):
         sel = keep & (area > 0)
+        grid.quad_tri[sel, which] = count + np.arange(int(sel.sum()))
+        count += int(sel.sum())
+        if sel.any():
+            grid.max_density = max(grid.max_density, float((2 * area[sel] / cell[sel]).max()))
         p = [x[sel] for x in corners(s)]
         n = [x[sel] for x in corners(nrm)]
         t = [x[sel] for x in corners(uv)]
@@ -263,14 +279,19 @@ class Mesh:
         b1 = np.empty(n)
         b2 = np.empty(n)
         cum_face = np.cumsum(self.face_area[faces])
-        f = faces[np.minimum(np.searchsorted(cum_face, rng.random(n) * cum_face[-1], side="right"), len(faces) - 1)]
+        pick = stratified(n, rng) * cum_face[-1]             # evenly over the faces, and over the triangles
+        k = np.minimum(np.searchsorted(cum_face, pick, side="right"), len(faces) - 1)
+        f = faces[k]
+        within = np.clip((pick - (cum_face[k] - self.face_area[f])) / np.where(self.face_area[f] > 0,
+                                                                              self.face_area[f], 1.0), 0.0, 1.0)
         cum = self._cum_area()
         todo = np.arange(n)
-        for _ in range(1000):
+        for attempt in range(1000):
             ft = f[todo]
             lo = np.where(self.face_first[ft] > 0, cum[self.face_first[ft] - 1], 0.0)
             hi = cum[self.face_first[ft + 1] - 1]
-            t = np.searchsorted(cum, lo + rng.random(len(todo)) * (hi - lo), side="right")
+            t = np.searchsorted(cum, lo + (within if attempt == 0 else rng.random(len(todo))) * (hi - lo),
+                                side="right")
             t = np.clip(t, self.face_first[ft], self.face_first[ft + 1] - 1)
             r1, r2 = rng.random(len(todo)), rng.random(len(todo))
             fold = r1 + r2 > 1
@@ -281,6 +302,29 @@ class Mesh:
             if todo.size == 0:
                 break
         return tri, b1, b2
+
+    def locate(self, face: int, u: np.ndarray, v: np.ndarray):
+        """The triangles of one face at the surface parameters (u, v) (normalised): triangle (-1:
+        none there), barycentric b1, b2, and the triangle's area density relative to the largest
+        of the face (points drawn evenly in (u, v) and kept with this probability are even by
+        area)."""
+        g = self.grids[face]
+        iu = np.clip(np.searchsorted(g.ug, u, side="right") - 1, 0, len(g.ug) - 2)
+        iv = np.clip(np.searchsorted(g.vg, v, side="right") - 1, 0, len(g.vg) - 2)
+        du, dv = g.ug[iu + 1] - g.ug[iu], g.vg[iv + 1] - g.vg[iv]
+        above = (v - g.vg[iv]) / dv > (u - g.ug[iu]) / du        # of the cell's diagonal
+        local = g.quad_tri[iu, iv, above.astype(np.int64)]
+        tri = np.where(local >= 0, self.face_first[face] + local, -1)
+        t = np.maximum(tri, 0)
+        vt = self.vt[t]                                          # barycentric from the vertices' (u, v):
+        d1, d2 = vt[:, 1] - vt[:, 0], vt[:, 2] - vt[:, 0]        # right also for faces that were turned
+        ru, rv = u - vt[:, 0, 0], v - vt[:, 0, 1]
+        det = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
+        det = np.where(det == 0, 1.0, det)
+        b1 = np.clip((ru * d2[:, 1] - rv * d2[:, 0]) / det, 0.0, 1.0)
+        b2 = np.clip((d1[:, 0] * rv - d1[:, 1] * ru) / det, 0.0, 1.0 - b1)
+        density = np.where(tri >= 0, 2 * self.area[t] / (du * dv) / max(g.max_density, 1e-300), 0.0)
+        return tri, b1, b2, density
 
     def _cum_area(self) -> np.ndarray:
         if getattr(self, "_cum", None) is None or len(self._cum) != len(self.area):

@@ -433,6 +433,37 @@ for image in (seen, bidir):
 assert pt_setup.parse_spectrum("450:1, 550: 2;650") == ((450.0, 1.0), (550.0, 2.0), (650.0, 1.0))
 assert pt_setup.parse_spectrum("") == ((550.0, 1.0),)
 
+# ---- samples are spread evenly: every texel of a sensor gets the points its area asks for (also on
+# a trimmed face, where they stay inside), every pixel its rays – no scatter of the numbers
+scene = scene_of([disc], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((50, 50, 40),))])
+sensor = pt_scene.TexelSensor(scene, [0], 20)
+tri, b1, b2 = sensor.points(20_000, np.random.default_rng(SEED))
+_, uv = scene.mesh.shade(tri, b1, b2)
+counts = np.bincount(sensor.texel(tri, uv), minlength=sensor.count)
+asked = 20_000 * sensor.texel_area / sensor.area
+assert np.abs(counts - asked).max() < 3 and np.abs(counts - asked).mean() < 0.4, np.abs(counts - asked).max()
+assert np.sqrt(asked.mean()) > 6                                     # (numbers that scatter would differ by ~7)
+p = scene.mesh.v0[tri] + b1[:, None] * scene.mesh.e1[tri] + b2[:, None] * scene.mesh.e2[tri]
+r = np.hypot(p[:, 0] - 50, p[:, 1] - 50)
+assert r.max() < 40.3 and not ((abs(p[:, 0] - 50) < 4.8) & (abs(p[:, 1] - 50) < 4.8)).any()
+assert abs(r.mean() / 27.13 - 1) < 0.01, r.mean()                    # mean radius of the disc without the hole
+turned_patch = pt_mesh.build([{"id": 1, "geometry": sphere_patch(2.0)}], 1e-3)       # a curved face, also turned
+for flip in (False, True):
+    if flip:
+        turned_patch.flip_faces([0])
+    u, v = np.random.default_rng(1).random(500) * 0.9, np.random.default_rng(2).random(500)   # (not at the pole)
+    t, c1, c2, density = turned_patch.locate(0, u, v)
+    _, back = turned_patch.shade(t, c1, c2)
+    assert (t >= 0).all() and np.allclose(back, np.column_stack([u, v]), atol=1e-9) and 0 < density.min() <= density.max() <= 1
+pixels = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 20.0, 10, 10).sample(1_000, np.random.default_rng(SEED))["texel"]
+assert np.array_equal(np.bincount(pixels, minlength=100), np.full(100, 10))
+strata = pt_mesh.stratified(8, np.random.default_rng(SEED))
+assert sorted((strata * 8).astype(int)) == list(range(8))
+scene = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
+sensor = pt_scene.TexelSensor(scene, [0], 4)                         # 2 500 points per texel: their number alone
+smooth = pt_integrator.render(scene, sensor, "path", 40_000, 2, seed=SEED, batch=5_000)     # would scatter by 2 %
+assert pt_setup.typical_noise(smooth["values"], smooth["error"]) < 0.008
+
 # ---- the standard error from the spread of the batches: of the right size, falls with sqrt(N)
 scene = scene_of([wall], [BLACK], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
 sensor = pt_scene.TexelSensor(scene, [0], 4)

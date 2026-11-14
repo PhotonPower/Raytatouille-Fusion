@@ -287,7 +287,8 @@ class Scene:
         """n emitted rays: position p, normals ns / ng (zero for points), source, direction d, the
         densities pdf_pos and pdf_dir, and whether the ray is usable (ok)."""
         mesh = self.mesh
-        src = np.minimum(np.searchsorted(np.cumsum(self.src_prob), rng.random(n), side="right"), len(self.src_prob) - 1)
+        src = np.minimum(np.searchsorted(np.cumsum(self.src_prob), pt_mesh.stratified(n, rng), side="right"),
+                         len(self.src_prob) - 1)
         p = np.zeros((n, 3))
         ns = np.zeros((n, 3))
         ng = np.zeros((n, 3))
@@ -350,6 +351,7 @@ class TexelSensor:
         self.texel_area = np.concatenate([mesh.texel_areas(int(f), w, h).ravel()
                                           for f, (w, h) in zip(self.faces, self.size)])
         self.area = float(mesh.face_area[self.faces].sum())
+        self.cum_area = np.cumsum(self.texel_area)
         self.crossed = bool(scene.face_virtual[self.faces].any())   # light passes some of the faces
 
     def texel(self, tri: np.ndarray, uv: np.ndarray) -> np.ndarray:
@@ -367,7 +369,7 @@ class TexelSensor:
     def sample(self, n: int, rng: np.random.Generator) -> dict:
         """n rays from points uniform on the sensor faces, into both half-spaces by the cosine."""
         mesh = self.scene.mesh
-        tri, b1, b2 = mesh.sample(self.faces, n, rng)
+        tri, b1, b2 = self.points(n, rng)
         p = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
         ns, uv = mesh.shade(tri, b1, b2)
         ng = mesh.ng[tri]
@@ -377,6 +379,41 @@ class TexelSensor:
         return {"p": p, "ns": ns, "ng": ng, "d": d, "texel": self.texel(tri, uv), "ok": ok,
                 "pdf_pos": np.full(n, 1.0 / self.area), "pdf_dir": cos / (2 * np.pi),
                 "beta": np.full(n, 2 * np.pi * self.area), "point": np.zeros(n, dtype=bool)}
+
+    def points(self, n: int, rng: np.random.Generator):
+        """n points uniform by area on the sensor faces – triangle, b1, b2 –, spread evenly over the
+        texels: every texel gets the number its area asks for (to within one) instead of a number
+        that scatters, which would be noise of its own in the texel's value."""
+        mesh = self.scene.mesh
+        tex = np.minimum(np.searchsorted(self.cum_area, pt_mesh.stratified(n, rng) * self.cum_area[-1], side="right"),
+                         self.count - 1)
+        slot = np.searchsorted(self.first, tex, side="right") - 1
+        w, h = self.w[slot], self.h[slot]
+        i, j = (tex - self.first[slot]) % w, (tex - self.first[slot]) // w
+        tri = np.full(n, -1, dtype=np.int64)
+        b1, b2 = np.zeros(n), np.zeros(n)
+        todo = np.arange(n)
+        for _ in range(64):         # evenly in the texel's (u, v), kept where the face is, by the area there
+            u = (i[todo] + rng.random(len(todo))) / w[todo]
+            v = (j[todo] + rng.random(len(todo))) / h[todo]
+            keep = rng.random(len(todo))
+            ok = np.zeros(len(todo), dtype=bool)
+            for s in np.unique(slot[todo]):
+                sel = np.nonzero(slot[todo] == s)[0]
+                face = int(self.faces[s])
+                t, c1, c2, density = mesh.locate(face, u[sel], v[sel])
+                good = (t >= 0) & (keep[sel] < density) & mesh.inside(np.full(len(sel), face), u[sel], v[sel])
+                a = todo[sel[good]]
+                tri[a], b1[a], b2[a] = t[good], c1[good], c2[good]
+                ok[sel[good]] = True
+            todo = todo[~ok]
+            if not todo.size:
+                break
+        if todo.size:                                        # texels with hardly any area: anywhere on their face
+            for s in np.unique(slot[todo]):
+                a = todo[slot[todo] == s]
+                tri[a], b1[a], b2[a] = mesh.sample(self.faces[s:s + 1], len(a), rng)
+        return tri, b1, b2
 
     def response(self, ns: np.ndarray, w: np.ndarray):
         """Importance into the direction w from a sensor point, the density of picking w, and
@@ -413,8 +450,10 @@ class Camera:
         self.area = 1.0
 
     def sample(self, n: int, rng: np.random.Generator) -> dict:
-        x = (2 * rng.random(n) - 1) * self.tan_x
-        y = (2 * rng.random(n) - 1) * self.tan_y
+        # evenly over the pixels: each gets its share of the rays (to within one), jittered inside
+        pixel = np.minimum((pt_mesh.stratified(n, rng) * self.count).astype(np.int64), self.count - 1)
+        x = (2 * (pixel % self.w + rng.random(n)) / self.w - 1) * self.tan_x
+        y = (2 * (pixel // self.w + rng.random(n)) / self.h - 1) * self.tan_y
         d = self.forward + x[:, None] * self.right + y[:, None] * self.up
         length = np.linalg.norm(d, axis=1)
         d /= length[:, None]
