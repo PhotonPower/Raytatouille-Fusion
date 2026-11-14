@@ -8,7 +8,9 @@ side. One channel (radiometric, no colour). Kinds:
   mirror       ideal mirror with `reflectance`
   glossy       a lobe around the mirror direction (normalised Phong), width from `roughness`
   glass        smooth dielectric with refractive index `ior` inside (behind the front side),
-               Fresnel reflection and refraction; `absorption` (1/mm) inside (Beer–Lambert)
+               Fresnel reflection and refraction; `absorption` (1/mm) inside (Beer–Lambert).
+               With an Abbe number `abbe` the index depends on the wavelength: `ior` is n_d
+               (587.56 nm), n = A + B / lambda² through n_d and the dispersion n_F − n_C
   detector     no surface at all for the light: rays pass as if it were not there. Only a place
                to measure the irradiance (the scene keeps such faces out of the tracing)
 
@@ -35,6 +37,8 @@ class Materials:
     ior: np.ndarray
     absorption: np.ndarray               # 1/mm
     names: list[str]
+    abbe: np.ndarray | None = None       # Abbe number V_d of glass (0: the index is constant)
+    ior_table: np.ndarray | None = None  # index [material, wavelength], set by wavelengths()
 
     @staticmethod
     def from_rows(rows: list[dict]) -> "Materials":
@@ -43,7 +47,7 @@ class Materials:
         if not rows:
             raise ValueError("no materials")
         names = []
-        cols: dict[str, list[float]] = {k: [] for k in ("kind", "rho", "tau", "exp", "ior", "abs")}
+        cols: dict[str, list[float]] = {k: [] for k in ("kind", "rho", "tau", "exp", "ior", "abs", "abbe")}
         for row in rows:
             name = str(row.get("name", "")).strip()
             kind = str(row.get("kind", "diffuse")).strip().lower()
@@ -66,6 +70,10 @@ class Materials:
                 raise ValueError(f"material {name!r}: refractive index below 1")
             if absorb < 0:
                 raise ValueError(f"material {name!r}: negative absorption")
+            abbe = float(row.get("abbe", 0.0)) if kind == "glass" else 0.0
+            if abbe < 0:
+                raise ValueError(f"material {name!r}: negative Abbe number")
+            cols["abbe"].append(abbe)
             names.append(name)
             cols["kind"].append(KINDS.index(kind))
             cols["rho"].append(rho)
@@ -74,7 +82,20 @@ class Materials:
             cols["ior"].append(ior)
             cols["abs"].append(absorb)
         return Materials(np.asarray(cols["kind"], dtype=np.int64), np.asarray(cols["rho"]), np.asarray(cols["tau"]),
-                         np.asarray(cols["exp"]), np.asarray(cols["ior"]), np.asarray(cols["abs"]), names)
+                         np.asarray(cols["exp"]), np.asarray(cols["ior"]), np.asarray(cols["abs"]), names,
+                         np.asarray(cols["abbe"]))
+
+    def wavelengths(self, nm) -> np.ndarray:
+        """Sets and returns the refractive index of every material at the wavelengths (nm):
+        [material, wavelength]. Sampling with a `channel` then uses it."""
+        lam = np.asarray(nm, dtype=float)[None, :] / 1000.0             # µm
+        f, dd, c = 0.48613, 0.58756, 0.65627                            # F, d and C line
+        abbe = np.zeros(len(self.ior)) if self.abbe is None else self.abbe
+        nd = self.ior[:, None]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            b = np.where(abbe > 0, (self.ior - 1) / (abbe * (1 / f ** 2 - 1 / c ** 2)), 0.0)[:, None]
+        self.ior_table = nd + b * (1 / lam ** 2 - 1 / dd ** 2)
+        return self.ior_table
 
     def specular(self, m: np.ndarray) -> np.ndarray:
         k = self.kind[m]
@@ -112,10 +133,12 @@ class Materials:
         return f, p_fwd, p_rev
 
     # ------------------------------------------------------------------ sampling
-    def sample(self, m: np.ndarray, n: np.ndarray, wo: np.ndarray, rng: np.random.Generator, radiance: bool):
+    def sample(self, m: np.ndarray, n: np.ndarray, wo: np.ndarray, rng: np.random.Generator, radiance: bool,
+               channel: np.ndarray | None = None):
         """A scattered direction wi for each point: (wi, weight, pdf) with weight = f |cos| / pdf
         (0: absorbed) and pdf per solid angle (0 for specular materials). `radiance`: the path
-        comes from the sensor (refraction then scales by the squared ratio of the indices)."""
+        comes from the sensor (refraction then scales by the squared ratio of the indices).
+        `channel`: number of each path's wavelength (see wavelengths())."""
         count = len(m)
         k = self.kind[m]
         co = np.einsum("ij,ij->i", n, wo)
@@ -152,7 +175,10 @@ class Materials:
             pdf[g] = (e + 1) / (2 * np.pi) * cos_a ** e
         t = np.nonzero(k == GLASS)[0]
         if t.size:
-            ior = self.ior[m[t]]
+            if channel is None or self.ior_table is None:
+                ior = self.ior[m[t]]
+            else:
+                ior = self.ior_table[m[t], channel[t]]
             eta = np.where(co[t] >= 0, 1.0 / ior, ior)             # n(side of wo) / n(other side)
             cos_o = np.abs(co[t])
             sin2 = eta ** 2 * (1 - cos_o ** 2)

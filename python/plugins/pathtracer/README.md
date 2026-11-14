@@ -6,8 +6,8 @@ with a camera – an **image**. Several methods estimate the same quantities and
 light tracing, path tracing, bidirectional path tracing and photon mapping. Needs only `numpy` in the plugin
 environment.
 
-Lengths are mm (the document's unit), power is W. One channel: radiometric, no colour and no
-wavelengths yet.
+Lengths are mm (the document's unit), power is W. Radiometric: sources emit at single
+wavelengths, the results are sums over them or one per wavelength; no colours.
 
 ## Steps
 
@@ -21,7 +21,7 @@ wavelengths yet.
    | `diffuse` | reflectance, transmittance | Lambertian reflection; with a transmittance also diffuse transmission (a diffuser sheet) |
    | `mirror` | reflectance | ideal mirror |
    | `glossy` | reflectance, roughness | a lobe around the mirror direction (normalised Phong, exponent 2/roughness² − 2) |
-   | `glass` | index, absorption | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air |
+   | `glass` | index, absorption, Abbe number | smooth dielectric: Fresnel reflection and refraction, absorption inside (1/mm); the body must be closed and stand in air. With an Abbe number V the index depends on the wavelength: *Index* is n_d (587.56 nm) and n(λ) = A + B/λ² with n_F − n_C = (n_d − 1)/V; 0: constant |
    | `detector` | – | no surface for the light – it passes as if the object were not there; only a place to measure the irradiance (a measuring plane in free space). Not visible to the camera, cannot be a source |
 
 2. **Sources** (table in the panel: flux in W, half-angle, side). Select surfaces, bodies or
@@ -32,6 +32,10 @@ wavelengths yet.
      *Side*: the front is the side of the surface normal; for closed bodies the outside.
    - Points emit evenly into all directions; the points of one source share its flux.
    - A source also has its material (it reflects light like any other object).
+   - *Wavelengths*: the lines a source emits, in nm, each with an optional share of its flux –
+     `550`, `486.1, 587.6, 656.3` or `450:1, 550:2, 650:1`. Every path carries one wavelength;
+     it matters where glass disperses. *Also per wavelength* adds a texture / an image for each
+     wavelength to the sum.
 
    *Show materials and sources* lists the objects; *Show light paths* draws some paths from the
    sources (colour: number of the bounce) – a check of where and into which direction they emit.
@@ -86,7 +90,8 @@ diffuse box, a glass plate).
 
 ## Not yet
 
-Colour and wavelengths (dispersion), measured materials and rough glass, glass touching glass,
+Continuous spectra and colours, reflectances that depend on the wavelength, measured materials
+and rough glass, glass touching glass,
 sources with a measured distribution, a lens
 camera with depth of field, the exact NURBS surface at a hit (instead of the triangle), a
 compiled intersection kernel, keeping results with the document.

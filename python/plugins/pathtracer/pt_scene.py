@@ -6,6 +6,9 @@ Sources
              Lambertian emitter), from the front, the back or both sides; all surfaces of one
              source share its flux by area
   points     emit evenly into all directions; the points of one source share its flux
+  spectrum   a source emits at single wavelengths (lines), each with a share of its flux. Every
+             path carries one wavelength ("channel": its number in Scene.wavelengths); it matters
+             where glass disperses, and the sensors keep the channels apart
 
 Sensors
   TexelSensor   irradiance on faces: the flux arriving (from both sides) in every texel; also on
@@ -44,6 +47,7 @@ class SourceSpec:
     side: str = "front"                  # front, back, both
     entities: tuple = ()                 # indices into the entity list of the mesh (surfaces)
     points: tuple = ()                   # (x, y, z) of point sources
+    spectrum: tuple = ((550.0, 1.0),)    # lines (wavelength / nm, share of the flux – any scale)
 
 
 class Scene:
@@ -150,7 +154,7 @@ class Scene:
     # ------------------------------------------------------------------ sources
     def _sources(self, specs: list[SourceSpec]) -> None:
         mesh = self.mesh
-        flux, sin_max, sides, area, point, is_point = [], [], [], [], [], []
+        flux, sin_max, sides, area, point, is_point, spectra = [], [], [], [], [], [], []
         faces: list[np.ndarray] = []
         self.face_source = np.full(len(mesh.face_area), -1, dtype=np.int64)
         self.source_names = []
@@ -161,6 +165,13 @@ class Scene:
                 raise ValueError(f"source {spec.name!r} is on surfaces and on points: use two sources")
             if spec.flux == 0 or not (spec.entities or spec.points):
                 continue
+            lines: dict[float, float] = {}
+            for nm, share in spec.spectrum:
+                if not (nm > 0 and share >= 0):
+                    raise ValueError(f"source {spec.name!r}: wavelengths must be positive, shares not negative")
+                lines[float(nm)] = lines.get(float(nm), 0.0) + float(share)
+            if sum(lines.values()) <= 0:
+                raise ValueError(f"source {spec.name!r}: its spectrum is empty")
             if spec.entities:
                 if not 0 < spec.half_angle <= 90:
                     raise ValueError(f"source {spec.name!r}: half-angle must lie in 0 … 90°")
@@ -182,6 +193,7 @@ class Scene:
                 area.append(float(mesh.face_area[fs].sum()))
                 point.append((np.nan,) * 3)
                 is_point.append(False)
+                spectra.append(lines)
                 self.source_names.append(spec.name)
             else:
                 for p in spec.points:
@@ -192,6 +204,7 @@ class Scene:
                     area.append(1.0)
                     point.append(tuple(float(c) for c in p))
                     is_point.append(True)
+                    spectra.append(lines)
                     self.source_names.append(spec.name)
         if not flux:
             raise ValueError("no source: give at least one object a source with a flux above 0")
@@ -210,6 +223,17 @@ class Scene:
         self.src_radiance = np.where(self.src_is_point, self.src_flux / (4 * np.pi),
                                      self.src_flux / (nsides * self.src_area * np.pi * self.src_sin ** 2))
         self.src_dir_norm = np.where(self.src_is_point, 1 / (4 * np.pi), 1 / (nsides * np.pi * self.src_sin ** 2))
+        # wavelengths: the lines of all sources; per source the share of its flux in each
+        self.wavelengths = np.asarray(sorted({nm for lines in spectra for nm, share in lines.items() if share > 0}))
+        self.src_spectrum = np.asarray([[lines.get(nm, 0.0) for nm in self.wavelengths] for lines in spectra])
+        self.src_spectrum /= self.src_spectrum.sum(axis=1, keepdims=True)
+        self.channel_prob = self.src_prob @ self.src_spectrum           # share of each wavelength in all paths
+        self.materials.wavelengths(self.wavelengths)
+
+    def spectral_weight(self, src: np.ndarray, channel: np.ndarray) -> np.ndarray:
+        """Share of the wavelength `channel` in the flux of source `src`, over its share in all
+        paths: what a path that carries this wavelength and ends on this source has to count."""
+        return self.src_spectrum[src, channel] / self.channel_prob[channel]
 
     def _emits(self, src: np.ndarray, cos: np.ndarray) -> np.ndarray:
         """Whether a surface source emits into a direction with the cosine `cos` to its normal."""
@@ -241,6 +265,7 @@ class Scene:
         d = np.zeros((n, 3))
         cos = np.ones(n)
         u1, u2, u3 = rng.random(n), rng.random(n), rng.random(n)
+        channel = (rng.random(n)[:, None] < np.cumsum(self.src_spectrum, axis=1)[src]).argmax(axis=1)
         for k in np.unique(src):
             sel = np.nonzero(src == k)[0]
             if self.src_is_point[k]:
@@ -260,7 +285,7 @@ class Scene:
         pdf_dir = self.src_dir_norm[src] * np.where(pt, 1.0, cos)
         ok = pt | ((cos > 0) & (np.einsum("ij,ij->i", ng, d) * np.einsum("ij,ij->i", ns, d) > 0))
         return {"p": p, "ns": ns, "ng": ng, "src": src, "d": d, "pdf_pos": self.emit_pdf_pos(src),
-                "pdf_dir": pdf_dir, "ok": ok, "point": pt}
+                "pdf_dir": pdf_dir, "ok": ok, "point": pt, "channel": channel}
 
 
 # ---------------------------------------------------------------------------- sensors

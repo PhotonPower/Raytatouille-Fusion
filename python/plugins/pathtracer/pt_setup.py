@@ -21,21 +21,39 @@ UP = {"+Z": (0, 0, 1), "-Z": (0, 0, -1), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+X"
 
 DEFAULT_MATERIALS = [
     {"name": "white", "kind": "diffuse", "reflectance": 0.8, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
     {"name": "black", "kind": "absorber", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
     {"name": "mirror", "kind": "mirror", "reflectance": 0.95, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
     {"name": "metal", "kind": "glossy", "reflectance": 0.85, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
     {"name": "glass", "kind": "glass", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
     {"name": "diffuser", "kind": "diffuse", "reflectance": 0.3, "transmittance": 0.6, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
+    {"name": "BK7", "kind": "glass", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5168,
+     "absorption": 0.0, "abbe": 64.17},
     {"name": "detector", "kind": "detector", "reflectance": 0.0, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
-     "absorption": 0.0},
+     "absorption": 0.0, "abbe": 0.0},
 ]
-DEFAULT_SOURCES = [{"name": "lamp", "flux": 1.0, "half_angle": 90.0, "side": "front"}]
+DEFAULT_SOURCES = [{"name": "lamp", "flux": 1.0, "half_angle": 90.0, "side": "front", "spectrum": "550"}]
+
+
+def parse_spectrum(text) -> tuple:
+    """The lines of a source from text: wavelengths in nm, separated by commas, each with an
+    optional share of the flux after a colon – "550", "486.1, 587.6, 656.3", "450:1, 550:2".
+    Empty: 550 nm. ValueError for anything else."""
+    lines = []
+    for part in str(text or "").replace(";", ",").split(","):
+        if not part.strip():
+            continue
+        nm, _, share = part.partition(":")
+        try:
+            lines.append((float(nm), float(share) if share.strip() else 1.0))
+        except ValueError:
+            raise ValueError(f"spectrum {text!r}: write wavelengths in nm, e.g. \"450:1, 550:2, 650:1\"") from None
+    return tuple(lines) or ((550.0, 1.0),)
 
 
 def label(entity: dict) -> str:
@@ -120,7 +138,8 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
         points = tuple(tuple(e["geometry"]["point"]) for e in active(entities)
                        if _kind(e) == "point" and _attr(e, SOURCE) == name)
         specs.append(pt_scene.SourceSpec(name, float(row.get("flux", 0.0)), float(row.get("half_angle", 90.0)),
-                                         str(row.get("side", "front")), on, points))
+                                         str(row.get("side", "front")), on, points,
+                                         parse_spectrum(row.get("spectrum", ""))))
     if not any(s.entities or s.points for s in specs):
         raise ValueError("no object is a source: select a surface, a body or a point and choose "
                          "\"Selection: make it a source\"")

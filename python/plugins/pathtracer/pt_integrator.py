@@ -62,6 +62,7 @@ class Path:
         self.spec = np.zeros((k, n), dtype=bool)
         self.valid = np.zeros((k, n), dtype=bool)
         self.point = np.zeros(n, dtype=bool)                 # vertex 0 is a point (no surface)
+        self.channel = np.zeros(n, dtype=np.int64)           # number of the path's wavelength
         self.escape = np.full(n, -1, dtype=np.int64)         # vertex whose ray left the scene
         self.escape_dir = np.zeros((n, 3))
         self.rays = 0
@@ -134,7 +135,7 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         path.valid[k, idx] = True
         if k == k_max - 1:
             break
-        wi, weight, pd = mats.sample(m, ns, -dk, rng, radiance)
+        wi, weight, pd = mats.sample(m, ns, -dk, rng, radiance, path.channel[idx])
         _, _, p_rev = mats.eval(m, ns, -dk, wi)
         path.pr[k - 1, idx] = p_rev * path.cos(k - 1, idx, dk) / dist2
         ok = (weight > 0) & (_dot(ns, wi) * _dot(ng, wi) > 0)
@@ -207,17 +208,21 @@ def light_subpaths(scene, sensor, n: int, k: int, rng) -> Path:
     e = scene.emit(n, rng)
     path.p[0], path.ns[0], path.ng[0], path.src[0] = e["p"], e["ns"], e["ng"], e["src"]
     path.point = e["point"]
+    path.channel = e["channel"]
     path.beta[0] = 1.0 / e["pdf_pos"]
-    path.pf[0] = e["pdf_pos"]
+    path.pf[0] = e["pdf_pos"] * scene.spectral_weight(e["src"], e["channel"])     # point and wavelength
     path.valid[0] = True
     _walk(scene, sensor, path, e, np.full(n, scene.flux), rng, radiance=False)
     return path
 
 
-def eye_subpaths(scene, sensor, n: int, k: int, rng, stop_rough: bool = False) -> Path:
+def eye_subpaths(scene, sensor, n: int, k: int, rng, stop_rough: bool = False, channel=None) -> Path:
     """n subpaths from the sensor with up to k vertices (stop_rough: only as far as the first
-    vertex that is not specular)."""
+    vertex that is not specular). channel: the wavelengths they carry – those of the light
+    subpaths they are paired with."""
     path = Path(max(k, 1), n)
+    if channel is not None:
+        path.channel = channel
     e = sensor.sample(n, rng)
     path.p[0], path.ns[0], path.ng[0], path.tex[0] = e["p"], e["ns"], e["ng"], e["texel"]
     path.point = e["point"]
@@ -250,7 +255,7 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
     con: dict = {}
     if s == 0:                                               # the eye subpath hit a source
         le, _ = scene.emitted(eye.src[t - 1, j], eye.ns[t - 1, j], eye.wo[t - 1, j])
-        c = eye.beta[t - 1, j] * le
+        c = eye.beta[t - 1, j] * le * scene.spectral_weight(eye.src[t - 1, j], light.channel[j])
         tex = eye.tex[0, j]
     elif t == 0:                                             # the light subpath hit a sensor face
         c = light.beta[s - 1, j].copy()
@@ -302,7 +307,7 @@ def _strategy(scene, sensor, light: Path, eye: Path | None, s: int, t: int, meth
     ways = [sp for sp in range(n + 1) if enabled(method, camera, sp, n - sp)]
     if ways != [s]:
         c = c * _weight(scene, sensor, light, eye, s, t, j, con, ways)
-    accum += np.bincount(tex, weights=c, minlength=len(accum))
+    accum += np.bincount(light.channel[j] * sensor.count + tex, weights=c, minlength=len(accum))
     return rays
 
 
@@ -336,7 +341,7 @@ def _weight(scene, sensor, light: Path, eye: Path | None, s: int, t: int, j: np.
             pf[s + 1] = con["dens_z_rev"] * eye.cos(t - 2, j, eye.wo[t - 1, j]) / gap2(eye, t - 1)
     elif s == 0:
         src = eye.src[t - 1, j]
-        pf[0] = scene.emit_pdf_pos(src)
+        pf[0] = scene.emit_pdf_pos(src) * scene.spectral_weight(src, light.channel[j])
         _, dens = scene.emitted(src, eye.ns[t - 1, j], eye.wo[t - 1, j])
         pf[1] = dens * eye.cos(t - 2, j, eye.wo[t - 1, j]) / gap2(eye, t - 1)
     else:
@@ -398,8 +403,9 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
            progress=None, cancelled=None, radius: float = 0.0) -> dict:
     """Estimates the sensor's values with `samples` pairs of subpaths; paths have up to `depth`
     segments (source – … – sensor). Returns {"values": per texel the flux / W or per pixel the
-    radiance / W/(mm² sr), "samples": done, "rays": traced}. progress(fraction) and cancelled()
-    are called between batches; a cancelled run returns what it has."""
+    radiance / W/(mm² sr), "channels": the same per wavelength of scene.wavelengths (their sum is
+    "values"), "samples": done, "rays": traced}. progress(fraction) and cancelled() are called
+    between batches; a cancelled run returns what it has."""
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}")
     if depth < 1:
@@ -415,12 +421,12 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
     k_light, k_eye = lengths(method, sensor.camera, depth)
     if batch is None:
         batch = batch_size(k_light, k_eye)
-    accum = np.zeros(sensor.count)
+    accum = np.zeros(len(scene.wavelengths) * sensor.count)
     done = rays = 0
     while done < samples:
         n = min(batch, samples - done)
         light = light_subpaths(scene, sensor, n, k_light, rng)
-        eye = eye_subpaths(scene, sensor, n, k_eye, rng) if k_eye else None
+        eye = eye_subpaths(scene, sensor, n, k_eye, rng, channel=light.channel) if k_eye else None
         rays += light.rays + (eye.rays if eye is not None else 0)
         for s in range(0, k_light + 1):
             for t in range(0, k_eye + 1):
@@ -433,7 +439,8 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
             progress(done / samples)
         if cancelled is not None and cancelled():
             break
-    return {"values": accum / max(done, 1), "samples": done, "rays": rays}
+    channels = accum.reshape(len(scene.wavelengths), sensor.count) / max(done, 1)
+    return {"values": channels.sum(axis=0), "channels": channels, "samples": done, "rays": rays}
 
 
 def light_paths(scene, n: int, depth: int, seed: int = 0):
