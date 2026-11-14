@@ -33,7 +33,7 @@ and V upwards.
   radius at their foot and head.
 - *Lens* (patterned lens only): position, thickness, refractive index, transmittance, element
   size, the position of the mirror's focus and the **elements**.
-- *Analysis*: the **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
+- *Analysis*: the shadows of the steps on / off, the **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
 
@@ -203,8 +203,11 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 ## Limits of this version
 
 - Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
-  connecting faces, nothing shades (a wall does not shadow the facet behind it), no light leaving
-  the lamp directly, no bulb glass, no cover lens. The cut-off is sharper than a real lamp's.
+  connecting faces, no light leaving the lamp directly, no bulb glass, no cover lens. The cut-off
+  is sharper than a real lamp's. With *Analysis → Shadows of the steps* a ray that a step of the
+  mirror stops – on its way from the coil to a mirror point, or after the reflection – is left out
+  (the log gives that share; the mirror is compared as a height map of 0.25 mm, up to 6.4 mm
+  sideways of the point); where the stopped light goes after a second reflection is not followed.
 - A filament across the axis (H3) in the facetted reflector is meant for a horizontal cut-off (fog
   lamps): see *A coil across the axis*; with the rising branch it is untried.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp

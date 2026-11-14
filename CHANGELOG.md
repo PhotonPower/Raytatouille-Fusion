@@ -25,7 +25,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   lamps P21W, PY21W, R10W, R5W. The lens may lean back, run back to one side and be domed;
   the walls between its elements are faces of their own and mirror the light that meets them
   (stray light).
-  The facetted reflector also takes lamps with the filament across the axis (H3: fog lamps).
+  The facetted reflector also takes lamps with the filament across the axis (H3: fog lamps);
+  its light distribution leaves out the rays that a step of the mirror stops.
   ([python/plugins/automotive_lighting](python/plugins/automotive_lighting/README.md))
 - **Layer stacks** in the node workflow: the FourierGrating plugin provides `fg.stack` (coatings,
   filters, mirror layers between two media, exact per ray), with an RTT-Fusion that has it.

@@ -243,6 +243,21 @@ rows_c = {row[0]: row for row in al_photometry.test_points(dist_c, cut)}
 assert rows_c["50R"][3] > 10000 and rows_c["B50L"][3] < 350                # stray light of the walls stays low
 g_c, v_c = al_photometry.sharpness(dist_c, cut)
 assert g_c > 0.13 and abs(v_c + 0.57) < 0.2
+# shadows of the steps: the mirror as a height map; rays it stops are left out
+height = al_photometry.HeightMap(rc)
+Ph, Nh, _, _ = rc.samples(1.0, kinds=(al_reflector.FACET,))
+assert np.abs(height.at(Ph[:, 1], Ph[:, 2]) - Ph[:, 0])[np.isfinite(height.at(Ph[:, 1], Ph[:, 2]))].max() < 0.02
+assert height.at(np.array([500.0, 0.0]), np.array([0.0, 0.0])).tolist() == [-np.inf, -np.inf]     # beyond, lamp hole
+straight = np.tile([1.0, 0.0, 0.0], (len(Ph), 1, 1))
+assert not height.stopped(Ph, straight).any()                               # straight out of the mirror: free
+flat_ray = np.tile([0.05, 0.9987, 0.0], (len(Ph), 1, 1))                   # nearly sideways, to the left: from the
+left_half, right_half = Ph[:, 1] > 10.0, Ph[:, 1] < -10.0                   # left half into the rising mirror,
+assert height.stopped(Ph, flat_ray)[left_half].mean() > 0.9 > 0.5 > height.stopped(Ph, flat_ray)[right_half].mean()   # not the right
+shaded = al_photometry.light_distribution(rc, spacing=1.0, n_axial=6, n_around=12, shadows=True)
+assert 0.0 < shaded.flux_shadow < 0.15 * shaded.flux_mirror and dist_c.flux_shadow == 0.0
+assert shaded.flux_beam < dist_c.flux_beam and abs(shaded.flux_mirror - dist_c.flux_mirror) < 1e-6
+assert al_photometry.light_distribution(r, spacing=2.0, n_axial=6, n_around=12, shadows=True).flux_shadow == 0.0
+
 # ---- strips cut into rows: a third level of connecting faces, every further row starts where the last ends
 breaks = al_transitions.stations((0.0, 20.0), [8.0])
 assert breaks[0] == 0.0 and breaks[-1] == 20.0 and np.all(np.diff(breaks) > 0)
