@@ -110,12 +110,12 @@ Where the long edge of the filament image is parallel to the cut-off, the end of
 touches changes; the surface is smooth there but its curvature jumps (the strips are integrated
 with the change located inside the step).
 
-**A coil across the axis** (H3, fog lamps: *Cut-off → Rise* 0, one zone or an upper and a lower
-one). The image of such a coil lies along a horizontal cut-off – both its ends touch – where the
+**A coil across the axis** (H3; for a fog lamp *Cut-off → Rise* 0 and one zone or an upper and a
+lower one; the asymmetric cut-off with its rising zone works as well). The image of such a coil lies along a horizontal cut-off – both its ends touch – where the
 mirror's normal has no part along the coil. One such line runs across the strips near the lamp
 axis' level: the strips cross it and change the touching end, as above. The other runs along
 the strips, where a facet looks straight ahead sideways; the strips of its two sides run into
-each other there. So a strip border lies on the lamp axis (not a strip's middle), and every facet
+each other there. So a strip border lies at the lamp axis (not a strip's middle), and every facet
 keeps to one side of that line: where its aim would bring it across, the aim is moved on (the log
 names these facets – those next to the lamp axis, whose beams then cross).
 
@@ -208,8 +208,6 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
   mirror stops – on its way from the coil to a mirror point, or after the reflection – is left out
   (the log gives that share; the mirror is compared as a height map of 0.25 mm, up to 6.4 mm
   sideways of the point); where the stopped light goes after a second reflection is not followed.
-- A filament across the axis (H3) in the facetted reflector is meant for a horizontal cut-off (fog
-  lamps): see *A coil across the axis*; with the rising branch it is untried.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp
   axis; the strips must be wider than their connecting faces (both are reported).
 - The frame should be convex or nearly so; the lamp axis is +X; the faces are separate trimmed

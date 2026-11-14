@@ -343,7 +343,8 @@ def build_facet(spec: FacetSpec, fil: Filament, *, step: float = 0.5, knot_spaci
                                            fil.radius, a)
             return nx * fil.axis[0] + ny * fil.axis[1] + nz * fil.axis[2]
 
-        side = 1.0 if side_of(a_mid, float(fr.p_of(0.5 * (c_lo + c_hi), spec.q_start)), spec.q_start) >= 0.0 else -1.0
+        # (the side of the facet's own middle: a cell may be a sliver at the rim of its strip)
+        side = 1.0 if side_of(linear_aim(0.5 * (p0 + p1), spec.q_start), 0.5 * (p0 + p1), spec.q_start) >= 0.0 else -1.0
 
         def aim_at(p: float, q: float) -> float:        # noqa: F811 – the aim above, kept to one side
             a = linear_aim(p, q)

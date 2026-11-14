@@ -40,7 +40,9 @@ class Settings:
     def strip_shift(self) -> float:
         """A coil across the axis: a strip border lies on the lamp axis (every facet keeps to one
         side of the coil's image, al_design); else a strip is centred there."""
-        return 0.0 if self.lamp.axial else 0.5
+        # (a hair beside it: a curved border exactly through the axis – the apex of every zone – would
+        # touch the zones' corners instead of cutting them)
+        return 0.0 if self.lamp.axial else 0.5001
 
 
 @dataclass
