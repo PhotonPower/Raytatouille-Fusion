@@ -320,6 +320,36 @@ camera = pt_scene.Camera((0, 0, 300), (0, 0, 0), (0, 1, 0), 30.0, 2, 2)      # u
 image = values(scene, camera, "path", 20_000, 2).reshape(2, 2)
 assert image[:, 1].sum() > 3 * image[:, 0].sum() and abs(image[0].sum() / image[1].sum() - 1) < 0.1
 
+# ---- photon mapping (camera): the lit wall; on faces it is light tracing
+scene = scene_of([wall], [WHITE], [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
+camera = pt_scene.Camera((0, 0, 200), (0, 0, 0), (0, 1, 0), 2.0, 4, 4)
+out = pt_integrator.render(scene, camera, "photon", 80_000, 2, seed=SEED)
+assert abs(out["values"].mean() / exact - 1) < 0.12 and out["passes"] == 16 and 1 < out["radius"] < 20, out
+assert pt_integrator.render(scene, camera, "photon", 5_000, 2, seed=SEED, radius=5.0)["radius"] == 5.0    # one pass
+sensor = pt_scene.TexelSensor(scene, [0], 4)
+assert np.array_equal(values(scene, sensor, "photon", 5_000), values(scene, sensor, "light", 5_000))
+
+# ---- photon mapping: a glass plate between the source and the floor, the camera looks through it.
+# No connection can make these paths (specular on both sides of the floor): the other methods see
+# nothing. The floor's radiance is rho · E / pi with E = T · I / h'², the source seen 10 (1 − 1/n)
+# nearer through the plate, and the plate takes its share again on the way to the camera
+scene = scene_of([wall, box((-200, -200, 20), (200, 200, 30))], [WHITE, GLASS],
+                 [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))], (1,))
+camera = pt_scene.Camera((0, 0, 45), (0, 0, 0), (0, 1, 0), 6.0, 4, 4)
+through = 0.96 / 1.04
+expected = 0.6 / math.pi * through / (4 * math.pi * (50 - 10 / 3) ** 2) * through
+image = values(scene, camera, "photon", 60_000, 8)
+assert abs(image.mean() / expected - 1) < 0.15, image.mean() / expected
+for method in ("light", "path", "bidir"):
+    assert values(scene, camera, method, 4_000, 8).max() == 0, method
+
+# ---- photon mapping: the lit wall seen in a mirror, as path tracing sees it
+scene = scene_of([wall, rect((-100, 100, 0), (200, 0, 0), (0, 0, 150))], [WHITE, MIRROR],
+                 [pt_scene.SourceSpec("p", 1.0, points=((0, 0, 50),))])
+camera = pt_scene.Camera((0, -50, 80), (0, 100, 60), (0, 0, 1), 20.0, 4, 4)
+reference = values(scene, camera, "path", 40_000, 6).mean()
+assert abs(values(scene, camera, "photon", 80_000, 6).mean() / reference - 1) < 0.1
+
 # ---- the model and the panel -> scene; the plugin's actions with a stand-in for CAD
 params = {"materials": pt_setup.DEFAULT_MATERIALS, "default_material": "white", "sources": pt_setup.DEFAULT_SOURCES,
           "tolerance": 0.01}
@@ -435,7 +465,8 @@ for method in pt_setup.METHODS:
     p["method"] = method
     assert plugin.irradiance(cad).startswith("Irradiance on 8 face(s)")
     assert plugin.camera_image(cad).startswith("Camera image 16 × 12")
-assert len(cad.fields) == 24 and cad.fields[0][0] == "E floor" and cad.fields[2][0] == "E ball · face 1"
+assert len(cad.fields) == 32 and cad.fields[0][0] == "E floor" and cad.fields[2][0] == "E ball · face 1"
+assert any("photon mapping: " in line for line in cad.logs)
 assert cad.fields[0][2]["unit"] == "W/m²" and cad.fields[0][2]["value_range"][1] > 0 and cad.fields[3][2]["face"] == 1
 means = [img.mean() for _, img, _ in cad.images]
 assert min(means) > 0 and max(means) / min(means) < 1.5, means       # the three methods see the same scene

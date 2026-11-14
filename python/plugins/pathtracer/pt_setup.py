@@ -16,7 +16,7 @@ MATERIAL = "pt.material"        # attribute of an object: name of a material of 
 SOURCE = "pt.source"            # attribute of an object: name of a source of the panel
 INACTIVE = "sim.inactive"       # attribute: the object takes no part (docs/plugins.md, D11)
 
-METHODS = {"light tracing": "light", "path tracing": "path", "bidirectional": "bidir"}
+METHODS = {"light tracing": "light", "path tracing": "path", "bidirectional": "bidir", "photon mapping": "photon"}
 UP = {"+Z": (0, 0, 1), "-Z": (0, 0, -1), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+X": (1, 0, 0), "-X": (-1, 0, 0)}
 
 DEFAULT_MATERIALS = [
