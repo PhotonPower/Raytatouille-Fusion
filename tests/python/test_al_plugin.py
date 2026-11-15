@@ -253,9 +253,16 @@ assert not height.stopped(Ph, straight).any()                               # st
 flat_ray = np.tile([0.05, 0.9987, 0.0], (len(Ph), 1, 1))                   # nearly sideways, to the left: from the
 left_half, right_half = Ph[:, 1] > 10.0, Ph[:, 1] < -10.0                   # left half into the rising mirror,
 assert height.stopped(Ph, flat_ray)[left_half].mean() > 0.9 > 0.5 > height.stopped(Ph, flat_ray)[right_half].mean()   # not the right
+steep = np.tile(al_optics.direction(-1.2, 0.0), (len(Ph), 1))              # 50° to the left: from the left half
+found, again = height.bounce(Ph[left_half], steep[left_half])               # some meet a step and are reflected
+assert 0.05 < found.mean() < 0.9
+assert np.allclose(np.linalg.norm(again[found], axis=1), 1.0) and (again[found, 0] > 0.0).all()   # once more, forwards
 shaded = al_photometry.light_distribution(rc, spacing=1.0, n_axial=6, n_around=12, shadows=True)
 assert 0.0 < shaded.flux_shadow < 0.15 * shaded.flux_mirror and dist_c.flux_shadow == 0.0
 assert shaded.flux_beam < dist_c.flux_beam and abs(shaded.flux_mirror - dist_c.flux_mirror) < 1e-6
+dark = al_photometry.light_distribution(rc, spacing=1.0, n_axial=6, n_around=12, shadows=True, reflectance_connections=0.0)
+assert dark.flux_shadow == shaded.flux_shadow and dark.flux_connections == 0.0   # black walls: no second reflection
+assert shaded.flux_beam - dark.flux_beam > dist_c.flux_connections - 0.2 * shaded.flux_shadow
 assert al_photometry.light_distribution(r, spacing=2.0, n_axial=6, n_around=12, shadows=True).flux_shadow == 0.0
 
 # ---- strips cut into rows: a third level of connecting faces, every further row starts where the last ends

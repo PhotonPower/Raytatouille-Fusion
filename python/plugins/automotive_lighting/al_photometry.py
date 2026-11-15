@@ -103,7 +103,8 @@ class Distribution:
     flux_connections: float = 0.0  # lm of the beam that come from the connecting faces
     flux_walls: float = 0.0        # lm that meet the walls between the elements of a lens (what of it goes
                                    # on into the beam, as stray light, is part of flux_connections)
-    flux_shadow: float = 0.0       # lm onto the mirror that a step of the mirror stops (before or after the reflection)
+    flux_shadow: float = 0.0       # lm onto the mirror that a step of the mirror stops (before or after the
+                                   # reflection; what leaves after a second reflection is part of flux_connections)
 
     def at(self, h_deg: float, v_deg: float, half_h: float = 0.25, half_v: float = 0.1) -> float:
         """Mean intensity in a small window about a point (a photometer's aperture)."""
@@ -171,17 +172,57 @@ class HeightMap:
         return out
 
 
+    def bounce(self, p: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Rays from the mirror points p (n, 3) along v (n, 3) that the mirror stops: where they
+        meet it they are reflected a second time. Returns which of them then leave the mirror freely
+        and forwards, and their new directions."""
+        sideways = np.maximum(np.hypot(v[:, 1], v[:, 2]), 1e-9)
+
+        def above(tau):      # how far the mirror stands above the ray there
+            return self.at(p[:, 1] + tau * v[:, 1], p[:, 2] + tau * v[:, 2]) - (p[:, 0] + tau * v[:, 0])
+
+        free, inside = np.zeros(len(p)), np.full(len(p), np.nan)
+        for reach in self.REACH:                                # the first place where the ray is in the mirror
+            tau = np.minimum(reach / sideways, 40.0)
+            hit = np.isnan(inside) & (above(tau) > self.CLEAR)
+            inside = np.where(hit, tau, inside)
+            free = np.where(np.isnan(inside), tau, free)
+        found = ~np.isnan(inside)
+        inside = np.where(found, inside, free)
+        for _ in range(12):                                     # the point where it enters, by halving
+            middle = 0.5 * (free + inside)
+            within = above(middle) > 0.0
+            inside, free = np.where(within, middle, inside), np.where(within, free, middle)
+        y, z = p[:, 1] + free * v[:, 1], p[:, 2] + free * v[:, 2]
+        h = self.pitch
+        with np.errstate(invalid="ignore"):                     # (beside the mirror: no slope, no reflection)
+            gy = (self.at(y + h, z) - self.at(y - h, z)) / (2.0 * h)
+            gz = (self.at(y, z + h) - self.at(y, z - h)) / (2.0 * h)
+        found &= np.isfinite(gy) & np.isfinite(gz)
+        gy, gz = np.where(found, gy, 0.0), np.where(found, gz, 0.0)
+        normal = np.stack([np.ones_like(gy), -gy, -gz], axis=1)
+        normal /= np.linalg.norm(normal, axis=1, keepdims=True)
+        again = v - 2.0 * np.sum(v * normal, axis=1, keepdims=True) * normal
+        where = np.column_stack([p[:, 0] + free * v[:, 0], y, z]) + 0.05 * normal
+        found &= (np.sum(v * normal, axis=1) < 0.0) & (again[:, 0] > 1e-6)
+        found &= ~self.stopped(where, again[:, None, :])[:, 0]
+        return found, again
+
+
 def light_distribution(reflector: Reflector, *, spacing: float = 1.0, reflectance: float = 0.85,
                        reflectance_connections: float | None = None, shadows: bool = False,
                        **options) -> Distribution:
     """The luminous intensity of the facetted reflector by rays from every sample of the coil's
     surface to every mirror point of a front-view lattice (`spacing`, mm); `shadows`: a ray that a
-    step of the mirror stops – on its way from the coil or after the reflection – is left out;
-    options as intensity()."""
+    step of the mirror stops on its way from the coil is left out, one that it stops after the
+    reflection is reflected there a second time (with the reflectance of the connecting faces) and
+    counts as stray light if it then leaves freely; options as intensity()."""
     if shadows and reflector.transitions is not None:
         if getattr(reflector, "_height_map", None) is None:
             reflector._height_map = HeightMap(reflector)
         options["stopped"] = reflector._height_map.stopped
+        options["bounce"] = reflector._height_map.bounce
+        options["rho_second"] = reflectance if reflectance_connections is None else reflectance_connections
     P, N, A, part = reflector.samples(spacing)
     connection = np.array([p.kind != FACET for p in reflector.parts()], dtype=bool)[part] if len(part) else part
     rho = np.where(connection, reflectance if reflectance_connections is None else reflectance_connections,
@@ -190,8 +231,8 @@ def light_distribution(reflector: Reflector, *, spacing: float = 1.0, reflectanc
 
 
 def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.ndarray, rho: np.ndarray,
-              connection: np.ndarray | None = None, *, after=None, stopped=None, n_axial: int = 12,
-              n_around: int = 24,
+              connection: np.ndarray | None = None, *, after=None, stopped=None, bounce=None,
+              rho_second: float = 0.0, n_axial: int = 12, n_around: int = 24,
               h_range=(-40.0, 40.0), v_range=(-15.0, 10.0), dh: float = 0.25, dv: float = 0.1,
               progress=None) -> Distribution:
     """The luminous intensity of a mirror given by points P, unit normals N, areas A and reflectances
@@ -199,7 +240,9 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
     whose light is counted as stray light of connecting faces; after(origins, directions) ->
     directions, factors[, walls]: what follows the mirror (a lens), factor 0 for a lost ray, and
     optionally which rays met a wall there; stopped(points, directions (m, k, 3)) -> (m, k): rays
-    from the mirror points that the mirror itself stops (HeightMap.stopped)."""
+    from the mirror points that the mirror itself stops (HeightMap.stopped); bounce(points,
+    directions (n, 3)) -> found, directions: the second reflection of reflected rays it stops
+    (HeightMap.bounce), which keeps `rho_second` of their light."""
     if connection is None:
         connection = np.zeros(len(P), dtype=bool)
     flux_connections = flux_walls = flux_shadow = 0.0
@@ -232,12 +275,24 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
             w = np.where(((az - lo) % 360.0) <= (hi - lo), w, 0.0)
         flux_mirror += float(w.sum())
         out = d - 2.0 * np.einsum("mki,mi->mk", d, n)[..., None] * n[:, None, :]
+        twice = None
         if stopped is not None:      # in the shadow of a step as seen from the coil, or the reflected ray meets one
-            shaded = (w > 0.0) & (stopped(p, -d) | stopped(p, out))
-            flux_shadow += float(w[shaded].sum())
+            shaded = (w > 0.0) & stopped(p, -d)
+            caught = (w > 0.0) & ~shaded & stopped(p, out)
+            flux_shadow += float(w[shaded | caught].sum())
             w = np.where(shaded, 0.0, w)
+            if bounce is not None and caught.any():      # a second reflection where the ray meets the step
+                rows, cols = np.nonzero(caught)
+                found, again = bounce(p[rows], out[rows, cols])
+                out[rows, cols] = again
+                w[rows, cols] *= np.where(found, rho_second, 0.0)
+                twice = caught
+            else:
+                w = np.where(caught, 0.0, w)
         ok = (out[..., 0] > 1e-6) & (w > 0.0)
         w = w * rho[start:start + chunk, None]
+        if twice is not None:
+            flux_connections += float(w[twice & ok].sum())
         if after is not None:
             rows = np.nonzero(ok)[0]
             passed, factor, *walls = after(p[rows], out[ok])
