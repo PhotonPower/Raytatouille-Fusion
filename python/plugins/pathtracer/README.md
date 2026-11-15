@@ -111,6 +111,21 @@ The first three agree within their noise wherever a method can produce every pat
 `tests/python/test_pathtracer.py`, with closed-form cases – point source over a plane, a closed
 diffuse box, a glass plate).
 
+## Two kernels
+
+The computations exist twice, with the same model and the same methods:
+
+- **NumPy** – the modules `pt_*.py` of this plugin; nothing to install besides `numpy`.
+- **C++** – the package `pathtracer` (repository *PathTracer*): one path at a time on all
+  processor cores, some ten times faster and more. The plugin uses it when it is installed in
+  the plugin's Python (`pip install <path to PathTracer>`); *Kernel* in the panel chooses
+  (automatic: C++ if installed). The log names the kernel of every computation.
+
+Both are built from the same description of the model (`pt_setup.describe`) and are tested
+against the same closed forms and against each other (`tests/python/test_pathtracer_native.py`).
+Their random numbers differ, so two results agree within their noise, not digit for digit. With
+the C++ kernel *Processes* are threads (0: all cores).
+
 ## How it works
 
 - **Geometry.** Every face is tessellated in its surface parameters to the *Mesh tolerance*;
@@ -138,7 +153,7 @@ diffuse box, a glass plate).
 - **Modules** (no CAD in them, usable from scripts): `pt_nurbs` (NURBS evaluation), `pt_mesh`
   (tessellation, masks, areas), `pt_bvh` (intersection), `pt_bsdf` (materials), `pt_scene`
   (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_photometry` (luminaire files,
-  V(λ)), `pt_parallel` and
+  V(λ)), `pt_native` (the C++ kernel behind the same interface), `pt_parallel` and
   `pt_worker` (several processes), `pt_setup` (model and panel → scene).
 
 ## Not yet
