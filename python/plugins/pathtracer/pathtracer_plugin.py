@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pt_bsdf  # noqa: E402
 import pt_integrator  # noqa: E402
+import pt_native  # noqa: E402
 import pt_parallel  # noqa: E402
 import pt_photometry  # noqa: E402
 import pt_scene  # noqa: E402
@@ -77,6 +78,11 @@ class PathTracerPlugin(Plugin):
                                            "connections to the sources; bidirectional: both, combined; photon "
                                            "mapping: camera images with light through glass and off mirrors "
                                            "(for the irradiance it is light tracing)"),
+        "kernel": Param.choice(["automatic", "C++", "NumPy"], "automatic", label="Kernel", group="Computation",
+                               description="The program that computes. C++: the package pathtracer (fast, all "
+                                           "processor cores) – it has to be installed in the plugin's Python. "
+                                           "NumPy: the kernel that comes with the plugin. automatic: C++ if it "
+                                           "is installed. Both compute the same quantities with the same methods"),
         "samples": Param.integer(500_000, min=1_000, max=2_000_000_000, label="Samples", group="Computation",
                                  description="Paths (pairs of a light and an eye path); the noise falls with "
                                              "the square root"),
@@ -96,9 +102,10 @@ class PathTracerPlugin(Plugin):
                                               "to the texels / pixels whose values are still uncertain (the result "
                                               "stays right: every batch is drawn with shares fixed before it)"),
         "processes": Param.integer(0, min=0, max=256, label="Processes", group="Computation",
-                                   description="Processor cores used by larger computations. 0: half of the "
-                                               "cores, at most 4 – every process needs memory for the scene "
-                                               "and its paths (some hundred MB)"),
+                                   description="Processor cores used by larger computations. NumPy kernel – "
+                                               "0: half of the cores, at most 4 (every process needs memory "
+                                               "for the scene and its paths, some hundred MB). C++ kernel: "
+                                               "threads – 0: all cores"),
         "export": Param.file("", filter="NumPy archive (*.npz)", save=True, label="Also write to file",
                              group="Computation",
                              description="Irradiance and Camera image also write their numbers (values, standard "
@@ -139,7 +146,17 @@ class PathTracerPlugin(Plugin):
 
     def __init__(self):
         self.cache = pt_setup.MeshCache()
+        self.native_cache = pt_native.MeshCache()
         self.files = pt_setup.Distributions()
+
+    @staticmethod
+    def _native(ctx) -> bool:
+        """Whether the C++ kernel computes (see the parameter Kernel)."""
+        choice = ctx.params["kernel"]
+        if choice == "C++" and not pt_native.available():
+            raise UserError("The C++ kernel is not installed in the plugin's Python (package \"pathtracer\"): "
+                            "install it, or choose the kernel NumPy or automatic.")
+        return choice != "NumPy" and pt_native.available()
 
     # ------------------------------------------------------------------ assignments
     @staticmethod
@@ -189,14 +206,20 @@ class PathTracerPlugin(Plugin):
         return f"{len(rows)} objects, {sum(1 for r in rows if r[3])} of them sources"
 
     # ------------------------------------------------------------------ computation
-    def _scene(self, ctx) -> pt_scene.Scene:
+    def _scene(self, ctx):
+        """The scene of the model for the kernel in use (pt_scene.Scene or the C++ kernel's)."""
         ctx.progress(0.0, "preparing the model")
+        native = self._native(ctx)
         try:
-            scene = pt_setup.build_scene(ctx.entities(), ctx.params, self.cache, self.files)
+            if native:
+                scene = pt_native.build_scene(ctx.entities(), ctx.params, self.native_cache, self.files)
+            else:
+                scene = pt_setup.build_scene(ctx.entities(), ctx.params, self.cache, self.files)
         except ValueError as e:
             raise UserError(str(e)) from None
         mesh = scene.mesh
         lumens = scene.flux * pt_photometry.lumens_per_watt(scene.wavelengths, scene.channel_prob)
+        ctx.log(f"kernel: {'C++ ' + pt_native.version() if native else 'NumPy'}")
         ctx.log(f"{mesh.triangles} triangles on {len(mesh.face_area)} faces; {len(scene.src_flux)} source(s), "
                 f"{scene.flux:.6g} W ({lumens:.6g} lm) at {', '.join(f'{nm:g}' for nm in scene.wavelengths)} nm"
                 + (f"; {len(scene.flipped)} face(s) turned outwards" if scene.flipped else ""))
@@ -211,9 +234,12 @@ class PathTracerPlugin(Plugin):
             ctx.progress(0.02 + 0.96 * f, f"{what}, {method}: {int(round(f * p['samples'])):,} of {p['samples']:,}")
 
         try:
-            out = pt_parallel.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
-                                     seed=p["seed"], processes=p["processes"], radius=p["photon_radius"],
-                                     adaptive=p["adaptive"], progress=progress, cancelled=ctx.cancelled)
+            render = pt_native.render if self._native(ctx) else pt_parallel.render
+            out = render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
+                         seed=p["seed"], processes=p["processes"], radius=p["photon_radius"],
+                         adaptive=p["adaptive"], progress=progress, cancelled=ctx.cancelled)
+        except ValueError as e:
+            raise UserError(str(e)) from None
         except OSError as e:                                 # no worker processes here: do without
             ctx.log(f"worker processes could not be started ({e}); computing in one process")
             out = pt_integrator.render(scene, sensor, pt_setup.METHODS[method], p["samples"], p["depth"],
@@ -224,7 +250,8 @@ class PathTracerPlugin(Plugin):
             ctx.log(f"photon mapping: {out['passes']} passes, last radius {out['radius']:.4g} mm")
         seconds = max(time.time() - start, 1e-9)
         ctx.log(f"{what}, {method}: {out['samples']:,} samples, {out['rays']:,} rays in {seconds:.1f} s "
-                f"({out['rays'] / seconds:,.0f} rays/s, {out['processes']} process(es))")
+                f"({out['rays'] / seconds:,.0f} rays/s, {out['processes']} "
+                f"{'thread(s)' if self._native(ctx) else 'process(es)'})")
         note = "" if out["samples"] >= p["samples"] else f" (stopped at {out['samples']:,} samples)"
         if p["units"].startswith("photometric"):
             out = pt_setup.photometric(out, scene.wavelengths)
@@ -259,7 +286,8 @@ class PathTracerPlugin(Plugin):
         unit = pt_setup.UNITS[p["units"]]
         scene = self._scene(ctx)
         try:
-            sensor = pt_scene.TexelSensor(scene, pt_setup.sensor_faces(scene, p["irradiance_on"]), p["texels"])
+            faces = pt_setup.sensor_faces(scene, p["irradiance_on"])
+            sensor = (pt_native.texel_sensor if self._native(ctx) else pt_scene.TexelSensor)(scene, faces, p["texels"])
         except ValueError as e:
             raise UserError(str(e)) from None
         out, note = self._render(ctx, scene, sensor, "Irradiance")
@@ -305,6 +333,10 @@ class PathTracerPlugin(Plugin):
         unit = pt_setup.UNITS[p["units"]]
         camera = self._camera(ctx)
         scene = self._scene(ctx)
+        if self._native(ctx):
+            camera = pt_native.camera(p["camera_position"], p["camera_target"], pt_setup.UP[p["camera_up"]],
+                                      p["camera_fov"], p["camera_width"], p["camera_height"], p["camera_lens"],
+                                      p["camera_focus"])
         out, note = self._render(ctx, scene, camera, "Camera image")
         values = out["values"] * 1e6
         positive = values[values > 0]
@@ -341,7 +373,8 @@ class PathTracerPlugin(Plugin):
     def show_paths(self, ctx):
         p = ctx.params
         scene = self._scene(ctx)
-        points, starts = pt_integrator.light_paths(scene, p["preview_paths"], p["depth"], p["seed"])
+        paths = pt_native.light_paths if self._native(ctx) else pt_integrator.light_paths
+        points, starts = paths(scene, p["preview_paths"], p["depth"], p["seed"])
         if len(starts) < 2:
             raise UserError("No light path could be drawn.")
         order = np.zeros(len(points))

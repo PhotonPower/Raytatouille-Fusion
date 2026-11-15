@@ -99,8 +99,8 @@ def _all_around(phi: np.ndarray, cd: np.ndarray):
     return phi, cd
 
 
-def parse_ies(text: str) -> Distribution:
-    """A distribution from the text of an IES LM-63 file (photometry of type C)."""
+def table_ies(text: str):
+    """theta, phi (degrees) and intensity[phi, theta] from the text of an IES LM-63 file (type C)."""
     lines = text.replace("\r", "").split("\n")
     tilt = next((k for k, line in enumerate(lines) if line.strip().upper().startswith("TILT")), None)
     if tilt is None:
@@ -128,11 +128,11 @@ def parse_ies(text: str) -> Distribution:
     cd = np.asarray(data[n_t + n_p:n_t + n_p + n_t * n_p]).reshape(n_p, n_t)
     if n_p > 1:
         phi, cd = _all_around(phi, cd)
-    return Distribution(theta, phi, cd)
+    return theta, phi, cd
 
 
-def parse_ldt(text: str) -> Distribution:
-    """A distribution from the text of an EULUMDAT (.ldt) file."""
+def table_ldt(text: str):
+    """theta, phi (degrees) and intensity[phi, theta] from the text of an EULUMDAT (.ldt) file."""
     lines = [line.strip() for line in text.replace("\r", "").split("\n")]
     try:
         symmetry, planes, n_g = int(float(lines[2])), int(float(lines[3])), int(float(lines[5]))
@@ -146,26 +146,42 @@ def parse_ldt(text: str) -> Distribution:
     except (ValueError, IndexError, KeyError):
         raise ValueError("EULUMDAT file: not in the expected form") from None
     if symmetry == 1:
-        return Distribution(gamma, [0.0], cd)
+        return gamma, np.array([0.0]), cd
     if symmetry == 0:
-        return Distribution(gamma, c, cd)
+        return gamma, c, cd
     if symmetry == 3:                                        # planes C90 … C270 given: mirror at C90 – C270
         first = int(np.argmin(np.abs(c - 90.0)))
         have = c[first:first + given]
         full = np.stack([cd[int(np.argmin(np.abs(have - (a if 90.0 <= a <= 270.0 else (180.0 - a) % 360.0))))]
                          for a in c])
-        return Distribution(gamma, c, full)
+        return gamma, c, full
     phi, cd = _all_around(c[:given], cd)                     # C0 … C180 or C0 … C90
-    return Distribution(gamma, phi, cd)
+    return gamma, phi, cd
 
 
-def load(path: str) -> Distribution:
-    """A distribution from an .ies or .ldt file (by its content if the ending says nothing)."""
+def parse_ies(text: str) -> Distribution:
+    """A distribution from the text of an IES LM-63 file (photometry of type C)."""
+    return Distribution(*table_ies(text))
+
+
+def parse_ldt(text: str) -> Distribution:
+    """A distribution from the text of an EULUMDAT (.ldt) file."""
+    return Distribution(*table_ldt(text))
+
+
+def load_table(path: str):
+    """theta, phi and intensity[phi, theta] from an .ies or .ldt file (by its content if the ending
+    says nothing)."""
     try:
         with open(path, encoding="latin-1") as f:
             text = f.read()
     except OSError as e:
         raise ValueError(f"luminaire file {path!r}: {e.strerror or e}") from None
     if path.lower().endswith(".ldt") or (not path.lower().endswith(".ies") and "TILT" not in text.upper()):
-        return parse_ldt(text)
-    return parse_ies(text)
+        return table_ldt(text)
+    return table_ies(text)
+
+
+def load(path: str) -> Distribution:
+    """A distribution from an .ies or .ldt file."""
+    return Distribution(*load_table(path))

@@ -76,12 +76,13 @@ def parse_axis(text) -> tuple:
 
 
 class Distributions:
-    """Luminaire files that were read, by path (read again when the file changed)."""
+    """Luminaire files that were read, by path (read again when the file changed): the tables
+    (theta, phi, intensity) and, for the NumPy kernel, the distributions made of them."""
 
     def __init__(self):
         self.known: dict = {}
 
-    def get(self, path: str):
+    def table(self, path: str):
         import os
 
         try:
@@ -89,8 +90,15 @@ class Distributions:
         except OSError as e:
             raise ValueError(f"luminaire file {path!r}: {e.strerror or e}") from None
         if key not in self.known:
-            self.known = {key: pt_photometry.load(path), **{k: v for k, v in self.known.items() if k[0] != path}}
+            self.known = {key: {"table": pt_photometry.load_table(path)},
+                          **{k: v for k, v in self.known.items() if k[0] != path}}
         return self.known[key]
+
+    def get(self, path: str):
+        entry = self.table(path)
+        if "distribution" not in entry:
+            entry["distribution"] = pt_photometry.Distribution(*entry["table"])
+        return entry["distribution"]
 
 
 def parse_values(text) -> tuple:
@@ -191,14 +199,17 @@ class MeshCache:
         return self.mesh
 
 
-def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = None,
-                files: Distributions | None = None) -> pt_scene.Scene:
-    """The scene of the model: materials and sources of the panel, assigned by the attributes
-    pt.material and pt.source. ValueError with a message for the user when something is missing."""
-    materials = pt_bsdf.Materials.from_rows([{**row, "spectrum": parse_values(row.get("spectrum", ""))}
-                                             for row in params["materials"]])
+def describe(entities: list[dict], params: dict, files: Distributions | None = None) -> dict:
+    """What a kernel builds its scene from – the model and the panel in plain data:
+    surfaces (the entities that are traced), materials (rows with their spectra as pairs),
+    entity_material (a material number per surface entity), sources (dicts: name, flux in W,
+    half_angle, side, entities, points, curves, spectrum, table (theta, phi, intensity of a
+    luminaire file, or None), file, axis), closed (the entities that are bodies), tol, exact.
+    ValueError with a message for the user when something is missing."""
+    rows = [{**row, "spectrum": parse_values(row.get("spectrum", ""))} for row in params["materials"]]
+    names_m = pt_bsdf.Materials.from_rows(rows).names                  # (checks the rows)
     default = str(params.get("default_material", "")).strip()
-    if default not in materials.names:
+    if default not in names_m:
         raise ValueError(f"the default material {default!r} is not in the table of materials")
     surf = surfaces(entities)
     if not surf:
@@ -206,16 +217,16 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
     entity_material = []
     for e in surf:
         name = _attr(e, MATERIAL) or default
-        if name not in materials.names:
+        if name not in names_m:
             raise ValueError(f"{label(e)}: its material {name!r} is not in the table of materials")
-        entity_material.append(materials.names.index(name))
+        entity_material.append(names_m.index(name))
     names = [str(row.get("name", "")).strip() for row in params["sources"]]
     if len(set(names)) != len(names) or "" in names:
         raise ValueError("sources need different, non-empty names")
     for e in active(entities):
         if _attr(e, SOURCE) and _attr(e, SOURCE) not in names:
             raise ValueError(f"{label(e)}: its source {_attr(e, SOURCE)!r} is not in the table of sources")
-    specs = []
+    sources = []
     for row, name in zip(params["sources"], names):
         on = tuple(k for k, e in enumerate(surf) if _attr(e, SOURCE) == name)
         points = tuple(tuple(e["geometry"]["point"]) for e in active(entities)
@@ -230,26 +241,42 @@ def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = No
                 raise ValueError(f"source {name!r}: its flux is in lumens, but none of its wavelengths is visible")
             flux /= efficacy
         file = str(row.get("distribution", "") or "").strip()
-        distribution = None
-        if file and (on or points):
-            distribution = (files or Distributions()).get(file)
-        specs.append(pt_scene.SourceSpec(name, flux, float(row.get("half_angle", 90.0)),
-                                         str(row.get("side", "front")), on, points, curves, spectrum, distribution,
-                                         parse_axis(row.get("axis", "")) if distribution is not None and points
-                                         else (0.0, 0.0, -1.0)))
-    if not any(s.entities or s.points or s.curves for s in specs):
+        measured = bool(file and (on or points))
+        if measured and files is None:
+            files = Distributions()
+        side = str(row.get("side", "front"))
+        if side not in ("front", "back", "both"):
+            raise ValueError(f"source {name!r}: side must be front, back or both")
+        sources.append({"name": name, "flux": flux, "half_angle": float(row.get("half_angle", 90.0)), "side": side,
+                        "entities": on, "points": points, "curves": curves, "spectrum": spectrum,
+                        "table": files.table(file)["table"] if measured else None, "file": file if measured else "",
+                        "axis": parse_axis(row.get("axis", "")) if measured and points else (0.0, 0.0, -1.0)})
+    if not any(s["entities"] or s["points"] or s["curves"] for s in sources):
         raise ValueError("no object is a source: select a surface, a body, a curve or a point and choose "
                          "\"Selection: make it a source\"")
-    tol = float(params.get("tolerance", 0.01))
-    mesh = cache.get(surf, tol) if cache is not None else pt_mesh.build(surf, tol)
-    closed = tuple(k for k, e in enumerate(surf) if _kind(e) == "shell")
-    scene = pt_scene.Scene(mesh, materials, np.asarray(entity_material), specs, closed)
-    scene.exact = bool(params.get("exact_normals", True))
-    scene.contact = max(scene.contact, 2 * tol)             # touching bodies' triangles differ by the tolerance
+    return {"surfaces": surf, "materials": rows, "entity_material": entity_material, "sources": sources,
+            "closed": tuple(k for k, e in enumerate(surf) if _kind(e) == "shell"),
+            "tol": float(params.get("tolerance", 0.01)), "exact": bool(params.get("exact_normals", True)),
+            "files": files}
+
+
+def build_scene(entities: list[dict], params: dict, cache: MeshCache | None = None,
+                files: Distributions | None = None) -> pt_scene.Scene:
+    """The scene of the model for the NumPy kernel: materials and sources of the panel, assigned by
+    the attributes pt.material and pt.source (see describe)."""
+    d = describe(entities, params, files)
+    materials = pt_bsdf.Materials.from_rows(d["materials"])
+    specs = [pt_scene.SourceSpec(s["name"], s["flux"], s["half_angle"], s["side"], s["entities"], s["points"],
+                                 s["curves"], s["spectrum"], d["files"].get(s["file"]) if s["file"] else None,
+                                 s["axis"]) for s in d["sources"]]
+    mesh = cache.get(d["surfaces"], d["tol"]) if cache is not None else pt_mesh.build(d["surfaces"], d["tol"])
+    scene = pt_scene.Scene(mesh, materials, np.asarray(d["entity_material"]), specs, d["closed"])
+    scene.exact = d["exact"]
+    scene.contact = max(scene.contact, 2 * d["tol"])        # touching bodies' triangles differ by the tolerance
     return scene
 
 
-def sensor_faces(scene: pt_scene.Scene, ids) -> list[int]:
+def sensor_faces(scene, ids) -> list[int]:
     """Faces of the mesh that belong to the objects `ids` (empty: all faces)."""
     mesh = scene.mesh
     if not ids:
@@ -261,7 +288,7 @@ def sensor_faces(scene: pt_scene.Scene, ids) -> list[int]:
     return faces
 
 
-def irradiance(sensor: pt_scene.TexelSensor, flux: np.ndarray, error: np.ndarray | None = None) -> list[dict]:
+def irradiance(sensor, flux: np.ndarray, error: np.ndarray | None = None) -> list[dict]:
     """Per sensor face: entity (id), face (number within the entity), w, h, values (irradiance in
     W/m², row by row, NaN where the face has no or hardly any area in a texel), flux / W,
     area / mm² and – with the standard error of the flux per texel – noise: the relative
