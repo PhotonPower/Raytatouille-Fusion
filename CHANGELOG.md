@@ -26,7 +26,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   the walls between its elements are faces of their own and mirror the light that meets them
   (stray light).
   The facetted reflector also takes lamps with the filament across the axis (H3: fog lamps);
-  its light distribution leaves out the rays that a step of the mirror stops.
+  its light distribution leaves out the rays that a step of the mirror shades and follows those
+  it stops after the reflection through a second one.
   ([python/plugins/automotive_lighting](python/plugins/automotive_lighting/README.md))
 - **Layer stacks** in the node workflow: the FourierGrating plugin provides `fg.stack` (coatings,
   filters, mirror layers between two media, exact per ray), with an RTT-Fusion that has it.

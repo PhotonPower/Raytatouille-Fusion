@@ -205,9 +205,11 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 - Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
   connecting faces, no light leaving the lamp directly, no bulb glass, no cover lens. The cut-off
   is sharper than a real lamp's. With *Analysis → Shadows of the steps* a ray that a step of the
-  mirror stops – on its way from the coil to a mirror point, or after the reflection – is left out
-  (the log gives that share; the mirror is compared as a height map of 0.25 mm, up to 6.4 mm
-  sideways of the point); where the stopped light goes after a second reflection is not followed.
+  mirror stops on its way from the coil to a mirror point is left out; one that it stops after the
+  reflection is reflected there a second time (with the reflectance of the connecting faces) and
+  counts as stray light if it then leaves the mirror freely – a third reflection is not followed.
+  The log gives the stopped share; the mirror is compared as a height map of 0.25 mm, up to 6.4 mm
+  sideways of the point.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp
   axis; the strips must be wider than their connecting faces (both are reported).
 - The frame should be convex or nearly so; the lamp axis is +X; the faces are separate trimmed

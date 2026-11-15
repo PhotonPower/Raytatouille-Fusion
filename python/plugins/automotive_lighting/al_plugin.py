@@ -182,8 +182,8 @@ class AutomotiveLighting(Plugin):
                                                 "minimum on the axis and its maximum"),
         "shadows": Param.boolean(True, label="Shadows of the steps", group="Analysis",
                                  description="facetted reflector with connecting faces: a ray that a step of the "
-                                             "mirror stops – on its way from the coil or after the reflection – is "
-                                             "left out of the light distribution (takes longer)"),
+                                             "mirror stops on its way from the coil is left out; one it stops after "
+                                             "the reflection is reflected there a second time (takes longer)"),
         "sampling": Param.number(1.0, min=0.2, max=10.0, decimals=2, unit="mm", label="Mirror points every",
                                  group="Analysis", description="lattice of the light distribution"),
         "image_points": Param.integer(150, min=1, max=5000, label="Filament images (number)", group="Analysis"),
@@ -388,7 +388,8 @@ class AutomotiveLighting(Plugin):
                 shadows=bool(ctx.params["shadows"]), progress=progress, **field)
             if ctx.params["shadows"] and r.transitions is not None:
                 ctx.log(f"shadows of the steps: {dist.flux_shadow:.0f} lm of the light onto the mirror are stopped "
-                        f"by a step ({100.0 * dist.flux_shadow / max(dist.flux_mirror, 1e-9):.1f} %)")
+                        f"by a step ({100.0 * dist.flux_shadow / max(dist.flux_mirror, 1e-9):.1f} %); what is stopped "
+                        "after the reflection is reflected there once more and counts as stray light")
         run = ctx.result_set(f"Low beam {r.settings.lamp.name}")
         ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
                   extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
