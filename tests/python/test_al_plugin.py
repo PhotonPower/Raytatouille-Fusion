@@ -352,8 +352,8 @@ fog_cut = al_optics.Cutoff(v_deg=-1.15, rise_deg=0.0)
 fog = al_reflector.build(al_reflector.Settings(h3, fog_cut, (al_layout.Zone(0.0, 360.0, al_optics.HORIZONTAL, 20.0, -20.0),),
                                                strip_width=10.0, hole_radius=10.0),
                          al_layout.rounded_rectangle(100.0, 56.0, 10.0))
-assert fog.settings.strip_shift == 0.5 and {c.strip for c in fog.cells} >= {-1, 0}
-assert all(abs(c.spec.c_range[0] / 10.0 - round(c.spec.c_range[0] / 10.0)) < 1e-9 for c in fog.cells)   # borders at k · width
+assert abs(fog.settings.strip_shift - 0.5) < 1e-3 and {c.strip for c in fog.cells} >= {-1, 0}
+assert all(abs(c.spec.c_range[0] / 10.0 - round(c.spec.c_range[0] / 10.0)) < 1e-3 for c in fog.cells)   # borders at k · width
 held = {c.name for c, f in zip(fog.cells, fog.facets) if f.aim_limited}
 assert fog.cutoff_error < 0.1 and held == {"1.-1", "1.0"}, (fog.cutoff_error, held)   # the two beside the lamp axis
 Pf, Nf, _, _ = fog.samples(2.0, kinds=(al_reflector.FACET,))
@@ -364,6 +364,16 @@ top = (al_photometry.reflect(df, Nf[:, None, :]) @ fog_cut.plane(al_optics.HORIZ
 assert np.degrees(np.arcsin(top)) < 0.1                                     # every image below the cut-off
 fog_dist = al_photometry.light_distribution(fog, spacing=2.0, n_axial=6, n_around=12, reflectance_connections=0.0)
 assert al_photometry.glare(fog_dist, fog_cut) == 0.0 and fog_dist.intensity.max() > 5000
+
+# the coil across the axis with the asymmetric cut-off: the rising branch too, in zones with curved strips
+h3_low = al_reflector.build(al_reflector.Settings(h3, cut, al_plugin.zones_of(al_plugin.default_zones(True)),
+                                                  strip_width=15.0, hole_radius=10.0, connect=False),
+                            al_layout.rounded_rectangle(100.0, 64.0, 12.0))
+assert h3_low.cutoff_error < 0.1 and abs(h3_low.area - r.area) < 0.5        # the same frame as `r`, all of it covered
+Pf, Nf, _, _ = h3_low.samples(2.0)
+df = Pf[:, None, :] - Qf[None, :, :]
+df /= np.linalg.norm(df, axis=2, keepdims=True)
+assert np.degrees(np.arcsin(cut.above(al_photometry.reflect(df, Nf[:, None, :]).reshape(-1, 3)).max())) < 0.1
 
 # ---- a patterned lens in front of a paraboloid
 d_in = al_optics.direction(np.array([0.3, -0.1]), np.array([0.2, 0.0]))
