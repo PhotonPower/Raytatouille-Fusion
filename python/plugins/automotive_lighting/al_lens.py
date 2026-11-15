@@ -14,7 +14,8 @@ which gives its slopes ∂x/∂y and ∂x/∂z; they are integrated over the cel
 the cell's surface is the Bézier patch of degree 5 closest to that. The cells are independent:
 between neighbours a step remains, closed by a wall along X. A ray that meets a wall – in the air
 before the elements or in the glass behind them – is mirrored there once (with the glass' reflectance
-at that angle, or totally) and goes on as stray light.
+at that angle, or totally) and goes on as stray light. With a draft angle the walls lean and are
+rounded at foot and head (_join): then they are part of the inner surface and refract like it.
 
 The lens may lean back (rake), run back to one side (sweep) and be domed (a sphere's radius): its
 outer side is that shape, its inner side the same shape `thickness` behind it (measured along X)
@@ -70,6 +71,8 @@ class LensSettings:
     rake: float = 0.0              # degrees: the lens leans back, its top towards the mirror
     sweep: float = 0.0             # degrees: it runs back towards the left (negative: the right)
     radius: float = 0.0            # mm: domed outwards, a sphere of this radius (0: flat)
+    wall_draft: float = 0.0        # degrees between the walls of the elements and X (0: walls along X)
+    wall_fillet: float = 0.0       # mm, radius at the foot and the head of these walls (with a draft only)
 
 
 def _bernstein(t: np.ndarray, degree: int = DEGREE) -> np.ndarray:
@@ -118,6 +121,8 @@ class LensSystem:
     whole: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))   # cells the outline does not cut
     fit_error: float = 0.0         # largest slope error of the patches against the wanted slopes
     sag: tuple[float, float] = (0.0, 0.0)     # the elements' depth and height about the lens' shape
+    column_bands: dict = field(default_factory=dict)   # (i, j): the wall between the cells i - 1 and i of the row j
+    row_bands: dict = field(default_factory=dict)      # j: the walls between the rows j - 1 and j
     warnings: list[str] = field(default_factory=list)
 
     # ---- the mirror
@@ -165,8 +170,44 @@ class LensSystem:
         return next((e for e in self.settings.elements if e.y0 <= y < e.y1 and e.z0 <= z < e.z1), None)
 
     def inner(self, y: np.ndarray, z: np.ndarray):
-        """x - lens_x of the inner side (the lens' shape with the elements on it) and its slopes at
-        points; `inside` marks the points that lie on a cell."""
+        """x - lens_x of the inner side and its slopes at points; `inside` marks the points that lie
+        on a cell. With drafted walls: the elements' patches, and near the cells' borders the bands
+        that join them (those between the rows first)."""
+        sag, dy, dz, inside, whole = self.patch(y, z)
+        if not self.column_bands and not self.row_bands:
+            return sag, dy, dz, inside, whole
+        s = self.settings
+        sag, dy, dz = sag.copy(), dy.copy(), dz.copy()
+        self.on_band = np.zeros(len(sag), dtype=bool)
+        j = np.rint((z - self.z0) / s.cell_height).astype(int)              # the nearest border between rows
+        offset = z - (self.z0 + j * s.cell_height)
+        for key in np.unique(j):
+            band = self.row_bands.get(int(key))
+            if band is None:
+                continue
+            rows = np.flatnonzero((j == key) & (np.abs(offset) <= band.half_width)
+                                  & (y >= band.graph.knots_p[0]) & (y <= band.graph.knots_p[-1]))
+            if len(rows):
+                sag[rows], dy[rows], dz[rows] = band.graph.evaluate(y[rows], offset[rows])
+                self.on_band[rows] = True
+        i = np.rint((y - self.y0) / s.cell_width).astype(int)               # the nearest border between columns
+        offset = y - (self.y0 + i * s.cell_width)
+        row = np.floor((z - self.z0) / s.cell_height).astype(int)
+        keys = i * 100003 + row
+        for key in np.unique(keys[~self.on_band]):
+            band = self.column_bands.get((int(key // 100003), int(key % 100003)))
+            if band is None:
+                continue
+            rows = np.flatnonzero((keys == key) & ~self.on_band & (np.abs(offset) <= band.half_width))
+            if len(rows):
+                f, fu, fxi = band.graph.evaluate(-z[rows], offset[rows])      # the band's u runs along -z
+                sag[rows], dy[rows], dz[rows] = f, fxi, -fu
+                self.on_band[rows] = True
+        return sag, dy, dz, inside, whole
+
+    def patch(self, y: np.ndarray, z: np.ndarray):
+        """x - lens_x of the cells' own surfaces (the lens' shape with the elements on it) and their
+        slopes at points; `inside` marks the points that lie on a cell."""
         s = self.settings
         iy = np.floor((y - self.y0) / s.cell_width).astype(int)
         iz = np.floor((z - self.z0) / s.cell_height).astype(int)
@@ -252,10 +293,19 @@ class LensSystem:
         for _ in range(3):                                                  # among the elements) onto the shape …
             y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
             t = np.maximum((s.lens_x + self.shape(y, z)[0] - origins[:, 0]) / dx, 0.0)
-        for _ in range(2):                                                  # … and onto the elements
+        banded = bool(self.column_bands or self.row_bands)
+        for _ in range(4 if banded else 2):                                 # … and onto the elements
             y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
             sag, dy, dz, inside, whole = self.inner(y, z)
-            t_before, t = t, np.maximum((s.lens_x + sag - origins[:, 0]) / dx, 0.0)
+            if banded:       # Newton: a drafted wall is steep, the plain step would overshoot there
+                miss = origins[:, 0] + t * dx - s.lens_x - sag
+                rate = dx - dy * d[:, 1] - dz * d[:, 2]
+                t_before, t = t, np.maximum(t - miss / np.where(np.abs(rate) > 0.05, rate, dx), 0.0)
+            else:
+                t_before, t = t, np.maximum((s.lens_x + sag - origins[:, 0]) / dx, 0.0)
+        if banded:
+            y, z = origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2]
+            sag, dy, dz, inside, whole = self.inner(y, z)
         normal = np.stack([np.ones_like(dy), -dy, -dz], axis=1)
         normal /= np.linalg.norm(normal, axis=1, keepdims=True)
         glass, ok1 = refract(d, normal, 1.0 / s.index)
@@ -265,6 +315,9 @@ class LensSystem:
         cut = np.flatnonzero(ok & ~whole)                                   # only cells at the rim need the outline
         if len(cut):
             ok[cut] = al_layout.contains(self._outline, np.column_stack([y[cut], z[cut]]))
+        if banded:           # the walls are part of the surface: what lies on a band is the walls' light
+            none = (np.zeros(len(ok), dtype=bool), np.zeros((len(ok), 3)), np.zeros(len(ok), dtype=int))
+            return out, ok, (self.on_band.copy(), none[1], none[2]), none, glass
         # walls: the path in the air from where the elements begin, and in the glass to where they end.
         # A ray that finds no surface point in one cell – the point it is sent to lies in the next
         # one, whose surface lies elsewhere – runs into the wall between the two on its way there.
@@ -292,6 +345,8 @@ class LensSystem:
         s = self.settings
         out, ok, air, in_glass, glass = self._pass(origins, d)
         wall = (air[0] | in_glass[0]) & ok
+        if self.column_bands or self.row_bands:      # drafted walls refract like the rest of the surface
+            return out, np.where(ok, transmittance, 0.0), wall
         factor = np.where(ok & ~wall, transmittance, 0.0)
         rows = np.flatnonzero(wall & air[0] & (air[2] > 0))                 # mirrored in the air, then through
         if len(rows):
@@ -412,10 +467,63 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
     if without:
         system.warnings.append(f"{without} cells lie in no row of the element table: they are plane")
     system.sag = (sag_lo, sag_hi)
+    if s.wall_draft > 0.0:
+        _join(system, progress)
     if s.thickness + system.sag[0] < 0.3:
         raise DesignError(f"the lens elements are {-system.sag[0]:.1f} mm deep, more than the lens is thick "
                           f"({s.thickness:g} mm) – a thicker lens, smaller cells or less deflection")
     return system
+
+
+def _join(system: LensSystem, progress=None) -> None:
+    """Walls with a draft angle, rounded at foot and head, between the elements: the profile across
+    every border as between the facets of the reflector (al_transitions.blend), as bands that run
+    out into the cells. First between the cells of a row, then between the rows, whose two sides
+    are the rows as built so far."""
+    import al_transitions as T
+
+    s = system.settings
+    room = min(s.cell_width, s.cell_height)
+    site = 0.05          # mm across a wall: these walls are low and narrow, their fillets small
+
+    def used(y, z):
+        return system.cell(np.ravel(y), np.ravel(z))[2].reshape(np.shape(y))
+
+    def height(y, z):
+        return system.inner(np.ravel(y), np.ravel(z))[0].reshape(np.shape(y))
+
+    def profiles(border, breaks, extra=0.0):
+        try:
+            return T.profiles(border, breaks, s.wall_draft, s.wall_fillet, height, height, 1e9, room, used, extra)
+        except DesignError as e:
+            raise DesignError("the lens elements are too small for walls with this draft angle and fillet radius "
+                              f"({e})") from e
+
+    for j in range(system.nz):                                             # between the cells of a row
+        if progress is not None:
+            progress(0.5 * j / system.nz, "walls of the lens elements …")
+        za = system.z0 + j * s.cell_height
+        for i in range(1, system.ny):
+            if not (system.used[i - 1, j] and system.used[i, j]):
+                continue
+            border = T.LineBorder(np.array([system.y0 + i * s.cell_width, 0.0]), np.array([0.0, -1.0]))   # ξ along +y
+            # (the stations stay inside the row: on its upper border a point belongs to the next row)
+            pr = profiles(border, T.stations((-(za + s.cell_height) + 1e-6, -za - 1e-6)))
+            if pr is not None:
+                system.column_bands[(i, j)] = T.band_of(pr, T._width(pr.reach), (j,), i, site=site)
+    for j in range(1, system.nz):                                          # between the rows
+        if progress is not None:
+            progress(0.5 + 0.5 * j / system.nz, "walls of the lens elements …")
+        both = np.flatnonzero(system.used[:, j - 1] & system.used[:, j])
+        if not len(both):
+            continue
+        border = T.LineBorder(np.array([0.0, system.z0 + j * s.cell_height]), np.array([1.0, 0.0]))      # ξ along +z
+        u_range = (system.y0 + both[0] * s.cell_width, system.y0 + (both[-1] + 1) * s.cell_width)
+        crossings = [system.y0 + i * s.cell_width for i in range(1, system.ny)
+                     if (i, j - 1) in system.column_bands or (i, j) in system.column_bands]
+        pr = profiles(border, T.stations(u_range, crossings), extra=0.8 if crossings else 0.0)
+        if pr is not None:
+            system.row_bands[j] = T.band_of(pr, T._width(pr.reach), (j - 1, j), site=site)
 
 
 # ------------------------------------------------------------------ geometry for CAD
@@ -467,7 +575,12 @@ def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, di
             yb, zb = ya + s.cell_width, za + s.cell_height
             cell = np.array([[ya, za], [yb, za], [yb, zb], [ya, zb]])
             pieces = [system.frame]
-            for normal, offset in (((1.0, 0.0), ya), ((-1.0, 0.0), -yb), ((0.0, 1.0), za), ((0.0, -1.0), -zb)):
+            left, right = system.column_bands.get((i, j)), system.column_bands.get((i + 1, j))   # the bands take
+            below, above = system.row_bands.get(j), system.row_bands.get(j + 1)                    # their share
+            for normal, offset in (((1.0, 0.0), ya + (left.half_width if left else 0.0)),
+                                   ((-1.0, 0.0), -yb + (right.half_width if right else 0.0)),
+                                   ((0.0, 1.0), za + (below.half_width if below else 0.0)),
+                                   ((0.0, -1.0), -zb + (above.half_width if above else 0.0))):
                 pieces = al_layout.clip_all(pieces, al_layout.Line(np.array(normal), offset))
             if not pieces:
                 continue
@@ -477,11 +590,35 @@ def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, di
                      "knots_v": [za] * (DEGREE + 1) + [zb] * (DEGREE + 1), "num_u": DEGREE + 1, "num_v": DEGREE + 1,
                      "points": [round(float(c), 8) for p in ctrl for c in p]}
             for piece in pieces:
-                whole = abs(al_layout.area(piece) - al_layout.area(cell)) < 1e-6
+                whole = abs(al_layout.area(piece) - al_layout.area(cell)) < 1e-6 and not (left or right or below or above)
                 face = {"type": "trimmed_surface", "surface": patch, "label": f"lens element {i}.{j}"}
                 if not whole:
                     face["outer"] = [_loop(piece)]
                 out.append(("element", f"Lens element {i}.{j}", face))
+    if system.column_bands or system.row_bands:        # walls with a draft: the bands that join the cells
+        here = (ox + s.lens_x, oy, oz)
+        for key, band in sorted(system.row_bands.items()) + sorted(system.column_bands.items()):
+            row = isinstance(key, int)
+            zb = system.z0 + (key if row else key[1]) * s.cell_height
+            if row:
+                limits = ((1.0, 0.0), band.graph.knots_p[0]), ((-1.0, 0.0), -band.graph.knots_p[-1]), \
+                    ((0.0, 1.0), zb - band.half_width), ((0.0, -1.0), -zb - band.half_width)
+            else:
+                yb = system.y0 + key[0] * s.cell_width
+                below, above = system.row_bands.get(key[1]), system.row_bands.get(key[1] + 1)
+                limits = ((1.0, 0.0), yb - band.half_width), ((-1.0, 0.0), -yb - band.half_width), \
+                    ((0.0, 1.0), zb + (below.half_width if below else 0.0)), \
+                    ((0.0, -1.0), -zb - s.cell_height + (above.half_width if above else 0.0))
+            pieces = [system.frame]
+            for normal, offset in limits:
+                pieces = al_layout.clip_all(pieces, al_layout.Line(np.array(normal), offset))
+            surface = band.surface(here)
+            name = f"Lens walls between the rows {key - 1}|{key}" if row else f"Lens wall {key[0] - 1}|{key[0]}.{key[1]}"
+            for piece in pieces:
+                loop = np.stack(band.border.uxi(piece[:, 0], piece[:, 1]), axis=1)
+                out.append(("wall", name, {"type": "trimmed_surface", "surface": surface, "label": name.lower(),
+                                           "outer": [_loop(loop if al_layout.area(loop) > 0 else loop[::-1])]}))
+        return out
     # the walls between neighbouring cells: ruled along X between the two patches' rims
     outline = al_layout.simplified(system.frame, 0.05)
     fraction = np.arange(DEGREE + 1) / DEGREE

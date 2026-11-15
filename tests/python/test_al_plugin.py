@@ -474,6 +474,32 @@ for bad, message in ((dict(lens_x=-10.0), "inside the mirror"), (dict(thickness=
     except al_design.DesignError as e:
         assert message in str(e), e
 
+# walls with a draft angle and fillets: bands that join the elements to one smooth inner side
+drafted, dist_d, centre, _, _ = lens_beam((5.0, -2.0, 6.0, 2.0), wall_draft=5.0, wall_fillet=0.2)
+assert len(drafted.column_bands) > 10 and len(drafted.row_bands) >= 3
+assert abs(centre[0] - 5.0) < 0.3 and abs(centre[1] + 2.0) < 0.3 and dist_d.flux_walls > 0.0
+for start, end in (((-30.0, 3.3), (30.0, 4.1)), ((-14.0, -20.0), (-11.0, 20.0)), ((-25.0, -18.0), (22.0, 19.0))):
+    s_ = np.linspace(0.0, 1.0, 20001)                                       # lines across many borders: no step left
+    y_, z_ = start[0] + s_ * (end[0] - start[0]), start[1] + s_ * (end[1] - start[1])
+    x_, sy_, sz_, in_, _ = drafted.inner(y_, z_)
+    ds = math.hypot(end[0] - start[0], end[1] - start[1]) / 20000
+    jump = np.abs(np.diff(x_)) - 1.5 * ds * np.maximum(np.hypot(sy_, sz_)[1:], np.hypot(sy_, sz_)[:-1])
+    assert jump[in_[1:] & in_[:-1]].max() < 0.012, jump.max()                # (bands and cells join within 0.01 mm)
+    assert np.hypot(sy_, sz_)[in_].max() < 1.5 / tan(5.0)                   # and nothing steeper than the draft allows
+_, _, _, in_, _ = drafted.inner(np.array([0.0]), np.array([drafted.z0 + drafted.settings.cell_height]))
+assert drafted.on_band[0]                                                   # a point on a border lies on a band
+drafted_faces = al_lens.faces(drafted)
+bands = [f for f in drafted_faces if f[0] == "wall"]
+assert len(bands) >= len(drafted.column_bands) + len(drafted.row_bands) and all(f[2]["surface"]["degree_u"] == 3 for f in bands)
+total = 0.0
+for kind, _, face in drafted_faces[2:]:                                     # elements and bands tile the lens
+    loop = np.array(face["outer"][0]["points"]).reshape(-1, 3)
+    assert al_layout.area(loop[:-1, :2]) > 0
+    total += al_layout.area(loop[:-1, :2])
+whole = sum(al_layout.area(np.array(f[2]["outer"][0]["points"]).reshape(-1, 3)[:-1, :2]) if "outer" in f[2]
+            else drafted.settings.cell_width * drafted.settings.cell_height for f in al_lens.faces(pillow) if f[0] == "element")
+assert abs(total - whole) < 0.5, (total, whole)
+
 # a lens that leans back, runs back to one side, is domed: a plate of that shape turns nothing, prisms on
 # it turn the beam as on a flat lens
 flat_width = wide_h[1] - wide_h[0]

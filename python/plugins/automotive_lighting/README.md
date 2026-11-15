@@ -31,8 +31,9 @@ and V upwards.
   (0: whole strips; else every strip is cut into rows of this length) and the **zones**.
 - *Connecting faces*: on / off, the draft angle of the walls between the facets and the fillet
   radius at their foot and head.
-- *Lens* (patterned lens only): position, thickness, refractive index, transmittance, element
-  size, the position of the mirror's focus and the **elements**.
+- *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
+  element size, draft angle and fillet radius of the walls between the elements, the position of
+  the mirror's focus and the **elements**.
 - *Analysis*: the shadows of the steps on / off, the **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
@@ -181,6 +182,14 @@ with the reflectance of the glass at that – grazing – angle (what enters the
 the glass behind them by total reflection (or with its reflectance). *Light distribution* logs how
 much of the light from the mirror meets the walls and how much of that goes on.
 
+With *Lens → Draft angle of the walls* the walls lean by that angle against X and are rounded at
+foot and head with the *Fillet radius of the walls* – as moulding or pressing needs them. They
+are built like the connecting faces of the facetted reflector: the profile across every border
+(the wall through the middle of the step, a ball rolled over both sides), as bands that run out
+into the elements – first between the elements of a row, then between the rows. The walls are
+then part of the inner surface: a ray that meets one is refracted there like anywhere else (the
+log still names the share of the light on them), and the elements are trimmed back to the bands.
+
 *Generate reflector* adds the mirror (exact, with the lamp hole), the outer side of the lens, every
 element and every wall as trimmed NURBS faces (`al.part` = `mirror`, `lens`, `element`, `wall`) in
 the group *Headlamp &lt;lamp&gt;*. *Filament images* and *Light distribution* trace from the coil to the mirror
@@ -196,8 +205,9 @@ stop lamp S1 (60 … 260 cd), direction indicator front 1 (175 … 1000 cd) and 
 axis. The colour of the lens is part of *Transmittance* (a red or amber lens passes a fraction of
 the lamp's flux); the lamps P21W, PY21W, R10W and R5W have their filament across the axis.
 
-Not modelled: a second wall on the way of a mirrored ray (then it is lost), a draft angle or
-fillets of the walls, the reflections at the two sides of the lens. The dome is a sphere about a point on the lamp axis; the elements
+Not modelled: a second wall on the way of a ray mirrored at a wall along X (then it is lost), the
+reflections at the two sides of the lens. Drafted walls are computed on the lens' elements as
+they stand along X; they join the elements within about 0.01 mm. The dome is a sphere about a point on the lamp axis; the elements
 stand on the lens' shape along X (for a steep rake they are sheared, not perpendicular to it).
 
 ## Limits of this version

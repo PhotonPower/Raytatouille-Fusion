@@ -145,6 +145,12 @@ class AutomotiveLighting(Plugin):
                                    description="the lens runs back towards the left (negative: towards the right)"),
         "lens_radius": Param.number(0.0, min=0.0, max=100000.0, decimals=1, unit="mm", label="Dome radius",
                                     group="Lens", description="domed outwards as a sphere of this radius; 0: flat"),
+        "wall_draft": Param.number(0.0, min=0.0, max=45.0, decimals=1, unit="°", label="Draft angle of the walls",
+                                   group="Lens",
+                                   description="between the walls of neighbouring elements and X; 0: walls along X. "
+                                               "With a draft the walls are faces that join the elements smoothly"),
+        "wall_fillet": Param.number(0.0, min=0.0, max=5.0, decimals=2, unit="mm", label="Fillet radius of the walls",
+                                    group="Lens", description="at the foot and the head of every wall (with a draft)"),
         "lens_index": Param.number(1.49, min=1.01, max=3.0, decimals=3, label="Refractive index", group="Lens",
                                    description="PMMA 1.49, polycarbonate 1.59, glass about 1.52"),
         "lens_transmittance": Param.number(0.92, min=0.0, max=1.0, decimals=2, label="Transmittance", group="Lens"),
@@ -233,7 +239,8 @@ class AutomotiveLighting(Plugin):
                                             lens_x=float(p["lens_x"]), thickness=float(p["lens_thickness"]),
                                             index=float(p["lens_index"]), cell_width=float(p["cell_width"]),
                                             cell_height=float(p["cell_height"]), rake=float(p["lens_rake"]),
-                                            sweep=float(p["lens_sweep"]), radius=float(p["lens_radius"]))
+                                            sweep=float(p["lens_sweep"]), radius=float(p["lens_radius"]),
+                                            wall_draft=float(p["wall_draft"]), wall_fillet=float(p["wall_fillet"]))
             key = hashlib.sha256(repr(settings).encode() + frame.tobytes()).hexdigest()
             if getattr(self, "_lens", (None, None))[0] != key:
                 def progress(fraction: float, text: str) -> None:
