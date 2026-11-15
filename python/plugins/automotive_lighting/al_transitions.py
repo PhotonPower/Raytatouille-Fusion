@@ -344,13 +344,15 @@ def _reach(changed: np.ndarray, half: int, h: float) -> float:
     return reach * h
 
 
-def band_of(pr: Profiles, half_width: float, zones: tuple[int, ...], strip: int = 0, row: int | None = None) -> "Band":
+def band_of(pr: Profiles, half_width: float, zones: tuple[int, ...], strip: int = 0, row: int | None = None,
+            site: float = SITE) -> "Band":
     """The band of the profiles, |ξ| <= half_width (at least their reach + TAPER): the blended
-    profile within the reach, running out into the two sides up to the rim."""
+    profile within the reach, running out into the two sides up to the rim. `site`: spacing of the
+    B-spline's sites across the border."""
     weight = np.clip((half_width - np.abs(pr.xi)) / TAPER, 0.0, 1.0)
     weight = weight * weight * (3.0 - 2.0 * weight)
     profile = pr.G + weight[None, :] * (pr.F - pr.G)
-    n_xi = max(4, round(2.0 * half_width / SITE) + 3)
+    n_xi = max(4, round(2.0 * half_width / site) + 3)
     graph = Graph((pr.breaks[0], pr.breaks[-1]), (-half_width, half_width), 0, n_xi, pr.breaks)
     values = np.empty((graph.n_p, n_xi))
     for i in range(graph.n_p):

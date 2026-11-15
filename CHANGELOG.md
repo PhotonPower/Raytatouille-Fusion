@@ -24,7 +24,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   UN R148 (position, stop, direction indicator, daytime running lamps) as test points, and the
   lamps P21W, PY21W, R10W, R5W. The lens may lean back, run back to one side and be domed;
   the walls between its elements are faces of their own and mirror the light that meets them
-  (stray light).
+  (stray light), or with a draft angle lean, are rounded and refract it.
   The facetted reflector also takes lamps with the filament across the axis (H3: fog lamps);
   its light distribution leaves out the rays that a step of the mirror shades and follows those
   it stops after the reflection through a second one.
