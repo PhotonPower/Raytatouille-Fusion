@@ -7,6 +7,14 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**: *Light distribution (ray tracing)* – the coil modelled as a
+  helix of tungsten wire (one NURBS face per turn; wire diameter and turns estimated from the
+  lamp's power or given), the H4's shield and cap, the mirror's facets and connecting faces or
+  the paraboloid, and the lens as a glass body with Fresnel's reflection and refraction, traced
+  by the Path Tracer plugin's kernel (C++ if installed) from the wire through every reflection
+  until the light leaves; the same image, test points and cuts as *Light distribution*, with the
+  flux split into beam, direct, backwards, housing and absorbed, and the noise. The filament
+  images and the design keep the cylinder.
 - **Path Tracer plugin**: `escapes` in both kernels (`pt_integrator`, `pt_native`; package
   `pathtracer` 0.2.0) – the light that leaves the scene: per light path its direction, flux,
   number of surface events and its first and last surface; the base of far-field results such

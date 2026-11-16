@@ -11,7 +11,8 @@ systems (*System* in the panel):
   a lens whose inner side is a grid of elements – prisms, cylinder lenses, pillows – that turn and
   spread the light. See *Patterned lens* below.
 
-Needs only NumPy in the plugin environment.
+Needs only NumPy in the plugin environment; the ray tracing also the Path Tracer plugin next to
+this one (and, to be fast, its C++ kernel).
 
 Coordinates: **+X** is the driving direction (the light leaves along +X), **+Y** left, **+Z** up; the
 centre of the filament lies at *Filament centre*. On the measuring screen H is positive to the right
@@ -44,6 +45,9 @@ and V upwards.
   **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
+- *Ray tracing*: the number of light paths (default 5 million), the longest path (12 segments),
+  the coil's **wire diameter** and **turns** (0: estimated, see below) and the kernel (automatic,
+  C++, NumPy). *Lamp → Custom: power* is the power its coil is estimated from.
 
 **Zones.** A zone is a sector about the lamp axis (azimuth 0° = left, 90° = up, 180° = right, seen
 in the driving direction; each row reaches to the next row's start). Its facets use one branch of
@@ -73,6 +77,12 @@ bottom spread the light.
   lens; it may miss it): an H4's cap stops it within about 40° of the axis, a lamp without a cap
   sends it all over the screen – with an H7 up to about 100 cd, Φ sin θ / π² at θ from the axis.
   Its flux is logged apart from the beam's.
+- **Light distribution (ray tracing)**: the same image, table and cuts by ray tracing (see
+  below), in the result set *Low beam &lt;lamp&gt; – ray tracing* beside the other one for comparison.
+  The log names the kernel, the light paths and the time, the coil (wire, turns, pitch, how much
+  of the wire's light gets out of the coil), the flux in the beam, of the connecting faces, direct,
+  backwards, into the housing (with a lens) and absorbed, and the noise where the light is
+  brightest.
 - **Show strips**: the start curve and some characteristic strips of every facet as lines.
 - **Default zones**: the zone table for the chosen traffic side.
 
@@ -221,9 +231,50 @@ reflections at the two sides of the lens. Drafted walls are computed on the lens
 they stand along X; they join the elements within about 0.01 mm. The dome is a sphere about a point on the lamp axis; the elements
 stand on the lens' shape along X (for a steep rake they are sheared, not perpendicular to it).
 
+## Ray tracing
+
+*Light distribution (ray tracing)* checks the design with the lamp as it is, without the
+assumptions of the filament images, which stay as they are for the design and for *Filament
+images* and *Light distribution*:
+
+- **The coil** is a helix of tungsten wire that fills the lamp's cylinder (length, diameter): the
+  wire's centre runs on a helix of radius (diameter − wire) / 2, one NURBS face per turn (a tube
+  about the helix, within 0.2 µm of it). Its surface shines evenly (Lambertian, one luminance);
+  light that meets another turn is absorbed. The flux is set so that what gets out of the coil is
+  the lamp's flux, as from the cylinder – about 58 % of the wire's light does for an H7. Wire
+  diameter and turns are not in UN/ECE R37: without own values they are estimated from the
+  power – a wire at 3100 K (tungsten's resistivity 95.6 µΩ cm, Desai et al., J. Phys. Chem. Ref.
+  Data 13 (1984) 1069) at 13.2 V, the power rising with the voltage to the 1.6th, wound with a
+  pitch of 1.5 wire diameters: H7 0.161 mm and 16 turns, H4 0.187 mm and 19 turns.
+- **The lamp's inside**: the H4's shield (the trough and its end wall) and its cap as absorbing
+  surfaces, where the photometry has them.
+- **The mirror**: every facet and connecting face (or the paraboloid) as generated, with the
+  panel's reflectances; **the lens** as one glass body (outer side, elements and walls, turned
+  so that their normals point out of the glass) with Fresnel's reflection and refraction at the
+  panel's index – *Transmittance* is not used, no absorption.
+- **Light paths** start on the wire and are followed through every reflection and refraction, up
+  to *Longest path* segments (the meeting points on the exact surfaces); the light that leaves
+  is sorted by its direction into the cells of the screen. Light whose first surface is the
+  mirror is the beam, the rest that leaves forwards the direct light; with a lens only what
+  leaves through it counts, the rest stays in the housing.
+- **The kernel** is the Path Tracer plugin's (it must be installed next to this plugin): C++ if
+  the package `pathtracer` 0.2.0 or later is installed in the plugins' Python, else NumPy. The C++
+  kernel traces 5 million paths through a facetted reflector in about 15 s; NumPy needs
+  minutes for a few hundred thousand.
+- **Noise**: every cell of 0.25° × 0.1° gets the light of a few hundred paths; the log gives the
+  standard error where the light is brightest (5 million paths: some 5 %). The test points are
+  means over the photometer's window, which halves it.
+
+Compared with the filament images (H7, the test reflector, 12 million paths): the same flux in the
+beam (508 against 500 lm) and directly (736 against 740 lm), the same glare above the cut-off
+(288 against 293 cd), a maximum some 15 % lower – the wire shines less brightly than the cylinder
+across the coil and more along its axis: seen from its ends one sees the turns, the cylinder
+sends nothing there. That light meets the mirror near its vertex, where the images are large,
+and brightens the beam's wide parts (with a paraboloid, at B50L: 3000 instead of 160 cd).
+
 ## Limits of this version
 
-- Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
+- Photometry (*Filament images*, *Light distribution*): the coil as an evenly shining cylinder, one reflection at the facets and the
   connecting faces, no bulb glass (its refraction), no cover lens, no housing; of the lamp's inner
   parts only the H4's shield and cap (not its driving-beam coil and supports, nor light the
   shield's inside reflects). The direct light is taken on a grid of 1° and, whether the mirror is
@@ -235,6 +286,10 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
   counts as stray light if it then leaves the mirror freely – a third reflection is not followed.
   The log gives the stopped share; the mirror is compared as a height map of 0.25 mm, up to 6.4 mm
   sideways of the point.
+- Ray tracing: no bulb glass, no supports or leads of the coil, a coil of one temperature (its
+  ends are cooler in a real lamp), no driving-beam coil in an H4; the shield and the cap absorb
+  (a real shield reflects a little); the lens has no rim – light that reaches its edge inside the
+  glass leaves there unrefracted.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp
   axis; the strips must be wider than their connecting faces (both are reported).
 - The frame should be convex or nearly so; the lamp axis is +X; the faces are separate trimmed
