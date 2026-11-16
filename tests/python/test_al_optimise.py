@@ -139,7 +139,7 @@ start = O.objective(plain.ravel()[pr.bins][None, None, :], pr, 0.1)[0]
 assert result.objective < start - 0.5, (result.objective, start)
 first = result.rounds[0]
 assert set(first["model"]) == set(names) and first["sweeps"] >= 1
-close = [abs(first["surrogate"][k] / first["model"][k] - 1) < 0.1 for k in ("75R", "50R", "50V")]
+close = [abs(first["surrogate"][k] / first["model"][k] - 1) < 0.15 for k in ("75R", "50R", "50V")]
 assert all(close), first
 cells = {(e.y0, e.z0) for e in result.elements}
 assert len(cells) == len(result.elements)

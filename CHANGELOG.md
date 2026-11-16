@@ -6,6 +6,14 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Fixed
+- **Automotive Lighting plugin**: lamp data checked against UN/ECE R37 Rev. 7 – HB3 5.1 mm and
+  1860 lm, HB4 1095 lm, P21W/PY21W 6.0 mm; the black top of H7, H8, H11 from γ3 at the coil's end
+  nearest the reference plane, of the HB4 from its centre (it reached not far enough back); bulbs
+  within R37's outlines (H1 8.5 mm, the tips of P21W, PY21W, R5W, R10W); the H4's shield 4.3 mm in
+  radius as on sheet H4/3. The README says where the H4's mirror has its focus (at the
+  driving-beam coil, 6.7 mm behind): then its shining shield sends no light above the cut-off.
+
 ### Added
 - **Automotive Lighting plugin**: *Optimise lens* – every cell of a patterned lens gets its own
   deflection and spread so that the low beam meets the R112 test points and zones with a margin

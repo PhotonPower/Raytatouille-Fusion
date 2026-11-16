@@ -20,8 +20,8 @@ coil's turns warming each other is left out.
 
 The bulb (Bulb) is a tube of glass closed by a half sphere at its tip, about the lamp's reference
 axis, with the black top as a coating on its outside – where R37 puts it at least: from the angle
-γ3 seen from the coil's front end (H7, H8, H11: 30°, HB4: 45°), for the H4 from its shield's cap
-(α ≤ 40°). Diameters, wall and the tip's position are typical values of such lamps (R37 fixes
+γ3 seen from the coil's end nearest the reference plane (H7, H8, H11: 30°) or its centre (HB4:
+45°), for the H4 from its shield's cap (α ≤ 40°). Diameters, wall and the tip's position are typical values of such lamps (R37 fixes
 only the outline they must stay within).
 
 NumPy only."""
@@ -320,22 +320,24 @@ class Bulb:
         return tube | dome
 
 
-# Typical bulbs (mm, from the coil's centre): outer diameter, wall, tip, back end, the black top
-# ("γ3" angle from the coil's front end, "shield": the H4's cap, None) and the glass.
+# Typical bulbs (mm, from the coil's centre), within R37's outlines: outer diameter, wall, tip,
+# back end, the black top – (γ3, where its vertex lies on the coil's axis as a share of the coil's
+# length from its centre: R37 sheets H7/2, H8/2, H11/2 at the coil's end nearest the reference
+# plane, HB4/2 at its centre), "shield" (the H4's cap) or None – and the glass.
 _BULBS = {
-    "H1": (10.0, 1.0, 14.0, -20.0, None, QUARTZ),
+    "H1": (8.5, 1.0, 14.0, -20.0, None, QUARTZ),
     "H4 (low beam)": (13.0, 1.0, 15.0, -25.0, "shield", QUARTZ),
-    "H7": (9.0, 1.0, 14.8, -21.0, 30.0, QUARTZ),
-    "H8": (9.0, 1.0, 14.0, -21.0, 30.0, QUARTZ),
+    "H7": (9.0, 1.0, 14.8, -21.0, (30.0, -0.5), QUARTZ),
+    "H8": (9.0, 1.0, 14.0, -21.0, (30.0, -0.5), QUARTZ),
     "H9": (9.0, 1.0, 14.0, -21.0, None, QUARTZ),
-    "H11": (9.0, 1.0, 14.0, -21.0, 30.0, QUARTZ),
+    "H11": (9.0, 1.0, 14.0, -21.0, (30.0, -0.5), QUARTZ),
     "HB3": (10.0, 1.0, 14.0, -21.0, None, QUARTZ),
-    "HB4": (10.0, 1.0, 14.0, -21.0, 45.0, QUARTZ),
+    "HB4": (10.0, 1.0, 14.0, -21.0, (45.0, 0.0), QUARTZ),
     "H3": (10.0, 1.0, 12.0, -15.0, None, QUARTZ),
-    "P21W": (26.5, 0.7, 20.0, -14.0, None, HARD_GLASS),
-    "PY21W": (26.5, 0.7, 20.0, -14.0, None, HARD_GLASS),
-    "R10W": (19.0, 0.6, 16.0, -8.0, None, HARD_GLASS),
-    "R5W": (19.0, 0.6, 16.0, -8.0, None, HARD_GLASS),
+    "P21W": (26.5, 0.7, 13.2, -14.0, None, HARD_GLASS),
+    "PY21W": (26.5, 0.7, 13.2, -14.0, None, HARD_GLASS),
+    "R10W": (19.0, 0.6, 11.0, -8.0, None, HARD_GLASS),
+    "R5W": (19.0, 0.6, 11.0, -8.0, None, HARD_GLASS),
 }
 _GENERIC = (10.0, 1.0, 14.0, -20.0, None, QUARTZ)
 
@@ -354,7 +356,8 @@ def bulb_of(lamp: Lamp, diameter: float = 0.0, wall: float = 0.0, coils=()) -> B
     if top == "shield":
         cap_x = lamp.shield.cap_x
     elif top is not None:
-        cap_x = min(0.5 * lamp.length + radius / math.tan(math.radians(top)), dome_x)
+        angle, vertex = top
+        cap_x = min(vertex * lamp.length + radius / math.tan(math.radians(angle)), dome_x)
     else:
         cap_x = None
     bulb = Bulb(radius, wall, tip, back, cap_x, axis_z, index)
