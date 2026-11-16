@@ -1,7 +1,7 @@
-"""Automotive Lighting plugin, ray tracing: the coil as a helix of wire, the H4's shield and cap
-as surfaces, the lens' faces turned out of the glass, the light that leaves – with the NumPy
-kernel of the Path Tracer plugin (and the C++ one, if installed) – and the plugin's action.
-Exit code 77 (skipped) without NumPy."""
+"""Automotive Lighting plugin, ray tracing: the coil as a helix of wire with cooler ends, the
+bulb, the H4's shield, cap and second coil as surfaces, the lens' faces turned out of the glass,
+the light that leaves – with the NumPy kernel of the Path Tracer plugin (and the C++ one, if
+installed) – and the plugin's action. Exit code 77 (skipped) without NumPy."""
 
 import json
 import math
@@ -66,6 +66,37 @@ end, _, _ = pt_nurbs.surface_grid(faces[2], [1.0], np.linspace(0, 1, 13))
 start, _, _ = pt_nurbs.surface_grid(faces[3], [0.0], np.linspace(0, 1, 13))
 assert np.abs(end - start).max() < 1e-12                                   # the turns join
 assert abs(al_coil.estimated_wire(4.1, 1.3, 55.0) - coil.wire) < 1e-12
+quarters = al_coil.coil_faces(coil, pieces=4)                          # quarter turns: the same wire
+assert len(quarters) == 4 * coil.turns
+s, su, sv = pt_nurbs.surface_grid(quarters[9], np.linspace(0, 1, 23), np.linspace(0, 1, 13))
+pts = s.reshape(-1, 3)
+gap = np.linalg.norm(pts[:, None, :] - centre[None], axis=2)
+assert np.abs(gap.min(axis=1) - 0.5 * coil.wire).max() < 2e-4
+end, _, _ = pt_nurbs.surface_grid(quarters[9], [1.0], np.linspace(0, 1, 13))
+start, _, _ = pt_nurbs.surface_grid(quarters[10], [0.0], np.linspace(0, 1, 13))
+assert np.abs(end - start).max() < 1e-12
+moved = al_coil.coil_of(H7, al_optics.Filament.of(H7), offset=(-6.0, 0.0, -0.5))
+assert np.allclose(moved.centre(phi) - coil.centre(phi), [-6.0, 0.0, -0.5])
+
+# ---- the cooler ends: the temperature rises from the end to the middle, the luminance with it
+assert al_coil.luminance(al_coil.T_COIL)[0] == 1.0 and 0.07 < al_coil.luminance(2400.0)[0] < 0.11
+s_end, T_end = al_coil.end_profile(coil.wire, 2400.0, 6.0)
+assert T_end[0] == 2400.0 and (np.diff(T_end) >= 0).all() and 3050 < T_end[-1] < al_coil.T_COIL
+# near the middle the difference falls by e every λ = sqrt(k d / (4 ε σ T0³ (4 − β))) (the heat
+# balance made linear)
+lam = math.sqrt(al_coil.CONDUCTIVITY * coil.wire / (4 * al_coil.EMISSIVITY * al_coil.SIGMA * al_coil.T_COIL ** 3
+                                                    * (4 - al_coil.BETA)))
+far = (al_coil.T_COIL - T_end) < 60
+rate = -np.polyfit(s_end[far], np.log(al_coil.T_COIL - T_end[far]), 1)[0]
+assert abs(rate * lam - 1) < 0.05 and 1.2 < lam < 1.9, (rate * lam, lam)
+glow = al_coil.emission(coil, 4, 2400.0)
+assert len(glow) == 4 * coil.turns and np.allclose(glow, glow[::-1]) and glow[0] == glow.min() < 0.25
+assert glow[len(glow) // 2] > 0.99 and (al_coil.emission(coil, 4, al_coil.T_COIL) == 1.0).all()
+
+# ---- the H4's driving-beam coil: R37, behind the shield and 0.8 mm below plane H
+lit, offset = al_coil.driving_coil(H4)
+assert al_coil.driving_coil(H7) is None and lit.flux == 1650.0 and lit.length == 4.5
+assert np.allclose(offset, (-6.7, 0.0, H4.shield.axis_z - 0.8)) and offset[0] + 2.25 < H4.shield.back
 
 # ---- the H4's shield and cap as surfaces: they stop what Shield.passes says they stop
 shield = H4.shield
@@ -77,10 +108,12 @@ assert [k for k, _ in areas] == ["shield", "shield", "cap"]
 assert abs(areas[0][1] / (span * shield.radius * (shield.front - shield.back)) - 1) < 1e-3
 assert abs(areas[1][1] / (0.5 * shield.radius ** 2 * (span - math.sin(span))) - 1) < 2e-3
 assert abs(areas[2][1] / (math.pi * shield.bulb_radius ** 2) - 1) < 1e-3
-lamp_only = al_trace.lamp_bodies(H4, al_coil.coil_of(H4, al_optics.Filament.of(H4)))
-assert [b.role for b in lamp_only] == [al_trace.COIL, al_trace.SHIELD, al_trace.CAP]
+h4_coil = al_coil.coil_of(H4, al_optics.Filament.of(H4))
+lamp_only = al_trace.lamp_bodies(H4, h4_coil)
+assert [b.role for b in lamp_only] == [al_trace.COIL] * 4 * h4_coil.turns + [al_trace.SHIELD, al_trace.CAP]
+assert lamp_only[-2].material["kind"] == "absorber"
 walls = pt_scene.Scene(pt_mesh.build([{"id": k, "geometry": {"type": "shell", "faces": b.faces}}
-                                      for k, b in enumerate(lamp_only[1:])], al_trace.TOLERANCE),
+                                      for k, b in enumerate(lamp_only[-2:])], al_trace.TOLERANCE),
                        pt_bsdf.Materials.from_rows([{"name": "black", "kind": "absorber"}]), np.zeros(2, dtype=int),
                        [pt_scene.SourceSpec("p", 1.0, points=((0.0, 0.0, 0.0),))])
 rng = np.random.default_rng(2)
@@ -90,6 +123,39 @@ d /= np.linalg.norm(d, axis=1, keepdims=True)
 t, tri, _, _ = walls.hit(Q, d)
 agree = (tri < 0) == shield.passes(Q, d[None])[0]
 assert agree.mean() > 0.995, agree.mean()                        # (the cap's 1 µm hole, rays along a face)
+
+# ---- the bulb: R37's black top, the glass a closed shell with its normals out of the glass
+bulb = al_coil.bulb_of(H7, coils=[coil])
+assert bulb.radius == 4.5 and abs(bulb.cap_x - (2.05 + 4.5 / math.tan(math.radians(30)))) < 1e-9
+assert al_coil.bulb_of(H4, coils=[h4_coil]).cap_x == H4.shield.cap_x and al_coil.bulb_of(al_optics.LAMPS["H1"]).cap_x is None
+assert al_coil.bulb_of(H7, 12.0, 0.8).radius == 6.0
+for args, words in (((1.6, 0.2), "does not fit"), ((9.0, 3.0), "wall")):
+    try:
+        al_coil.bulb_of(H7, *args, coils=[coil])
+        raise AssertionError("not refused")
+    except ValueError as e:
+        assert words in str(e), e
+glass = al_trace.lamp_bodies(H7, coil, bulb=bulb)
+assert [b.role for b in glass[-2:]] == [al_trace.BULB, al_trace.CAP] and glass[-2].material["ior"] == al_coil.QUARTZ
+mesh = pt_mesh.build([{"id": 0, "geometry": {"type": "shell", "faces": glass[-2].faces}}], 0.002)
+inner_r = bulb.radius - bulb.wall
+expected = [2 * math.pi * bulb.radius * (bulb.dome_x - bulb.back), 2 * math.pi * bulb.radius ** 2,
+            2 * math.pi * inner_r * (bulb.dome_x - bulb.back), 2 * math.pi * inner_r ** 2,
+            math.pi * (bulb.radius ** 2 - inner_r ** 2)]
+assert np.allclose(mesh.face_area, expected, rtol=2e-3), (mesh.face_area, expected)
+tri, b1, b2 = mesh.sample(np.arange(5), 2000, np.random.default_rng(3))
+p = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
+n, _ = mesh.shade(tri, b1, b2)
+assert not bulb.inside_glass(p + 0.05 * n).any() and bulb.inside_glass(p - 0.05 * n).mean() > 0.999
+top = pt_mesh.build([{"id": 0, "geometry": {"type": "shell", "faces": glass[-1].faces}}], 0.002)
+r_top = bulb.radius + al_coil.COATING
+assert abs(top.face_area.sum() / (2 * math.pi * r_top * (bulb.dome_x - bulb.cap_x) + 2 * math.pi * r_top ** 2) - 1) < 2e-3
+disc = al_trace.lamp_bodies(H7, coil, bulb=bulb, glass=False)
+assert [b.role for b in disc[-1:]] == [al_trace.CAP] and al_trace.BULB not in [b.role for b in disc]
+shielded = al_trace.lamp_bodies(H4, h4_coil, other=al_coil.coil_of(lit, al_optics.Filament.of(H4), offset=offset),
+                                bulb=al_coil.bulb_of(H4, coils=[h4_coil]), shield_reflectance=0.5)
+assert [b.role for b in shielded[4 * h4_coil.turns:]] == [al_trace.OFF, al_trace.SHIELD, al_trace.BULB, al_trace.CAP]
+assert shielded[4 * h4_coil.turns + 1].material == {"name": "shield", "kind": "mirror", "reflectance": 0.5}
 
 # ---- a face turned: the same surface, the normal the other way, the trimming along
 lens_frame = al_layout.rounded_rectangle(80.0, 50.0, 8.0)
@@ -123,8 +189,8 @@ assert 0.5 < share < 0.65, share
 looser = al_trace.coil_share(al_coil.coil_of(H7, al_optics.Filament.of(H7), wire=coil.wire, turns=8), "NumPy",
                              rays=40_000)
 assert looser > share + 0.1                                     # open turns hide less of each other
-bare, info = al_trace.trace(al_trace.lamp_bodies(H7, coil), H7, coil, rays=60_000, depth=4, kernel_name="NumPy",
-                            batch=20_000)
+bare, info = al_trace.trace(al_trace.lamp_bodies(H7, coil, end=al_coil.T_COIL), H7, coil, rays=60_000, depth=4,
+                            kernel_name="NumPy", batch=20_000)
 assert abs((bare.flux_direct + info.flux_back) / H7.flux - 1) < 0.02, (bare.flux_direct, info.flux_back)
 assert abs(bare.flux_direct / H7.flux - 0.5) < 0.02 and bare.flux_beam == 0.0
 assert abs(info.flux_lost - H7.flux * (1 / info.coil_share - 1)) < 0.02 * H7.flux
@@ -135,6 +201,10 @@ side = (np.abs(bare.h) > 20) & (np.abs(bare.h) < 40)
 cylinder = H7.flux * np.sin(np.radians(np.abs(bare.h[side]))) / math.pi ** 2
 ratio = bare.intensity[np.abs(bare.v) < 5][:, side].mean() / cylinder.mean()
 assert 1.1 < ratio < 1.5, ratio
+cool, info = al_trace.trace(al_trace.lamp_bodies(H7, coil), H7, coil, rays=60_000, depth=4, kernel_name="NumPy",
+                            batch=20_000)                          # the cooler ends: less light along the axis
+along = lambda d: d.intensity[np.abs(d.v) < 5][:, side].mean()     # noqa: E731
+assert abs(cool.flux_direct / bare.flux_direct - 1) < 0.03 and along(cool) < 0.95 * along(bare)
 
 # ---- the paraboloid alone: the beam where the design's model has it
 mirror_only = al_trace.lamp_bodies(H7, coil) + lens[:1]
@@ -157,6 +227,28 @@ if native is not None:            # the C++ kernel: the same fluxes
     again, info = al_trace.trace(mirror_only, H7, coil, rays=600_000, depth=4, kernel_name="C++")
     assert abs(again.flux_beam / beam.flux_beam - 1) < 0.03 and abs(again.flux_direct / beam.flux_direct - 1) < 0.03
     assert info.kernel == "C++" and al_trace.kernel("automatic") == "C++"
+    # the bulb: nearly every ray passes its glass first, the beam is still what the mirror sends (the
+    # glass reflects a little of it back onto the wire and the black top); without its top the glass
+    # takes only what it sends back onto the coil
+    clear = al_coil.Bulb(bulb.radius, bulb.wall, bulb.tip, bulb.back)
+    for b, low in ((bulb, 0.85), (clear, 0.9)):
+        bodies = al_trace.lamp_bodies(H7, coil, bulb=b) + lens[:1]
+        through, info = al_trace.trace(bodies, H7, coil, rays=600_000, depth=12, kernel_name="C++")
+        assert low < through.flux_beam / again.flux_beam < 1.0, (through.flux_beam, again.flux_beam)
+    _, info = al_trace.trace(al_trace.lamp_bodies(H7, coil, bulb=clear), H7, coil, rays=300_000, depth=12,
+                             kernel_name="C++")
+    back_on_coil = info.flux_lost - H7.flux * (1 / info.coil_share - 1)
+    assert 0.0 < back_on_coil < 0.04 * H7.flux, back_on_coil
+    lost = []
+    for rho in (0.0, 1.0):        # the shield as a mirror: some of what it reflects gets out
+        h4_bodies = al_trace.lamp_bodies(H4, h4_coil, shield_reflectance=rho)
+        _, info = al_trace.trace(h4_bodies, H4, h4_coil, rays=300_000, depth=12, kernel_name="C++")
+        lost.append(info.flux_lost - H4.flux * (1 / info.coil_share - 1))      # (beyond the coil's own turns)
+    assert lost[1] < 0.9 * lost[0], lost        # (the trough about the coil sends much of it back onto the coil)
+    lit_coil = al_coil.coil_of(lit, al_optics.Filament.of(H4), offset=offset)
+    high, info = al_trace.trace(al_trace.lamp_bodies(H4, lit_coil, other=h4_coil, bulb=al_coil.bulb_of(H4)) + lens[:1],
+                                lit, lit_coil, rays=300_000, depth=12, kernel_name="C++")
+    assert high.flux_lamp == 1650.0 and high.flux_beam > beam.flux_beam
 else:
     assert al_trace.kernel("automatic") == "NumPy"
     try:
@@ -209,5 +301,26 @@ try:
     raise AssertionError("a wire thicker than the coil")
 except al_plugin.UserError as e:
     assert "thinner" in str(e)
+
+ctx.params.update({"coil_wire": 0.0, "trace_filament": "driving beam"})
+try:
+    plugin.light_distribution_traced(ctx)
+    raise AssertionError("an H7 has no driving-beam coil")
+except al_plugin.UserError as e:
+    assert "Only the H4" in str(e)
+host.results.clear()
+ctx.params.update({"lamp": "H4 (low beam)", "bulb_diameter": 14.0})
+summary = plugin.light_distribution_traced(ctx)
+assert summary.startswith("ray tracing, driving beam:") and host.results == ["image", "table", "curve", "curve"]
+log = "\n".join(host.logs)
+assert "coil (driving beam): 16 turns of 0.180 mm" in log and "14 mm across" in log and "the shield reflects 50 %" in log, log
+
+# ---- the driving beam's test points
+flat = al_photometry.Distribution(np.arange(-20, 20.01, 0.25), np.arange(-5, 5.01, 0.1),
+                                  np.full((101, 161), 50000.0), 0.0, 0.0, 1650.0, 0.0)
+rows = al_photometry.driving_points(flat)
+assert [r[0] for r in rows] == ["IM", "HV", "H-5L", "H-2.5L", "H-2.5R", "H-5R"] and all(r[-1] == "ok" for r in rows)
+flat.intensity[:, np.abs(flat.h) < 1.0] = 300000.0
+assert [r[0] for r in al_photometry.driving_points(flat) if r[-1] != "ok"] == ["IM"]
 
 print("al trace ok")

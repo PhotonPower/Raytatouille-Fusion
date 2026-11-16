@@ -502,6 +502,37 @@ def test_points(dist: Distribution, cutoff: Cutoff) -> list[list]:
     return rows
 
 
+# ------------------------------------------------------------------ UN/ECE R112, class B driving beam
+# Paragraph 6.3.3, measured with the passing beam's aim: at least these on the horizontal line, the
+# maximum IM within its limits and HV within the isoline of 80 % of it.
+R112_DRIVING_B = (
+    TestPoint("H-5L", -5.0, 0.0, 5100.0, None),
+    TestPoint("H-2.5L", -2.5, 0.0, 20300.0, None),
+    TestPoint("H-2.5R", 2.5, 0.0, 20300.0, None),
+    TestPoint("H-5R", 5.0, 0.0, 5100.0, None),
+)
+DRIVING_MAX = (40500.0, 215000.0)     # cd: IM at least, at most
+DRIVING_HV = 0.8
+
+
+def driving_points(dist: Distribution) -> list[list]:
+    """Rows name, H, V, intensity / cd, E at 25 m / lx, requirement, verdict of a driving beam."""
+    measured = dist.measured()
+    j, i = np.unravel_index(int(np.argmax(measured)), measured.shape)
+    top = float(measured[j, i])
+    lo, hi = DRIVING_MAX
+    rows = [["IM", round(float(dist.h[i]), 2), round(float(dist.v[j]), 2), round(top, 1), round(top / 625.0, 2),
+             f"{lo:.0f} … {hi:.0f} cd", "ok" if lo <= top <= hi else "not met"]]
+    hv = dist.at(0.0, 0.0)
+    rows.append(["HV", 0.0, 0.0, round(hv, 1), round(hv / 625.0, 2), f"≥ {DRIVING_HV * top:.0f} cd (80 % of IM)",
+                 "ok" if hv >= DRIVING_HV * top else "not met"])
+    for tp in R112_DRIVING_B:
+        value = dist.at(tp.h, tp.v)
+        rows.append([tp.name, tp.h, tp.v, round(value, 1), round(value / 625.0, 2), f"≥ {tp.minimum:.0f} cd",
+                     "ok" if value >= tp.minimum else "not met"])
+    return rows
+
+
 # ------------------------------------------------------------------ UN R148: light-signalling lamps
 # Standard light distributions (Annex 3): H, V in degrees and the percentage of the minimum
 # intensity required on the axis; and that minimum and the maximum in any direction for a single

@@ -1,17 +1,19 @@
 """The light distribution by ray tracing, with the kernel of the Path Tracer plugin (C++ if the
-package `pathtracer` ≥ 0.2.0 is installed, else NumPy).
+package `pathtracer` ≥ 0.3.0 is installed, else NumPy).
 
-The scene: the coil as it is (al_coil: a helix of wire whose surface shines evenly – Lambertian,
-the same luminance everywhere), the H4's shield and cap, the mirror (the facets and the
-connecting faces, or the paraboloid) and the lens, all as NURBS surfaces in design coordinates.
-Light paths start on the wire and are followed through every reflection – the mirror with its
-reflectance, the lens with Fresnel's reflection and refraction (index of the panel, no
+The scene: the coil as it is (al_coil: a helix of wire, Lambertian, its luminance falling towards
+its cooler ends; in pieces of a quarter turn, each a source of its own), the bulb's glass with
+its black top, the H4's shield and its other coil, the mirror (the facets and the connecting
+faces, or the paraboloid) and the lens, all as NURBS surfaces in design coordinates. Light paths
+start on the wire and are followed through every reflection – the mirror with its reflectance,
+the shield with its own (a mirror), bulb and lens with Fresnel's reflection and refraction (no
 absorption) – until they leave; what leaves is binned by its direction into the cells of the
-screen (luminous intensity = flux / solid angle of the cell). The wire, shield and cap absorb.
+screen (luminous intensity = flux / solid angle of the cell). The wires and the black top absorb.
 
 The coil's flux is set so that what gets out of the coil – past its own turns – is the lamp's
-flux, as the design's cylinder sends it. Not modelled: the bulb's glass, the lamp's supports and
-leads, the lens' rim (light that reaches it inside the glass leaves there, unrefracted)."""
+flux, as the design's cylinder sends it. Not modelled: the lamp's supports and leads, the pinch
+at the bulb's back (open there), the lens' rim (light that reaches it inside the glass leaves
+there, unrefracted)."""
 
 from __future__ import annotations
 
@@ -30,7 +32,10 @@ PATHTRACER = Path(__file__).resolve().parent.parent / "pathtracer"
 TOLERANCE = 0.002          # mm: the triangles within this of the surfaces (the rays meet the surfaces themselves)
 WAVELENGTH = 555.0         # nm: one line; fluxes are in lm throughout
 
-COIL, SHIELD, CAP, FACETS, CONNECTIONS, MIRROR, LENS = "coil", "shield", "cap", "facets", "connections", "mirror", "lens"
+COIL, OFF, BULB, SHIELD, CAP = "coil", "other coil", "bulb", "shield", "cap"
+FACETS, CONNECTIONS, MIRROR, LENS = "facets", "connections", "mirror", "lens"
+LAMP = (COIL, OFF, BULB, SHIELD, CAP)          # the lamp's parts: the light's first surface is the one after them
+PIECES = 4                                     # pieces of the wire per turn (sources of their own luminance)
 
 
 def _numpy():
@@ -52,14 +57,14 @@ def _native():
         import pathtracer
     except ImportError:
         return None
-    return pathtracer if hasattr(pathtracer, "escapes") else None
+    return pathtracer if "skip" in (getattr(pathtracer, "escapes", None).__doc__ or "") else None
 
 
 def kernel(choice: str = "automatic") -> str:
     """"C++" or "NumPy" for the choice automatic / C++ / NumPy."""
     native = _native()
     if choice == "C++" and native is None:
-        raise RuntimeError("the C++ kernel (package pathtracer 0.2.0 or later) is not installed in the plugins' "
+        raise RuntimeError("the C++ kernel (package pathtracer 0.3.0 or later) is not installed in the plugins' "
                            "Python: pip install git+https://github.com/PhotonPower/PathTracer")
     return "C++" if choice != "NumPy" and native is not None else "NumPy"
 
@@ -67,23 +72,47 @@ def kernel(choice: str = "automatic") -> str:
 # ------------------------------------------------------------------ the scene
 @dataclass
 class Body:
-    """One entity of the scene: its role (COIL …), the faces and its material row."""
+    """One entity of the scene: its role (COIL …), the faces and its material row; `emission` > 0:
+    a source of this relative luminance."""
 
     role: str
     faces: list[dict]
     material: dict
+    emission: float = 0.0
 
 
-def lamp_bodies(lamp: Lamp, coil: al_coil.Coil) -> list[Body]:
-    """The coil (first) and what of the lamp stops its light."""
-    black = {"name": "black", "kind": "absorber"}
-    bodies = [Body(COIL, [{"surface": f} for f in al_coil.coil_faces(coil)], {"name": "tungsten", "kind": "absorber"})]
+TUNGSTEN = {"name": "tungsten", "kind": "absorber"}
+
+
+def coil_bodies(coil: al_coil.Coil, end: float = al_coil.END_TEMPERATURE, pieces: int = PIECES) -> list[Body]:
+    """The coil in pieces along the wire, each a source with the luminance of its temperature."""
+    weights = al_coil.emission(coil, pieces, end)
+    return [Body(COIL, [{"surface": f}], TUNGSTEN, float(w))
+            for f, w in zip(al_coil.coil_faces(coil, pieces=pieces), weights)]
+
+
+def lamp_bodies(lamp: Lamp, coil: al_coil.Coil, *, other: al_coil.Coil | None = None,
+                bulb: al_coil.Bulb | None = None, glass: bool = True, end: float = al_coil.END_TEMPERATURE,
+                shield_reflectance: float = 0.0) -> list[Body]:
+    """The coil (first, the source) and the rest of the lamp: its other coil (dark), the bulb's
+    glass (`glass`) and black top, the H4's shield (a mirror of `shield_reflectance`). Without a
+    bulb the H4's cap is the disc of al_coil.shield_faces."""
+    bodies = coil_bodies(coil, end)
+    if other is not None:
+        bodies.append(Body(OFF, [{"surface": f} for f in al_coil.coil_faces(other)], TUNGSTEN))
     if lamp.shield is not None:
-        parts = al_coil.shield_faces(lamp.shield)
-        for role in (SHIELD, CAP):
-            faces = [{"surface": g} for kind, g in parts if kind == role]
-            if faces:
-                bodies.append(Body(role, faces, dict(black, name=role)))
+        parts = al_coil.shield_faces(lamp.shield, cap=bulb is None)
+        faces = [{"surface": g} for kind, g in parts if kind == SHIELD]
+        bodies.append(Body(SHIELD, faces, _mirror(SHIELD, shield_reflectance)))
+        if bulb is None:
+            bodies.append(Body(CAP, [{"surface": g} for kind, g in parts if kind == CAP], {"name": CAP, "kind": "absorber"}))
+    if bulb is not None:
+        if glass:
+            faces = _outward([{"surface": f} for f in al_coil.bulb_faces(bulb)], bulb.inside_glass)
+            bodies.append(Body(BULB, faces, {"name": "bulb", "kind": "glass", "ior": float(bulb.index)}))
+        top = al_coil.top_faces(bulb, glass)
+        if top:
+            bodies.append(Body(CAP, [{"surface": f} for f in top], {"name": CAP, "kind": "absorber"}))
     return bodies
 
 
@@ -129,35 +158,45 @@ def _turned(face: dict) -> dict:
     return out
 
 
+def _outward(faces: list[dict], inside) -> list[dict]:
+    """The faces of a glass body, each turned so that its normal points out of the glass: tested a
+    hair in front of a few of its points (inside(points) → in the glass?)."""
+    _, _, pt_mesh, _ = _numpy()
+    mesh = pt_mesh.build([{"id": 0, "geometry": {"type": "shell", "faces": faces}}], 0.005)
+    rng = np.random.default_rng(1)
+    out = []
+    for k, face in enumerate(faces):
+        tri, b1, b2 = mesh.sample(np.array([k]), 5, rng)
+        p = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
+        n, _ = mesh.shade(tri, b1, b2)
+        glass = inside(p + 0.05 * n)                     # (ten times the triangles' distance from the surface)
+        out.append(_turned(face) if glass.sum() > len(glass) / 2 else face)
+    return out
+
+
 def lens_bodies(system, reflectance: float) -> list[Body]:
     """The paraboloid and the lens – one glass body of the outer side, the elements and the walls,
-    every face turned so that its normal points out of the glass (tested a hair in front of a few
-    of its points: inside the glass is between the inner side and the outer side)."""
+    every face turned out of the glass (inside the glass is between the inner side and the outer
+    side)."""
     import al_lens
 
-    _, _, pt_mesh, _ = _numpy()
     s = system.settings
     mirror, lens = [], []
     for kind, _name, face in al_lens.faces(system):
         (mirror if kind == "mirror" else lens).append(face)
-    mesh = pt_mesh.build([{"id": 0, "geometry": {"type": "shell", "faces": lens}}], 0.005)
-    rng = np.random.default_rng(1)
-    faces = []
-    for k, face in enumerate(lens):
-        tri, b1, b2 = mesh.sample(np.array([k]), 5, rng)
-        p = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
-        n, _ = mesh.shade(tri, b1, b2)
-        q = p + 0.05 * n                                 # (ten times the triangles' distance from the surface)
+
+    def inside(q: np.ndarray) -> np.ndarray:
         inner, _, _, on_cell, _ = system.inner(q[:, 1], q[:, 2])
         outer = s.lens_x + s.thickness + system.shape(q[:, 1], q[:, 2])[0]
-        glass = on_cell & (q[:, 0] > s.lens_x + inner) & (q[:, 0] < outer)
-        faces.append(_turned(face) if glass.sum() > len(glass) / 2 else face)
+        return on_cell & (q[:, 0] > s.lens_x + inner) & (q[:, 0] < outer)
+
     return [Body(MIRROR, mirror, _mirror("mirror", reflectance)),
-            Body(LENS, faces, {"name": "glass", "kind": "glass", "ior": float(s.index)})]
+            Body(LENS, _outward(lens, inside), {"name": "glass", "kind": "glass", "ior": float(s.index)})]
 
 
 class Scene:
-    """The bodies as a scene of the kernel, with the coil as the source of `flux` (lm)."""
+    """The bodies as a scene of the kernel; the sources (bodies with an emission) share `flux` (lm)
+    by their emission (their pieces of wire have the same area)."""
 
     def __init__(self, bodies: list[Body], flux: float, kernel_name: str):
         self.bodies, self.kernel = bodies, kernel_name
@@ -167,33 +206,39 @@ class Scene:
             if b.material["name"] not in [r["name"] for r in rows]:
                 rows.append(b.material)
             numbers.append([r["name"] for r in rows].index(b.material["name"]))
-        coil = [k for k, b in enumerate(bodies) if b.role == COIL]
+        lit = [k for k, b in enumerate(bodies) if b.emission > 0.0]
+        total = sum(bodies[k].emission for k in lit)
+        shares = [(k, float(flux) * bodies[k].emission / total) for k in lit]
+        self.skip = [k for k, b in enumerate(bodies) if b.role in LAMP]
         if kernel_name == "C++":
             pt = _native()
             mesh = pt.build_mesh(entities, TOLERANCE)
-            source = {"name": "coil", "flux": float(flux), "half_angle": 90.0, "side": "front", "entities": coil,
-                      "points": [], "curves": [], "spectrum": [[WAVELENGTH, 1.0]], "distribution": None,
-                      "axis": [0.0, 0.0, -1.0]}
-            self.scene = pt.Scene(mesh, [dict(r, spectrum=[]) for r in rows], numbers, [source], [])
+            sources = [{"name": f"wire {k}", "flux": f, "half_angle": 90.0, "side": "front", "entities": [k],
+                        "points": [], "curves": [], "spectrum": [[WAVELENGTH, 1.0]], "distribution": None,
+                        "axis": [0.0, 0.0, -1.0]} for k, f in shares]
+            self.scene = pt.Scene(mesh, [dict(r, spectrum=[]) for r in rows], numbers, sources, [])
         else:
             pt_bsdf, _, pt_mesh, pt_scene = _numpy()
             mesh = pt_mesh.build(entities, TOLERANCE)
-            source = pt_scene.SourceSpec("coil", float(flux), 90.0, "front", tuple(coil), spectrum=((WAVELENGTH, 1.0),))
-            self.scene = pt_scene.Scene(mesh, pt_bsdf.Materials.from_rows(rows), np.asarray(numbers), [source])
+            sources = [pt_scene.SourceSpec(f"wire {k}", f, 90.0, "front", (k,), spectrum=((WAVELENGTH, 1.0),))
+                       for k, f in shares]
+            self.scene = pt_scene.Scene(mesh, pt_bsdf.Materials.from_rows(rows), np.asarray(numbers), sources)
         self.scene.exact = True
         self.scene.contact = max(self.scene.contact, 2 * TOLERANCE)
         self.triangles = int(mesh.triangles)
 
     def escapes(self, n: int, depth: int, seed: int, index: int) -> dict:
+        """The light that leaves; `first`: its first surface after the lamp's parts."""
         if self.kernel == "C++":
-            return _native().escapes(self.scene, n, depth, seed=seed, index=index)
+            return _native().escapes(self.scene, n, depth, seed=seed, index=index, skip=self.skip)
         _, pt_integrator, _, _ = _numpy()
-        return pt_integrator.escapes(self.scene, n, depth, seed=seed, index=index)
+        return pt_integrator.escapes(self.scene, n, depth, seed=seed, index=index, skip=self.skip)
 
 
-def coil_share(coil: al_coil.Coil, kernel_name: str, rays: int = 200_000, seed: int = 1) -> float:
-    """The share of the wire's light that gets out of the coil past its own turns."""
-    bodies = [Body(COIL, [{"surface": f} for f in al_coil.coil_faces(coil)], {"name": "tungsten", "kind": "absorber"})]
+def coil_share(coil, kernel_name: str, rays: int = 200_000, seed: int = 1) -> float:
+    """The share of the wire's light that gets out of the coil past its own turns: `coil` an
+    al_coil.Coil (shining evenly) or its bodies (coil_bodies)."""
+    bodies = coil if isinstance(coil, list) else coil_bodies(coil, end=al_coil.T_COIL)
     out = Scene(bodies, 1.0, kernel_name).escapes(rays, 1, seed, 0)
     return float(out["flux"].sum())
 
@@ -217,15 +262,15 @@ class Traced:
     beam: np.ndarray | None = None                # cd of the beam alone (without the direct light), as intensity
 
 
-def trace(bodies: list[Body], lamp: Lamp, coil: al_coil.Coil, *, rays: int, depth: int = 12, kernel_name: str,
+def trace(bodies: list[Body], lamp: Lamp, coil: al_coil.Coil, *, rays: int, depth: int = 20, kernel_name: str,
           h_range=(-40.0, 40.0), v_range=(-15.0, 10.0), dh: float = 0.25, dv: float = 0.1, seed: int = 1,
           batch: int = 250_000, progress=None) -> tuple[Distribution, Traced]:
     """The luminous intensity of the scene `bodies` (lamp_bodies first) on the screen's cells,
-    from `rays` light paths of up to `depth` segments. The light whose first surface is the mirror
-    is the beam, of it what met a connecting face first or last its stray light; the rest that
+    from `rays` light paths of up to `depth` segments. The light whose first surface past the lamp
+    (coils, bulb, shield, cap) is the mirror is the beam, of it what met a connecting face first or last its stray light; the rest that
     leaves forwards is the lamp's direct light (Distribution.add_direct). With a lens only what
     leaves through it reaches the screen – the rest stays in the housing. progress(fraction, text)."""
-    share = coil_share(coil, kernel_name)
+    share = coil_share([b for b in bodies if b.role == COIL], kernel_name)
     if not share > 0:
         raise RuntimeError("no light gets out of the coil")
     scene = Scene(bodies, lamp.flux / share, kernel_name)
