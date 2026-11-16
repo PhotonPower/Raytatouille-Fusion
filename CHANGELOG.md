@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Path Tracer plugin**: example documents in `examples/pathtracer` – a Cornell box, caustics of
+  glass and polished metal, a prism that fans white light into its colours (31 wavelengths) and
+  materials with depth of field –, each ready for *Camera image*, with `make_examples.py` that
+  writes them and puts the images of the wavelengths together to colour pictures.
 - **Hide / Unhide** buttons in the View toolbar (also *Edit* menu, H and Shift + H): Hide hides
   the selected objects and deselects them, so a later Delete or Move cannot act on them unseen;
   Unhide shows what Hide and Isolate hid and leaves layers and model-tree check boxes as they are.
