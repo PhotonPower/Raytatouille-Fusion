@@ -116,10 +116,12 @@ diffuse box, a glass plate).
 The computations exist twice, with the same model and the same methods:
 
 - **NumPy** – the modules `pt_*.py` of this plugin; nothing to install besides `numpy`.
-- **C++** – the package `pathtracer` (repository *PathTracer*): one path at a time on all
-  processor cores, some ten times faster and more. The plugin uses it when it is installed in
-  the plugin's Python (`pip install <path to PathTracer>`); *Kernel* in the panel chooses
-  (automatic: C++ if installed). The log names the kernel of every computation.
+- **C++** – the package `pathtracer` ([PhotonPower/PathTracer](https://github.com/PhotonPower/PathTracer),
+  MIT): one path at a time on all processor cores, some ten times faster and more. The plugin
+  uses it when it is installed in the plugin's Python –
+  `pip install git+https://github.com/PhotonPower/PathTracer` (needs a C++20 compiler and CMake) –;
+  *Kernel* in the panel chooses (automatic: C++ if installed). The log names the kernel of every
+  computation.
 
 Both are built from the same description of the model (`pt_setup.describe`) and are tested
 against the same closed forms and against each other (`tests/python/test_pathtracer_native.py`).

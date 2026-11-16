@@ -122,7 +122,9 @@ the irradiance on the image surface and optimises with live updates – see its
 The **Path Tracer** plugin computes light transport on the CAD model itself: objects become
 light sources, the others get materials (diffuse, mirror, glossy, glass, absorber); it shows the
 irradiance as a texture on the faces and a camera image, by light tracing, path tracing or
-bidirectional path tracing – see its [guide](../python/plugins/pathtracer/README.md).
+bidirectional path tracing – see its [guide](../python/plugins/pathtracer/README.md). With the package
+[pathtracer](https://github.com/PhotonPower/PathTracer) installed in the plugin's Python it computes
+in C++ on all processor cores.
 
 Writing your own plugins: [plugin-api.md](plugin-api.md).
 
