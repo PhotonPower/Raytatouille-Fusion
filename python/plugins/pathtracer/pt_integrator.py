@@ -64,6 +64,8 @@ class Path:
         self.channel = np.zeros(n, dtype=np.int64)           # number of the path's wavelength
         self.escape = np.full(n, -1, dtype=np.int64)         # vertex whose ray left the scene
         self.escape_dir = np.zeros((n, 3))
+        self.escape_beta = np.zeros(n)                       # weight of the subpath as it left
+        self.entity = np.full((k, n), -1, dtype=np.int64)   # entity of the vertex's surface (-1: vertex 0)
         self.rays = 0
         #: where rays crossed detector faces: {k: [crossings]} for the rays towards vertex k – each
         #: the vertex-k data (paths j, p, ns, wo, pf, tex, beta) of a subpath that ends there
@@ -108,6 +110,7 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         alive[lost] = False
         path.escape[lost] = k - 1
         path.escape_dir[lost] = dk[~got]
+        path.escape_beta[lost] = beta[lost]
         idx, dk, o, t, tri, b1, b2 = idx[got], dk[got], o[got], t[got], tri[got], b1[got], b2[got]
         if not idx.size:
             break
@@ -165,6 +168,7 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         if sensor is not None and not sensor.camera:
             path.tex[k, idx] = sensor.texel(tri, uv)
         path.src[k, idx] = scene.face_source[mesh.face[tri]]
+        path.entity[k, idx] = body
         path.beta[k, idx] = b
         path.pf[k, idx] = pdf[idx] * np.abs(cs) / dist2
         spec = mats.specular(m) | straight
@@ -569,3 +573,21 @@ def light_paths(scene, n: int, depth: int, seed: int = 0):
             points.extend(pts)
             starts.append(len(points))
     return np.asarray(points, dtype=float).reshape(-1, 3), np.asarray(starts, dtype=np.int64)
+
+
+def escapes(scene, n: int, depth: int, seed: int = 0, index: int = 0) -> dict:
+    """The light that leaves the scene, from n light subpaths of up to `depth` segments (batch
+    `index` of the seed): for every subpath that leaves, its direction d (m, 3), its flux (its
+    weight over n: the fluxes of one call add up to the escaping flux), its wavelength's channel,
+    its number of surface events before it left (bounces; 0: straight from the source) and the
+    entities of its first and its last surface (-1: none)."""
+    if depth < 1:
+        raise ValueError("paths need at least one segment")
+    if n < 1:
+        raise ValueError("at least one subpath is needed")
+    path = light_subpaths(scene, None, n, depth + 1, np.random.default_rng([seed, index]))
+    j = np.nonzero(path.escape >= 0)[0]
+    k = path.escape[j]
+    return {"d": path.escape_dir[j], "flux": path.escape_beta[j] / n, "channel": path.channel[j], "bounces": k,
+            "first": np.where(k >= 1, path.entity[np.minimum(1, path.entity.shape[0] - 1), j], -1),
+            "last": np.where(k >= 1, path.entity[k, j], -1), "rays": path.rays}

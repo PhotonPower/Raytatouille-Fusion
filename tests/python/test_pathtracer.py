@@ -230,6 +230,25 @@ for method in pt_integrator.METHODS:
     assert abs(centre - 1) < 0.08, (method, centre)
     assert np.allclose(sensor.texel_area, 400)
 
+# ---- the light that leaves the scene: a point source over a mirror square
+square = rect((-10, -10, 0), (20, 0, 0), (0, 20, 0))                 # normal +z, towards the source
+mirror_scene = scene_of([square], [MIRROR], [pt_scene.SourceSpec("p", 2.0, points=((0, 0, 5),))])
+share = solid_angle(10, 10, 5) / (4 * math.pi)
+gone = [pt_integrator.escapes(mirror_scene, 60_000, 3, seed=SEED, index=k) for k in range(2)]
+direct = sum(g["flux"][g["bounces"] == 0].sum() for g in gone) / 2
+mirrored = sum(g["flux"][g["bounces"] == 1].sum() for g in gone) / 2
+assert abs(direct / (2 * (1 - share)) - 1) < 0.01 and abs(mirrored / (2 * 0.9 * share) - 1) < 0.01, (direct, mirrored)
+for g in gone:
+    once = g["bounces"] == 1
+    assert g["d"].shape == (len(g["flux"]), 3) and once.any() and (g["bounces"] <= 1).all()
+    assert (g["first"][once] == 0).all() and (g["last"][once] == 0).all() and (g["first"][~once] == -1).all()
+    assert (g["d"][once, 2] > 0).all()
+    down = ~once & (g["d"][:, 2] < 0)                               # straight down: beside the square
+    assert (np.maximum(np.abs(g["d"][down, 0]), np.abs(g["d"][down, 1])) * 5 / -g["d"][down, 2] > 10 - 1e-6).all()
+assert not np.array_equal(gone[0]["flux"], gone[1]["flux"])           # the batches differ
+short = pt_integrator.escapes(mirror_scene, 20_000, 1, seed=SEED)
+assert (short["bounces"] == 0).all() and abs(short["flux"].sum() / (2 * (1 - share)) - 1) < 0.02
+
 # ---- detectors: the light passes them. Two between the source and a white floor measure the solid
 # angles they fill (also what the floor sends back up); the floor gets what it gets without them
 floor = rect((-100, -100, 0), (200, 0, 0), (0, 200, 0))
