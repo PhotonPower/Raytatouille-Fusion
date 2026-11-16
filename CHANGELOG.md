@@ -143,6 +143,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   `;`-separated paths (documents with the old text are still read).
 
 ### Fixed
+- **Workflow: a camera behind a grating computes.** The camera of a path through a FourierGrating
+  sample was evaluated in the Raytracer plugin's process, which has no grating – the run stopped
+  with *raytracer: … no evaluator for fg.grating*. Such a detector is now computed by the
+  workflow engine itself, which reaches both plugins (needs RTT-Fusion #82).
 - **Node editor**: a block of another kind that replaces a Raytatouille block (*Replace with*)
   keeps its element and traversals, keyed by the new ports, so the Raytracer still draws it.
 - **Workflow: a document computes on its own.** A grating (`fg.grating`) or layer stack

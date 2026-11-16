@@ -86,7 +86,11 @@ class WorkflowEngine(Plugin):
         except RuntimeError as e:
             ctx.log(f"blocks of other plugins: {e}")
             catalogues = []
-        evaluators = remote.register_remote(registry, catalogues, ctx.evaluate_block, self._portdata.name)
+        try:  # a detector with another plugin's block on its path (a grating) computes here
+            evaluators = remote.register_remote(registry, catalogues, ctx.evaluate_block, self._portdata.name,
+                                                local=_evaluators({}))
+        except TypeError:  # an RTT-Fusion before #82
+            evaluators = remote.register_remote(registry, catalogues, ctx.evaluate_block, self._portdata.name)
         providers = {str(e["type"]["type"]): {"plugin": str(e["provider"]), "version": str(e.get("version", ""))}
                      for e in catalogues}
         return evaluators, providers
