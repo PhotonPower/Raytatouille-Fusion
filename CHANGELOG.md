@@ -7,6 +7,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**: *Optimise lens* – every cell of a patterned lens gets its own
+  deflection and spread so that the low beam meets the R112 test points and zones with a margin
+  (H4: the shield makes the cut-off). The cells' light of the plane lens is shifted and smeared
+  per element choice (a surrogate of the filament images, within a few per cent), the cells are
+  optimised one by one in sweeps, the lens is built and checked in rounds; with the lamp's blur
+  measured by ray tracing the limits hold for the lamp as it is too. Zone I of R112 (the
+  foreground, at most 2 × I(50R)) is now in the table of the test points.
 - **FourierGrating plugin**: the dialog of a grating or stack block (double-click) shows the
   numbers of its configuration – period, Fourier orders, layer thicknesses, lamella edges,
   refractive indices – once *Store panel configuration in block* stored it.
