@@ -126,7 +126,7 @@ assert agree.mean() > 0.995, agree.mean()                        # (the cap's 1 
 
 # ---- the bulb: R37's black top, the glass a closed shell with its normals out of the glass
 bulb = al_coil.bulb_of(H7, coils=[coil])
-assert bulb.radius == 4.5 and abs(bulb.cap_x - (2.05 + 4.5 / math.tan(math.radians(30)))) < 1e-9
+assert bulb.radius == 4.5 and abs(bulb.cap_x - (-2.05 + 4.5 / math.tan(math.radians(30)))) < 1e-9   # γ3 from the coil's back end
 assert al_coil.bulb_of(H4, coils=[h4_coil]).cap_x == H4.shield.cap_x and al_coil.bulb_of(al_optics.LAMPS["H1"]).cap_x is None
 assert al_coil.bulb_of(H7, 12.0, 0.8).radius == 6.0
 for args, words in (((1.6, 0.2), "does not fit"), ((9.0, 3.0), "wall")):

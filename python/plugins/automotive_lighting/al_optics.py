@@ -77,7 +77,7 @@ class Shield:
         return ~stopped
 
 
-def h4_shield(length: float, diameter: float, *, radius: float = 2.5, alpha: float = 40.0,
+def h4_shield(length: float, diameter: float, *, radius: float = 4.3, alpha: float = 40.0,
               bulb_diameter: float = 13.0) -> Shield:
     """The shield and the tip cap of an H4 (UN/ECE R37, sheets H4/1 to H4/5, 12 V) about a coil of
     `length` and `diameter`, from the regulation where it fixes them:
@@ -86,9 +86,15 @@ def h4_shield(length: float, diameter: float, *, radius: float = 2.5, alpha: flo
                  line 15° below it through the reference axis – the window (−15°, 180°)
       p = 28.95, α ≤ 40°: the cap's edge is seen from the point p on the reference axis at most α
                  from the axis (footnote 5/: it covers the tip and overlaps the shield)
-    and assumed where it does not: the trough's radius (p, q at 33 mm "depend on the shape of the
-    shield"; the drawing is not binding), its ends 1.2 mm behind and 3.4 mm in front of the coil
-    (the proportions of sheet H4/3), the bulb's outer diameter (13 mm, OSRAM data sheets)."""
+    and taken from the drawing of sheet H4/3 where it does not (it "is not mandatory with respect
+    to the design of the shield"; p, q at 33 mm "depend on the shape of the shield"): a half
+    cylinder about 8.6 mm wide and 4.2 mm deep – radius 4.3 –, its ends 1.2 mm behind and 3.4 mm in
+    front of the coil; the bulb's outer diameter (13 mm, OSRAM data sheets).
+
+    In its headlamp the H4's mirror has its focus at the driving-beam coil, 6.7 mm behind the
+    passing-beam coil's centre: then the light the shining shield sends back – from its rear part
+    backwards and up – stays below the cut-off; with the focus closer to the passing-beam coil it
+    rises above it."""
     e, c, p = 28.5, 0.6, 28.95
     centre = e + 0.5 * length
     bulb_radius = 0.5 * bulb_diameter
@@ -114,23 +120,26 @@ class Lamp:
     watts: float = 0.0            # W at 12 V (the coil's wire for the ray tracing is estimated from it)
 
 
-# Luminous flux: the nominal values of UN/ECE R37 (12 V lamps). Filament length and diameter:
-# typical values of the coil – check the lamp's R37 sheet or data sheet; "Custom" takes the panel's.
+# UN/ECE R37 (Rev. 7), 12 V lamps: luminous flux = the objective value at the test voltage (13.2 V,
+# signal lamps 13.5 V; ± 10 … 20 %), filament length = the nominal one of the lamp's sheet (R5W,
+# R10W: none given, typical). R37 gives no coil diameters – at most an objective maximum (H7 1.3,
+# H8 1.2, H9 1.4, H11 1.4 mm) –: typical values. "Custom" takes the panel's.
 LAMPS: dict[str, Lamp] = {
     "H1": Lamp("H1", 5.0, 1.4, 1550.0, note="55 W, axial coil", watts=55.0),
     "H4 (low beam)": Lamp("H4 (low beam)", 5.5, 1.5, 1000.0, shield=h4_shield(5.5, 1.5), watts=55.0,
                           note="55 W coil above its shield (R37 sheet H4/3): light over the edges into the upper "
-                               "195°, a trough 2.5 mm in radius closed at the back; the black tip cap ≤ 40°"),
+                               "195°, a trough 4.3 mm in radius closed at the back; the black tip cap ≤ 40°; the "
+                               "mirror's focus at the driving-beam coil (6.7 mm behind)"),
     "H7": Lamp("H7", 4.1, 1.3, 1500.0, note="55 W, axial coil", watts=55.0),
     "H8": Lamp("H8", 3.7, 1.2, 800.0, note="35 W, axial coil", watts=35.0),
     "H9": Lamp("H9", 4.8, 1.4, 2100.0, note="65 W, axial coil", watts=65.0),
     "H11": Lamp("H11", 4.5, 1.3, 1350.0, note="55 W, axial coil", watts=55.0),
-    "HB3": Lamp("HB3", 4.2, 1.4, 1700.0, note="60 W, axial coil", watts=60.0),
-    "HB4": Lamp("HB4", 5.1, 1.4, 1000.0, note="51 W, axial coil", watts=51.0),
+    "HB3": Lamp("HB3", 5.1, 1.4, 1860.0, note="60 W, axial coil", watts=60.0),
+    "HB4": Lamp("HB4", 5.1, 1.4, 1095.0, note="51 W, axial coil", watts=51.0),
     "H3": Lamp("H3", 5.0, 1.4, 1450.0, axial=False, note="55 W, transverse coil (fog lamps)", watts=55.0),
     # signal lamps: the coil lies across the axis
-    "P21W": Lamp("P21W", 5.0, 1.0, 460.0, axial=False, note="21 W, transverse coil", watts=21.0),
-    "PY21W": Lamp("PY21W", 5.0, 1.0, 280.0, axial=False, note="21 W amber, transverse coil", watts=21.0),
+    "P21W": Lamp("P21W", 6.0, 1.0, 460.0, axial=False, note="21 W, transverse coil", watts=21.0),
+    "PY21W": Lamp("PY21W", 6.0, 1.0, 280.0, axial=False, note="21 W amber, transverse coil", watts=21.0),
     "R10W": Lamp("R10W", 4.0, 0.8, 125.0, axial=False, note="10 W, transverse coil", watts=10.0),
     "R5W": Lamp("R5W", 4.0, 0.7, 50.0, axial=False, note="5 W, transverse coil", watts=5.0),
 }

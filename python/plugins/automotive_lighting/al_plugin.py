@@ -241,7 +241,7 @@ class AutomotiveLighting(Plugin):
                                   group="Ray tracing", description="0: typical (quartz 1 mm, signal lamps 0.6–0.7 mm)"),
         "shield_reflectance": Param.number(0.5, min=0.0, max=1.0, decimals=2, label="H4 shield: reflectance",
                                            group="Ray tracing",
-                                           description="the shield's metal as a mirror (assumed 0.5); 0: black"),
+                                           description="the shield's shining metal as a mirror (assumed 0.5); 0: black"),
         "coil_wire": Param.number(0.0, min=0.0, max=2.0, decimals=3, unit="mm", label="Coil: wire diameter",
                                   group="Ray tracing", description="0: estimated from the lamp's power (tungsten "
                                                                    "at 3100 K, 13.2 V)"),

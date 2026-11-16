@@ -470,7 +470,7 @@ assert shield.window == (-15.0, 180.0) and abs(shield.axis_z - 0.15) < 1e-12   #
 Q = np.array([[0, 0, 0], [-2.75, 0, 0], [2.75, 0, -0.75], [2.75, 0, -0.75], [0, 0, 0], [0, 0, 0], [0, 0, 0],
               [0, 0, 0], [0, 0, 0.75]], dtype=float)
 d = np.array([[0, 0, 1],          # up: free
-              [-1, 0, -0.3],      # back and down: the end wall at the back
+              [-1, 0, -0.6],      # back and down: the end wall at the back
               [1, 0, -1],         # forward and steeply down: the trough
               [1, 0, -0.2],       # forward and down, past the open front: the cap
               [0, 1, 0],          # left (+Y): over the edge 15° below plane H
@@ -486,7 +486,7 @@ assert shield.back < -2.75 < 2.75 < shield.cap_x <= shield.front                
 before = dataclasses.replace(shield, axis_z=0.0, back=-1e9, front=1e9, cap_x=None)   # the model before: endless,
 h4_before = dataclasses.replace(al_optics.LAMPS["H4 (low beam)"], shield=before)     # its edges level with the coil centre
 low_before = lens_beam((0, 0, 0, 0), lamp=h4_before, focus_behind=4.0)[1]
-assert 0.9 * low_before.flux_mirror < low_beam.flux_mirror < 0.98 * low_before.flux_mirror   # edges 0.15 mm higher
+assert 0.9 * low_before.flux_mirror < low_beam.flux_mirror < 0.99 * low_before.flux_mirror   # edges 0.15 mm higher
 # (this mirror lies wholly behind the coil: the cap, ≤ 40° about +X, does not see it)
 # the lamp's direct light: a bare coil gives I(θ) = Φ sin θ / π² (a Lambertian cylinder), Φ/2 forwards
 screen_h, screen_v = np.arange(-39.875, 40.0, 0.25), np.arange(-14.95, 10.0, 0.1)

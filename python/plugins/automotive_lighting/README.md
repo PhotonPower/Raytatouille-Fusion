@@ -28,8 +28,10 @@ and V upwards.
   about the reference axis from 1.2 mm behind the coil (closed by an end wall) to 3.4 mm in front
   of it (open); the cap seen at 40° from the axis point p = 28.95 mm (the limit of the sheet) on a
   bulb 13 mm across. The regulation fixes the edges, the coil's position and the cap's angle;
-  the trough's radius (2.5 mm), its length and the bulb's diameter are assumed – the drawing of
-  the shield is not binding.
+  the trough's radius (4.3 mm: about 8.6 mm wide, 4.2 mm deep) and its length are taken from the
+  drawing of sheet H4/3, which is not binding for the shield, the bulb's diameter is assumed. In
+  its headlamp the H4's mirror has its focus at the driving-beam coil, 6.7 mm behind the
+  low-beam coil's centre (*Mirror focus behind the filament centre* 6.7).
 - *Cut-off*: right- or left-hand traffic, the height of the horizontal part (−0.57° = 1 %), the
   rise (15°) and the position of the kink.
 - *Frame*: the outline of the mirror seen along X – closed curves drawn in CAD (*Frame (curves)*,
@@ -190,8 +192,9 @@ narrower strips, a smaller spread per strip, or neighbouring zones with similar 
 
 *System → patterned lens*. The mirror is the paraboloid of *Reflector → Focal length* within the
 frame, outside the lamp hole; *Lens → Mirror focus behind the filament centre* moves its focus
-(H4: the low-beam coil sits before the focus, so the upper half of the mirror, which alone gets
-light past the shield, sends it below the horizon). The lens is a plate that meets the lamp axis
+(H4: the low-beam coil sits before the focus – in the H4's headlamp the focus is at the
+driving-beam coil, 6.7 mm behind –, so the upper half of the mirror, which alone gets light past
+the shield, sends it below the horizon). The lens is a plate that meets the lamp axis
 at *Lens in front of the filament*; its outer side is smooth, its inner side a grid of cells
 (*Element width / height*, one cell centred on the lamp axis). It may lean back (*Rake*: its top
 towards the mirror), run back to one side (*Sweep*) and be domed outwards (*Dome radius*, a
@@ -253,7 +256,8 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 ## Optimising the lens
 
 A low beam through a patterned lens takes its cut-off from the lamp – the H4's shield, with the
-paraboloid's focus behind the coil (*Mirror focus behind the filament centre* ≈ 3 mm) –; the lens
+paraboloid's focus behind the coil (*Mirror focus behind the filament centre*; the H4's headlamp
+has it at the driving-beam coil, 6.7 mm) –; the lens
 has to place the light below it, finely: *Optimise lens* gives every cell (best a few mm, *Element
 width / height*) its own deflection and spread.
 
@@ -288,8 +292,12 @@ What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, focus 3 mm behi
 shield black, about 4½ minutes): all of R112 met by the filament images and by the ray tracing,
 75R 11 900 cd, 50R 20 600 cd, zone III 380 cd, the cut-off at −0.70° with G = 0.33 (ray tracing).
 Without the blur the filament images are met but the ray tracing finds light in zone III at the
-cut-off's kink. A mirroring H4 shield (*H4 shield: reflectance*) sends light above the cut-off
-that no lens can take back (zone III about 5 600 cd at 0.5) – how the real shield reflects decides.
+cut-off's kink. With the focus that close to the coil the shining H4 shield (*H4 shield:
+reflectance*) sends light above the cut-off that no lens can take back (zone III about 5 600 cd at
+0.5): its rear part reflects the coil's light backwards and up, as from a coil behind the focus.
+With the focus at the driving-beam coil (6.7 mm, as in the H4's headlamp) that light stays below
+the cut-off (a lens deflecting 1° down, ray tracing: zone III 791 cd with the shield black, 799 cd
+shining; with the focus 3 mm behind 223 and 5 459 cd).
 
 ## Ray tracing
 
@@ -317,10 +325,11 @@ images* and *Light distribution*. *Generate lamp* puts this lamp into the model 
 - **The bulb**: a tube of glass about the reference axis closed by a half sphere, one glass body
   with Fresnel's reflection and refraction (quartz n = 1.458, signal lamps' glass 1.52), open at
   the back where it narrows to the pinch. Its black top, an absorbing coating just outside the
-  glass, reaches as far back as R37 demands at least: to the angle γ3 from the coil's front end
-  (H7, H8, H11 30°, HB4 45°), the H4's to its cap (α ≤ 40°). Diameter, wall and the tip's place are
-  typical (R37 fixes only the outline they must keep within): H7 9 mm, H4 13 mm, wall 1 mm, the
-  tip about 15 mm in front of the coil; P21W 26.5 mm, R5W/R10W 19 mm. Without the glass the black
+  glass, reaches as far back as R37 demands at least: to the angle γ3 from the coil's end nearest
+  the reference plane (H7, H8, H11 30°; sheets H7/2, H8/2, H11/2) or from its centre (HB4 45°,
+  sheet HB4/2), the H4's to its cap (α ≤ 40°). Diameter, wall and the tip's place are typical,
+  within R37's outlines: H7 9 mm, H1 8.5 mm, H4 13 mm, wall 1 mm, the tip about 15 mm in front of
+  the coil; P21W 26.5 mm with its tip 13.2 mm, R5W/R10W 19 mm with 11 mm in front of the coil. Without the glass the black
   top is a disc across the bulb.
 - **The H4's inside**: the shield (the trough and its end wall, where the photometry has it) as a
   mirror of *H4 shield: reflectance* (0: black) – being nearly coaxial with the coil, the trough
