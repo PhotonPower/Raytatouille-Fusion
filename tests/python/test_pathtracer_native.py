@@ -114,6 +114,14 @@ for bounces, room in ((0, 0.01), (1, 0.03), (None, 0.01)):           # (None: al
     assert abs(b / a - 1) < room, (bounces, a, b)
 up = lambda g: g["flux"][g["d"][:, 2] > 0.5].sum() / g["flux"].sum()            # noqa: E731
 assert abs(up(theirs[0]) / up(mine) - 1) < 0.03 and set(np.unique(theirs[0]["first"])) == set(np.unique(mine["first"]))
+if pt_native.skips():                                                 # the first surface past the most common one
+    common = int(np.bincount(mine["first"][mine["first"] >= 0]).argmax())
+    mine = pt_integrator.escapes(numpy_scene, 100_000, 6, seed=SEED, skip=[common])
+    theirs = pt_native.escapes(native_scene, 400_000, 6, seed=SEED, skip=[common])
+    assert common not in mine["first"] and common not in theirs["first"]
+    for e in np.unique(mine["first"]):
+        a, b = mine["flux"][mine["first"] == e].sum(), theirs["flux"][theirs["first"] == e].sum()
+        assert abs(b - a) < 0.02 * mine["flux"].sum(), (e, a, b)
 
 # ---- the plugin's actions with the C++ kernel
 from nfcad import UserError  # noqa: E402

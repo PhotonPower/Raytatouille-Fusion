@@ -204,15 +204,35 @@ class AutomotiveLighting(Plugin):
         "trace_rays": Param.integer(5_000_000, min=10_000, max=2_000_000_000, label="Light paths", group="Ray tracing",
                                     description="from the coil's wire; the noise of a cell of the screen falls with "
                                                 "their root (5 million: some 5 % where the beam is brightest)"),
-        "trace_depth": Param.integer(12, min=1, max=100, unit="segments", label="Longest path", group="Ray tracing",
-                                     description="reflections and refractions a light path may have before it ends"),
+        "trace_depth": Param.integer(20, min=1, max=100, unit="segments", label="Longest path", group="Ray tracing",
+                                     description="reflections and refractions a light path may have before it ends "
+                                                 "(through the bulb alone: two)"),
+        "trace_filament": Param.choice(["passing beam", "driving beam"], "passing beam", label="H4: lit coil",
+                                       group="Ray tracing",
+                                       description="driving beam: the H4's other coil (behind the shield, R37) lit – "
+                                                   "the same reflector's high beam, with the driving-beam points of "
+                                                   "R112"),
+        "coil_end_temperature": Param.number(2400.0, min=1000.0, max=3100.0, decimals=0, unit="K",
+                                             label="Coil: temperature at its ends", group="Ray tracing",
+                                             description="the leads cool the coil's ends (assumed 2400 K), its middle "
+                                                         "is at 3100 K; 3100: the coil shines evenly"),
+        "bulb": Param.boolean(True, label="Bulb glass", group="Ray tracing",
+                              description="the bulb as glass (Fresnel) with its black top; off: no glass, the black "
+                                          "top as a disc across the bulb"),
+        "bulb_diameter": Param.number(0.0, min=0.0, max=60.0, decimals=2, unit="mm", label="Bulb: outer diameter",
+                                      group="Ray tracing", description="0: typical of the lamp (H7 9 mm, H4 13 mm)"),
+        "bulb_wall": Param.number(0.0, min=0.0, max=5.0, decimals=2, unit="mm", label="Bulb: wall",
+                                  group="Ray tracing", description="0: typical (quartz 1 mm, signal lamps 0.6–0.7 mm)"),
+        "shield_reflectance": Param.number(0.5, min=0.0, max=1.0, decimals=2, label="H4 shield: reflectance",
+                                           group="Ray tracing",
+                                           description="the shield's metal as a mirror (assumed 0.5); 0: black"),
         "coil_wire": Param.number(0.0, min=0.0, max=2.0, decimals=3, unit="mm", label="Coil: wire diameter",
                                   group="Ray tracing", description="0: estimated from the lamp's power (tungsten "
                                                                    "at 3100 K, 13.2 V)"),
         "coil_turns": Param.integer(0, min=0, max=1000, label="Coil: turns", group="Ray tracing",
                                     description="0: a pitch of 1.5 wire diameters"),
         "trace_kernel": Param.choice(["automatic", "C++", "NumPy"], "automatic", label="Kernel", group="Ray tracing",
-                                     description="the Path Tracer plugin's: C++ (package pathtracer 0.2.0 or later) "
+                                     description="the Path Tracer plugin's: C++ (package pathtracer 0.3.0 or later) "
                                                  "if installed – NumPy takes minutes for a reflector"),
     }
 
@@ -458,20 +478,37 @@ class AutomotiveLighting(Plugin):
                 f"{dist.intensity.max():.0f} cd, cut-off G = {g:.2f}")
 
     @action("Light distribution (ray tracing)",
-            description="The same by ray tracing: the coil as a helix of wire, the H4's shield and cap, the mirror and "
-                        "the lens as surfaces; light paths from the wire through every reflection and refraction, "
-                        "traced by the Path Tracer plugin's kernel")
+            description="The same by ray tracing: the coil as a helix of wire, the bulb, the H4's shield and cap, the "
+                        "mirror and the lens as surfaces; light paths from the wire through every reflection and "
+                        "refraction, traced by the Path Tracer plugin's kernel")
     def light_distribution_traced(self, ctx):
         p = ctx.params
         patterned = p["system"] == PATTERNED
         r = self.lens_system(ctx) if patterned else self.reflector(ctx)
         lamp, cutoff, function = r.settings.lamp, r.settings.cutoff, p["test_points"]
+        second = al_coil.driving_coil(lamp)
+        driving = p["trace_filament"] == "driving beam"
+        if driving and second is None:
+            raise UserError("Only the H4 has a driving-beam coil (H4: lit coil).")
         field = {} if function == LOW_BEAM else {"h_range": (-40.0, 40.0), "v_range": (-20.0, 20.0), "dv": 0.25}
         try:
             kernel = al_trace.kernel(p["trace_kernel"])
-            coil = al_coil.coil_of(lamp, r.filament, float(p["coil_wire"]), int(p["coil_turns"]))
+            wire, turns = float(p["coil_wire"]), int(p["coil_turns"])
+            if second is None:
+                coil, other, lit = al_coil.coil_of(lamp, r.filament, wire, turns), None, lamp
+            elif driving:
+                lit, offset = second
+                coil = al_coil.coil_of(lit, r.filament, wire, turns, offset)
+                other = al_coil.coil_of(lamp, r.filament)
+            else:
+                coil, lit = al_coil.coil_of(lamp, r.filament, wire, turns), lamp
+                other = al_coil.coil_of(second[0], r.filament, offset=second[1])
+            bulb = al_coil.bulb_of(lamp, float(p["bulb_diameter"]), float(p["bulb_wall"]),
+                                   [c for c in (coil, other) if c is not None])
             ctx.progress(0.9, "the scene: coil, lamp, mirror" + (" and lens" if patterned else "") + " …")
-            bodies = al_trace.lamp_bodies(lamp, coil) + (
+            bodies = al_trace.lamp_bodies(lamp, coil, other=other, bulb=bulb, glass=bool(p["bulb"]),
+                                          end=float(p["coil_end_temperature"]),
+                                          shield_reflectance=float(p["shield_reflectance"])) + (
                 al_trace.lens_bodies(r, float(p["reflectance"])) if patterned else
                 al_trace.reflector_bodies(r, float(p["reflectance"]), float(p["reflectance_connections"])))
 
@@ -480,34 +517,51 @@ class AutomotiveLighting(Plugin):
                 ctx.progress(0.9 + 0.1 * fraction, text)
 
             start = time.time()
-            dist, info = al_trace.trace(bodies, lamp, coil, rays=int(p["trace_rays"]), depth=int(p["trace_depth"]),
+            dist, info = al_trace.trace(bodies, lit, coil, rays=int(p["trace_rays"]), depth=int(p["trace_depth"]),
                                         kernel_name=kernel, progress=progress, **field)
         except (RuntimeError, ValueError) as e:
             raise UserError(str(e)) from e
         ctx.log(f"ray tracing with the {kernel} kernel: {info.rays:,} light paths, {info.traced:,} rays, "
                 f"{info.triangles:,} triangles, {time.time() - start:.1f} s")
         estimated = [what for what, given in (("wire", p["coil_wire"]), ("turns", p["coil_turns"])) if not given]
-        ctx.log(f"coil: {coil.turns} turns of {coil.wire:.3f} mm wire, pitch {coil.pitch:.3f} mm, "
-                f"{coil.wire_length:.0f} mm of wire" + (f" ({' and '.join(estimated)} estimated)" if estimated else "")
+        ctx.log(f"coil{' (driving beam)' if driving else ''}: {coil.turns} turns of {coil.wire:.3f} mm wire, pitch "
+                f"{coil.pitch:.3f} mm, {coil.wire_length:.0f} mm of wire"
+                + (f" ({' and '.join(estimated)} estimated)" if estimated else "")
                 + f"; {100.0 * info.coil_share:.0f} % of the wire's light gets out of the coil, the rest meets its "
                   "other turns")
-        own = lamp.flux / info.coil_share - lamp.flux               # what the coil's turns take of their own light
-        ctx.log(f"flux: lamp {lamp.flux:.0f} lm; in the beam {dist.flux_beam:.0f} lm (by the mirror), of it "
+        end = float(p["coil_end_temperature"])
+        if end < al_coil.T_COIL:
+            glow = al_coil.emission(coil, al_trace.PIECES, end)
+            ctx.log(f"coil's ends at {end:.0f} K (middle {al_coil.T_COIL:.0f} K): its first and last turns shine at "
+                    f"{100.0 * glow[:al_trace.PIECES].mean():.0f} % of the middle's luminance, the coil as a whole at "
+                    f"{100.0 * glow.mean():.0f} %")
+        ctx.log(f"bulb: {'glass' if p['bulb'] else 'no glass'} (n = {bulb.index:g}), {2.0 * bulb.radius:g} mm across, "
+                f"wall {bulb.wall:g} mm, tip {bulb.tip:g} mm in front of the coil"
+                + (f", black from {bulb.cap_x:.1f} mm on" if bulb.cap_x is not None else ", no black top")
+                + (f"; the shield reflects {100.0 * float(p['shield_reflectance']):.0f} % (mirror)"
+                   if lamp.shield is not None else "")
+                + ("; the other coil dark in its place" if other is not None else ""))
+        own = lit.flux / info.coil_share - lit.flux                 # what the coil's turns take of their own light
+        ctx.log(f"flux: lamp {lit.flux:.0f} lm; in the beam {dist.flux_beam:.0f} lm (by the mirror), of it "
                 f"{dist.flux_connections:.0f} lm by the connecting faces; direct {dist.flux_direct:.0f} lm forwards, "
                 f"not by the mirror{' (through the lens)' if patterned else ''}, up to {dist.direct_max:.0f} cd; "
                 f"backwards {info.flux_back:.0f} lm; "
                 + (f"into the housing beside the lens {info.flux_housing:.0f} lm; " if patterned else "")
-                + f"absorbed {max(info.flux_lost - own, 0.0):.0f} lm"
-                + (" (shield and cap, mirror)" if lamp.shield is not None else " (mirror)"))
+                + f"absorbed {max(info.flux_lost - own, 0.0):.0f} lm (lamp, mirror)")
         if patterned:
             ctx.log(f"the lens refracts and reflects by Fresnel (n = {r.settings.index:g}): *Transmittance* is not "
                     "used here")
         if math.isfinite(info.noise):
             ctx.log(f"noise: {100.0 * info.noise:.1f} % per cell where the light is brightest (standard error; four "
                     f"times the light paths halve it)")
-        self._present(ctx, dist, r, f"Low beam {lamp.name} – ray tracing",
-                      f"ray tracing ({kernel}): the coil as a helix of wire, every reflection and refraction, with the "
-                      "lamp's direct light")
+        description = (f"ray tracing ({kernel}): the coil as a helix of wire, every reflection and refraction, with the "
+                       "lamp's direct light")
+        if driving:
+            self._present(ctx, dist, r, "Driving beam H4 – ray tracing", description, driving=True)
+            failed = [row[0] for row in al_photometry.driving_points(dist) if row[-1] != "ok"]
+            return (f"ray tracing, driving beam: {dist.flux_beam:.0f} lm in the beam, maximum "
+                    f"{dist.intensity.max():.0f} cd, R112: " + ("met" if not failed else f"{', '.join(failed)} not met"))
+        self._present(ctx, dist, r, f"Low beam {lamp.name} – ray tracing", description)
         if function != LOW_BEAM:
             failed = [row[0] for row in al_photometry.signal_points(dist, function) if row[-1] != "ok"]
             return (f"ray tracing: {dist.flux_beam:.0f} lm in the beam, maximum {dist.intensity.max():.0f} cd, "
@@ -520,9 +574,9 @@ class AutomotiveLighting(Plugin):
                 f"cut-off G = {g:.2f}")
 
     @staticmethod
-    def _present(ctx, dist, r, title: str, description: str):
+    def _present(ctx, dist, r, title: str, description: str, driving: bool = False):
         """The intensity as an image, the table of the test points and two cuts, in a new result set."""
-        function = ctx.params["test_points"]
+        function = "driving" if driving else ctx.params["test_points"]
         cutoff = r.settings.cutoff
         run = ctx.result_set(title)
         ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
@@ -532,6 +586,10 @@ class AutomotiveLighting(Plugin):
             ctx.table(run, "R112 test points (class B, passing beam)",
                       ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
                       al_photometry.test_points(dist, cutoff))
+        elif driving:
+            ctx.table(run, "R112 test points (class B, driving beam)",
+                      ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
+                      al_photometry.driving_points(dist))
         else:
             ctx.table(run, f"R148 standard light distribution, {function}",
                       ["point", "H / °", "V / °", "I / cd", "required", ""],

@@ -7,6 +7,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**, *Light distribution (ray tracing)*: the lamp as it is – the
+  coil's cooler ends (the temperature along the wire from its heat balance, each quarter turn
+  shining by its temperature), the bulb as a glass body with its black top where R37 puts it, the
+  H4's shield as a mirror and its driving-beam coil (R37 sheet H4/3) in its place; *H4: lit coil →
+  driving beam* gives the same reflector's high beam with the driving-beam points of UN/ECE R112.
+- **Path Tracer plugin**: `escapes(..., skip=...)` in both kernels (package `pathtracer` 0.3.0) –
+  the first surface past given entities, e.g. what the light of a lamp meets after its bulb.
 - **Automotive Lighting plugin**: *Light distribution (ray tracing)* – the coil modelled as a
   helix of tungsten wire (one NURBS face per turn; wire diameter and turns estimated from the
   lamp's power or given), the H4's shield and cap, the mirror's facets and connecting faces or

@@ -248,6 +248,15 @@ for g in gone:
 assert not np.array_equal(gone[0]["flux"], gone[1]["flux"])           # the batches differ
 short = pt_integrator.escapes(mirror_scene, 20_000, 1, seed=SEED)
 assert (short["bounces"] == 0).all() and abs(short["flux"].sum() / (2 * (1 - share)) - 1) < 0.02
+past = pt_integrator.escapes(mirror_scene, 20_000, 3, seed=SEED, skip=[0])     # the square passed over
+plain_escape = pt_integrator.escapes(mirror_scene, 20_000, 3, seed=SEED)
+assert (past["first"] == -1).all() and np.array_equal(past["last"], plain_escape["last"])
+assert np.array_equal(pt_integrator.escapes(mirror_scene, 20_000, 3, seed=SEED, skip=[5])["first"], plain_escape["first"])
+try:
+    pt_integrator.escapes(mirror_scene, 10, 3, skip=[-1])
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "skip" in str(e), e
 
 # ---- detectors: the light passes them. Two between the source and a white floor measure the solid
 # angles they fill (also what the floor sends back up); the floor gets what it gets without them

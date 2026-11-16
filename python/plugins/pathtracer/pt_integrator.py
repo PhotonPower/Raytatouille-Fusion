@@ -575,19 +575,26 @@ def light_paths(scene, n: int, depth: int, seed: int = 0):
     return np.asarray(points, dtype=float).reshape(-1, 3), np.asarray(starts, dtype=np.int64)
 
 
-def escapes(scene, n: int, depth: int, seed: int = 0, index: int = 0) -> dict:
+def escapes(scene, n: int, depth: int, seed: int = 0, index: int = 0, skip=()) -> dict:
     """The light that leaves the scene, from n light subpaths of up to `depth` segments (batch
     `index` of the seed): for every subpath that leaves, its direction d (m, 3), its flux (its
     weight over n: the fluxes of one call add up to the escaping flux), its wavelength's channel,
     its number of surface events before it left (bounces; 0: straight from the source) and the
-    entities of its first and its last surface (-1: none)."""
+    entities of its first surface not in `skip` and of its last surface (-1: none)."""
     if depth < 1:
         raise ValueError("paths need at least one segment")
     if n < 1:
         raise ValueError("at least one subpath is needed")
+    skip = np.asarray(list(skip), dtype=np.int64)
+    if (skip < 0).any():
+        raise ValueError("skip: entities are numbers from 0 on")
     path = light_subpaths(scene, None, n, depth + 1, np.random.default_rng([seed, index]))
     j = np.nonzero(path.escape >= 0)[0]
     k = path.escape[j]
+    vertices = path.entity[1:, j]                                   # (surface events, paths)
+    rank = np.arange(1, vertices.shape[0] + 1)[:, None]
+    counted = (vertices >= 0) & ~np.isin(vertices, skip) & (rank <= k[None, :])
+    at = np.argmax(counted, axis=0)
+    first = np.where(counted.any(axis=0), vertices[at, np.arange(len(j))], -1) if len(j) else np.zeros(0, int)
     return {"d": path.escape_dir[j], "flux": path.escape_beta[j] / n, "channel": path.channel[j], "bounces": k,
-            "first": np.where(k >= 1, path.entity[np.minimum(1, path.entity.shape[0] - 1), j], -1),
-            "last": np.where(k >= 1, path.entity[k, j], -1), "rays": path.rays}
+            "first": first, "last": np.where(k >= 1, path.entity[k, j], -1), "rays": path.rays}

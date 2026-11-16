@@ -45,9 +45,12 @@ and V upwards.
   **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
-- *Ray tracing*: the number of light paths (default 5 million), the longest path (12 segments),
-  the coil's **wire diameter** and **turns** (0: estimated, see below) and the kernel (automatic,
-  C++, NumPy). *Lamp → Custom: power* is the power its coil is estimated from.
+- *Ray tracing*: the number of light paths (default 5 million), the longest path (20 segments),
+  the H4's **lit coil** (passing or driving beam), the coil's **wire diameter** and **turns** (0:
+  estimated, see below), the **temperature at its ends** (2400 K; 3100 K: even), the **bulb glass**
+  on / off with its outer diameter and wall (0: typical of the lamp), the **H4 shield's
+  reflectance** (0.5) and the kernel (automatic, C++, NumPy). *Lamp → Custom: power* is the power
+  its coil is estimated from.
 
 **Zones.** A zone is a sector about the lamp axis (azimuth 0° = left, 90° = up, 180° = right, seen
 in the driving direction; each row reaches to the next row's start). Its facets use one branch of
@@ -238,28 +241,49 @@ assumptions of the filament images, which stay as they are for the design and fo
 images* and *Light distribution*:
 
 - **The coil** is a helix of tungsten wire that fills the lamp's cylinder (length, diameter): the
-  wire's centre runs on a helix of radius (diameter − wire) / 2, one NURBS face per turn (a tube
-  about the helix, within 0.2 µm of it). Its surface shines evenly (Lambertian, one luminance);
-  light that meets another turn is absorbed. The flux is set so that what gets out of the coil is
-  the lamp's flux, as from the cylinder – about 58 % of the wire's light does for an H7. Wire
-  diameter and turns are not in UN/ECE R37: without own values they are estimated from the
-  power – a wire at 3100 K (tungsten's resistivity 95.6 µΩ cm, Desai et al., J. Phys. Chem. Ref.
-  Data 13 (1984) 1069) at 13.2 V, the power rising with the voltage to the 1.6th, wound with a
-  pitch of 1.5 wire diameters: H7 0.161 mm and 16 turns, H4 0.187 mm and 19 turns.
-- **The lamp's inside**: the H4's shield (the trough and its end wall) and its cap as absorbing
-  surfaces, where the photometry has them.
+  wire's centre runs on a helix of radius (diameter − wire) / 2, a NURBS face per quarter turn (a
+  tube about the helix, within 0.2 µm of it). Its surface is Lambertian; light that meets another
+  turn is absorbed. The flux is set so that what gets out of the coil is the lamp's flux, as from
+  the cylinder – about 56 % of the wire's light does for an H7. Wire diameter and turns are not in
+  UN/ECE R37: without own values they are estimated from the power – a wire at 3100 K
+  (tungsten's resistivity 95.6 µΩ cm, Desai et al., J. Phys. Chem. Ref. Data 13 (1984) 1069) at
+  13.2 V, the power rising with the voltage to the 1.6th, wound with a pitch of 1.5 wire
+  diameters: H7 0.161 mm and 16 turns, H4 0.187 mm and 19 turns.
+- **Its cooler ends**: the leads draw heat off the coil's ends. Along the wire, conducted heat
+  balances Joule heat and radiation, k A T'' = π d ε σ T⁴ − I² ρ(T) / A (tungsten at 3100 K:
+  k = 95 W/m K, ε = 0.34, ρ ∝ T^1.15; the current keeps the middle at 3100 K); its first integral
+  gives the rise from the ends' temperature (*Coil: temperature at its ends*, assumed 2400 K) to
+  the middle – 2900 K after 2 mm of wire, 3040 K after 4 mm (near the middle it closes in on
+  3100 K by e every λ = √(k d / 4 ε σ T³ (4 − β)) ≈ 1.5 mm). Every quarter turn shines with the
+  luminance of its temperature (Planck's law weighted with V(λ), grey tungsten): the first and last
+  turns of an H7 at about half the middle's. The turns warming each other is left out.
+- **The bulb**: a tube of glass about the reference axis closed by a half sphere, one glass body
+  with Fresnel's reflection and refraction (quartz n = 1.458, signal lamps' glass 1.52), open at
+  the back where it narrows to the pinch. Its black top, an absorbing coating just outside the
+  glass, reaches as far back as R37 demands at least: to the angle γ3 from the coil's front end
+  (H7, H8, H11 30°, HB4 45°), the H4's to its cap (α ≤ 40°). Diameter, wall and the tip's place are
+  typical (R37 fixes only the outline they must keep within): H7 9 mm, H4 13 mm, wall 1 mm, the
+  tip about 15 mm in front of the coil; P21W 26.5 mm, R5W/R10W 19 mm. Without the glass the black
+  top is a disc across the bulb.
+- **The H4's inside**: the shield (the trough and its end wall, where the photometry has it) as a
+  mirror of *H4 shield: reflectance* (0: black) – being nearly coaxial with the coil, the trough
+  sends much of what it reflects back onto the wire –, and the other coil, dark, in its place
+  (UN/ECE R37 sheet H4/3: the driving-beam coil 4.5 mm long, 1.7 mm behind the passing-beam
+  coil, its axis 0.8 mm below plane H). *H4: lit coil → driving beam* lights that one instead
+  (1650 lm): the same reflector's high beam, with the driving-beam points of UN/ECE R112 (IM
+  40 500 … 215 000 cd, HV ≥ 80 % of IM, H-2.5L/R ≥ 20 300 cd, H-5L/R ≥ 5100 cd).
 - **The mirror**: every facet and connecting face (or the paraboloid) as generated, with the
   panel's reflectances; **the lens** as one glass body (outer side, elements and walls, turned
   so that their normals point out of the glass) with Fresnel's reflection and refraction at the
   panel's index – *Transmittance* is not used, no absorption.
 - **Light paths** start on the wire and are followed through every reflection and refraction, up
   to *Longest path* segments (the meeting points on the exact surfaces); the light that leaves
-  is sorted by its direction into the cells of the screen. Light whose first surface is the
-  mirror is the beam, the rest that leaves forwards the direct light; with a lens only what
-  leaves through it counts, the rest stays in the housing.
+  is sorted by its direction into the cells of the screen. Light whose first surface past the
+  lamp (coils, bulb, shield, black top) is the mirror is the beam, the rest that leaves forwards
+  the direct light; with a lens only what leaves through it counts, the rest stays in the housing.
 - **The kernel** is the Path Tracer plugin's (it must be installed next to this plugin): C++ if
-  the package `pathtracer` 0.2.0 or later is installed in the plugins' Python, else NumPy. The C++
-  kernel traces 5 million paths through a facetted reflector in about 15 s; NumPy needs
+  the package `pathtracer` 0.3.0 or later is installed in the plugins' Python, else NumPy. The C++
+  kernel traces 5 million paths through bulb and facetted reflector in about 10 s; NumPy needs
   minutes for a few hundred thousand.
 - **Noise**: every cell of 0.25° × 0.1° gets the light of a few hundred paths; the log gives the
   standard error where the light is brightest (5 million paths: some 5 %). The test points are
@@ -271,6 +295,13 @@ beam (508 against 500 lm) and directly (736 against 740 lm), the same glare abov
 across the coil and more along its axis: seen from its ends one sees the turns, the cylinder
 sends nothing there. That light meets the mirror near its vertex, where the images are large,
 and brightens the beam's wide parts (with a paraboloid, at B50L: 3000 instead of 160 cd).
+
+What the lamp adds (the panel's defaults, H7, 5 million paths, against the even coil without
+glass): the cooler ends change little (G 1.03 against 0.96, the light along the coil's axis
+13 % weaker); the bulb's glass most – its reflections send light above the cut-off (zone III 520
+against 200 cd, B50L 180 against 15 cd, G 0.36): ghost images of the coil, which R37 asks the
+lamp makers to keep above the coil (sheet H7/2, note 8). The H4 likewise (G 0.25 against 0.97, B50L
+93 against 20 cd).
 
 ## Limits of this version
 
@@ -286,10 +317,10 @@ and brightens the beam's wide parts (with a paraboloid, at B50L: 3000 instead of
   counts as stray light if it then leaves the mirror freely – a third reflection is not followed.
   The log gives the stopped share; the mirror is compared as a height map of 0.25 mm, up to 6.4 mm
   sideways of the point.
-- Ray tracing: no bulb glass, no supports or leads of the coil, a coil of one temperature (its
-  ends are cooler in a real lamp), no driving-beam coil in an H4; the shield and the cap absorb
-  (a real shield reflects a little); the lens has no rim – light that reaches its edge inside the
-  glass leaves there unrefracted.
+- Ray tracing: typical bulbs, open at the back (no pinch); no supports or leads of the coil; the
+  coil's end temperature assumed, its turns not warming each other; the wires absorb what meets
+  them (tungsten reflects about half); the shield is an ideal mirror (no scatter); the lens has
+  no rim – light that reaches its edge inside the glass leaves there unrefracted.
 - The lamp hole must be large enough for the bands between the zones, which meet at the lamp
   axis; the strips must be wider than their connecting faces (both are reported).
 - The frame should be convex or nearly so; the lamp axis is +X; the faces are separate trimmed
