@@ -97,6 +97,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   `;`-separated paths (documents with the old text are still read).
 
 ### Fixed
+- **Workflow: a document computes on its own.** A grating (`fg.grating`) or layer stack
+  (`fg.stack`) that named its FourierGrating configuration or Jones table by path failed on any
+  other machine – every display behind it gave up and the status line only said *nothing
+  computed*. *Check workflow* (and *Run workflow*) now store such files in the blocks and clear the
+  paths (RTT-Fusion W75), so the `.rttf` carries them; a file that cannot be read is a warning at
+  the check. A run that computes nothing names the first reason in the status line.
 - Crash when hiding results (e.g. the rays of one arm) or a layer with its check box: the panel
   rebuilt its list while Qt was still handling the click. The lists also keep their scroll
   position now.
