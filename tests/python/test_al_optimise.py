@@ -82,13 +82,14 @@ settings = al_lens.LensSettings(H4, cut, (al_lens.Element(-1e3, 1e3, -1e3, 1e3),
 plane = al_lens.build(settings, frame)
 rays = O.lens_rays(plane, spacing=2.0)
 assert len(rays.cells) == plane.cells and rays.cell.max() < len(rays.cells) and (rays.flux > 0).all()
-sur = O.Surrogate(rays, pr, np.zeros((1, len(pr.bins))))
-zero = O.Choice(*(np.full(len(rays.cells), z, dtype=np.int64) for z in (16, 15, 0, 0)))
+sur = O.Surrogate(rays, pr, np.zeros((1, len(pr.bins))), cell=(8.0, 8.0))
+zero = O.Choice(*(np.full(len(rays.cells), z, dtype=np.int64) for z in (16, 15, 0, 7)))
 assert O.DEFLECT_H[16] == 0.0 and O.DEFLECT_V[15] == 0.0
 flat = sur.full(zero)[0]
 inside = (rays.H >= O.H_RANGE[0]) & (rays.H < O.H_RANGE[1]) & (rays.V >= O.V_RANGE[0]) & (rays.V < O.V_RANGE[1])
 assert abs(flat.sum() / rays.flux[inside].sum() - 1) < 1e-5
-moved = O.Choice(np.full(len(rays.cells), 22), zero.dv.copy(), zero.sh.copy(), np.full(len(rays.cells), 2))
+assert O.ANGLE[7] == 0.0 and O.SPREAD[1] == 1.0 and O.ANGLE[15] == 90.0
+moved = O.Choice(np.full(len(rays.cells), 22), zero.dv.copy(), np.full(len(rays.cells), 1), np.full(len(rays.cells), 15))
 shifted = sur.full(moved)[0]                                                       # 6° to the right, ± 0.5° up and down
 centre = lambda m: ((m.sum(axis=0) * h).sum() / m.sum(), (m.sum(axis=1) * v).sum() / m.sum())  # noqa: E731
 assert abs(centre(shifted)[0] - centre(flat)[0] - 6.0) < 0.05 and abs(centre(shifted)[1] - centre(flat)[1]) < 0.02
@@ -99,6 +100,20 @@ seen, _ = O.resampled(model)
 omega = al_photometry._solid_angle(h[None, :], v[:, None], O.DH, O.DV)
 bright = seen > 0.2 * seen.max()
 assert np.abs((flat / omega)[bright] / seen[bright] - 1).mean() < 0.05            # the surrogate is the model
+# a cylinder turned by 15° (strength 6°): the surrogate's slanting smear against the lens built
+assert O.SPREAD[5] == 6.0 and O.ANGLE[10] == 15.0
+slant = O.Choice(zero.dh.copy(), zero.dv.copy(), np.full(len(rays.cells), 5), np.full(len(rays.cells), 10))
+built = al_lens.build(dataclasses.replace(settings, elements=(al_lens.Element(-1e3, 1e3, -1e3, 1e3, 0.0, 0.0, 6.0, 0.0, 15.0),)),
+                      frame)
+model15 = al_photometry.intensity(H4, built.filament, *built.samples(2.0), np.full(len(built.samples(2.0)[0]), 0.85),
+                                  after=lambda o, d: built.through(o, d, 0.92), n_axial=8, n_around=16)
+seen15, _ = O.resampled(model15)
+pred15 = sur.full(slant)[0] / omega
+on = seen15 > 0.2 * seen15.max()
+assert abs(pred15[on].sum() / seen15[on].sum() - 1) < 0.1 and np.abs(pred15[on] / seen15[on] - 1).mean() < 0.25
+H2, V2 = np.meshgrid(h, v)
+tilt = lambda m: np.degrees(np.arctan(np.polyfit(H2[m > 0.2 * m.max()], V2[m > 0.2 * m.max()], 1)[0] / 1.0))  # noqa: E731
+assert abs(tilt(pred15) - tilt(seen15)) < 3.0 and tilt(seen15) > 5.0, (tilt(pred15), tilt(seen15))
 # fit_blur finds a blur laid on
 blurred = dataclasses.replace(model, intensity=O.blurred(model.intensity, (0.25 * 2, 0.2)))    # (model: 0.25° bins)
 sh, sv, err = O.fit_blur(model, blurred)

@@ -48,6 +48,7 @@ _ELEMENT = {
     "deflect_v": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="deflect V"),
     "spread_h": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="spread ± H"),
     "spread_v": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="spread ± V"),
+    "spread_angle": Param.number(0.0, min=-180.0, max=180.0, decimals=1, unit="°", label="spread turned by"),
 }
 
 _ZONE = {
@@ -172,13 +173,16 @@ class AutomotiveLighting(Plugin):
                                      description="0: the filament sits in the focus of the paraboloid (its focal "
                                                  "length: Reflector → Focal length)"),
         "elements": Param.table(_ELEMENT, [{"y_from": -500.0, "y_to": 500.0, "z_from": -500.0, "z_to": 500.0,
-                                            "deflect_h": 0.0, "deflect_v": -1.0, "spread_h": 15.0, "spread_v": 4.0}],
+                                            "deflect_h": 0.0, "deflect_v": -1.0, "spread_h": 15.0, "spread_v": 4.0,
+                                            "spread_angle": 0.0}],
                                 label="Elements", group="Lens",
                                 description="what the cells of the lens do, by the place of their centre (the first "
                                             "row that holds it; y to the left, z up, about the lamp axis): by how "
                                             "much the light is turned in the cell's middle and the half spread "
-                                            "about that; all 0: plane glass; a negative spread turns the element "
-                                            "round (crossing rays)"),
+                                            "about that, both turned by the angle (counter-clockwise on the "
+                                            "screen: a cylinder lens, spread V 0, that spreads along the line "
+                                            "rising by it); all 0: plane glass; a negative spread turns the "
+                                            "element round (crossing rays)"),
         "optimise_margin": Param.number(10.0, min=0.0, max=50.0, decimals=1, unit="%", label="Optimise: margin",
                                         group="Lens", description="*Optimise lens*: how far within R112's limits "
                                                                   "the test points and zones are to lie"),
@@ -290,7 +294,8 @@ class AutomotiveLighting(Plugin):
             frame = self.frame_of(ctx)
             elements = tuple(al_lens.Element(float(r["y_from"]), float(r["y_to"]), float(r["z_from"]), float(r["z_to"]),
                                              float(r["deflect_h"]), float(r["deflect_v"]), float(r["spread_h"]),
-                                             float(r["spread_v"])) for r in p["elements"])
+                                             float(r["spread_v"]), float(r.get("spread_angle") or 0.0))
+                             for r in p["elements"])
             settings = al_lens.LensSettings(self.lamp_of(p), self.cutoff_of(p), elements, focal=float(p["focal"]),
                                             focus_behind=float(p["focus_behind"]), hole_radius=float(p["hole_radius"]),
                                             lens_x=float(p["lens_x"]), thickness=float(p["lens_thickness"]),
@@ -669,8 +674,11 @@ class AutomotiveLighting(Plugin):
                                        after=lambda origins, d: r.through(origins, d, transmittance),
                                        n_axial=8, n_around=16, progress=progress, **field)
         if params["direct"]:             # as far as the elements may turn light into the screen
-            reach = [max([abs(e.deflect_h) + abs(e.spread_h) for e in r.settings.elements] + [0.0]),
-                     max([abs(e.deflect_v) + abs(e.spread_v) for e in r.settings.elements] + [0.0])]
+            spread = [abs(e.spread_h) + abs(e.spread_v) if e.spread_angle else None for e in r.settings.elements]
+            reach = [max([abs(e.deflect_h) + (abs(e.spread_h) if w is None else w)
+                          for e, w in zip(r.settings.elements, spread)] + [0.0]),
+                     max([abs(e.deflect_v) + (abs(e.spread_v) if w is None else w)
+                          for e, w in zip(r.settings.elements, spread)] + [0.0])]
             dist.add_direct(*al_photometry.direct_light(
                 r.settings.lamp, r.filament, dist.h, dist.v, progress=progress,
                 after=lambda origins, d: r.through(origins, d, transmittance),
@@ -727,9 +735,9 @@ class AutomotiveLighting(Plugin):
         return f"strips of {len(r.facets)} facets"
 
     @action("Optimise lens",
-            description="Chooses every cell's element (deflection, spread) so that the low beam meets the R112 test "
-                        "points and zones with the margin – for a lamp whose shield makes the cut-off (H4); sets the "
-                        "element table, one row per cell")
+            description="Chooses every cell's element (a prism and a cylinder lens: deflection, spread and its "
+                        "direction) so that the low beam meets the R112 test points and zones with the margin – for a "
+                        "lamp whose shield makes the cut-off (H4); sets the element table, one row per cell")
     def optimise_lens(self, ctx):
         p = ctx.params
         if p["system"] != PATTERNED:
@@ -786,7 +794,8 @@ class AutomotiveLighting(Plugin):
         except (DesignError, RuntimeError, ValueError) as e:
             raise UserError(str(e)) from e
         rows = [{"y_from": e.y0, "y_to": e.y1, "z_from": e.z0, "z_to": e.z1, "deflect_h": e.deflect_h,
-                 "deflect_v": e.deflect_v, "spread_h": e.spread_h, "spread_v": e.spread_v} for e in result.elements]
+                 "deflect_v": e.deflect_v, "spread_h": e.spread_h, "spread_v": e.spread_v, "spread_angle": e.spread_angle}
+                for e in result.elements]
         ctx.set_params({"elements": rows})
         cutoff = r.settings.cutoff
         verdicts = []

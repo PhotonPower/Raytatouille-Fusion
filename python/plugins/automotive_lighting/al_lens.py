@@ -3,7 +3,10 @@ whose inner side is a grid of spreading elements (prisms, cylinder lenses, pillo
 
 Every cell of the grid turns the light that reaches it: its middle by (deflect H, deflect V), its
 borders by ± the spread more – running linearly across the cell, its left part to the left, its
-upper part upwards. A cell with neither is plane glass. For a point of the cell, the ray that comes
+upper part upwards; with a spread angle φ the two spreads are turned by φ on the screen: a
+cylinder lens whose axis is turned so, that spreads the light along the line rising by φ (as the
+facets of a clear-lens reflector lay their filament images along the cut-off). A cell with
+neither is plane glass. For a point of the cell, the ray that comes
 from the filament centre by way of the mirror (direction d) is to leave the lens in the direction t,
 d turned by these angles. The outer side of the lens is a plane; the direction g inside the glass follows from t by
 refraction there, and the inner surface must have the normal
@@ -43,7 +46,9 @@ NODES = 15             # per direction: where a cell's slopes are computed
 @dataclass(frozen=True)
 class Element:
     """What the cells whose centre lies in y0 … y1, z0 … z1 do (degrees): by how much the light is
-    turned in the cell's middle, and the half spread horizontally and vertically."""
+    turned in the cell's middle, and the half spread horizontally and vertically – both turned by
+    `spread_angle` (counter-clockwise on the screen, as the driver sees it): a cylinder lens
+    (spread_v 0) spreads the light along the line that rises by that angle."""
 
     y0: float
     y1: float
@@ -53,6 +58,19 @@ class Element:
     deflect_v: float = 0.0
     spread_h: float = 0.0
     spread_v: float = 0.0
+    spread_angle: float = 0.0
+
+    def offsets(self, a, b, width: float, height: float):
+        """The turn (H, V degrees) besides the deflection at points of the cell – a to the right, b
+        up from its middle (mm) – of a cell width x height: the spreads run linearly along their
+        directions and reach ± their value at the cell's farthest corner."""
+        phi = math.radians(self.spread_angle)
+        c, s = math.cos(phi), math.sin(phi)
+        a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+        u, w = a * c + b * s, -a * s + b * c
+        along = self.spread_h * u / (0.5 * width * abs(c) + 0.5 * height * abs(s))
+        across = self.spread_v * w / (0.5 * width * abs(s) + 0.5 * height * abs(c))
+        return along * c - across * s, along * s + across * c
 
 
 @dataclass(frozen=True)
@@ -432,10 +450,12 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
                 e = Element(0, 0, 0, 0)
             Y, Z = np.meshgrid(ya + t * s.cell_width, za + t * s.cell_height, indexing="ij")
             arrive = system.chief(Y, Z)
-            H = np.degrees(np.arctan(-arrive[..., 1] / arrive[..., 0])) + e.deflect_h \
-                - e.spread_h * (2.0 * t - 1.0)[:, None]                         # the left part to the left
-            V = np.degrees(np.arctan(arrive[..., 2] / arrive[..., 0])) + e.deflect_v \
-                + e.spread_v * (2.0 * t - 1.0)[None, :]                         # the upper part upwards
+            # y runs to the left: the cell's left part turns its light to the left
+            turn_h, turn_v = e.offsets((0.5 - t)[:, None] * s.cell_width + 0.0 * t[None, :],
+                                       (t - 0.5)[None, :] * s.cell_height + 0.0 * t[:, None],
+                                       s.cell_width, s.cell_height)
+            H = np.degrees(np.arctan(-arrive[..., 1] / arrive[..., 0])) + e.deflect_h + turn_h
+            V = np.degrees(np.arctan(arrive[..., 2] / arrive[..., 0])) + e.deflect_v + turn_v
             want = direction(np.tan(np.radians(H)), np.tan(np.radians(V)))
             base, base_y, base_z = system.shape(Y, Z)
             outer = np.stack([np.ones_like(base_y), -base_y, -base_z], axis=-1)
