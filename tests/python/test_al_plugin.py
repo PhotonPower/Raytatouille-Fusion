@@ -2,6 +2,7 @@
 layout, a small reflector with its light distribution, and the plugin's actions against a recorded
 context. NumPy only, no CAD; exit code 77 (skipped) without NumPy."""
 
+import dataclasses
 import json
 import math
 import sys
@@ -455,6 +456,30 @@ above = low_beam.intensity[low_beam.v > 0.5]                                  # 
 assert above[:, left_side].sum() < 0.01 * low_beam.intensity.sum()            # but for the 15° wedge on the right
 assert above[:, ~left_side].sum() > 5 * above[:, left_side].sum()
 assert low_beam.intensity[low_beam.v < 0].sum() > 0.85 * low_beam.intensity.sum()
+# the H4's shield (R37 sheet H4/3) and the cap on its tip (sheet H4/1): rays from the coil
+shield = al_optics.LAMPS["H4 (low beam)"].shield
+assert shield.window == (-15.0, 180.0) and abs(shield.axis_z - 0.15) < 1e-12   # coil top c = 0.6 above plane H
+Q = np.array([[0, 0, 0], [-2.75, 0, 0], [2.75, 0, -0.75], [2.75, 0, -0.75], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+              [0, 0, 0], [0, 0, 0.75]], dtype=float)
+d = np.array([[0, 0, 1],          # up: free
+              [-1, 0, -0.3],      # back and down: the end wall at the back
+              [1, 0, -1],         # forward and steeply down: the trough
+              [1, 0, -0.2],       # forward and down, past the open front: the cap
+              [0, 1, 0],          # left (+Y): over the edge 15° below plane H
+              [0, -1, 0],         # right: the edge on plane H stops it (the coil centre lies 0.15 below it)
+              [1, 0, 0],          # along the axis: the cap
+              [1, 0, 1.5], [-1, 0, 0.05]], dtype=float)
+d /= np.linalg.norm(d, axis=1, keepdims=True)
+assert shield.passes(Q, d[None])[0].tolist() == [True, False, False, False, True, False, False, True, True]
+apex = np.array([[28.95 - 31.25, 0.0, shield.axis_z]])                         # α from the point p on the axis
+cone = [np.array([[[math.cos(math.radians(a)), 0.0, math.sin(math.radians(a))]]]) for a in (39.8, 40.2)]
+assert not shield.passes(apex, cone[0])[0, 0] and shield.passes(apex, cone[1])[0, 0]
+assert shield.back < -2.75 < 2.75 < shield.cap_x <= shield.front                # the cap overlaps the shield (5/)
+before = dataclasses.replace(shield, axis_z=0.0, back=-1e9, front=1e9, cap_x=None)   # the model before: endless,
+h4_before = dataclasses.replace(al_optics.LAMPS["H4 (low beam)"], shield=before)     # its edges level with the coil centre
+low_before = lens_beam((0, 0, 0, 0), lamp=h4_before, focus_behind=4.0)[1]
+assert 0.9 * low_before.flux_mirror < low_beam.flux_mirror < 0.98 * low_before.flux_mirror   # edges 0.15 mm higher
+# (this mirror lies wholly behind the coil: the cap, ≤ 40° about +X, does not see it)
 lens_faces = al_lens.faces(pillow, (1.0, 2.0, 3.0))
 assert [k for k, _, _ in lens_faces[:2]] == ["mirror", "lens"] and len(lens_faces) >= 2 + pillow.cells
 assert "holes" in lens_faces[0][2] and len(lens_faces[0][2]["surface"]["points"]) == 108
@@ -650,7 +675,7 @@ ctx.params.update({"traffic": al_plugin.LEFT, "lamp": "H4 (low beam)", "frame_cu
 plugin.set_default_zones(ctx)
 assert host.params_set["zones"] == ctx.params["zones"] == al_plugin.default_zones(False)
 assert [z["branch"] for z in ctx.params["zones"]].count("rising") == 1
-assert plugin.reflector(ctx).settings.lamp.window == (-15.0, 180.0)
+assert plugin.reflector(ctx).settings.lamp.shield.window == (-15.0, 180.0)
 try:
     ctx.params["zones"] = []
     plugin.reflector(ctx)

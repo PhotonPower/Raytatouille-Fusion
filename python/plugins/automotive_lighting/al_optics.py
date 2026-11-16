@@ -16,6 +16,90 @@ import numpy as np
 
 # ------------------------------------------------------------------ lamps
 @dataclass(frozen=True)
+class Shield:
+    """What inside a two-filament lamp (H4) stops the light of the low-beam coil, in design
+    coordinates. The lamp's reference axis runs parallel to X, `axis_z` above the coil centre.
+
+    The shield is a trough under the coil: the part of the cylinder of `radius` about the reference
+    axis that lies outside `window` – azimuths atan2(z, y) about that axis, in degrees; light leaves
+    between the two edges. It runs from `back` (closed there by an end wall, the segment of the
+    circle below the chord between the edges) to `front` (open). The bulb is a cylinder of
+    `bulb_radius` about the reference axis, blackened from `cap_x` on (the cap on its tip); `cap_x`
+    None: no cap."""
+
+    window: tuple[float, float]
+    radius: float
+    back: float
+    front: float
+    axis_z: float = 0.0
+    cap_x: float | None = None
+    bulb_radius: float = 6.5
+
+    def passes(self, Q: np.ndarray, d: np.ndarray) -> np.ndarray:
+        """Which rays from points Q (k, 3) on the coil in unit directions d (..., k, 3) get out of
+        the lamp: neither the trough, its end wall nor the cap stop them."""
+        dx, dy, dz = d[..., 0], d[..., 1], d[..., 2]
+        x0, y0, z0 = Q[:, 0], Q[:, 1], Q[:, 2] - self.axis_z
+        lo, hi = self.window
+        span = (hi - lo) % 360.0 or 360.0
+        # where the ray leaves the cylinder of the trough (it starts inside it)
+        qa = dy * dy + dz * dz
+        qb = y0 * dy + z0 * dz
+        qc = y0 * y0 + z0 * z0 - self.radius ** 2
+        inside = qc < 0.0
+        with np.errstate(divide="ignore", invalid="ignore"):   # (along the axis: t = ∞, it never meets the trough)
+            t = np.where(qa > 1e-12, (-qb + np.sqrt(np.maximum(qb * qb - qa * qc, 0.0))) / qa, np.inf)
+            x_out = x0 + t * dx
+            az = np.where(inside, np.degrees(np.arctan2(z0 + t * dz, y0 + t * dy)),
+                          np.degrees(np.arctan2(dz, dy)))     # (a coil wider than the trough: the direction)
+        on_trough = ~inside | ((x_out >= self.back) & (x_out <= self.front))
+        stopped = on_trough & (((az - lo) % 360.0) > span)
+        # the end wall at the back: the segment below the chord between the two edges
+        with np.errstate(divide="ignore", invalid="ignore"):
+            s = np.where(dx < 0.0, (self.back - x0) / dx, np.inf)
+        e1 = self.radius * np.array([math.cos(math.radians(lo)), math.sin(math.radians(lo))])
+        e2 = self.radius * np.array([math.cos(math.radians(hi)), math.sin(math.radians(hi))])
+        mid = math.radians(hi + 0.5 * (360.0 - span))
+        m = self.radius * np.array([math.cos(mid), math.sin(mid)])
+        chord = e2 - e1
+        side = chord[0] * (m[1] - e1[1]) - chord[1] * (m[0] - e1[0])
+        with np.errstate(invalid="ignore"):
+            yb, zb = y0 + s * dy, z0 + s * dz
+            wall = (inside & (x_out < self.back) & np.isfinite(s)
+                    & ((chord[0] * (zb - e1[1]) - chord[1] * (yb - e1[0])) * side > 0.0))
+        stopped |= wall
+        if self.cap_x is not None:
+            # the cap: a ray still within the bulb where the blackening begins meets it
+            with np.errstate(divide="ignore", invalid="ignore"):
+                s = np.where(dx > 0.0, np.maximum(self.cap_x - Q[:, 0], 0.0) / dx, np.inf)
+                yc, zc = y0 + s * dy, z0 + s * dz
+                stopped |= np.isfinite(s) & (yc * yc + zc * zc < self.bulb_radius ** 2)
+        return ~stopped
+
+
+def h4_shield(length: float, diameter: float, *, radius: float = 2.5, alpha: float = 40.0,
+              bulb_diameter: float = 13.0) -> Shield:
+    """The shield and the tip cap of an H4 (UN/ECE R37, sheets H4/1 to H4/5, 12 V) about a coil of
+    `length` and `diameter`, from the regulation where it fixes them:
+      e = 28.5   from the reference plane to the start of the low-beam coil (its centre: e + l/2)
+      c = 0.6    top of the coil above plane H; the shield's edges: b1 = 0 on plane H, b2 = 0 on the
+                 line 15° below it through the reference axis – the window (−15°, 180°)
+      p = 28.95, α ≤ 40°: the cap's edge is seen from the point p on the reference axis at most α
+                 from the axis (footnote 5/: it covers the tip and overlaps the shield)
+    and assumed where it does not: the trough's radius (p, q at 33 mm "depend on the shape of the
+    shield"; the drawing is not binding), its ends 1.2 mm behind and 3.4 mm in front of the coil
+    (the proportions of sheet H4/3), the bulb's outer diameter (13 mm, OSRAM data sheets)."""
+    e, c, p = 28.5, 0.6, 28.95
+    centre = e + 0.5 * length
+    bulb_radius = 0.5 * bulb_diameter
+    return Shield(window=(-15.0, 180.0), radius=radius,
+                  back=-0.5 * length - 1.2, front=0.5 * length + 3.4,
+                  axis_z=0.5 * diameter - c,
+                  cap_x=(p - centre) + bulb_radius / math.tan(math.radians(alpha)),
+                  bulb_radius=bulb_radius)
+
+
+@dataclass(frozen=True)
 class Lamp:
     """A filament lamp as the design sees it: the coil as a cylinder (length, diameter), its
     luminous flux, and what of it reaches the reflector."""
@@ -25,8 +109,7 @@ class Lamp:
     diameter: float               # mm, coil diameter
     flux: float                   # lm at the test voltage
     axial: bool = True            # coil along the lamp axis (X); else across it (along Y)
-    window: tuple[float, float] | None = None   # a shield under the coil: light leaves only where it passes
-    shield_radius: float = 0.0    # the cylinder of this radius about the axis at an azimuth atan2(z, y) in the window / deg
+    shield: Shield | None = None  # what inside the lamp stops light of the coil (H4)
     note: str = ""
 
 
@@ -34,9 +117,9 @@ class Lamp:
 # typical values of the coil – check the lamp's R37 sheet or data sheet; "Custom" takes the panel's.
 LAMPS: dict[str, Lamp] = {
     "H1": Lamp("H1", 5.0, 1.4, 1550.0, note="55 W, axial coil"),
-    "H4 (low beam)": Lamp("H4 (low beam)", 5.5, 1.5, 1000.0, window=(-15.0, 180.0), shield_radius=2.5,
-                          note="55 W coil above its shield: light only into the upper 195°; the shield's edges "
-                               "taken 2.5 mm from the axis"),
+    "H4 (low beam)": Lamp("H4 (low beam)", 5.5, 1.5, 1000.0, shield=h4_shield(5.5, 1.5),
+                          note="55 W coil above its shield (R37 sheet H4/3): light over the edges into the upper "
+                               "195°, a trough 2.5 mm in radius closed at the back; the black tip cap ≤ 40°"),
     "H7": Lamp("H7", 4.1, 1.3, 1500.0, note="55 W, axial coil"),
     "H8": Lamp("H8", 3.7, 1.2, 800.0, note="35 W, axial coil"),
     "H9": Lamp("H9", 4.8, 1.4, 2100.0, note="65 W, axial coil"),

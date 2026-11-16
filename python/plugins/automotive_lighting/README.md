@@ -21,8 +21,14 @@ and V upwards.
 
 - *Lamp*: the filament as a cylinder (length, diameter) and its luminous flux; nominal flux of
   UN/ECE R37, typical coil dimensions – check them against the lamp's sheet, or enter them under
-  *Custom*. H4: the low-beam coil above its shield – light passes only over the shield's edges
-  (taken 2.5 mm from the axis), into the upper 195°.
+  *Custom*. H4: the low-beam coil above its shield and the black cap on the bulb's tip, after
+  UN/ECE R37 sheets H4/1 to H4/5: the shield's edges on plane H and 15° below it (light leaves
+  over them into the upper 195°), the top of the coil 0.6 mm above plane H; the shield a trough
+  about the reference axis from 1.2 mm behind the coil (closed by an end wall) to 3.4 mm in front
+  of it (open); the cap seen at 40° from the axis point p = 28.95 mm (the limit of the sheet) on a
+  bulb 13 mm across. The regulation fixes the edges, the coil's position and the cap's angle;
+  the trough's radius (2.5 mm), its length and the bulb's diameter are assumed – the drawing of
+  the shield is not binding.
 - *Cut-off*: right- or left-hand traffic, the height of the horizontal part (−0.57° = 1 %), the
   rise (15°) and the position of the kink.
 - *Frame*: the outline of the mirror seen along X – closed curves drawn in CAD (*Frame (curves)*,
@@ -213,7 +219,11 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 ## Limits of this version
 
 - Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
-  connecting faces, no light leaving the lamp directly, no bulb glass, no cover lens. The cut-off
+  connecting faces, no light leaving the lamp directly, no bulb glass (its refraction), no cover
+  lens; of the lamp's inner parts only the H4's shield and cap (not its driving-beam coil and
+  supports, nor light the shield's inside reflects). The cap stops only what goes forward within
+  about 40° of the axis, so it changes the light distribution only for a mirror that reaches that
+  far forward. The cut-off
   is sharper than a real lamp's. With *Analysis → Shadows of the steps* a ray that a step of the
   mirror stops on its way from the coil to a mirror point is left out; one that it stops after the
   reflection is reflected there a second time (with the reflectance of the connecting faces) and
