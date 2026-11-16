@@ -614,8 +614,14 @@ class Host:
         if method == "model.groups":
             return self.group_list
         if method == "model.add_group":
-            self.group_list.append({"id": len(self.group_list) + 1, **args})
-            return len(self.group_list)
+            self.group_list.append({"id": max([g["id"] for g in self.group_list], default=0) + 1, **args})
+            return self.group_list[-1]["id"]
+        if method == "model.remove_group":                  # CAD removes empty groups only
+            assert not any(e["group"] == args["id"] for e in self.model), "group with entities removed"
+            assert not any(g["parent"] == args["id"] for g in self.group_list), "group with sub-groups removed"
+            assert any(g["id"] == args["id"] for g in self.group_list), "unknown group"
+            self.group_list = [g for g in self.group_list if g["id"] != args["id"]]
+            return None
         if method == "params.set":
             self.params_set.update(args["values"])
             return None
@@ -664,6 +670,67 @@ plugin.filament_images(ctx)
 plugin.light_distribution(ctx)
 plugin.show_strips(ctx)
 assert host.results == ["image", "image", "table", "curve", "curve", "lines", "lines"], host.results
+# the lamp of the ray tracing as faces: what al_trace traces, at the filament centre, in groups of its own
+import al_coil  # noqa: E402
+import al_trace  # noqa: E402
+
+
+def lamp_parts(role=None):
+    return [e for e in host.model if e["attributes"].get("al.lamp") and role in (None, e["attributes"]["al.lamp"])]
+
+
+def group_names(parent_name=None):
+    parent = next((g["id"] for g in host.group_list if g["name"] == parent_name), 0)
+    return sorted(g["name"] for g in host.group_list if g["parent"] == parent)
+
+
+assert "generate_lamp" in plugin.actions()
+ctx.params["position"] = (5.0, 1.0, -2.0)
+assert "71 faces" in plugin.generate_lamp(ctx)             # H7: 16 turns in quarters, 5 of glass, 2 of the top
+h7_coil = al_coil.coil_of(H7, fil)
+traced = al_trace.lamp_bodies(H7, h7_coil, bulb=al_coil.bulb_of(H7, coils=[h7_coil]))
+assert len(lamp_parts()) == sum(len(b.faces) for b in traced) and len(host.model) == count + 71
+assert group_names() == ["Lamp H7", "Reflector H7"] and group_names("Lamp H7") == ["Black top", "Bulb glass", "Coil (lit)"]
+wire = lamp_parts(al_trace.COIL)
+assert len(wire) == 4 * h7_coil.turns and wire[0]["name"] == "Coil 1.1" and wire[-1]["name"] == "Coil 16.4"
+glow = [e["attributes"]["al.luminance"] for e in wire]
+assert glow[0] == min(glow) < 0.25 and max(glow) > 0.99 and all(e["attributes"]["al.material"] == "absorber" for e in wire)
+for e, (role, face) in zip(lamp_parts(), [(b.role, f) for b in traced for f in b.faces]):
+    assert e["geometry"]["type"] == "surface" and e["attributes"]["al.lamp"] == role     # the trace's faces,
+    assert np.allclose(np.array(e["geometry"]["points"]).reshape(-1, 3) - (5.0, 1.0, -2.0),   # at the filament centre
+                       np.array(face["surface"]["points"]).reshape(-1, 3))
+    assert e["geometry"]["weights"] == face["surface"]["weights"] and e["geometry"]["knots_u"] == face["surface"]["knots_u"]
+points = np.concatenate([np.array(e["geometry"]["points"]).reshape(-1, 3) for e in wire])
+assert np.allclose(0.5 * (points.min(axis=0) + points.max(axis=0)), (5.0, 1.0, -2.0), atol=0.02)
+assert lamp_parts(al_trace.BULB)[0]["attributes"]["al.material"] == "glass" and len(lamp_parts(al_trace.BULB)) == 5
+plugin.generate_lamp(ctx)                                  # again: the last lamp is replaced
+assert len(host.model) == count + 71 and len(host.group_list) == 5
+plugin.generate(ctx)                                       # a new reflector leaves the lamp, and the other way round
+assert len(lamp_parts()) == 71 and len(host.model) == count + 71
+ctx.params.update({"lamp": "H4 (low beam)", "bulb": False, "trace_filament": "driving beam"})
+plugin.generate_lamp(ctx)                                  # H4 without glass: both coils, the shield, the cap's disc
+assert group_names() == ["Lamp H4 (low beam)", "Reflector H7"]          # the H7 lamp's groups are gone
+assert group_names("Lamp H4 (low beam)") == ["Black top", "Coil (lit)", "Other coil (dark)", "Shield"]
+assert not lamp_parts(al_trace.BULB) and len(lamp_parts(al_trace.SHIELD)) == 2 and len(lamp_parts(al_trace.CAP)) == 1
+assert [e["name"] for e in lamp_parts(al_trace.CAP)] == ["Black top"] and lamp_parts(al_trace.OFF)[0]["name"] == "Other coil 1"
+lit_x = np.concatenate([np.array(e["geometry"]["points"]).reshape(-1, 3) for e in lamp_parts(al_trace.COIL)])[:, 0]
+dark_x = np.concatenate([np.array(e["geometry"]["points"]).reshape(-1, 3) for e in lamp_parts(al_trace.OFF)])[:, 0]
+assert lit_x.max() < dark_x.min() and len(lamp_parts(al_trace.OFF)) == 19      # the driving-beam coil lies behind
+ctx.params.update({"lamp": "H7", "trace_filament": "driving beam"})
+try:
+    plugin.generate_lamp(ctx)
+    raise AssertionError("an H7 with a driving-beam coil")
+except al_plugin.UserError as e:
+    assert "H4" in str(e)
+ctx.params.update({"bulb": True, "trace_filament": "passing beam", "coil_wire": 0.9})
+try:
+    plugin.generate_lamp(ctx)
+    raise AssertionError("a wire thicker than the coil")
+except al_plugin.UserError as e:
+    assert "wire" in str(e)
+ctx.params["coil_wire"] = 0.0
+host.model = [e for e in host.model if not e["attributes"].get("al.lamp")]
+host.group_list = host.group_list[:1]
 # the frame from CAD curves about the filament centre
 ctx.params.update({"position": (5.0, 1.0, -2.0), "frame_curves": [7]})
 host.model.append({"id": 7, "name": "frame", "attributes": {}, "group": 0,

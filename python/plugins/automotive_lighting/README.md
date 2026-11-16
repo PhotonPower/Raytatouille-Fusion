@@ -86,6 +86,17 @@ bottom spread the light.
   of the wire's light gets out of the coil), the flux in the beam, of the connecting faces, direct,
   backwards, into the housing (with a lens) and absorbed, and the noise where the light is
   brightest.
+- **Generate lamp**: the lamp as the ray tracing has it (see below), as NURBS faces in the
+  model-tree group *Lamp &lt;lamp&gt;* at the *Filament centre* – the coil's wire in the quarter
+  turns that are traced (*Coil 3.2*: third turn, second quarter; the attribute `al.luminance` is
+  its luminance against the coil's middle), the bulb's glass, the black top, the H4's shield and
+  its other coil, each in a group of its own, with the settings of the panel's group *Ray tracing*
+  (wire, turns, bulb, lit coil). The faces carry the attributes `al.lamp` (`coil`, `other coil`,
+  `bulb`, `cap`, `shield`) and `al.material`; a new run replaces the last lamp, *Generate
+  reflector* leaves it. Glass is drawn like any other face: hide the group *Bulb glass* – and the
+  filament's cylinder of *Generate reflector*, which the wire touches from inside – in the model
+  tree to see the coil. The ray tracing does not read these faces: it builds the lamp anew from
+  the panel.
 - **Show strips**: the start curve and some characteristic strips of every facet as lines.
 - **Default zones**: the zone table for the chosen traffic side.
 
@@ -238,7 +249,7 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 
 *Light distribution (ray tracing)* checks the design with the lamp as it is, without the
 assumptions of the filament images, which stay as they are for the design and for *Filament
-images* and *Light distribution*:
+images* and *Light distribution*. *Generate lamp* puts this lamp into the model to look at:
 
 - **The coil** is a helix of tungsten wire that fills the lamp's cylinder (length, diameter): the
   wire's centre runs on a helix of radius (diameter − wire) / 2, a NURBS face per quarter turn (a
