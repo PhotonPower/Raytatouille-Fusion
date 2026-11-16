@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Path Tracer plugin**: `escapes` in both kernels (`pt_integrator`, `pt_native`; package
+  `pathtracer` 0.2.0) – the light that leaves the scene: per light path its direction, flux,
+  number of surface events and its first and last surface; the base of far-field results such
+  as luminous intensities.
 - **Automotive Lighting plugin**: the facetted reflector of a clear-lens headlamp. For a
   filament lamp (H1, H4, H7, H8, H9, H11, HB3, HB4 or own data), the cut-off line and the frame
   of the mirror, the reflector is cut into zones and strips whose filament images all touch the

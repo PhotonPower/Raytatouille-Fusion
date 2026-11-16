@@ -106,6 +106,14 @@ for method, samples in (("path", 60_000), ("bidir", 40_000)):       # (bidirecti
     assert np.allclose(image[seen] / reference[seen], 1, atol=0.2), (method, image[seen] / reference[seen])
 points, starts = pt_native.light_paths(native_scene, 30, 4, SEED)
 assert len(starts) == 31 and starts[-1] == len(points)
+mine = pt_integrator.escapes(numpy_scene, 100_000, 6, seed=SEED)        # the light that leaves the model
+theirs = [pt_native.escapes(native_scene, 200_000, 6, seed=SEED, index=k) for k in range(2)]
+for bounces, room in ((0, 0.01), (1, 0.03), (None, 0.01)):           # (None: all of it)
+    a = mine["flux"][mine["bounces"] == bounces].sum() if bounces is not None else mine["flux"].sum()
+    b = sum((t["flux"][t["bounces"] == bounces] if bounces is not None else t["flux"]).sum() for t in theirs) / 2
+    assert abs(b / a - 1) < room, (bounces, a, b)
+up = lambda g: g["flux"][g["d"][:, 2] > 0.5].sum() / g["flux"].sum()            # noqa: E731
+assert abs(up(theirs[0]) / up(mine) - 1) < 0.03 and set(np.unique(theirs[0]["first"])) == set(np.unique(mine["first"]))
 
 # ---- the plugin's actions with the C++ kernel
 from nfcad import UserError  # noqa: E402

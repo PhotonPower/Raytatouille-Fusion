@@ -154,7 +154,8 @@ the C++ kernel *Processes* are threads (0: all cores).
   jobs do not depend on the number of processes, so the result does not either.
 - **Modules** (no CAD in them, usable from scripts): `pt_nurbs` (NURBS evaluation), `pt_mesh`
   (tessellation, masks, areas), `pt_bvh` (intersection), `pt_bsdf` (materials), `pt_scene`
-  (sources, sensors), `pt_integrator` (the estimator), `pt_photon` (photon mapping), `pt_photometry` (luminaire files,
+  (sources, sensors), `pt_integrator` (the estimator; `escapes`: the light that leaves the scene –
+  direction, flux, bounces – for far fields), `pt_photon` (photon mapping), `pt_photometry` (luminaire files,
   V(λ)), `pt_native` (the C++ kernel behind the same interface), `pt_parallel` and
   `pt_worker` (several processes), `pt_setup` (model and panel → scene).
 

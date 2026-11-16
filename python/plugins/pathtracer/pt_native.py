@@ -84,3 +84,11 @@ def render(scene, sensor, method: str, samples: int, depth: int, *, seed: int = 
 
 def light_paths(scene, n: int, depth: int, seed: int = 0):
     return _pt.light_paths(scene, n, depth, seed)
+
+
+def escapes(scene, n: int, depth: int, seed: int = 0, index: int = 0, threads: int = 0) -> dict:
+    """As pt_integrator.escapes; threads 0: all cores. Needs the package from version 0.2.0 on."""
+    if not hasattr(_pt, "escapes"):
+        raise RuntimeError(f"the C++ kernel {version()} cannot follow the light out of the scene yet – "
+                           f"install version 0.2.0 or later")
+    return _pt.escapes(scene, n, depth, seed=seed, index=index, threads=threads)
