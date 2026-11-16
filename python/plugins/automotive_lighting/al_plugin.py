@@ -27,12 +27,15 @@ import al_reflector
 import al_trace
 from al_design import DesignError
 from al_layout import Zone
-from al_optics import CUSTOM, HORIZONTAL, LAMPS, RISING, Cutoff, Lamp
+from al_optics import CUSTOM, HORIZONTAL, LAMPS, RISING, Cutoff, Filament, Lamp
 from al_spline import curve_points
 
 RIGHT, LEFT = "right-hand", "left-hand"
 CLEAR, PATTERNED = "clear lens: facetted reflector", "patterned lens: paraboloid and lens"
 LOW_BEAM = "low beam (UN R112, class B)"
+# the lamp's parts in the model tree (Generate lamp): group and face names by their role in the ray tracing
+_LAMP_PARTS = {al_trace.COIL: "Coil (lit)", al_trace.OFF: "Other coil (dark)", al_trace.SHIELD: "Shield",
+               al_trace.BULB: "Bulb glass", al_trace.CAP: "Black top"}
 
 _ELEMENT = {
     "y_from": Param.number(-500.0, decimals=1, unit="mm", label="y from"),
@@ -477,6 +480,103 @@ class AutomotiveLighting(Plugin):
         return (f"{dist.flux_beam:.0f} lm in the beam ({100.0 * dist.flux_beam / dist.flux_lamp:.0f} %), maximum "
                 f"{dist.intensity.max():.0f} cd, cut-off G = {g:.2f}")
 
+    @staticmethod
+    def _traced_lamp(p: dict, lamp: Lamp, filament: Filament):
+        """The lamp of the ray tracing as the panel has it: (the lit coil, the other coil or None,
+        the lit coil's lamp, the bulb). ValueError: the coil or the bulb cannot be built."""
+        second = al_coil.driving_coil(lamp)
+        driving = p["trace_filament"] == "driving beam"
+        if driving and second is None:
+            raise UserError("Only the H4 has a driving-beam coil (H4: lit coil).")
+        wire, turns = float(p["coil_wire"]), int(p["coil_turns"])
+        if second is None:
+            coil, other, lit = al_coil.coil_of(lamp, filament, wire, turns), None, lamp
+        elif driving:
+            lit, offset = second
+            coil = al_coil.coil_of(lit, filament, wire, turns, offset)
+            other = al_coil.coil_of(lamp, filament)
+        else:
+            coil, lit = al_coil.coil_of(lamp, filament, wire, turns), lamp
+            other = al_coil.coil_of(second[0], filament, offset=second[1])
+        bulb = al_coil.bulb_of(lamp, float(p["bulb_diameter"]), float(p["bulb_wall"]),
+                               [c for c in (coil, other) if c is not None])
+        return coil, other, lit, bulb
+
+    @staticmethod
+    def _lamp_bodies(p: dict, lamp: Lamp, coil, other, bulb) -> list:
+        """The lamp's bodies of the ray tracing (al_trace.lamp_bodies) with the panel's settings."""
+        return al_trace.lamp_bodies(lamp, coil, other=other, bulb=bulb, glass=bool(p["bulb"]),
+                                    end=float(p["coil_end_temperature"]),
+                                    shield_reflectance=float(p["shield_reflectance"]))
+
+    def _lamp_groups(self, ctx, name: str, roles: list[str]) -> dict[str, int]:
+        """Removes the lamp generated before; the model-tree groups for the new one – `name` and
+        in it one per part of `roles`. Groups the old lamp leaves empty are removed."""
+        entities = ctx.entities()
+        old = [e for e in entities if (e.get("attributes") or {}).get("al.lamp")]
+        gone = {e["id"] for e in old}
+        for e in old:
+            ctx.remove(e["id"])
+        groups = ctx.groups()
+
+        def group(label: str, parent: int) -> int:
+            return next((g["id"] for g in groups if g["name"] == label and int(g.get("parent") or 0) == parent),
+                        None) or ctx.add_group(label, parent)
+
+        top = group(name, 0)
+        out = {role: group(_LAMP_PARTS[role], top) for role in roles}
+        keep = {top, *out.values()} | {int(e.get("group") or 0) for e in entities if e["id"] not in gone}
+        parent_of = {g["id"]: int(g.get("parent") or 0) for g in groups}
+        left = {int(e.get("group") or 0) for e in old} - keep - {0}        # the old lamp's part groups
+        above = {parent_of.get(g, 0) for g in left} - keep - {0}             # and the groups they were in
+        for g in [*sorted(left), *sorted(above)]:
+            if g in parent_of and not any(parent == g for parent in parent_of.values()):
+                ctx.remove_group(g)
+                del parent_of[g]
+        return out
+
+    @action("Generate lamp", description="The lamp as the ray tracing has it, as NURBS faces: the coil's wire, the "
+                                         "bulb's glass and black top, the H4's shield and other coil (group Ray "
+                                         "tracing) – to look at what is traced; hide the bulb glass and the filament's "
+                                         "cylinder in the model tree to see the coil")
+    def generate_lamp(self, ctx):
+        p = ctx.params
+        lamp = self.lamp_of(p)
+        try:
+            coil, other, lit, bulb = self._traced_lamp(p, lamp, Filament.of(lamp))
+            bodies = self._lamp_bodies(p, lamp, coil, other, bulb)
+        except (RuntimeError, ValueError) as e:
+            raise UserError(str(e)) from e
+        origin = np.asarray(p["position"], dtype=float)
+        roles = [role for role in _LAMP_PARTS if any(b.role == role for b in bodies)]
+        groups = self._lamp_groups(ctx, f"Lamp {lamp.name}", roles)
+        count = {role: sum(len(b.faces) for b in bodies if b.role == role) for role in roles}
+        done = dict.fromkeys(roles, 0)
+        total = sum(count.values())
+        for body in bodies:
+            for face in body.faces:
+                ctx.check_cancel()
+                k = done[body.role] = done[body.role] + 1
+                label = _LAMP_PARTS[body.role].split(" (")[0]
+                if body.role == al_trace.COIL:                       # the trace's pieces of the wire, by turn
+                    name = f"{label} {(k - 1) // al_trace.PIECES + 1}.{(k - 1) % al_trace.PIECES + 1}"
+                else:
+                    name = f"{label} {k}" if count[body.role] > 1 else label
+                attributes = {"al.lamp": body.role, "al.material": str(body.material.get("kind", ""))}
+                if body.emission > 0.0:
+                    attributes["al.luminance"] = round(float(body.emission), 4)
+                ctx.add(_placed(face, origin), name, attributes, groups[body.role])
+                ctx.progress(sum(done.values()) / total, "adding the lamp's faces …")
+        ctx.log(f"lamp {lamp.name} as the ray tracing has it, in the group Lamp {lamp.name}: "
+                + ", ".join(f"{_LAMP_PARTS[role].lower()} {count[role]} faces" for role in roles)
+                + f"; lit: {lit.name}, {coil.turns} turns of {coil.wire:.3f} mm wire (al.luminance: the luminance of "
+                  "each piece of the wire against the coil's middle)")
+        hide = (["the group Bulb glass (glass is drawn like any other face)"] if al_trace.BULB in roles else []) + [
+            "the filament's cylinder of Generate reflector (the wire touches it from inside)"]
+        ctx.log(f"to see the coil{' and the shield' if lamp.shield is not None else ''}, hide in the model tree: "
+                + " and ".join(hide))
+        return f"lamp {lamp.name}: {total} faces in {len(roles)} groups"
+
     @action("Light distribution (ray tracing)",
             description="The same by ray tracing: the coil as a helix of wire, the bulb, the H4's shield and cap, the "
                         "mirror and the lens as surfaces; light paths from the wire through every reflection and "
@@ -486,29 +586,13 @@ class AutomotiveLighting(Plugin):
         patterned = p["system"] == PATTERNED
         r = self.lens_system(ctx) if patterned else self.reflector(ctx)
         lamp, cutoff, function = r.settings.lamp, r.settings.cutoff, p["test_points"]
-        second = al_coil.driving_coil(lamp)
         driving = p["trace_filament"] == "driving beam"
-        if driving and second is None:
-            raise UserError("Only the H4 has a driving-beam coil (H4: lit coil).")
         field = {} if function == LOW_BEAM else {"h_range": (-40.0, 40.0), "v_range": (-20.0, 20.0), "dv": 0.25}
         try:
             kernel = al_trace.kernel(p["trace_kernel"])
-            wire, turns = float(p["coil_wire"]), int(p["coil_turns"])
-            if second is None:
-                coil, other, lit = al_coil.coil_of(lamp, r.filament, wire, turns), None, lamp
-            elif driving:
-                lit, offset = second
-                coil = al_coil.coil_of(lit, r.filament, wire, turns, offset)
-                other = al_coil.coil_of(lamp, r.filament)
-            else:
-                coil, lit = al_coil.coil_of(lamp, r.filament, wire, turns), lamp
-                other = al_coil.coil_of(second[0], r.filament, offset=second[1])
-            bulb = al_coil.bulb_of(lamp, float(p["bulb_diameter"]), float(p["bulb_wall"]),
-                                   [c for c in (coil, other) if c is not None])
+            coil, other, lit, bulb = self._traced_lamp(p, lamp, r.filament)
             ctx.progress(0.9, "the scene: coil, lamp, mirror" + (" and lens" if patterned else "") + " …")
-            bodies = al_trace.lamp_bodies(lamp, coil, other=other, bulb=bulb, glass=bool(p["bulb"]),
-                                          end=float(p["coil_end_temperature"]),
-                                          shield_reflectance=float(p["shield_reflectance"])) + (
+            bodies = self._lamp_bodies(p, lamp, coil, other, bulb) + (
                 al_trace.lens_bodies(r, float(p["reflectance"])) if patterned else
                 al_trace.reflector_bodies(r, float(p["reflectance"]), float(p["reflectance_connections"])))
 
@@ -626,6 +710,17 @@ class AutomotiveLighting(Plugin):
     def set_default_zones(self, ctx):
         ctx.set_params({"zones": default_zones(ctx.params["traffic"] == RIGHT)})
         return f"zones for {ctx.params['traffic']} traffic"
+
+
+def _placed(face: dict, origin: np.ndarray) -> dict:
+    """A face of the ray tracing ({"surface", "outer", "holes"}, design coordinates) as geometry of
+    the document, moved to `origin`."""
+    s = face["surface"]
+    points = np.asarray(s["points"], dtype=float).reshape(-1, 3) + origin
+    surface = dict(s, type="surface", points=[float(c) for c in points.reshape(-1)])
+    if not face.get("outer") and not face.get("holes"):
+        return surface
+    return dict(face, type="trimmed_surface", surface=surface)
 
 
 def _extent(dist) -> tuple[float, float, float, float]:

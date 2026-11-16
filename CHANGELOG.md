@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**: *Generate lamp* – the lamp of the ray tracing in the model, to
+  look at what is traced: the coil's wire (the traced quarter turns, with their luminance as an
+  attribute), the bulb's glass and black top, the H4's shield and other coil as NURBS faces in the
+  group *Lamp &lt;lamp&gt;*, each part in a group of its own that can be hidden.
 - **FourierGrating plugin**: a grating or stack block holds its configuration in the document –
   *Store panel configuration in block* (right-click on the block) takes over a configuration
   loaded from GUI-FourierGrating, *Load block configuration into panel* brings it back to edit,
