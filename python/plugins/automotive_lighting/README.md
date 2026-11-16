@@ -40,7 +40,8 @@ and V upwards.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
   element size, draft angle and fillet radius of the walls between the elements, the position of
   the mirror's focus and the **elements**.
-- *Analysis*: the shadows of the steps on / off, the **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
+- *Analysis*: the shadows of the steps on / off, the **direct light of the lamp** on / off, the
+  **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
   the lattice of mirror points, the number of filament images.
 
@@ -67,7 +68,11 @@ bottom spread the light.
   points and zones of UN/ECE R112 (class B, passing beam) as a table, a vertical cut through the
   cut-off at 2.5° and a horizontal cut at V = −0.86° as curves; flux (also what the connecting
   faces send into the beam – stray light), the sharpness G of the cut-off and the highest
-  intensity above it in the log.
+  intensity above it in the log. With *Direct light of the lamp* the light that leaves the coil
+  forwards past the mirror is part of the image and the table (with the patterned lens through the
+  lens; it may miss it): an H4's cap stops it within about 40° of the axis, a lamp without a cap
+  sends it all over the screen – with an H7 up to about 100 cd, Φ sin θ / π² at θ from the axis.
+  Its flux is logged apart from the beam's.
 - **Show strips**: the start curve and some characteristic strips of every facet as lines.
 - **Default zones**: the zone table for the chosen traffic side.
 
@@ -219,11 +224,11 @@ stand on the lens' shape along X (for a steep rake they are sheared, not perpend
 ## Limits of this version
 
 - Photometry: the coil as an evenly shining cylinder, one reflection at the facets and the
-  connecting faces, no light leaving the lamp directly, no bulb glass (its refraction), no cover
-  lens; of the lamp's inner parts only the H4's shield and cap (not its driving-beam coil and
-  supports, nor light the shield's inside reflects). The cap stops only what goes forward within
-  about 40° of the axis, so it changes the light distribution only for a mirror that reaches that
-  far forward. The cut-off
+  connecting faces, no bulb glass (its refraction), no cover lens, no housing; of the lamp's inner
+  parts only the H4's shield and cap (not its driving-beam coil and supports, nor light the
+  shield's inside reflects). The direct light is taken on a grid of 1° and, whether the mirror is
+  in its way, from the coil centre (its rim casts no half shadow); through the lens it goes from
+  the coil centre too. The cut-off
   is sharper than a real lamp's. With *Analysis → Shadows of the steps* a ray that a step of the
   mirror stops on its way from the coil to a mirror point is left out; one that it stops after the
   reflection is reflected there a second time (with the reflectance of the connecting faces) and

@@ -4,8 +4,8 @@ luminous intensity of the low beam with the test points of UN/ECE R112.
 Model: the coil is a cylinder whose lateral surface shines evenly in all directions (Lambertian,
 luminance L = flux / (π · area)); every mirror point – on the facets and on the connecting faces –
 reflects once (reflectance ρ); a step of the mirror may shade a point from the coil or stop its
-reflected ray (HeightMap); no light that leaves the lamp directly, no bulb glass, no cover lens.
-NumPy only."""
+reflected ray (HeightMap); the light that leaves the lamp directly – past the mirror, over an H4's
+shield and around its cap – may be added (direct_light); no bulb glass, no cover lens. NumPy only."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from al_optics import Cutoff, Filament, Lamp, screen
+from al_optics import Cutoff, Filament, Lamp, direction, screen
 from al_reflector import FACET, Reflector
 
 
@@ -105,6 +105,15 @@ class Distribution:
                                    # on into the beam, as stray light, is part of flux_connections)
     flux_shadow: float = 0.0       # lm onto the mirror that a step of the mirror stops (before or after the
                                    # reflection; what leaves after a second reflection is part of flux_connections)
+    flux_direct: float = 0.0       # lm that leave the lamp directly forwards, past the mirror (not in flux_beam)
+    direct_max: float = 0.0        # cd: the highest intensity of that light on the screen
+
+    def add_direct(self, intensity: np.ndarray, flux: float) -> None:
+        """Adds the light that leaves the lamp directly (direct_light) to the intensity; its flux
+        is kept apart from that of the beam."""
+        self.intensity = self.intensity + intensity
+        self.flux_direct += flux
+        self.direct_max = float(intensity.max()) if intensity.size else 0.0
 
     def at(self, h_deg: float, v_deg: float, half_h: float = 0.25, half_v: float = 0.1) -> float:
         """Mean intensity in a small window about a point (a photometer's aperture)."""
@@ -146,6 +155,7 @@ class HeightMap:
         self.known = np.zeros(self.x.shape, dtype=bool)
         self.x[i - self.i0, j - self.j0] = P[:, 0]
         self.known[i - self.i0, j - self.j0] = True
+        self.reach = float(np.hypot(P[:, 1], P[:, 2]).max()) + 2.0 * pitch if len(P) else 0.0
 
     def at(self, y, z) -> np.ndarray:
         """x of the mirror at points (bilinear); -inf where there is no mirror."""
@@ -169,6 +179,16 @@ class HeightMap:
             tau = np.minimum(reach / sideways, 40.0)
             out |= self.at(p[:, None, 1] + tau * v[..., 1], p[:, None, 2] + tau * v[..., 2]) \
                 > p[:, None, 0] + tau * v[..., 0] + self.CLEAR
+        return out
+
+    def escapes(self, d: np.ndarray, step: float = 0.5) -> np.ndarray:
+        """Whether rays from the coil centre (the origin) along the unit directions d (n, 3) leave
+        forwards without meeting the mirror: compared with it every `step` mm sideways out to its rim."""
+        sideways = np.maximum(np.hypot(d[:, 1], d[:, 2]), 1e-9)
+        out = d[:, 0] > 1e-6
+        for r in np.arange(step, self.reach + step, step):
+            tau = r / sideways
+            out &= ~(self.at(tau * d[:, 1], tau * d[:, 2]) > tau * d[:, 0] + self.CLEAR)
         return out
 
 
@@ -211,15 +231,17 @@ class HeightMap:
 
 def light_distribution(reflector: Reflector, *, spacing: float = 1.0, reflectance: float = 0.85,
                        reflectance_connections: float | None = None, shadows: bool = False,
-                       **options) -> Distribution:
+                       direct: bool = False, **options) -> Distribution:
     """The luminous intensity of the facetted reflector by rays from every sample of the coil's
     surface to every mirror point of a front-view lattice (`spacing`, mm); `shadows`: a ray that a
     step of the mirror stops on its way from the coil is left out, one that it stops after the
     reflection is reflected there a second time (with the reflectance of the connecting faces) and
-    counts as stray light if it then leaves freely; options as intensity()."""
-    if shadows and reflector.transitions is not None:
+    counts as stray light if it then leaves freely; `direct`: with the light that leaves the lamp
+    past the mirror (direct_light); options as intensity()."""
+    if (shadows and reflector.transitions is not None) or direct:
         if getattr(reflector, "_height_map", None) is None:
             reflector._height_map = HeightMap(reflector)
+    if shadows and reflector.transitions is not None:
         options["stopped"] = reflector._height_map.stopped
         options["bounce"] = reflector._height_map.bounce
         options["rho_second"] = reflectance if reflectance_connections is None else reflectance_connections
@@ -227,7 +249,110 @@ def light_distribution(reflector: Reflector, *, spacing: float = 1.0, reflectanc
     connection = np.array([p.kind != FACET for p in reflector.parts()], dtype=bool)[part] if len(part) else part
     rho = np.where(connection, reflectance if reflectance_connections is None else reflectance_connections,
                    reflectance)
-    return intensity(reflector.settings.lamp, reflector.filament, P, N, A, rho, connection, **options)
+    dist = intensity(reflector.settings.lamp, reflector.filament, P, N, A, rho, connection, **options)
+    if direct:
+        dist.add_direct(*direct_light(reflector.settings.lamp, reflector.filament, dist.h, dist.v,
+                                      escapes=reflector._height_map.escapes))
+    return dist
+
+
+def lamp_intensity(lamp: Lamp, fil: Filament, d: np.ndarray, n_axial: int = 8, n_around: int = 16) -> np.ndarray:
+    """The luminous intensity (cd) of the bare lamp in the unit directions d (n, 3): every sample
+    of the coil's surface as a point source, less what the lamp's shield and cap stop."""
+    Q, nu, dA = fil.surface_samples(n_axial, n_around)
+    luminance = lamp.flux / (math.pi * dA * len(Q))
+    out = np.zeros(len(d))
+    chunk = max(1, 200_000 // len(Q))
+    for start in range(0, len(d), chunk):
+        dd = d[start:start + chunk]
+        w = np.clip(dd @ nu.T, 0.0, None)
+        if lamp.shield is not None:
+            w = np.where(lamp.shield.passes(Q, np.broadcast_to(dd[:, None, :], (len(dd), len(Q), 3))), w, 0.0)
+        out[start:start + chunk] = luminance * dA * w.sum(axis=1)
+    return out
+
+
+def _solid_angle(h_deg, v_deg, dh: float, dv: float) -> np.ndarray:
+    """Solid angle of cells dh × dv (degrees) about the screen points (h, v) in degrees."""
+    th, tv = np.tan(np.radians(h_deg)), np.tan(np.radians(v_deg))
+    return (math.radians(dh) * (1 + th ** 2)) * (math.radians(dv) * (1 + tv ** 2)) / (1 + th ** 2 + tv ** 2) ** 1.5
+
+
+def direct_light(lamp: Lamp, fil: Filament, h: np.ndarray, v: np.ndarray, *, escapes=None, after=None,
+                 margin: tuple[float, float] = (20.0, 10.0), step: float = 1.0, n_axial: int = 8,
+                 n_around: int = 16, progress=None) -> tuple[np.ndarray, float]:
+    """The light that leaves the lamp directly, without the mirror: its intensity (cd) on the cells
+    of the screen centred at h × v (degrees, evenly spaced) – (len(v), len(h)) – and its flux (lm,
+    all directions forwards).
+
+    The lamp's intensity (lamp_intensity, smooth) is taken on a grid of `step` degrees over H and V
+    and kept where escapes(d) -> bool lets the ray from the coil centre past the mirror (None: all
+    forward directions). Without a lens it is interpolated to the screen; after(origins,
+    directions) -> directions, factors[, walls] (a lens, as in intensity()): rays from the coil
+    centre, two by two per screen cell over the screen widened by `margin` (H, V degrees: as far as
+    the lens may turn light into the screen), go through it and are counted where they arrive."""
+    g = np.arange(-90.0 + 0.5 * step, 90.0, step)
+    GV, GH = np.meshgrid(g, g, indexing="ij")
+    d = direction(np.tan(np.radians(GH.ravel())), np.tan(np.radians(GV.ravel())))
+    I = lamp_intensity(lamp, fil, d, n_axial, n_around)
+    if escapes is not None:
+        I = np.where(escapes(d), I, 0.0)
+    omega = _solid_angle(GH.ravel(), GV.ravel(), step, step)
+    dh, dv = float(h[1] - h[0]), float(v[1] - v[0])
+    if after is None:
+        return _bilinear(I.reshape(GH.shape), g, h[None, :], v[:, None]), float((I * omega).sum())
+    lit = np.flatnonzero(I > 0.0)
+    flux = 0.0
+    if len(lit):
+        with np.errstate(all="ignore"):      # (far off the axis a ray may miss the lens: not finite, lost)
+            out, factor, *_ = after(np.zeros((len(lit), 3)), d[lit])
+        flux = float(np.where(np.isfinite(factor) & (out[:, 0] > 1e-6), I[lit] * omega[lit] * factor, 0.0).sum())
+    # the screen: emitted directions two by two per cell, jittered, over the widened screen
+    lo_h, hi_h = max(h[0] - 0.5 * dh - margin[0], -89.0), min(h[-1] + 0.5 * dh + margin[0], 89.0)
+    lo_v, hi_v = max(v[0] - 0.5 * dv - margin[1], -89.0), min(v[-1] + 0.5 * dv + margin[1], 89.0)
+    sh, sv = 0.5 * dh, 0.5 * dv
+    eh = lo_h + (np.arange(int(round((hi_h - lo_h) / sh))) + 0.5) * sh
+    ev = lo_v + (np.arange(int(round((hi_v - lo_v) / sv))) + 0.5) * sv
+    rng = np.random.default_rng(1)
+    nh, nv = len(h), len(v)
+    cells = np.zeros(nv * nh)
+    rows = max(1, 200_000 // len(eh))
+    for start in range(0, len(ev), rows):
+        if progress is not None:
+            progress(start / len(ev), "direct light …")
+        EV, EH = np.meshgrid(ev[start:start + rows], eh, indexing="ij")
+        EH = EH.ravel() + (rng.random(EH.size) - 0.5) * sh
+        EV = EV.ravel() + (rng.random(EV.size) - 0.5) * sv
+        w = _bilinear(I.reshape(GH.shape), g, EH, EV) * _solid_angle(EH, EV, sh, sv)
+        keep = w > 0.0
+        if not keep.any():
+            continue
+        e = direction(np.tan(np.radians(EH[keep])), np.tan(np.radians(EV[keep])))
+        with np.errstate(all="ignore"):
+            out, factor, *_ = after(np.zeros((len(e), 3)), e)
+        w = np.where(np.isfinite(factor), w[keep] * factor, 0.0)
+        ok = (w > 0.0) & (out[:, 0] > 1e-6) & np.isfinite(out).all(axis=1)
+        out, w = out[ok], w[ok]
+        H = np.degrees(np.arctan(-out[:, 1] / out[:, 0]))
+        V = np.degrees(np.arctan(out[:, 2] / out[:, 0]))
+        i = np.floor((H - h[0] + 0.5 * dh) / dh).astype(int)
+        j = np.floor((V - v[0] + 0.5 * dv) / dv).astype(int)
+        inside = (i >= 0) & (i < nh) & (j >= 0) & (j < nv)
+        cells += np.bincount(j[inside] * nh + i[inside], weights=w[inside], minlength=nv * nh)
+    return cells.reshape(nv, nh) / _solid_angle(h[None, :], v[:, None], dh, dv), flux
+
+
+def _bilinear(values: np.ndarray, g: np.ndarray, x, y) -> np.ndarray:
+    """values[j, i] given at (g[i], g[j]) (evenly spaced), at the points (x, y); 0 outside."""
+    x, y = np.broadcast_arrays(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+    step = g[1] - g[0]
+    fx, fy = (x - g[0]) / step, (y - g[0]) / step
+    i = np.clip(np.floor(fx).astype(int), 0, len(g) - 2)
+    j = np.clip(np.floor(fy).astype(int), 0, len(g) - 2)
+    a, b = np.clip(fx - i, 0.0, 1.0), np.clip(fy - j, 0.0, 1.0)
+    out = ((1 - a) * (1 - b) * values[j, i] + a * (1 - b) * values[j, i + 1]
+           + (1 - a) * b * values[j + 1, i] + a * b * values[j + 1, i + 1])
+    return np.where((fx >= -0.5) & (fx <= len(g) - 0.5) & (fy >= -0.5) & (fy <= len(g) - 0.5), out, 0.0)
 
 
 def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.ndarray, rho: np.ndarray,
