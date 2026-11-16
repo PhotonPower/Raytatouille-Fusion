@@ -80,3 +80,17 @@ upwards – the panel's layers, saved with *Save configuration*.
 
 **Next steps:** further blocks (`fg.*`: grating as
 S-matrix operator, stacks).
+
+**The configuration lives in the document.** A grating or stack block holds its FourierGrating
+configuration itself (RTT-Fusion W75, parameter `config`), so a `.rttf` computes on any machine
+without further files. To bring in a grating or stack built in GUI-FourierGrating:
+1. *File → Configuration*, *Load configuration* (the file into the panel);
+2. right-click the block in the node editor → *Store panel configuration in block*. The block no
+   longer names a file; a grating's Jones table, if it had one, is dropped (it would be used
+   instead of the configuration).
+
+To change it later: right-click → *Load block configuration into panel*, edit (Solve, Scan,
+Optimise work on it as usual), then *Store panel configuration in block* again. *Save
+configuration* writes it to a file only when you choose one (*Save as*). Blocks of older
+documents that still name a file get its content when *Check workflow* or *Run workflow* can read
+it (workflow engine).

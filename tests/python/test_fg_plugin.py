@@ -184,6 +184,72 @@ try:
 except ImportError:
     print("scipy not installed: optimisation skipped")
 
+# the configuration a block holds (RTT-Fusion W75), without FourierGrating: a configuration from
+# a file -> panel -> stored in a grating inside a group; back into the panel; a stack; errors
+import fg_plugin  # noqa: E402
+from nfcad import UserError  # noqa: E402
+
+
+class BlockCtx:
+    def __init__(self, wf, target, params=None):
+        self.wf, self.target, self.params, self.written = wf, target, dict(params or {}), None
+
+    def workflow(self):
+        return json.loads(json.dumps(self.wf))  # as CAD sends it: a copy
+
+    def set_workflow(self, wf):
+        self.written = self.wf = wf
+
+    def set_params(self, values):
+        self.params.update(values)
+
+
+def grating_node(**params):
+    return {"id": "Probe", "type": "fg.grating", "name": "Si grating",
+            "params": {"table": "", "fouriergrating": "", "side": "reflected", **params}}
+
+
+with tempfile.TemporaryDirectory() as d:
+    path = Path(d) / "lamellar.fg.json"
+    path.write_text(json.dumps(LAMELLAR))
+    old = grating_node(fouriergrating=str(path), table="/gone/table.json", table_data={"held": 1})
+    wf = {"model": {"nodes": [{"id": "G", "type": "group", "variant": "a", "variants": {
+        "a": {"nodes": [old]}, "b": {"nodes": [grating_node()]}}}, {"id": "Probe", "type": "rtt.section"}]}}
+    fgp = fg_plugin.FourierGratingPlugin()
+    # Load block configuration into panel: a block from before W75 still names its file
+    ctx = BlockCtx(wf, {"block": "Probe", "scope": ["G"]}, {"config_file": str(path)})
+    message = fgp.block_to_config(ctx)
+    assert fg_config.to_config(ctx.params) == LAMELLAR and ctx.params["config_file"] == "", message
+    ctx.params["period_x"] = 0.8  # edited in the panel
+    message = fgp.config_to_block(ctx)
+    inner = ctx.written["model"]["nodes"][0]["variants"]["a"]["nodes"][0]
+    assert inner["params"]["config"] == {**LAMELLAR, "period_um": {"x": 0.8}}, inner
+    assert inner["params"]["fouriergrating"] == "" and inner["params"]["table"] == "", inner
+    assert inner["params"]["table_data"] == {} and "Jones table is dropped" in message, message
+    assert ctx.written["model"]["nodes"][0]["variants"]["b"]["nodes"][0]["params"].get("config") is None
+    assert ctx.written["model"]["nodes"][1] == {"id": "Probe", "type": "rtt.section"}  # same id, other level
+    path.unlink()  # the document holds the configuration now
+    back = BlockCtx(ctx.written, ctx.target, {"config_file": ""})
+    fgp.block_to_config(back)
+    assert fg_config.to_config(back.params)["period_um"] == {"x": 0.8}
+    # a stack keeps no table; a socket graph (R16) works the same
+    stack = {"id": "S", "type": "fg.stack", "params": {"fouriergrating": ""}}
+    ctx = BlockCtx({"graph": {"nodes": [stack]}}, {"block": "S", "scope": []}, fg_config.to_params(LAMELLAR))
+    assert "table" not in fgp.config_to_block(ctx)
+    assert ctx.written["graph"]["nodes"][0]["params"] == {"fouriergrating": "", "config": LAMELLAR}
+    for wf_, target, why in (({"model": {"nodes": [stack]}}, {"block": "x"}, "is gone"),
+                             ({"model": {"nodes": [stack]}}, {"block": "S", "scope": ["G"]}, "group G is gone"),
+                             ({"model": {"nodes": [grating_node()]}}, {"block": "Probe"}, "holds no"),
+                             ({"model": {"nodes": [grating_node(fouriergrating=str(path))]}}, {"block": "Probe"},
+                              "cannot be read"),
+                             ({}, {"block": "S"}, "no node workflow")):
+        try:
+            fgp.block_to_config(BlockCtx(wf_, target))
+            raise AssertionError(f"not refused: {why}")
+        except UserError as e:
+            assert why in str(e), (why, e)
+print("block configuration ok")
+
 try:
     import fouriergrating  # noqa: F401
 except ImportError:
