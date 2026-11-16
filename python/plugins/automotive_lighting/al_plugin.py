@@ -735,9 +735,9 @@ class AutomotiveLighting(Plugin):
         return f"strips of {len(r.facets)} facets"
 
     @action("Optimise lens",
-            description="Chooses every cell's element (deflection, spread) so that the low beam meets the R112 test "
-                        "points and zones with the margin – for a lamp whose shield makes the cut-off (H4); sets the "
-                        "element table, one row per cell")
+            description="Chooses every cell's element (a prism and a cylinder lens: deflection, spread and its "
+                        "direction) so that the low beam meets the R112 test points and zones with the margin – for a "
+                        "lamp whose shield makes the cut-off (H4); sets the element table, one row per cell")
     def optimise_lens(self, ctx):
         p = ctx.params
         if p["system"] != PATTERNED:

@@ -6,6 +6,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Changed
+- **Automotive Lighting plugin**: the elements of a patterned lens may be turned (*spread turned
+  by*, a new column of the element table): a cylinder lens turned by 15° spreads the light along a
+  line that rises by 15°, as the facets of a clear-lens reflector lay their filament images along
+  the cut-off. *Optimise lens* chooses per cell a prism and a cylinder lens – its strength and its
+  direction – instead of spreads across and up and down.
+
 ### Fixed
 - **Automotive Lighting plugin**: lamp data checked against UN/ECE R37 Rev. 7 – HB3 5.1 mm and
   1860 lm, HB4 1095 lm, P21W/PY21W 6.0 mm; the black top of H7, H8, H11 from γ3 at the coil's end

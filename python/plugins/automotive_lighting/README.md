@@ -208,6 +208,10 @@ what the cells with their centre in it do; the first row that holds a cell count
 - *spread ± H / V*: by how much more at its borders, running linearly across the cell (its left
   part to the left, its upper part upwards; negative: the other way round, the rays cross) – a
   cylinder lens with one spread, a pillow with both.
+- *spread turned by*: both spreads turned on the screen by this angle (counter-clockwise as the
+  driver sees it): a cylinder lens (spread V 0) turned by 15° spreads the light along a line that
+  rises by 15° – as the facets of a clear-lens reflector lay their filament images along the
+  cut-off. The spread is reached at the cell's farthest corner along its direction.
 - All 0: plane glass.
 
 For a point of a cell, the ray that comes from the filament centre by way of the mirror
@@ -259,16 +263,21 @@ A low beam through a patterned lens takes its cut-off from the lamp – the H4's
 paraboloid's focus behind the coil (*Mirror focus behind the filament centre*; the H4's headlamp
 has it at the driving-beam coil, 6.7 mm) –; the lens
 has to place the light below it, finely: *Optimise lens* gives every cell (best a few mm, *Element
-width / height*) its own deflection and spread.
+width / height*) its own prism and cylinder lens – the cylinder's strength and its direction, so
+that a cell can lay its light along the cut-off: horizontally under its horizontal part, along 15°
+under its rise, steeper into the foreground, as the facets of a clear-lens reflector do.
 
 - **The cells' light.** Rays from the coil's surface by way of the mirror points reach the cells of
   a plane lens; each cell's light, binned on a grid of 0.5° x 0.1°, is its **pattern**. An element
-  moves it by its deflection and smears it over ± its spread (al_lens turns a cell's middle by the
-  deflection and its borders by ± the spread more): the beam of any choice is the sum of the
-  shifted and smeared patterns and the lamp's direct light – no filament images to be taken again.
-  Choices: deflection −16 … 16° (1° steps) across, −3 … 0.6° (0.2°) up and down, spread 0 … 12°
-  across and 0 … 1° up and down, |deflection| + spread ≤ 22° across, and only elements that fit
-  into the lens' thickness (their depth taken from al_lens for every choice).
+  moves it by its deflection and smears it along the cylinder's direction over ± its spread
+  (al_lens turns a cell's middle by the deflection and the rest by up to ± the spread more): evenly
+  along a horizontal or vertical line, along a slanting one as a trapezoid (how a rectangle's
+  points lie along it). The beam of any choice is the sum of the shifted and smeared patterns and
+  the lamp's direct light – no filament images to be taken again. Choices: deflection −16 … 16°
+  (1° steps) across, −3 … 0.6° (0.2°) up and down; a cylinder of 0 … 12° spread turned by −60 …
+  90° (0, ± 5, 10, 15, 20, 30, 45, 60, 90°); |deflection| + the spread's part across ≤ 22°, its
+  part up and down ≤ 4°, and only elements that fit into the lens' thickness (prism and cylinder
+  depths taken from al_lens).
 - **The objective**: R112's test points (their photometer windows) and zones III, IV and I (every
   bin; of III and I every bin that touches them – an optimiser finds any gap between the probes)
   within *Optimise: margin*, as squared shortfalls and excesses; then the smallest margin is made
@@ -277,8 +286,8 @@ width / height*) its own deflection and spread.
   traffic – where R112 measures the cut-off – a fall by a factor 10 from just below the line to
   just above it. Small elements are preferred where nothing depends on a cell.
 - **The search**: one cell after the other (the brightest first), its deflection over all choices
-  with its spread kept, then its spread with the deflection kept, in sweeps over all cells; after
-  the first sweep only deflections near the present one.
+  with its cylinder kept, then its cylinder (strength and direction together) with the deflection
+  kept, in sweeps over all cells; after the first sweep only choices near the present ones.
 - **Rounds** (*Optimise: rounds*): the lens is built and its filament images taken; half the
   difference from the patterns' sum is carried back, the cells are optimised again, the best
   round is kept. The patterns' sum and the filament images agree within a few per cent.
@@ -288,16 +297,17 @@ width / height*) its own deflection and spread.
   then judged in two views, as the filament images have it and blurred: every lower limit in the
   darker one, every upper limit in the brighter one. At the end the lens built is ray traced.
 
-What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, focus 3 mm behind the coil, the
-shield black, about 4½ minutes): all of R112 met by the filament images and by the ray tracing,
-75R 11 900 cd, 50R 20 600 cd, zone III 380 cd, the cut-off at −0.70° with G = 0.33 (ray tracing).
-Without the blur the filament images are met but the ray tracing finds light in zone III at the
-cut-off's kink. With the focus that close to the coil the shining H4 shield (*H4 shield:
-reflectance*) sends light above the cut-off that no lens can take back (zone III about 5 600 cd at
-0.5): its rear part reflects the coil's light backwards and up, as from a coil behind the focus.
-With the focus at the driving-beam coil (6.7 mm, as in the H4's headlamp) that light stays below
-the cut-off (a lens deflecting 1° down, ray tracing: zone III 791 cd with the shield black, 799 cd
-shining; with the focus 3 mm behind 223 and 5 459 cd).
+What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
+6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, about 10 minutes, 0.5 GB):
+all of R112 met by the filament images and by the ray tracing – in the ray tracing 75R 12 000 cd,
+50R 29 300 cd, zone III 510 cd, the cut-off at −0.70° with G = 0.40. Nearly every cell takes a
+prism alone (about 40 a weak cylinder, mostly 0 … 10° turned): with the focus there the filament
+images are large enough. Without the blur the filament images are met but the ray tracing finds
+light in zone III at the cut-off's kink. With the focus close to the coil (3 mm) the shining
+shield sends light above the cut-off that no lens can take back (zone III about 5 500 cd): its
+rear part reflects the coil's light backwards and up, as from a coil behind the focus; at 6.7 mm
+that light stays below the cut-off (a lens deflecting 1° down, ray tracing: zone III 791 cd with
+the shield black, 799 cd shining; with the focus 3 mm behind 223 and 5 459 cd).
 
 ## Ray tracing
 
