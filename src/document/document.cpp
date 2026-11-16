@@ -344,6 +344,18 @@ void Document::isolate(const std::vector<EntityId>& ids) {
   emit groupsChanged();
 }
 
+std::size_t Document::showHiddenEntities() {
+  std::vector<EntityId> shown;
+  for (auto& [id, e] : entities_) {
+    if (e.visible) continue;
+    e.visible = true;
+    ++e.revision;
+    shown.push_back(id);
+  }
+  touchEntities(shown);
+  return shown.size();
+}
+
 void Document::showAll() {
   for (Group& g : groups_) g.visible = true;
   for (Layer& l : layers_) l.visible = true;

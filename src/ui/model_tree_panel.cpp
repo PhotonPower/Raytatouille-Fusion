@@ -182,8 +182,12 @@ void ModelTreePanel::ungroupSelection() {
   }
 }
 
-void ModelTreePanel::hideSelection() {
-  for (document::EntityId id : selection_->entities()) doc_->setEntityVisible(id, false);
+std::size_t ModelTreePanel::hideSelection() {
+  const auto ids = selection_->entities();
+  for (document::EntityId id : ids) doc_->setEntityVisible(id, false);
+  // what cannot be seen must not stay selected: Delete or Move would act on it unseen
+  if (!ids.empty()) selection_->clear();
+  return ids.size();
 }
 
 void ModelTreePanel::isolateSelection() {
@@ -198,6 +202,7 @@ void ModelTreePanel::showContextMenu(const QPoint& pos) {
   menu.addSeparator();
   menu.addAction(tr("Hide"), this, &ModelTreePanel::hideSelection);
   menu.addAction(tr("Isolate"), this, &ModelTreePanel::isolateSelection);
+  menu.addAction(tr("Unhide"), this, [this] { doc_->showHiddenEntities(); });
   menu.addAction(tr("Show all"), this, [this] { doc_->showAll(); });
   menu.exec(tree_->viewport()->mapToGlobal(pos));
 }

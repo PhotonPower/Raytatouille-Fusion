@@ -7,6 +7,7 @@
 
 #include <QElapsedTimer>
 
+class QAction;
 class QActionGroup;
 class QDockWidget;
 class QLabel;
@@ -119,6 +120,8 @@ class MainWindow : public QMainWindow {
   void showAbout();
   void createPanels();
   void deleteSelection();
+  void hideSelection();
+  void unhide();
   void selectAll();
   void updateHoverInfo();
 
@@ -156,6 +159,8 @@ class MainWindow : public QMainWindow {
   ui::SnapBar* snapbar_ = nullptr;
   QDockWidget* tool_dock_ = nullptr;
   QActionGroup* display_modes_ = nullptr;
+  QAction* hide_action_ = nullptr;    ///< Edit → Hide and the View toolbar (H)
+  QAction* unhide_action_ = nullptr;  ///< Edit → Unhide and the View toolbar (Shift+H)
   QLabel* coords_ = nullptr;
   QLabel* active_view_ = nullptr;
   bool first_show_ = true;

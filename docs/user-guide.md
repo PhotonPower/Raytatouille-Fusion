@@ -26,8 +26,11 @@ see [Plugins](#plugins).
 - **Four views** (centre): Front (XZ), Left (YZ), Top (XY) and Perspective. The header of each
   view switches its display mode; **Space** maximises the view under the cursor and back.
 - **Display modes** (toolbar): *Wireframe*, *Surfaces* (flat, with edges) and *Shaded*.
+- **Hide / Unhide** (toolbar, also *Edit* menu): *Hide* (H) hides the selected objects and
+  deselects them; *Unhide* (Shift + H) shows every object hidden with Hide or Isolate again –
+  layers and the model tree's check boxes keep their state (*Show all* switches those on too).
 - **Docks** (right): *Properties* of the selection (also free attributes), *Layers*, *Model*
-  tree (groups with visibility check boxes; right-click: group, hide, isolate, show all),
+  tree (groups with visibility check boxes; right-click: group, hide, isolate, unhide, show all),
   *Results* of computations, *Plugin* (parameters and actions); *Plot* appears at the bottom
   with the first curve. Every dock can be moved, tabbed or hidden (*View* menu).
 - **Command line** (bottom): type a command or coordinates; the prompt says what is expected.
@@ -148,6 +151,7 @@ Writing your own plugins: [plugin-api.md](plugin-api.md).
 | Ctrl/Cmd + A | select all |
 | Delete / Backspace | delete the selection |
 | Ctrl/Cmd + G, Shift + Ctrl/Cmd + G | group, ungroup |
+| H, Shift + H | hide the selection, unhide (show what Hide and Isolate hid) |
 | Esc | cancel the command / plugin job, else clear the selection |
 | Enter | finish the command; on an empty command line: repeat the last one |
 | Space | maximise / restore the view under the cursor |

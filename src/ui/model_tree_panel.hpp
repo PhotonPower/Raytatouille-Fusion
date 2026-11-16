@@ -2,6 +2,8 @@
 
 #include <QWidget>
 
+#include <cstddef>
+
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -22,7 +24,7 @@ class ModelTreePanel : public QWidget {
 
   void groupSelection();
   void ungroupSelection();
-  void hideSelection();
+  std::size_t hideSelection();  ///< hides and deselects the selected objects; how many
   void isolateSelection();
 
  private:

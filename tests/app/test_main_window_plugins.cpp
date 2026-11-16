@@ -11,6 +11,7 @@
 #include <QStatusBar>
 #include <QStandardPaths>
 #include <QTest>
+#include <QToolBar>
 #include <QTreeWidget>
 #include <memory>
 
@@ -18,6 +19,7 @@
 #include "app/main_window.hpp"
 #include "document/document.hpp"
 #include "document/entity.hpp"
+#include "document/selection.hpp"
 #include "plugins/plugin_manager.hpp"
 #include "ui/plugin_panel.hpp"
 #include "ui/plugin_settings_dialog.hpp"
@@ -39,6 +41,34 @@ class TestMainWindowPlugins : public QObject {
     doc->addEntities({nfcad::document::make_entity(nf::Vec3{1, 2, 3}, QStringLiteral("p"))}, QStringLiteral("add"));
     QVERIFY(doc->isModified());
     w.reset();  // must not crash
+  }
+
+  void hideAndUnhideButtons() {
+    // the View toolbar's Hide (H) hides and deselects the selection, Unhide (Shift+H) shows it again
+    QStandardPaths::setTestModeEnabled(true);
+    nfcad::app::MainWindow w;
+    auto* doc = w.findChild<nfcad::document::Document*>();
+    auto* selection = w.findChild<nfcad::document::Selection*>();
+    const auto ids = doc->addEntities({nfcad::document::make_entity(nf::Vec3{0, 0, 0}, QStringLiteral("a")),
+                                       nfcad::document::make_entity(nf::Vec3{1, 0, 0}, QStringLiteral("b"))},
+                                      QStringLiteral("add"));
+    auto* bar = w.findChild<QToolBar*>(QStringLiteral("viewToolBar"));
+    auto* hide = w.findChild<QAction*>(QStringLiteral("hideAction"));
+    auto* unhide = w.findChild<QAction*>(QStringLiteral("unhideAction"));
+    QVERIFY(bar && hide && unhide);
+    QVERIFY(bar->actions().contains(hide) && bar->actions().contains(unhide));
+    QCOMPARE(hide->shortcut(), QKeySequence(Qt::Key_H));
+    QCOMPARE(unhide->shortcut(), QKeySequence(Qt::SHIFT | Qt::Key_H));
+
+    hide->trigger();  // nothing selected: nothing happens
+    QVERIFY(doc->isDisplayed(*doc->entity(ids[0])) && doc->isDisplayed(*doc->entity(ids[1])));
+    selection->apply({{ids[0], {}}}, nfcad::document::Selection::Mode::Replace);
+    hide->trigger();
+    QVERIFY(!doc->isDisplayed(*doc->entity(ids[0])));
+    QVERIFY(doc->isDisplayed(*doc->entity(ids[1])));
+    QVERIFY(selection->empty());  // a later Delete must not take the hidden object along
+    unhide->trigger();
+    QVERIFY(doc->isDisplayed(*doc->entity(ids[0])));
   }
 
   void workflowWindowComesBack() {

@@ -69,6 +69,24 @@ class TestModelTree : public QObject {
     for (EntityId id : ids) QVERIFY(doc.isDisplayed(*doc.entity(id)));
   }
 
+  void unhideShowsHiddenObjectsOnly() {
+    // Unhide (Shift+H) brings back what Hide and Isolate hid; the layer and group switches stay
+    Document doc;
+    const auto ids = three(doc);
+    const GroupId g = doc.groupEntities({ids[2]}, QStringLiteral("off"));
+    doc.setGroupVisible(g, false);
+    QCOMPARE(doc.showHiddenEntities(), std::size_t{0});
+    doc.setEntityVisible(ids[0], false);
+    doc.setEntityVisible(ids[2], false);
+    QSignalSpy changed(&doc, &Document::entityChanged);
+    QCOMPARE(doc.showHiddenEntities(), std::size_t{2});
+    QCOMPARE(changed.count(), 2);  // only those re-render
+    QVERIFY(doc.isDisplayed(*doc.entity(ids[0])));
+    QVERIFY(doc.entity(ids[2])->visible);
+    QVERIFY(!doc.isDisplayed(*doc.entity(ids[2])));  // its group is still switched off
+    QVERIFY(doc.groupHidden(g));
+  }
+
   void attributesWithUndo() {
     Document doc;
     const auto ids = three(doc);

@@ -7,6 +7,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Hide / Unhide** buttons in the View toolbar (also *Edit* menu, H and Shift + H): Hide hides
+  the selected objects and deselects them, so a later Delete or Move cannot act on them unseen;
+  Unhide shows what Hide and Isolate hid and leaves layers and model-tree check boxes as they are.
 - **Automotive Lighting plugin**: *Generate lamp* – the lamp of the ray tracing in the model, to
   look at what is traced: the coil's wire (the traced quarter turns, with their luminance as an
   attribute), the bulb's glass and black top, the H4's shield and other coil as NURBS faces in the
