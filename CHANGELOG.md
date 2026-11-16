@@ -22,6 +22,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   driving-beam coil, 6.7 mm behind): then its shining shield sends no light above the cut-off.
 
 ### Added
+- **Workflow panel: *Field accuracy ε (H links)*.** The allowed error of a field propagation,
+  relative to the peak amplitude (default 0.02, Fieldtracing's). Fieldtracing takes the cheapest
+  method within it; near a focus 0.05 often allows Debye (seconds) instead of Rayleigh–Sommerfeld
+  (hours). With RTT-Fusion #83 a pupil camera behind a grating (link H) takes about 3 minutes
+  instead of not finishing; the log names the method and its error.
 - **Automotive Lighting plugin**: *Optimise lens* – every cell of a patterned lens gets its own
   deflection and spread so that the low beam meets the R112 test points and zones with a margin
   (H4: the shield makes the cut-off). The cells' light of the plane lens is shifted and smeared

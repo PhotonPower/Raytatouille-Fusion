@@ -65,6 +65,12 @@ class WorkflowEngine(Plugin):
         "gaussian_waist": Param.number(0.0, min=0.0, max=10.0, label="Gaussian illumination (w / pupil radius)",
                                        description="0: uniform (a hard-edged beam, whose Fresnel diffraction a "
                                                    "field link shows); e.g. 0.5 for a laser beam"),
+        "field_tolerance": Param.number(0.02, min=0.001, max=0.2, label="Field accuracy ε (H links)",
+                                        description="Allowed error of a field propagation (link set to H), relative "
+                                                    "to the peak amplitude: Fieldtracing takes the cheapest method "
+                                                    "within it. 0.02 is its default; near a focus 0.05 often lets "
+                                                    "Debye (seconds) through instead of Rayleigh–Sommerfeld "
+                                                    "(minutes to hours); the log names the method and its error"),
     }
 
     def __init__(self):
@@ -336,7 +342,8 @@ class WorkflowEngine(Plugin):
         workflow, _, _, _ = _fusion()
         shared = {"rings": rings_for(int(ctx.params["rays"])),
                   "pixels": [int(ctx.params["pixels"])] * 2,
-                  "gaussian_waist": float(ctx.params.get("gaussian_waist", 0.0) or 0.0)}
+                  "gaussian_waist": float(ctx.params.get("gaussian_waist", 0.0) or 0.0),
+                  "field_tolerance": float(ctx.params.get("field_tolerance", 0.02) or 0.02)}
         materials = self._materials(wf)
         if materials is not None:
             shared["materials"] = materials
@@ -345,7 +352,7 @@ class WorkflowEngine(Plugin):
             self._cache = execute.ResultCache(limit_bytes=1 << 30)
         environment = {
             "rings": shared["rings"], "pixels": shared["pixels"], "window": ctx.params.get("window"),
-            "gaussian": shared["gaussian_waist"], "catalogs": self._catalogues(wf), "available": sorted(available),
+            "gaussian": shared["gaussian_waist"], "field_tolerance": shared["field_tolerance"], "catalogs": self._catalogues(wf), "available": sorted(available),
         }
         return execute.Executor(graph, registry, evaluators, shared, available=available, cache=self._cache,
                                 environment=environment)
