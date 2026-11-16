@@ -83,6 +83,9 @@ class Document : public QObject {
   void setGroupVisible(GroupId id, bool visible);
   /// Hides everything except the given entities (and shows them and their groups).
   void isolate(const std::vector<EntityId>& ids);
+  /// Shows the entities hidden one by one (Hide, Isolate); layers and groups keep their switches.
+  /// Returns how many were hidden.
+  std::size_t showHiddenEntities();
   void showAll();
 
   // ---- attributes (undoable)

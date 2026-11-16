@@ -182,8 +182,16 @@ void MainWindow::createMenus() {
                   [this] { model_tree_->groupSelection(); });
   edit->addAction(tr("U&ngroup"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G), this,
                   [this] { model_tree_->ungroupSelection(); });
-  edit->addAction(tr("&Hide selected"), this, [this] { model_tree_->hideSelection(); });
+  hide_action_ = edit->addAction(tr("&Hide"), this, &MainWindow::hideSelection);
+  hide_action_->setObjectName(QStringLiteral("hideAction"));
+  hide_action_->setShortcut(QKeySequence(Qt::Key_H));
+  hide_action_->setToolTip(tr("Hide the selected objects (H)"));
   edit->addAction(tr("&Isolate selected"), this, [this] { model_tree_->isolateSelection(); });
+  unhide_action_ = edit->addAction(tr("&Unhide"), this, &MainWindow::unhide);
+  unhide_action_->setObjectName(QStringLiteral("unhideAction"));
+  unhide_action_->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_H));
+  unhide_action_->setToolTip(tr("Show the objects hidden with Hide or Isolate again (Shift+H);\n"
+                                "layers and model-tree check boxes keep their state"));
   edit->addAction(tr("Show &all"), this, [this] { doc_->showAll(); });
   edit->addSeparator();
   QAction* none = edit->addAction(tr("Select &None / Cancel"), this, [this] {
@@ -261,7 +269,25 @@ void MainWindow::createViewToolBar() {
       if (all || v == grid_->activeView()) v->zoomSelected();
     }
   });
+  bar->addSeparator();
+  bar->addAction(hide_action_);  // the Edit menu's actions, with their shortcuts
+  bar->addAction(unhide_action_);
   view_menu->addSeparator();
+}
+
+void MainWindow::hideSelection() {
+  const std::size_t n = model_tree_->hideSelection();
+  statusBar()->showMessage(n == 0 ? tr("Hide: select objects first")
+                                  : tr("%n object(s) hidden – Unhide (Shift+H) shows them again", nullptr,
+                                       static_cast<int>(n)),
+                           4000);
+}
+
+void MainWindow::unhide() {
+  const std::size_t n = doc_->showHiddenEntities();
+  statusBar()->showMessage(n == 0 ? tr("Unhide: no hidden objects")
+                                  : tr("%n object(s) shown again", nullptr, static_cast<int>(n)),
+                           4000);
 }
 
 void MainWindow::createToolDock() {
