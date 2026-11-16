@@ -1,14 +1,20 @@
 """The elements of a patterned lens chosen cell by cell, so that the beam meets the test points of
 UN/ECE R112 (class B passing beam) with a margin – for a lamp whose cut-off its own shield makes
-(H4): the mirror and the shield form the cut-off, the lens spreads the light below it.
+(H4): the mirror and the shield form the cut-off, the lens spreads the light below it. Every cell
+is a prism (deflect H, V) with a cylinder lens on it whose strength (the spread) and direction
+(the angle its spread rises by on the screen) are chosen – as the facets of a clear-lens
+reflector lay their filament images along the cut-off: horizontally beneath its horizontal part,
+along 15° beneath its rise, steeper into the foreground.
 
 The surrogate. Light reaches a cell of the plane lens from the mirror: rays from samples of the
 coil's surface to the mirror's points, reflected, through the cell – their directions binned on a
 grid of the screen (0.5° x 0.1°), one pattern per cell. An element turns the light of its middle
-by (deflect H, deflect V) and that of its borders by ± the spread more, linearly across the cell
-(al_lens): its pattern is the plane cell's, shifted by the deflection and smeared over ± the
-spread (a box: the points of the cell are spread evenly). The beam is the sum of the cells'
-patterns and the lamp's direct light (through the plane lens).
+by (deflect H, deflect V) and that of the rest by up to ± the spread more along the spread's
+direction, linearly across the cell (al_lens): its pattern is the plane cell's, shifted by the
+deflection and smeared along that line as the cell's points spread – evenly for a horizontal or
+vertical line, as a trapezoid for a slanting one (a rectangle's points along a slanting line: two
+boxes in a row). The beam is the sum of the cells' patterns and the lamp's direct light (through
+the plane lens).
 
 The objective, at the test points' windows and the zones' bins (luminous intensities):
 
@@ -18,8 +24,8 @@ The objective, at the test points' windows and the zones' bins (luminous intensi
 – squared shortfalls and excesses, then the weakest requirement raised (the smallest margin made
 as large as can be), gentle elements where nothing depends on them. Zone I (the foreground) may
 have at most twice the intensity at 50R. It is minimised one cell at a time: its deflection over
-all choices with its spread kept, then its spread with the deflection kept; sweeps over all cells
-until no cell changes. The surrogate differs from the lens built (the elements are fitted
+all choices with its cylinder kept, then its cylinder (strength and direction) with the deflection
+kept; sweeps over all cells until no cell changes. The surrogate differs from the lens built (the elements are fitted
 patches, steps between them stray light, the coil is no point): `rounds` times the lens is built,
 its light distribution taken with the full model (evaluate) and half the difference carried into
 the surrogate before it is optimised again; the best round is kept. The lamp as it is (helix,
@@ -44,9 +50,10 @@ DH, DV = 0.5, 0.1                                  # degrees: the surrogate's gr
 H_RANGE, V_RANGE = (-45.0, 45.0), (-12.0, 6.0)
 DEFLECT_H = np.arange(-16.0, 16.01, 1.0)
 DEFLECT_V = np.round(np.arange(-3.0, 0.61, 0.2), 6)
-SPREAD_H = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0])
-SPREAD_V = np.array([0.0, 0.2, 0.5, 1.0])
-REACH = 22.0                                       # degrees: |deflect H| + spread H at most (the patches' slope)
+SPREAD = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0])        # the cylinder's ± spread
+ANGLE = np.array([-60.0, -45.0, -30.0, -20.0, -15.0, -10.0, -5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 30.0, 45.0, 60.0, 90.0])
+REACH = 22.0                                       # degrees: |deflect H| + the spread's H part at most (the patches' slope)
+REACH_V = 4.0                                      # degrees: the spread's V part at most
 EPSILON, LAMBDA = 0.02, 2e-6
 NEAR = 3                                           # after the first sweep: deflections this many steps away
 SWEEPS, LATER = 8, 3                               # sweeps at most: the first round, the later ones
@@ -293,27 +300,87 @@ def fit_blur(model: al_photometry.Distribution, traced: al_photometry.Distributi
 
 @dataclass
 class Choice:
-    """Indices into DEFLECT_H, DEFLECT_V, SPREAD_H, SPREAD_V per cell."""
+    """Indices into DEFLECT_H, DEFLECT_V, SPREAD, ANGLE per cell."""
 
     dh: np.ndarray
     dv: np.ndarray
-    sh: np.ndarray
-    sv: np.ndarray
+    sp: np.ndarray
+    an: np.ndarray
 
-    def element(self, k: int) -> tuple[float, float, float, float]:
-        return (float(DEFLECT_H[self.dh[k]]), float(DEFLECT_V[self.dv[k]]), float(SPREAD_H[self.sh[k]]),
-                float(SPREAD_V[self.sv[k]]))
+    def element(self, k: int) -> tuple[float, float, float, float, float]:
+        """(deflect H, deflect V, spread H, spread V, spread angle) of cell k – al_lens.Element's."""
+        return (float(DEFLECT_H[self.dh[k]]), float(DEFLECT_V[self.dv[k]]), float(SPREAD[self.sp[k]]), 0.0,
+                float(ANGLE[self.an[k]]))
+
+    def copy(self) -> "Choice":
+        return Choice(self.dh.copy(), self.dv.copy(), self.sp.copy(), self.an.copy())
+
+
+def spread_parts(cell: tuple[float, float]) -> tuple[np.ndarray, np.ndarray]:
+    """The H and V parts (degrees) of the cylinders' spreads (SPREAD x ANGLE) for cells of (width,
+    height) mm: the spread is reached at the cell's farthest corner along its direction."""
+    phi = np.radians(ANGLE)
+    return np.abs(SPREAD[:, None] * np.cos(phi)[None, :]), np.abs(SPREAD[:, None] * np.sin(phi)[None, :])
+
+
+def _line(cell: tuple[float, float], spread: float, angle: float):
+    """How a cylinder smears on the surrogate's grid: the axis it runs along most (1: V, 2: H), the
+    shift per bin along it on the other axis (bins), and the two boxes' half lengths along it (bins)
+    – the cell's points spread along the line as two boxes in a row: its width's and its height's."""
+    w, h = 0.5 * cell[0], 0.5 * cell[1]
+    phi = math.radians(angle)
+    c, s = math.cos(phi), math.sin(phi)
+    q = w * abs(c) + h * abs(s)
+    first, second = spread * w * abs(c) / q, spread * h * abs(s) / q       # degrees along the line
+    if abs(c) / DH >= abs(s) / DV:                                        # mostly across: along H
+        per = c / DH
+        return 2, (s / DV) / per, (first * abs(c) / DH, second * abs(c) / DH)
+    per = s / DV
+    return 1, (c / DH) / per, (first * abs(s) / DV, second * abs(s) / DV)
+
+
+def _smear(a: np.ndarray, axis: int, slope: float, halves) -> np.ndarray:
+    """a (views, rows, columns) smeared by boxes of `halves` (bins) along a line that runs along
+    `axis` and moves `slope` bins on the other axis per bin: the other axis sheared so that the line
+    runs along `axis` (whole bins), the boxes, sheared back. What leaves the array is lost (the
+    patterns have room for the widest spread)."""
+    halves = [int(round(x)) for x in halves]
+    if not any(halves):
+        return a
+    other = 3 - axis
+    n_along, n_other = a.shape[axis], a.shape[other]
+    shift = -np.rint((np.arange(n_along) - 0.5 * (n_along - 1)) * slope).astype(int)    # (the line rises by slope)
+    if not shift.any():
+        out = a
+        for half in halves:
+            out = _box(out, half, axis)
+        return out
+    pad = int(np.abs(shift).max())
+    idx_other = np.arange(n_other)[:, None] + pad + shift[None, :]            # (other, along) in the sheared array
+    idx_along = np.broadcast_to(np.arange(n_along)[None, :], idx_other.shape)
+    sheared = np.zeros((a.shape[0], n_other + 2 * pad, n_along) if axis == 2 else (a.shape[0], n_along, n_other + 2 * pad),
+                       dtype=a.dtype)
+    if axis == 2:                                                         # a[:, other, along]
+        sheared[:, idx_other, idx_along] = a
+    else:                                                                 # a[:, along, other]
+        sheared[:, idx_along.T, idx_other.T] = a
+    for half in halves:
+        sheared = _box(sheared, half, axis)
+    return sheared[:, idx_other, idx_along] if axis == 2 else sheared[:, idx_along.T, idx_other.T]
 
 
 class Surrogate:
     """The cells' patterns (flux per bin of the plane cell, each cut to where it has light, with room
     for the widest spread) in its views – as they are and, with a `blur` (sigma H, V in degrees:
-    what the lamp as it is adds to the filament images), blurred – and the beam at the probes."""
+    what the lamp as it is adds to the filament images), blurred – and the beam at the probes.
+    `cell`: the cells' width and height (mm), which shape a slanting cylinder's smear."""
 
-    def __init__(self, rays: Rays, pr: Probes, background: np.ndarray, blur: tuple[float, float] = (0.0, 0.0)):
+    def __init__(self, rays: Rays, pr: Probes, background: np.ndarray, blur: tuple[float, float] = (0.0, 0.0),
+                 cell: tuple[float, float] = (4.0, 4.0)):
         h, v = grid()
         self.nh, self.nv = len(h), len(v)
         self.probes = pr
+        self.cell = cell
         self.blurs = [(0.0, 0.0)] + ([tuple(blur)] if any(blur) else [])
         i = np.floor((rays.H - H_RANGE[0]) / DH).astype(int)
         j = np.floor((rays.V - V_RANGE[0]) / DV).astype(int)
@@ -325,10 +392,11 @@ class Surrogate:
         self.flux = pattern.reshape(count, -1).sum(axis=1)
         self.shift_h = np.rint(DEFLECT_H / DH).astype(int)
         self.shift_v = np.rint(DEFLECT_V / DV).astype(int)
-        self.half_h = np.rint(SPREAD_H / DH).astype(int)
-        self.half_v = np.rint(SPREAD_V / DV).astype(int)
-        mh = int(self.half_h.max()) + int(math.ceil(3.0 * blur[0] / DH))
-        mv = int(self.half_v.max()) + int(math.ceil(3.0 * blur[1] / DV))
+        self.part_h, self.part_v = spread_parts(cell)
+        self.lines = {(a, b): _line(cell, float(SPREAD[a]), float(ANGLE[b]))
+                      for a in range(len(SPREAD)) for b in range(len(ANGLE))}
+        mh = int(math.ceil(REACH / DH)) + 2 + int(math.ceil(3.0 * blur[0] / DH))
+        mv = int(math.ceil(REACH_V / DV)) + 2 + int(math.ceil(3.0 * blur[1] / DV))
         self.crops, self.offsets = [], []                 # crops[k]: (views, rows, columns)
         for k in range(count):
             if self.flux[k] <= 0.0:
@@ -345,12 +413,20 @@ class Surrogate:
         del pattern
         self.pv, self.ph = pr.bins // self.nh, pr.bins % self.nh
         self.background = background            # cd per view at the probes (direct light; the full model's difference)
-        self.depth_h = np.zeros((len(DEFLECT_H), len(SPREAD_H)))      # (depths(): how deep an element reaches)
-        self.depth_v = np.zeros((len(DEFLECT_V), len(SPREAD_V)))
+        self.depth_h = np.zeros(len(DEFLECT_H))                      # (depths(): how deep an element reaches)
+        self.depth_v = np.zeros(len(DEFLECT_V))
+        self.depth_c = np.zeros((len(SPREAD), len(ANGLE)))
         self.deepest = np.inf
 
-    def smeared(self, k: int, sh: int, sv: int) -> np.ndarray:
-        return _box(_box(self.crops[k], self.half_v[sv], 1), self.half_h[sh], 2)
+    def smeared(self, k: int, sp: int, an: int) -> np.ndarray:
+        axis, slope, halves = self.lines[(int(sp), int(an))]
+        return _smear(self.crops[k], axis, slope, halves)
+
+    def fits(self, dh, dv, sp, an) -> np.ndarray:
+        """Which elements (index arrays, broadcast) the lens can have: within the patches' slope and
+        the spread's reach, not deeper than the lens allows."""
+        return ((np.abs(DEFLECT_H[dh]) + self.part_h[sp, an] <= REACH) & (self.part_v[sp, an] <= REACH_V)
+                & (self.depth_h[dh] + self.depth_v[dv] + self.depth_c[sp, an] <= self.deepest))
 
     def at_probes(self, k: int, smeared: np.ndarray, dh, dv) -> np.ndarray:
         """Flux (views, k, probes) of cell k's smeared pattern shifted by the deflections (index arrays)."""
@@ -366,50 +442,49 @@ class Surrogate:
         """Flux (views, probes) of all cells with their choice."""
         total = np.zeros((len(self.blurs), len(self.probes.bins)))
         for k in np.flatnonzero(self.flux > 0.0):
-            total += self.at_probes(k, self.smeared(k, choice.sh[k], choice.sv[k]), choice.dh[k], choice.dv[k])[:, 0]
+            total += self.at_probes(k, self.smeared(k, choice.sp[k], choice.an[k]), choice.dh[k], choice.dv[k])[:, 0]
         return total
 
     def full(self, choice: Choice) -> np.ndarray:
         """The beam's flux on the whole grid (views, nv, nh)."""
         out = np.zeros((len(self.blurs), self.nv + 400, self.nh + 400))
         for k in np.flatnonzero(self.flux > 0.0):
-            m = self.smeared(k, choice.sh[k], choice.sv[k])
+            m = self.smeared(k, choice.sp[k], choice.an[k])
             j = 200 + self.offsets[k][0] + self.shift_v[choice.dv[k]]
             i = 200 + self.offsets[k][1] + self.shift_h[choice.dh[k]]
             out[:, j:j + m.shape[1], i:i + m.shape[2]] += m
         return out[:, 200:200 + self.nv, 200:200 + self.nh]
 
 
-def depths(settings: al_lens.LensSettings) -> tuple[np.ndarray, np.ndarray]:
-    """How deep (mm, below the cell's middle) an element of the cell on the lamp axis reaches:
-    (DEFLECT_H x SPREAD_H) turning across, (DEFLECT_V x SPREAD_V) up and down – the two add about
-    so (al_lens integrates the slopes along y, then along z). inf: the element cannot bend the
-    light that far."""
+def depths(settings: al_lens.LensSettings) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """How deep (mm, below the cell's middle) an element of the cell on the lamp axis reaches: the
+    prism turning across (DEFLECT_H), up and down (DEFLECT_V), the cylinder (SPREAD x ANGLE) – an
+    element's depth is at most their sum. inf: the element cannot bend the light that far."""
     w, hgt = settings.cell_width, settings.cell_height
     frame = al_layout.rounded_rectangle(1.02 * w, 1.02 * hgt, 0.0)
-    out = []
-    for first, second, make in ((DEFLECT_H, SPREAD_H, lambda a, b: (a, 0.0, b, 0.0)),
-                                (DEFLECT_V, SPREAD_V, lambda a, b: (0.0, a, 0.0, b))):
-        table = np.full((len(first), len(second)), np.inf)
-        for i, a in enumerate(first):
-            for j, b in enumerate(second):
-                try:
-                    one = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9, *make(a, b)),),
-                                                thickness=1e3, wall_draft=0.0, rake=0.0, sweep=0.0, radius=0.0), frame)
-                except DesignError:
-                    continue
-                table[i, j] = -one.sag[0]
-        out.append(table)
-    return out[0], out[1]
+
+    def depth(*element) -> float:
+        try:
+            one = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9, *element),),
+                                        thickness=1e3, wall_draft=0.0, rake=0.0, sweep=0.0, radius=0.0), frame)
+        except DesignError:
+            return np.inf
+        return -one.sag[0]
+
+    across = np.array([depth(a) for a in DEFLECT_H])
+    up = np.array([depth(0.0, a) for a in DEFLECT_V])
+    cylinder = np.array([[depth(0.0, 0.0, s, 0.0, a) for a in ANGLE] for s in SPREAD])
+    return across, up, cylinder
 
 
-def _cost(dh, dv, sh, sv) -> np.ndarray:
-    return LAMBDA * (np.abs(DEFLECT_H[dh]) + 5.0 * np.abs(DEFLECT_V[dv]) + SPREAD_H[sh] + 5.0 * SPREAD_V[sv])
+def _cost(dh, dv, sp, an, sur: Surrogate) -> np.ndarray:
+    return LAMBDA * (np.abs(DEFLECT_H[dh]) + 5.0 * np.abs(DEFLECT_V[dv]) + sur.part_h[sp, an] + 5.0 * sur.part_v[sp, an])
 
 
 def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, progress=None) -> tuple[Choice, int]:
-    """Coordinate descent over the cells (brightest first): each cell's deflection with its spread
-    kept, then its spread with its deflection kept. Returns the choice and the sweeps made."""
+    """Coordinate descent over the cells (brightest first): each cell's deflection with its
+    cylinder kept, then its cylinder (strength, direction) with its deflection kept. Returns the
+    choice and the sweeps made."""
     pr = sur.probes
 
     def judged(flux):                            # (views, k, probes) -> objective (k)
@@ -420,8 +495,10 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
     order = order[sur.flux[order] > 0.0]
     DHg, DVg = np.meshgrid(np.arange(len(DEFLECT_H)), np.arange(len(DEFLECT_V)), indexing="ij")
     DHg, DVg = DHg.ravel(), DVg.ravel()
-    SHg, SVg = np.meshgrid(np.arange(len(SPREAD_H)), np.arange(len(SPREAD_V)), indexing="ij")
-    SHg, SVg = SHg.ravel(), SVg.ravel()
+    SPg, ANg = np.meshgrid(np.arange(len(SPREAD)), np.arange(len(ANGLE)), indexing="ij")
+    SPg, ANg = SPg.ravel(), ANg.ravel()
+    plain = SPREAD[SPg] == 0.0
+    SPg, ANg = np.concatenate([SPg[~plain], [0]]), np.concatenate([ANg[~plain], [int(np.argmin(np.abs(ANGLE)))]])
     done = 0
     before = float(judged(total[:, None, :])[0])
     for sweep in range(sweeps):
@@ -430,28 +507,32 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
             if progress is not None and n % 50 == 0:
                 progress((sweep + n / len(order)) / sweeps, f"optimising the lens: sweep {sweep + 1}, cell {n} of "
                                                             f"{len(order)}")
-            old = (choice.dh[k], choice.dv[k], choice.sh[k], choice.sv[k])
-            m = sur.smeared(k, choice.sh[k], choice.sv[k])
+            old = (choice.dh[k], choice.dv[k], choice.sp[k], choice.an[k])
+            m = sur.smeared(k, choice.sp[k], choice.an[k])
             rest = total - sur.at_probes(k, m, choice.dh[k], choice.dv[k])[:, 0]
-            # the deflection, the spread kept: all in the first sweep, then those near the present one
-            fits = (np.abs(DEFLECT_H[DHg]) + SPREAD_H[choice.sh[k]] <= REACH) & (
-                sur.depth_h[DHg, choice.sh[k]] + sur.depth_v[DVg, choice.sv[k]] <= sur.deepest)
+            # the deflection, the cylinder kept: all in the first sweep, then those near the present one
+            fits = sur.fits(DHg, DVg, choice.sp[k], choice.an[k])
             if sweep > 0:
                 fits &= (np.abs(DHg - choice.dh[k]) <= NEAR) & (np.abs(DVg - choice.dv[k]) <= NEAR)
+            fits |= (DHg == choice.dh[k]) & (DVg == choice.dv[k])
             cand = sur.at_probes(k, m, DHg[fits], DVg[fits])
-            score = judged(rest[:, None, :] + cand) + _cost(DHg[fits], DVg[fits], choice.sh[k], choice.sv[k])
+            score = judged(rest[:, None, :] + cand) + _cost(DHg[fits], DVg[fits], choice.sp[k], choice.an[k], sur)
             best = int(np.argmin(score))
             choice.dh[k], choice.dv[k] = DHg[fits][best], DVg[fits][best]
-            # the spread, the deflection kept
-            fits = np.flatnonzero((np.abs(DEFLECT_H[choice.dh[k]]) + SPREAD_H[SHg] <= REACH) & (
-                sur.depth_h[choice.dh[k], SHg] + sur.depth_v[choice.dv[k], SVg] <= sur.deepest))
-            cand = np.stack([sur.at_probes(k, sur.smeared(k, SHg[q], SVg[q]), choice.dh[k], choice.dv[k])[:, 0]
+            # the cylinder, the deflection kept: all in the first sweep, then those near the present one
+            fits = sur.fits(choice.dh[k], choice.dv[k], SPg, ANg)
+            if sweep > 0:
+                turn = np.abs(ANg - choice.an[k])
+                fits &= (np.abs(SPg - choice.sp[k]) <= 2) & (np.minimum(turn, len(ANGLE) - turn) <= 2)
+            fits |= (SPg == choice.sp[k]) & (ANg == choice.an[k])
+            fits = np.flatnonzero(fits)
+            cand = np.stack([sur.at_probes(k, sur.smeared(k, SPg[q], ANg[q]), choice.dh[k], choice.dv[k])[:, 0]
                              for q in fits], axis=1)
-            score = judged(rest[:, None, :] + cand) + _cost(choice.dh[k], choice.dv[k], SHg[fits], SVg[fits])
+            score = judged(rest[:, None, :] + cand) + _cost(choice.dh[k], choice.dv[k], SPg[fits], ANg[fits], sur)
             best = int(np.argmin(score))
-            choice.sh[k], choice.sv[k] = SHg[fits[best]], SVg[fits[best]]
+            choice.sp[k], choice.an[k] = SPg[fits[best]], ANg[fits[best]]
             total = rest + cand[:, best]
-            changed += old != (choice.dh[k], choice.dv[k], choice.sh[k], choice.sv[k])
+            changed += old != (choice.dh[k], choice.dv[k], choice.sp[k], choice.an[k])
         done = sweep + 1
         now = float(judged(total[:, None, :])[0])
         if changed == 0 or before - now < 1e-5 * max(abs(now), 1e-3):
@@ -519,14 +600,14 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     if direct:
         direct_light, _ = al_photometry.direct_light(settings.lamp, plane.filament, h, v,
                                                      after=lambda o, d: plane.through(o, d, transmittance))
-    sur = Surrogate(rays, pr, np.zeros(0), blur)
-    sur.depth_h, sur.depth_v = depths(settings)
+    sur = Surrogate(rays, pr, np.zeros(0), blur, (settings.cell_width, settings.cell_height))
+    sur.depth_h, sur.depth_v, sur.depth_c = depths(settings)
     sur.deepest = DEPTH * (settings.thickness - 0.3)              # (al_lens.build: at least 0.3 mm of glass left)
-    if sur.depth_h[np.argmin(np.abs(DEFLECT_H)), 0] + sur.depth_v[np.argmin(np.abs(DEFLECT_V)), 0] > sur.deepest:
+    zero = (int(np.argmin(np.abs(DEFLECT_H))), int(np.argmin(np.abs(DEFLECT_V))), 0, int(np.argmin(np.abs(ANGLE))))
+    if not sur.fits(*zero):
         raise DesignError("the lens is too thin for even plane elements")
     background = np.stack([blurred(direct_light, b) for b in sur.blurs])
     sur.background = background.reshape(len(sur.blurs), -1)[:, pr.bins]
-    zero = (int(np.argmin(np.abs(DEFLECT_H))), int(np.argmin(np.abs(DEFLECT_V))), 0, 0)
     count = len(rays.cells)
     choice = Choice(*(np.full(count, z, dtype=np.int64) for z in zero))
     result = Result((), choice, rays.cells)
@@ -549,7 +630,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
             log(r, sweeps, result.rounds[-1])
         if r == 0 or score < result.objective:       # the best round is kept
             result.elements, result.dist, result.system, result.objective = elements, dist, system, score
-            result.choice = Choice(choice.dh.copy(), choice.dv.copy(), choice.sh.copy(), choice.sv.copy())
+            result.choice = choice.copy()
         if r < rounds:                               # half of what the surrogate misses, kept
             background = background + DAMPING * np.where(seen[None], actual - predicted, 0.0)
             sur.background = at(background)
