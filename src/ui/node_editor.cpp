@@ -1030,6 +1030,24 @@ bool NodeEditor::replaceNode(const QString& id, const QString& type) {
     if (old.contains("name")) node["name"] = old["name"];
     QJsonObject params;
     for (const QJsonValue& p : t["params"].toArray()) params[p.toObject()["name"].toString()] = p.toObject()["default"];
+    // a block of another kind in place of a Raytatouille block keeps its data (ADR Nachtrag 1, as
+    // RTT-Fusion's replace_block): the element stays in the system the Raytracer draws, its
+    // traversals keyed by the new ports like the branch steps below (an old channel goes)
+    const QJsonObject before = old["params"].toObject();
+    if (!type.startsWith(QLatin1String("rtt.")) && before.contains(QLatin1String("rtt"))) {
+      params[QStringLiteral("rtt")] = before["rtt"];
+      QJsonObject runs;
+      const QJsonObject old_runs = before["runs"].toObject();
+      for (auto it = old_runs.begin(); it != old_runs.end(); ++it) {
+        const QString traversal = it.key().section(QLatin1Char('|'), 0, 0);
+        const QString in = traversal.section(QLatin1Char('>'), 0, 0);
+        const QString out = traversal.section(QLatin1Char('>'), 1);
+        const QString key = map->value(in, in) + QLatin1Char('>') + (out.isEmpty() ? out : map->value(out, out)) +
+                            QLatin1Char('|');
+        if (!runs.contains(key)) runs[key] = it.value();
+      }
+      if (!runs.isEmpty()) params[QStringLiteral("runs")] = runs;
+    }
     if (!params.isEmpty()) node["params"] = params;
     QJsonArray nodes = g["nodes"].toArray();
     for (int k = 0; k < nodes.size(); ++k) {

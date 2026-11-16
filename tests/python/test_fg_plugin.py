@@ -213,6 +213,8 @@ with tempfile.TemporaryDirectory() as d:
     path = Path(d) / "lamellar.fg.json"
     path.write_text(json.dumps(LAMELLAR))
     old = grating_node(fouriergrating=str(path), table="/gone/table.json", table_data={"held": 1})
+    rtt_field = {"name": "/rtt/~1root~1children~14/name", "type": "text", "label": "name", "group": "Probe"}
+    old["fields"] = [rtt_field, {"name": "/config/stale", "type": "number", "label": "gone", "group": "Grating"}]
     wf = {"model": {"nodes": [{"id": "G", "type": "group", "variant": "a", "variants": {
         "a": {"nodes": [old]}, "b": {"nodes": [grating_node()]}}}, {"id": "Probe", "type": "rtt.section"}]}}
     fgp = fg_plugin.FourierGratingPlugin()
@@ -227,6 +229,21 @@ with tempfile.TemporaryDirectory() as d:
     assert inner["params"]["fouriergrating"] == "" and inner["params"]["table"] == "", inner
     assert inner["params"]["table_data"] == {} and "Jones table is dropped" in message, message
     assert ctx.written["model"]["nodes"][0]["variants"]["b"]["nodes"][0]["params"].get("config") is None
+    # its numbers in the block's dialog; the fields of the element it replaced stay
+    fields = {f["name"]: (f["type"], f["group"]) for f in inner["fields"]}
+    assert inner["fields"][0] == rtt_field and "/config/stale" not in fields, inner["fields"]
+    assert fields == {"/rtt/~1root~1children~14/name": ("text", "Probe"),
+                      "/config/period_um/x": ("number", "Grating"), "/config/truncation/Nx": ("integer", "Grating"),
+                      "/config/layers/0/thickness_um": ("number", "Layers"),
+                      "/config/layers/0/breakpoints_um": ("numbers", "Layers"),
+                      "/config/layers/1/thickness_um": ("number", "Layers"),
+                      "/config/materials/air/n": ("number", "Materials"),
+                      "/config/materials/glass/n": ("number", "Materials"),
+                      "/config/materials/si/n": ("numbers", "Materials")}, fields
+    two_d = fg_plugin.config_fields({**OTHER, "materials": {"a/b~c": {"n": 1.2}}})
+    assert [f["name"] for f in two_d] == ["/config/period_um/x", "/config/period_um/z", "/config/truncation/Nx",
+                                          "/config/truncation/Nz", "/config/layers/0/thickness_um",
+                                          "/config/materials/a~1b~0c/n"], two_d
     assert ctx.written["model"]["nodes"][1] == {"id": "Probe", "type": "rtt.section"}  # same id, other level
     path.unlink()  # the document holds the configuration now
     back = BlockCtx(ctx.written, ctx.target, {"config_file": ""})

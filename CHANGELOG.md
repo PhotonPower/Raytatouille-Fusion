@@ -11,6 +11,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   glass and polished metal, a prism that fans white light into its colours (31 wavelengths) and
   materials with depth of field –, each ready for *Camera image*, with `make_examples.py` that
   writes them and puts the images of the wavelengths together to colour pictures.
+- **FourierGrating plugin**: the dialog of a grating or stack block (double-click) shows the
+  numbers of its configuration – period, Fourier orders, layer thicknesses, lamella edges,
+  refractive indices – once *Store panel configuration in block* stored it.
 - **Hide / Unhide** buttons in the View toolbar (also *Edit* menu, H and Shift + H): Hide hides
   the selected objects and deselects them, so a later Delete or Move cannot act on them unseen;
   Unhide shows what Hide and Isolate hid and leaves layers and model-tree check boxes as they are.
@@ -133,6 +136,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   `;`-separated paths (documents with the old text are still read).
 
 ### Fixed
+- **Node editor**: a block of another kind that replaces a Raytatouille block (*Replace with*)
+  keeps its element and traversals, keyed by the new ports, so the Raytracer still draws it.
 - **Workflow: a document computes on its own.** A grating (`fg.grating`) or layer stack
   (`fg.stack`) that named its FourierGrating configuration or Jones table by path failed on any
   other machine – every display behind it gave up and the status line only said *nothing
