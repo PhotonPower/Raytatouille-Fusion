@@ -442,13 +442,36 @@ class TestNodeEditor : public QObject {
   }
 
   void modelReplaceKeepsPorts() {
+    // the mirror's Raytatouille data (element and traversals) go with it, keyed by the new port
+    QJsonObject wf = model_linnik();
+    QJsonObject model = wf["model"].toObject();
+    QJsonArray nodes = model["nodes"].toArray();
+    const QJsonObject mirror{{"/root/children/4", QJsonObject{{"type", "mirror"}, {"name", "Sample"}}}};
+    const QJsonArray reflect{QJsonObject{{"surface", "SMP"}, {"kind", "reflect"}}};
+    for (int k = 0; k < nodes.size(); ++k) {
+      QJsonObject n = nodes[k].toObject();
+      if (n["id"].toString() != QStringLiteral("Sample")) continue;
+      QJsonObject p = n["params"].toObject();
+      p["rtt"] = mirror;
+      p["runs"] = QJsonObject{{"Objective_A>Objective_A|", reflect}, {"Objective_A>Objective_A|order 1", reflect}};
+      n["params"] = p;
+      nodes[k] = n;
+    }
+    model["nodes"] = nodes;
+    wf["model"] = model;
     NodeEditor e;
-    e.setWorkflow(model_linnik());
+    e.setWorkflow(wf);
     if (!e.replacementsFor(QStringLiteral("Sample")).contains(QStringLiteral("fusion.grating"))) {
       QSKIP("the block library of the fixture has no grating");
     }
     QVERIFY(e.replaceNode(QStringLiteral("Sample"), QStringLiteral("fusion.grating")));
     const QJsonObject m = e.workflow()["model"].toObject();
+    for (const QJsonValue& v : m["nodes"].toArray()) {
+      if (v.toObject()["id"].toString() != QStringLiteral("Sample")) continue;
+      const QJsonObject p = v.toObject()["params"].toObject();
+      QCOMPARE(p["rtt"].toObject(), mirror);
+      QCOMPARE(p["runs"].toObject(), (QJsonObject{{"front>front|", reflect}}));
+    }
     bool connected = false;
     for (const QJsonValue& v : m["connections"].toArray()) {
       const QJsonArray ends = v.toObject()["ports"].toArray();
