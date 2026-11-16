@@ -9,6 +9,9 @@ environment.
 Lengths are mm (the document's unit), power is W. Radiometric: sources emit at single
 wavelengths, the results are sums over them or one per wavelength; no colours.
 
+**Examples** to open and compute: [examples/pathtracer](../../../examples/pathtracer/README.md) – a Cornell box,
+caustics, a prism, materials with depth of field.
+
 ## Steps
 
 1. **Materials** (table in the panel). Select surfaces or bodies, write a material's name into

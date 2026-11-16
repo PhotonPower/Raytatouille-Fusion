@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Path Tracer plugin**: example documents in `examples/pathtracer` – a Cornell box, caustics of
+  glass and polished metal, a prism that fans white light into its colours (31 wavelengths) and
+  materials with depth of field –, each ready for *Camera image*, with `make_examples.py` that
+  writes them and puts the images of the wavelengths together to colour pictures.
 - **FourierGrating plugin**: the dialog of a grating or stack block (double-click) shows the
   numbers of its configuration – period, Fourier orders, layer thicknesses, lamella edges,
   refractive indices – once *Store panel configuration in block* stored it.
