@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **FourierGrating plugin**: a grating or stack block holds its configuration in the document –
+  *Store panel configuration in block* (right-click on the block) takes over a configuration
+  loaded from GUI-FourierGrating, *Load block configuration into panel* brings it back to edit,
+  solve or optimise it.
 - **Automotive Lighting plugin**, *Light distribution (ray tracing)*: the lamp as it is – the
   coil's cooler ends (the temperature along the wire from its heat balance, each quarter turn
   shining by its temperature), the bulb as a glass body with its black top where R37 puts it, the

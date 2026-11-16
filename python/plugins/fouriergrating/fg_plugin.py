@@ -42,6 +42,48 @@ _MATERIAL = {
 }
 
 
+#: the blocks of this plugin that hold a FourierGrating configuration (RTT-Fusion W75: `config`)
+BLOCK_TYPES = ("fg.grating", "fg.stack")
+
+
+def target_block(wf: dict, target: dict) -> dict:
+    """The block an action was chosen on (`ctx.target`: its id and the groups it lies in), as the
+    node dict inside `wf` – changing it changes `wf`."""
+    container = wf.get("model") or wf.get("graph")
+    if not container:
+        raise UserError("The document has no node workflow.")
+    nodes = container.get("nodes", [])
+    for gid in target.get("scope", []):  # the block may lie inside groups (their active variant)
+        group = next((n for n in nodes if str(n.get("id")) == str(gid) and "variants" in n), None)
+        if group is None:
+            raise UserError(f"The group {gid} is gone – check the workflow and try again.")
+        nodes = group["variants"][group["variant"]].get("nodes", [])
+    block = str(target.get("block", ""))
+    node = next((n for n in nodes if str(n.get("id")) == block), None)
+    if node is None or node.get("type") not in BLOCK_TYPES:
+        raise UserError(f"The block {block or '?'} is gone – check the workflow and try again.")
+    return node
+
+
+def block_config(node: dict) -> dict | None:
+    """The configuration a block holds, else the one its file names (a document from before W75);
+    None if it has neither."""
+    params = node.get("params") or {}
+    if params.get("config"):
+        return json.loads(json.dumps(params["config"]))
+    path = str(params.get("fouriergrating") or "")
+    if not path:
+        return None
+    try:
+        cfg = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise UserError(f"{node.get('name') or node.get('id')} names {path}, which cannot be read ({e}) – "
+                        "Load configuration from where it is now, then Store panel configuration in block.") from e
+    if not isinstance(cfg, dict):
+        raise UserError(f"{path} is no FourierGrating configuration (not a JSON object).")
+    return cfg
+
+
 def _fg():
     try:
         import fouriergrating
@@ -164,6 +206,44 @@ class FourierGratingPlugin(Plugin):
         if provider is None:
             return {"ok": False, "error": "the FourierGrating plugin needs RTT-Fusion with remote blocks"}
         return provider.handle(request) if hasattr(provider, "handle") else provider.evaluate(request)
+
+    # ------------------------------------------------------------------ the configuration a block holds
+    @action("Store panel configuration in block",
+            description="The panel's configuration becomes this block's own (saved with the document, no file "
+                        "needed): import a configuration from GUI-FourierGrating with Load configuration first",
+            block_types=BLOCK_TYPES)
+    def config_to_block(self, ctx):
+        cfg = self.config(ctx)
+        wf = ctx.workflow()
+        node = target_block(wf, ctx.target)
+        params = node.setdefault("params", {})
+        dropped = bool(params.get("table") or params.get("table_data"))
+        params["config"] = cfg
+        params["fouriergrating"] = ""  # the block no longer names a file
+        if node.get("type") == "fg.grating":  # a held table would be used instead of the configuration
+            params["table"] = ""
+            params["table_data"] = {}
+        ctx.set_workflow(wf)
+        name = node.get("name") or node.get("id")
+        return (f"{name}: configuration stored in the block ({len(cfg.get('materials', {}))} materials, "
+                f"{len(cfg.get('layers', []))} layers)"
+                + ("; its Jones table is dropped, the block computes from the configuration" if dropped else ""))
+
+    @action("Load block configuration into panel",
+            description="Show this block's configuration in the panel to edit or solve it; Store panel "
+                        "configuration in block writes it back",
+            block_types=BLOCK_TYPES)
+    def block_to_config(self, ctx):
+        node = target_block(ctx.workflow(), ctx.target)
+        name = node.get("name") or node.get("id")
+        cfg = block_config(node)
+        if cfg is None:
+            raise UserError(f"{name} holds no FourierGrating configuration (a grating with a Jones table only "
+                            "has none to edit).")
+        values = fg_config.to_params(cfg)
+        values["config_file"] = ""  # Save configuration must not overwrite a file the block came from
+        ctx.set_params(values)
+        return f"{name}: configuration in the panel ({len(values['materials'])} materials, {len(values['layers'])} layers)"
 
     # ------------------------------------------------------------------ configuration
     def config(self, ctx) -> dict:
