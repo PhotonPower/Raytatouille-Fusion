@@ -89,6 +89,11 @@ without further files. To bring in a grating or stack built in GUI-FourierGratin
    longer names a file; a grating's Jones table, if it had one, is dropped (it would be used
    instead of the configuration).
 
+The block's dialog (double-click) then shows the configuration's numbers: period and Fourier
+orders (group *Grating*), layer thicknesses and lamella edges (*Layers*), refractive indices
+(*Materials*); with RTT-Fusion ≥ #80 also the ray path's table resolution (*Ray path*: σ step and
+margin around the rays' incidence directions) next to the field path's settings.
+
 To change it later: right-click → *Load block configuration into panel*, edit (Solve, Scan,
 Optimise work on it as usual), then *Store panel configuration in block* again. *Save
 configuration* writes it to a file only when you choose one (*Save as*). Blocks of older

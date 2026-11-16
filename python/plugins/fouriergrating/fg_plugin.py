@@ -65,6 +65,52 @@ def target_block(wf: dict, target: dict) -> dict:
     return node
 
 
+def _pointer(*parts) -> str:
+    return "/" + "/".join(str(p).replace("~", "~0").replace("/", "~1") for p in parts)
+
+
+def config_fields(cfg: dict) -> list[dict]:
+    """The numbers of a block's configuration as fields of its dialog in the node editor (JSON
+    pointers into its params, ADR Nachtrag 1): period and Fourier orders, layer thicknesses and
+    lamella edges, refractive indices given as n (or n, k)."""
+    out: list[dict] = []
+
+    def add(parts, kind, label, group, unit=""):
+        out.append({"name": _pointer("config", *parts), "type": kind, "label": label, "group": group,
+                    "unit": unit})
+
+    two_d = cfg.get("dimension") == "2D"
+    for axis in ("x", "z") if two_d else ("x",):
+        if isinstance((cfg.get("period_um") or {}).get(axis), int | float):
+            add(("period_um", axis), "number", f"Period {axis}", "Grating", "µm")
+    for axis in ("Nx", "Nz") if two_d else ("Nx",):
+        if isinstance((cfg.get("truncation") or {}).get(axis), int):
+            add(("truncation", axis), "integer", f"Fourier orders {axis} (−N … N)", "Grating")
+    for i, layer in enumerate(cfg.get("layers") or []):
+        if not isinstance(layer, dict):
+            continue
+        what = f"Layer {i + 1} ({layer.get('type', '?')})"
+        if isinstance(layer.get("thickness_um"), int | float):
+            add(("layers", i, "thickness_um"), "number", f"{what}: thickness", "Layers", "µm")
+        if isinstance(layer.get("breakpoints_um"), list):
+            add(("layers", i, "breakpoints_um"), "numbers", f"{what}: lamella edges", "Layers", "µm")
+    for name, material in (cfg.get("materials") or {}).items():
+        n = material.get("n") if isinstance(material, dict) else None
+        if isinstance(n, int | float):
+            add(("materials", name, "n"), "number", f"{name}: n", "Materials")
+        elif isinstance(n, list):
+            add(("materials", name, "n"), "numbers", f"{name}: n, k", "Materials")
+    return out
+
+
+def set_config(node: dict, cfg: dict) -> None:
+    """The block holds `cfg` and shows its numbers in its dialog (the fields of other data, e.g.
+    the Raytatouille element it replaced, stay)."""
+    node.setdefault("params", {})["config"] = cfg
+    kept = [f for f in node.get("fields") or [] if not str(f.get("name", "")).startswith("/config/")]
+    node["fields"] = kept + config_fields(cfg)
+
+
 def block_config(node: dict) -> dict | None:
     """The configuration a block holds, else the one its file names (a document from before W75);
     None if it has neither."""
@@ -210,7 +256,8 @@ class FourierGratingPlugin(Plugin):
     # ------------------------------------------------------------------ the configuration a block holds
     @action("Store panel configuration in block",
             description="The panel's configuration becomes this block's own (saved with the document, no file "
-                        "needed): import a configuration from GUI-FourierGrating with Load configuration first",
+                        "needed; period, orders, layers and indices in its dialog): import a configuration "
+                        "from GUI-FourierGrating with Load configuration first",
             block_types=BLOCK_TYPES)
     def config_to_block(self, ctx):
         cfg = self.config(ctx)
@@ -218,7 +265,7 @@ class FourierGratingPlugin(Plugin):
         node = target_block(wf, ctx.target)
         params = node.setdefault("params", {})
         dropped = bool(params.get("table") or params.get("table_data"))
-        params["config"] = cfg
+        set_config(node, cfg)
         params["fouriergrating"] = ""  # the block no longer names a file
         if node.get("type") == "fg.grating":  # a held table would be used instead of the configuration
             params["table"] = ""
