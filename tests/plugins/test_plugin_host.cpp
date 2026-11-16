@@ -92,12 +92,18 @@ class TestPluginHost : public QObject {
     // results (arrays through files)
     QCOMPARE(results_.sets().size(), std::size_t{1});
     const auto& items = results_.sets().front().items;
-    QCOMPARE(items.size(), std::size_t{4});
+    QCOMPARE(items.size(), std::size_t{5});
     QCOMPARE(items[3].kind, results::ResultItem::Kind::Image);
     QCOMPARE(items[3].image->width, 3);
     QCOMPARE(items[3].image->x0, -1.5);
     QCOMPARE(items[3].image->value(2, 1), 5.0F);
     QCOMPARE(items[3].image->description, QStringLiteral("6 px"));
+    QVERIFY(!items[3].image->coloured());
+    // a colour image: three bytes per pixel in the order of the values, clamped to 0 … 1
+    QCOMPARE(items[4].kind, results::ResultItem::Kind::Image);
+    QCOMPARE(items[4].image->value(2, 1), 5.0F);
+    const std::vector<unsigned char> rgb = {255, 0, 0, 0, 255, 0, 0, 0, 255, 128, 128, 128, 255, 0, 51, 255, 255, 255};
+    QCOMPARE(items[4].image->rgb, rgb);
     QCOMPARE(items[0].lines->polylineCount(), std::size_t{2});
     QCOMPARE(items[0].lines->values.size(), std::size_t{4});
     QCOMPARE(items[1].field->values.size(), std::size_t{6});

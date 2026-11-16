@@ -10,6 +10,8 @@
 #include <QProcessEnvironment>
 #include <QTimer>
 #include <QUuid>
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 
@@ -453,6 +455,14 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     if (im.width <= 0 || im.height <= 0 ||
         im.values.size() != static_cast<std::size_t>(im.width) * static_cast<std::size_t>(im.height)) {
       throw std::runtime_error("image: values do not match width x height");
+    }
+    if (args.contains(QLatin1String("rgb"))) {  // a colour image: red, green, blue in 0 … 1 per pixel
+      const std::vector<float> rgb = read_array<float>(args["rgb"], arrayDir());
+      if (rgb.size() != 3 * im.values.size()) throw std::runtime_error("image: rgb does not match width x height x 3");
+      im.rgb.resize(rgb.size());
+      std::transform(rgb.begin(), rgb.end(), im.rgb.begin(), [](float v) {
+        return static_cast<unsigned char>(std::isfinite(v) ? std::lround(255.0F * std::clamp(v, 0.0F, 1.0F)) : 0);
+      });
     }
     const QJsonArray extent = args["extent"].toArray();
     if (extent.size() == 4) {

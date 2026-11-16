@@ -73,6 +73,44 @@ class TestImageView : public QObject {
       zoomed.save(QString::fromLocal8Bit(dir) + QStringLiteral("/image_view_zoomed.png"));
     }
   }
+
+  void showsColoursAsTheyAre() {
+    results::ResultStore store;
+    ui::ImageView view(&store);
+    view.resize(500, 420);
+    results::Image im = spot(64, 48);
+    im.rgb.assign(3 * im.values.size(), 0);
+    for (int j = 0; j < 48; ++j) {  // left half red, right half green; the top row blue
+      for (int i = 0; i < 64; ++i) im.rgb[3 * (static_cast<std::size_t>(j) * 64 + i) + (j == 47 ? 2 : i < 32 ? 0 : 1)] = 255;
+    }
+    store.addImage(store.createSet(QStringLiteral("run")), QStringLiteral("colour"), std::move(im));
+    auto* canvas = view.findChild<ui::ImageCanvas*>();
+    const QImage shown = canvas->grab().toImage();
+    int red = 0, green = 0, blue = 0, blue_row = shown.height(), red_row = 0;
+    for (int y = 0; y < shown.height(); ++y) {
+      for (int x = 0; x < shown.width(); ++x) {
+        const QColor c = shown.pixelColor(x, y);
+        red += c == QColor(255, 0, 0) ? 1 : 0;
+        green += c == QColor(0, 255, 0) ? 1 : 0;
+        if (c == QColor(0, 0, 255)) {
+          ++blue;
+          blue_row = std::min(blue_row, y);
+        } else if (c == QColor(255, 0, 0)) {
+          red_row = std::max(red_row, y);
+        }
+      }
+    }
+    QVERIFY2(red > 1000 && green > 1000 && blue > 20, qPrintable(QStringLiteral("%1 %2 %3").arg(red).arg(green).arg(blue)));
+    QVERIFY(std::abs(red - green) < red / 10);
+    QVERIFY(blue_row < red_row);  // the last row of the image is on top
+    // no scale: the log switch is off and changes nothing
+    QVERIFY(!view.findChild<QCheckBox*>()->isEnabled());
+    view.setLogScale(true);
+    QCOMPARE(canvas->grab().toImage(), shown);
+    // a scalar image has its scale again
+    store.addImage(store.createSet(QStringLiteral("run 2")), QStringLiteral("CAM"), spot(64, 48));
+    QVERIFY(view.findChild<QCheckBox*>()->isEnabled());
+  }
 };
 
 QTEST_MAIN(TestImageView)

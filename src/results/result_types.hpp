@@ -57,10 +57,13 @@ struct FaceField {
 
 /// A 2D image with a physical extent for the image dock – e.g. a camera image (irradiance on a
 /// sensor) computed with many rays. Row-major, values[j * width + i]; row 0 at y0 (bottom).
+/// With `rgb` it is a colour image: the dock shows these colours as they are (no colour map, no
+/// colour bar, no log scale); `values` stays the number read out under the cursor.
 struct Image {
   int width = 0;
   int height = 0;
   std::vector<float> values;
+  std::vector<unsigned char> rgb;  ///< optional: sRGB, 3 bytes per pixel, in the order of `values`
   double x0 = 0.0, x1 = 1.0, y0 = 0.0, y1 = 1.0;  ///< extent of the grid (cell edges), e.g. mm
   QString x_label;
   QString y_label;
@@ -71,6 +74,7 @@ struct Image {
 
   [[nodiscard]] Range effectiveRange() const;
   [[nodiscard]] float value(int i, int j) const { return values[static_cast<std::size_t>(j) * width + i]; }
+  [[nodiscard]] bool coloured() const { return !rgb.empty(); }
 };
 
 /// x / y data for the plot dock (convergence curves, profiles, spectra).

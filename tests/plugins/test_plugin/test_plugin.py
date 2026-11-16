@@ -35,6 +35,9 @@ class TestPlugin(Plugin):
         ctx.append(c, 1, 0.5)
         ctx.image(run, "camera", [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3, 2, extent=(-1.5, 1.5, -1.0, 1.0),
                   unit="W/mm²", description="6 px")
+        ctx.image(run, "colour", [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3, 2, description="6 px in colour",
+                  rgb=[[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                       [[0.5, 0.5, 0.5], [2.0, -1.0, 0.2], [1.0, 1.0, 1.0]]])
         ctx.progress(1.0, "done")
         ctx.log("hello from the plugin")
         return f"new {new}"

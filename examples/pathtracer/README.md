@@ -12,10 +12,11 @@ the camera and the method are part of the document. *Show camera* draws the view
 | ![Prism](prism.png) | [`prism.rttf`](prism.rttf) | A thin sheet of white light grazes a table and meets a prism of heavy flint glass (n = 1.785, Abbe number 25.7) at the angle of least deviation: the colours leave it as a fan, 31 wavelengths from 400 to 700 nm; part of the light is reflected at the faces. Bidirectional. |
 | ![Materials and depth of field](depth-of-field.png) | [`depth-of-field.rttf`](depth-of-field.rttf) | Five balls on a chequered floor under a soft light – red paint (glossy), brushed gold (metal), glass, a mirror and frosted blue glass – seen through a lens of 14 mm radius that is sharp on the glass ball. Path tracing. |
 
-**Colours.** The plugin computes with single wavelengths and shows grey images: the sum, and with
-*Also per wavelength* (on in these documents) one image per wavelength. The colour pictures above
-are put together from those images by `make_examples.py` – every wavelength in its colour (CIE
-1931 observer), equal power on all of them as white. In the application you see the grey images.
+**Colours.** The plugin computes with single wavelengths. *Camera image* shows the sum in grey
+and, with several wavelengths, an image in colour (*Colour image*, on in these documents) – every
+wavelength in its colour (CIE 1931 observer), equal power on all of them as white. The pictures
+above are that colour image, written as a file by `make_examples.py`. *Also per wavelength* adds
+a grey image for each wavelength.
 
 **Time.** The documents ask for 120 to 160 samples per pixel; with the C++ kernel (package
 `pathtracer`) that takes from about half a minute (depth of field) to a few minutes (Cornell box)

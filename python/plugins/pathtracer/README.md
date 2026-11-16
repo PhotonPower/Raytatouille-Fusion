@@ -7,7 +7,8 @@ light tracing, path tracing, bidirectional path tracing and photon mapping. Need
 environment.
 
 Lengths are mm (the document's unit), power is W. Radiometric: sources emit at single
-wavelengths, the results are sums over them or one per wavelength; no colours.
+wavelengths, the results are sums over them or one per wavelength; the camera image is also
+shown in colour.
 
 **Examples** to open and compute: [examples/pathtracer](../../../examples/pathtracer/README.md) – a Cornell box,
 caustics, a prism, materials with depth of field.
@@ -71,7 +72,12 @@ caustics, a prism, materials with depth of field.
 
 4. **Camera.** Position, *Looks at* (both with *Pick*), up direction, horizontal field of view and
    pixels; *Show camera* draws the viewing pyramid. *Camera image* shows the radiance in
-   W/(m² sr) in the *Image* window (*White at percentile* sets the grey scale). With *Lens
+   W/(m² sr) in the *Image* window (*White at percentile* sets the grey scale). With several
+   wavelengths and *Colour image* it adds an image in colour, the one the window then shows: every wavelength in
+   the colour the eye gives it (CIE 1931 observer, sRGB), equal power on all wavelengths of the
+   scene as white, the brightest value by *White at percentile*, brighter light running into
+   white. It is a picture for the eye – the value under the cursor is the radiance of the grey
+   image, and pure wavelengths, which no screen can show, are cut to the nearest colour. With *Lens
    radius* 0 the camera is a pinhole and everything is sharp; with a radius it has a lens that
    is sharp at the *Focus distance* (0: the distance of *Looks at*) and blurs what is nearer or
    farther. A pinhole does not see point sources themselves, only the light they cast; a lens
