@@ -263,16 +263,8 @@ def intensity(lamp: Lamp, fil: Filament, P: np.ndarray, N: np.ndarray, A: np.nda
         cos_q = np.einsum("mki,ki->mk", d, nu)
         cos_p = -np.einsum("mki,mi->mk", d, n)
         w = luminance * dA * a[:, None] * np.clip(cos_q, 0.0, None) * np.clip(cos_p, 0.0, None) / r2
-        if lamp.window is not None:
-            # the shield's edges: where the ray passes the cylinder of the shield's radius about the axis
-            qa = d[..., 1] ** 2 + d[..., 2] ** 2
-            qb = Q[None, :, 1] * d[..., 1] + Q[None, :, 2] * d[..., 2]
-            qc = Q[None, :, 1] ** 2 + Q[None, :, 2] ** 2 - lamp.shield_radius ** 2
-            t = (-qb + np.sqrt(np.maximum(qb * qb - qa * qc, 0.0))) / np.maximum(qa, 1e-300)
-            az = np.degrees(np.arctan2(Q[None, :, 2] + t * d[..., 2], Q[None, :, 1] + t * d[..., 1]))
-            az = np.where(qc < 0.0, az, np.degrees(np.arctan2(d[..., 2], d[..., 1])))   # (no shield radius: the direction)
-            lo, hi = lamp.window
-            w = np.where(((az - lo) % 360.0) <= (hi - lo), w, 0.0)
+        if lamp.shield is not None:          # the shield under the coil and the cap on the bulb's tip
+            w = np.where(lamp.shield.passes(Q, d), w, 0.0)
         flux_mirror += float(w.sum())
         out = d - 2.0 * np.einsum("mki,mi->mk", d, n)[..., None] * n[:, None, :]
         twice = None
