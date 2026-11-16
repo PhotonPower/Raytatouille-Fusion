@@ -12,6 +12,7 @@ centre at *Filament centre*.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 import math
 import time
 
@@ -22,6 +23,7 @@ from nfcad import Param, Plugin, UserError, action
 import al_coil
 import al_layout
 import al_lens
+import al_optimise
 import al_photometry
 import al_reflector
 import al_trace
@@ -177,6 +179,17 @@ class AutomotiveLighting(Plugin):
                                             "much the light is turned in the cell's middle and the half spread "
                                             "about that; all 0: plane glass; a negative spread turns the element "
                                             "round (crossing rays)"),
+        "optimise_margin": Param.number(10.0, min=0.0, max=50.0, decimals=1, unit="%", label="Optimise: margin",
+                                        group="Lens", description="*Optimise lens*: how far within R112's limits "
+                                                                  "the test points and zones are to lie"),
+        "optimise_blur": Param.choice(["measured by ray tracing", "none"], "measured by ray tracing",
+                                      label="Optimise: the lamp's blur", group="Lens",
+                                      description="the lamp as it is (coil, bulb: the panel's Ray tracing settings) "
+                                                  "makes the beam softer than the filament images: measured on the "
+                                                  "plane lens and given to every cell's light, so that the margins "
+                                                  "hold for it; the result is then checked by ray tracing"),
+        "optimise_rounds": Param.integer(2, min=0, max=10, label="Optimise: rounds", group="Lens",
+                                         description="how often the lens is built, checked and optimised again"),
         "connect": Param.boolean(True, label="Connecting faces", group="Connecting faces",
                                  description="walls with draft and fillets between the facets: one mirror surface "
                                              "that can be moulded; off: the bare facets with steps between them"),
@@ -426,19 +439,7 @@ class AutomotiveLighting(Plugin):
         # a signal lamp is measured up to ± 20° / ± 10° about its axis, coarser than a cut-off needs
         field = {} if function == LOW_BEAM else {"h_range": (-40.0, 40.0), "v_range": (-20.0, 20.0), "dv": 0.25}
         if patterned:
-            P, N, A = r.samples(float(ctx.params["sampling"]))
-            transmittance = float(ctx.params["lens_transmittance"])
-            dist = al_photometry.intensity(r.settings.lamp, r.filament, P, N, A,
-                                           np.full(len(P), float(ctx.params["reflectance"])),
-                                           after=lambda origins, d: r.through(origins, d, transmittance),
-                                           n_axial=8, n_around=16, progress=progress, **field)
-            if ctx.params["direct"]:     # as far as the elements may turn light into the screen
-                reach = [max([abs(e.deflect_h) + abs(e.spread_h) for e in r.settings.elements] + [0.0]),
-                         max([abs(e.deflect_v) + abs(e.spread_v) for e in r.settings.elements] + [0.0])]
-                dist.add_direct(*al_photometry.direct_light(
-                    r.settings.lamp, r.filament, dist.h, dist.v, progress=progress,
-                    after=lambda origins, d: r.through(origins, d, transmittance),
-                    margin=(reach[0] + 5.0, reach[1] + 5.0)))
+            dist = self._lens_distribution(r, ctx.params, progress, field)
         else:
             dist = al_photometry.light_distribution(
                 r, spacing=float(ctx.params["sampling"]), reflectance=float(ctx.params["reflectance"]),
@@ -658,6 +659,25 @@ class AutomotiveLighting(Plugin):
                 f"cut-off G = {g:.2f}")
 
     @staticmethod
+    def _lens_distribution(r, params, progress=None, field=None):
+        """The light distribution of the paraboloid and lens `r` (filament images), with the lamp's
+        direct light through the lens if the panel says so."""
+        field = field or {}
+        P, N, A = r.samples(float(params["sampling"]))
+        transmittance = float(params["lens_transmittance"])
+        dist = al_photometry.intensity(r.settings.lamp, r.filament, P, N, A, np.full(len(P), float(params["reflectance"])),
+                                       after=lambda origins, d: r.through(origins, d, transmittance),
+                                       n_axial=8, n_around=16, progress=progress, **field)
+        if params["direct"]:             # as far as the elements may turn light into the screen
+            reach = [max([abs(e.deflect_h) + abs(e.spread_h) for e in r.settings.elements] + [0.0]),
+                     max([abs(e.deflect_v) + abs(e.spread_v) for e in r.settings.elements] + [0.0])]
+            dist.add_direct(*al_photometry.direct_light(
+                r.settings.lamp, r.filament, dist.h, dist.v, progress=progress,
+                after=lambda origins, d: r.through(origins, d, transmittance),
+                margin=(reach[0] + 5.0, reach[1] + 5.0)))
+        return dist
+
+    @staticmethod
     def _present(ctx, dist, r, title: str, description: str, driving: bool = False):
         """The intensity as an image, the table of the test points and two cuts, in a new result set."""
         function = "driving" if driving else ctx.params["test_points"]
@@ -705,6 +725,84 @@ class AutomotiveLighting(Plugin):
             starts = np.concatenate([[0], np.cumsum([len(line) for line in lines])])
             ctx.lines(run, name, points, starts, on_top=False)
         return f"strips of {len(r.facets)} facets"
+
+    @action("Optimise lens",
+            description="Chooses every cell's element (deflection, spread) so that the low beam meets the R112 test "
+                        "points and zones with the margin – for a lamp whose shield makes the cut-off (H4); sets the "
+                        "element table, one row per cell")
+    def optimise_lens(self, ctx):
+        p = ctx.params
+        if p["system"] != PATTERNED:
+            raise UserError("Optimise lens belongs to the patterned lens (System: patterned lens).")
+        if p["test_points"] != LOW_BEAM:
+            raise UserError("Optimise lens aims at the low beam's test points (Analysis: test points).")
+        r = self.lens_system(ctx)
+        frame = self.frame_of(ctx)
+        traced = p["optimise_blur"] == "measured by ray tracing"
+        if traced:
+            try:
+                al_trace.kernel(p["trace_kernel"])
+            except RuntimeError as e:
+                raise UserError(str(e)) from e
+        if r.settings.lamp.shield is None:
+            ctx.log(f"{r.settings.lamp.name} has no shield: the paraboloid makes no cut-off – the lens alone cannot "
+                    "meet the low beam's limits above it")
+
+        def trace(system):
+            coil, other, lit, bulb = self._traced_lamp(p, system.settings.lamp, system.filament)
+            bodies = self._lamp_bodies(p, system.settings.lamp, coil, other, bulb) + \
+                al_trace.lens_bodies(system, float(p["reflectance"]))
+            dist, _ = al_trace.trace(bodies, lit, coil, rays=int(p["trace_rays"]), depth=int(p["trace_depth"]),
+                                     kernel_name=al_trace.kernel(p["trace_kernel"]))
+            return dist
+
+        def progress(fraction: float, text: str) -> None:
+            ctx.check_cancel()
+            ctx.progress(fraction, text)
+
+        def log(r_: int, sweeps: int, values: dict) -> None:
+            ctx.log(f"round {r_ + 1}: {sweeps} sweeps; " + ", ".join(
+                f"{k} {values['surrogate'][k]:.0f}/{values['model'][k]:.0f}" for k in values["model"])
+                + " cd (the surrogate's / the filament images')")
+
+        start = time.time()
+        blur = (0.0, 0.0)
+        try:
+            if traced:          # how much softer the lamp as it is makes the plane lens' beam than the filament images
+                ctx.progress(0.0, "the plane lens: filament images and ray tracing …")
+                plane = al_lens.build(replace(r.settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),),
+                                              wall_draft=0.0), frame)
+                sh, sv, err = al_optimise.fit_blur(self._lens_distribution(plane, p), trace(plane))
+                blur = (sh, sv)
+                ctx.log(f"the lamp as it is blurs the plane lens' beam by σ = {sh:g}° (H) × {sv:g}° (V) against the "
+                        f"filament images ({100.0 * err:.0f} % relative difference left where it is bright)")
+            result = al_optimise.optimise(r.settings, frame, lambda system: self._lens_distribution(system, p),
+                                          margin=float(p["optimise_margin"]) / 100.0,
+                                          rounds=int(p["optimise_rounds"]), blur=blur,
+                                          spacing=float(p["sampling"]), reflectance=float(p["reflectance"]),
+                                          transmittance=float(p["lens_transmittance"]), direct=bool(p["direct"]),
+                                          progress=progress, log=log)
+            checked = trace(result.system) if traced else None
+        except (DesignError, RuntimeError, ValueError) as e:
+            raise UserError(str(e)) from e
+        rows = [{"y_from": e.y0, "y_to": e.y1, "z_from": e.z0, "z_to": e.z1, "deflect_h": e.deflect_h,
+                 "deflect_v": e.deflect_v, "spread_h": e.spread_h, "spread_v": e.spread_v} for e in result.elements]
+        ctx.set_params({"elements": rows})
+        cutoff = r.settings.cutoff
+        verdicts = []
+        for name, dist in (("filament images", result.dist), ("ray tracing", checked)):
+            if dist is None:
+                continue
+            self._present(ctx, dist, r, f"Low beam {r.settings.lamp.name} – optimised lens, {name}",
+                          f"the optimised lens ({len(rows)} cells), {name}")
+            failed = [row[0] for row in al_photometry.test_points(dist, cutoff) if row[-1] != "ok"]
+            g, v_cut = al_photometry.sharpness(dist, cutoff)
+            ctx.log(f"{name}: R112 " + ("met" if not failed else "not met: " + ", ".join(failed))
+                    + f"; cut-off at V = {v_cut:.2f}° with G = {g:.2f}")
+            verdicts.append(f"{name}: R112 " + ("met" if not failed else "not met: " + ", ".join(failed)))
+        ctx.log(f"optimised {len(rows)} cells in {time.time() - start:.0f} s; the element table now has a row per "
+                "cell")
+        return f"lens optimised ({len(rows)} cells); " + "; ".join(verdicts)
 
     @action("Default zones", description="Sets the zone table for the chosen traffic side")
     def set_default_zones(self, ctx):

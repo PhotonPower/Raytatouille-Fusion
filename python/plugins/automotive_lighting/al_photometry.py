@@ -464,6 +464,8 @@ ZONE_III = ((-8.0, 1.0), (-8.0, 4.0), (8.0, 4.0), (8.0, 2.0), (6.0, 1.5), (1.5, 
 ZONE_III_MAX = 625.0
 ZONE_IV = (-5.15, 5.15, -1.72, -0.86)     # H from, to, V from, to
 ZONE_IV_MIN = 2500.0
+ZONE_I = (-9.0, 9.0, -4.0, -1.72)         # the foreground: at most ZONE_I_FACTOR x the intensity at 50R
+ZONE_I_FACTOR = 2.0
 
 
 def _inside(poly, h: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -476,7 +478,8 @@ def _inside(poly, h: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 def test_points(dist: Distribution, cutoff: Cutoff) -> list[list]:
     """Rows name, H, V, intensity / cd, E at 25 m / lx, requirement, verdict – the test points and
-    the zones III (maximum in it) and IV (minimum in it, of the mean over a photometer window)."""
+    the zones III (maximum in it), IV (minimum in it, of the mean over a photometer window) and I
+    (maximum, at most twice the intensity at 50R)."""
     sign = 1.0 if cutoff.right_hand_traffic else -1.0
     rows = []
     for tp in R112_CLASS_B:
@@ -499,6 +502,12 @@ def test_points(dist: Distribution, cutoff: Cutoff) -> list[list]:
         value = min(dist.at(h, v) for h in hs for v in vs)
         rows.append(["zone IV", "", "", round(value, 1), round(value / 625.0, 2), f"≥ {ZONE_IV_MIN:.0f} cd",
                      "ok" if value >= ZONE_IV_MIN else "not met"])
+    zone1 = (H >= ZONE_I[0]) & (H <= ZONE_I[1]) & (V >= ZONE_I[2]) & (V <= ZONE_I[3])
+    if zone1.any():
+        value = float(dist.measured()[zone1].max())
+        limit = ZONE_I_FACTOR * dist.at(sign * 1.72, -0.86)
+        rows.append(["zone I", "", "", round(value, 1), round(value / 625.0, 2),
+                     f"≤ {ZONE_I_FACTOR:g} × I(50R) = {limit:.0f} cd", "ok" if value <= limit else "not met"])
     return rows
 
 

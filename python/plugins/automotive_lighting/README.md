@@ -40,7 +40,8 @@ and V upwards.
   radius at their foot and head.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
   element size, draft angle and fillet radius of the walls between the elements, the position of
-  the mirror's focus and the **elements**.
+  the mirror's focus and the **elements**; for *Optimise lens* its margin, rounds and whether the
+  lamp's blur is measured by ray tracing.
 - *Analysis*: the shadows of the steps on / off, the **direct light of the lamp** on / off, the
   **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
@@ -97,6 +98,10 @@ bottom spread the light.
   filament's cylinder of *Generate reflector*, which the wire touches from inside – in the model
   tree to see the coil. The ray tracing does not read these faces: it builds the lamp anew from
   the panel.
+- **Optimise lens** (patterned lens): chooses every cell's element so that the low beam meets the
+  R112 test points and zones with *Optimise: margin* (see *Optimising the lens* below) and writes
+  the element table, one row per cell; the result sets *… – optimised lens, filament images* and
+  (with the lamp's blur measured) *…, ray tracing* show how the lens built does.
 - **Show strips**: the start curve and some characteristic strips of every facet as lines.
 - **Default zones**: the zone table for the chosen traffic side.
 
@@ -244,6 +249,47 @@ Not modelled: a second wall on the way of a ray mirrored at a wall along X (then
 reflections at the two sides of the lens. Drafted walls are computed on the lens' elements as
 they stand along X; they join the elements within about 0.01 mm. The dome is a sphere about a point on the lamp axis; the elements
 stand on the lens' shape along X (for a steep rake they are sheared, not perpendicular to it).
+
+## Optimising the lens
+
+A low beam through a patterned lens takes its cut-off from the lamp – the H4's shield, with the
+paraboloid's focus behind the coil (*Mirror focus behind the filament centre* ≈ 3 mm) –; the lens
+has to place the light below it, finely: *Optimise lens* gives every cell (best a few mm, *Element
+width / height*) its own deflection and spread.
+
+- **The cells' light.** Rays from the coil's surface by way of the mirror points reach the cells of
+  a plane lens; each cell's light, binned on a grid of 0.5° x 0.1°, is its **pattern**. An element
+  moves it by its deflection and smears it over ± its spread (al_lens turns a cell's middle by the
+  deflection and its borders by ± the spread more): the beam of any choice is the sum of the
+  shifted and smeared patterns and the lamp's direct light – no filament images to be taken again.
+  Choices: deflection −16 … 16° (1° steps) across, −3 … 0.6° (0.2°) up and down, spread 0 … 12°
+  across and 0 … 1° up and down, |deflection| + spread ≤ 22° across, and only elements that fit
+  into the lens' thickness (their depth taken from al_lens for every choice).
+- **The objective**: R112's test points (their photometer windows) and zones III, IV and I (every
+  bin; of III and I every bin that touches them – an optimiser finds any gap between the probes)
+  within *Optimise: margin*, as squared shortfalls and excesses; then the smallest margin is made
+  as large as it can be. Two requirements beyond R112 keep the cut-off where it is aimed: from 0.3°
+  above the line (|H| ≤ 10°) at most zone III's 625 cd, and at 2.5° to the side of the oncoming
+  traffic – where R112 measures the cut-off – a fall by a factor 10 from just below the line to
+  just above it. Small elements are preferred where nothing depends on a cell.
+- **The search**: one cell after the other (the brightest first), its deflection over all choices
+  with its spread kept, then its spread with the deflection kept, in sweeps over all cells; after
+  the first sweep only deflections near the present one.
+- **Rounds** (*Optimise: rounds*): the lens is built and its filament images taken; half the
+  difference from the patterns' sum is carried back, the cells are optimised again, the best
+  round is kept. The patterns' sum and the filament images agree within a few per cent.
+- **The lamp's blur** (*Optimise: the lamp's blur → measured by ray tracing*): the lamp as it is
+  (helix, cooler ends, bulb) makes the beam softer than the filament images – on the plane lens of
+  an H4 by σ = 0.25° across and 0.2° up and down (a Gaussian fitted to the ray tracing). The beam is
+  then judged in two views, as the filament images have it and blurred: every lower limit in the
+  darker one, every upper limit in the brighter one. At the end the lens built is ray traced.
+
+What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, focus 3 mm behind the coil, the
+shield black, about 4½ minutes): all of R112 met by the filament images and by the ray tracing,
+75R 11 900 cd, 50R 20 600 cd, zone III 380 cd, the cut-off at −0.70° with G = 0.33 (ray tracing).
+Without the blur the filament images are met but the ray tracing finds light in zone III at the
+cut-off's kink. A mirroring H4 shield (*H4 shield: reflectance*) sends light above the cut-off
+that no lens can take back (zone III about 5 600 cd at 0.5) – how the real shield reflects decides.
 
 ## Ray tracing
 
