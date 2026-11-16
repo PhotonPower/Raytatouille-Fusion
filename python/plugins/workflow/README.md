@@ -17,5 +17,11 @@ catalogues from the source's `rtt_catalogs`, written by the Raytracer plugin). U
 blocks of all kernels are evaluated in this plugin's process, so its Python environment needs
 `rtt_fusion` and, for Raytatouille blocks, `raytatouille` (the same environment as the Raytracer).
 
+Files that blocks name – a grating's FourierGrating configuration or Jones table, a layer
+stack's configuration – are stored in the blocks by *Check workflow* (and *Run workflow*), and the
+paths are cleared, so the `.rttf` computes on any machine; a named file that cannot be read is a
+warning (`graph.file_unreadable`). STEP files of CAD layers in a FourierGrating configuration stay
+outside (`graph.file_external`).
+
 A workflow made before the blocks held their data cannot run here: run *Workflow from system* once
 in the Raytracer plugin.

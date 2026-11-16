@@ -72,6 +72,7 @@ class WorkflowEngine(Plugin):
         self._cache = None
         self._notes: list[str] = []
         self._model_ids: set[str] | None = None
+        self._failures: list[str] = []
 
     def _blocks(self, ctx, registry) -> tuple[dict, dict]:
         """The other plugins' block types in `registry` (ADR 0010, D2/D3): their evaluators (a
@@ -89,6 +90,20 @@ class WorkflowEngine(Plugin):
         providers = {str(e["type"]["type"]): {"plugin": str(e["provider"]), "version": str(e.get("version", ""))}
                      for e in catalogues}
         return evaluators, providers
+
+    @staticmethod
+    def _embed(ctx, workflow, model) -> tuple[bool, list]:
+        """The files blocks name (a grating's FourierGrating configuration or Jones table, a
+        stack's configuration) stored in the blocks, so the document computes on any machine
+        (RTT-Fusion W75): (anything stored, what could not be read as diagnostics). Nothing with
+        an older RTT-Fusion."""
+        embed = getattr(workflow, "embed_files", None)
+        if embed is None:
+            return False, []
+        done = embed(model)
+        for line in done.stored:
+            ctx.log(line)
+        return bool(done.stored), [dict(d.__dict__) for d in done.diagnostics]
 
     @staticmethod
     def _document(workflow, model, registry, wf, providers):
@@ -112,15 +127,19 @@ class WorkflowEngine(Plugin):
         graph = None
         if wf.get("model"):
             model = io.model_from_dict(wf["model"], registry)
+            _, files = self._embed(ctx, workflow, model)
             wf = {**wf, **self._document(workflow, model, registry, wf, providers)}
             if not any(d["severity"] == "error" for d in wf["diagnostics"]):
                 graph = fg.unroll(model, registry)
             self._model_ids = set(model.nodes)
         else:  # an old socket graph (R16)
             graph = io.from_dict(wf["graph"])
+            _, files = self._embed(ctx, workflow, graph)
+            wf["graph"] = io.to_dict(graph)
             wf["types"] = workflow.catalogue(registry)
             wf["diagnostics"], wf["plan"] = workflow.checked(graph, registry)
             self._model_ids = None
+        wf["diagnostics"] = list(wf["diagnostics"]) + files
         ctx.set_workflow(wf)
         if graph is not None and not any(d["severity"] == "error" for d in wf["diagnostics"]):
             try:  # which blocks the kept results still cover
@@ -145,10 +164,14 @@ class WorkflowEngine(Plugin):
             raise UserError("No node workflow yet – a plugin makes one (Raytracer: Workflow from system, "
                             "New Raytatouille system).")
         registry, extra = workflow.registry()
-        remote, _ = self._blocks(ctx, registry)
+        remote, providers = self._blocks(ctx, registry)
         extra = {**extra, **remote}
         if wf.get("model"):  # RTT-Fusion R24: exactly the branches of the model, unrolled
             model = io.model_from_dict(wf["model"], registry)
+            stored, files = self._embed(ctx, workflow, model)
+            if stored:  # the files are in the document from now on (saved with it)
+                ctx.set_workflow({**wf, **self._document(workflow, model, registry, wf, providers)})
+            self._log_files(ctx, files)
             try:
                 graph = fg.unroll(model, registry)
             except fg.ModelError as e:
@@ -158,6 +181,10 @@ class WorkflowEngine(Plugin):
             self._model_ids = set(model.nodes)
         else:
             graph = io.from_dict(wf["graph"])
+            stored, files = self._embed(ctx, workflow, graph)
+            if stored:
+                ctx.set_workflow({**wf, "graph": io.to_dict(graph)})
+            self._log_files(ctx, files)
             self._model_ids = None
         self._require_data(graph)
         displays = [n for n in graph.nodes.values() if n.type_id.startswith("display.")]
@@ -175,12 +202,25 @@ class WorkflowEngine(Plugin):
         name = str(((source.params.get("rtt_system") or {}).get("name") if source is not None else "") or "")
         run = ctx.result_set(f"Workflow {name or 'run'}")
         self._notes = []
+        self._failures = []
         made = self._run_displays(ctx, run, graph, registry, _evaluators(extra), execute, wf, displays)
         ctx.workflow_running("")
-        message = "workflow: " + (", ".join(made) if made else "nothing computed")
+        if made:
+            message = "workflow: " + ", ".join(made)
+        else:  # the reason in the status line, not only in the log
+            message = "workflow: nothing computed"
+            if self._failures:
+                message += " – " + self._failures[0]
+                if len(self._failures) > 1:
+                    message += f" (and {len(self._failures) - 1} more in the log)"
         if self._notes:  # shown in the status line, not only in the log
             message += " – warning: " + "; ".join(self._notes)
         return message
+
+    @staticmethod
+    def _log_files(ctx, files: list) -> None:
+        for d in files:
+            ctx.log(f"{d['severity']}: {d['code']} – {d['message']} ({d['location']})")
 
     @staticmethod
     def _require_data(graph) -> None:
@@ -250,6 +290,7 @@ class WorkflowEngine(Plugin):
                 view = ex.evaluate(node.id, "view")
             except execute.ExecutionError as e:
                 ctx.log(f"{node.name or node.id}: {e}")
+                self._failures.append(f"{node.name or node.id}: {e}")
                 continue
             key = f"workflow:{node.id}"
             if view.kind == "image" and view.image is not None:
