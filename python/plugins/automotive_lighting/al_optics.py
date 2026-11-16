@@ -111,27 +111,28 @@ class Lamp:
     axial: bool = True            # coil along the lamp axis (X); else across it (along Y)
     shield: Shield | None = None  # what inside the lamp stops light of the coil (H4)
     note: str = ""
+    watts: float = 0.0            # W at 12 V (the coil's wire for the ray tracing is estimated from it)
 
 
 # Luminous flux: the nominal values of UN/ECE R37 (12 V lamps). Filament length and diameter:
 # typical values of the coil – check the lamp's R37 sheet or data sheet; "Custom" takes the panel's.
 LAMPS: dict[str, Lamp] = {
-    "H1": Lamp("H1", 5.0, 1.4, 1550.0, note="55 W, axial coil"),
-    "H4 (low beam)": Lamp("H4 (low beam)", 5.5, 1.5, 1000.0, shield=h4_shield(5.5, 1.5),
+    "H1": Lamp("H1", 5.0, 1.4, 1550.0, note="55 W, axial coil", watts=55.0),
+    "H4 (low beam)": Lamp("H4 (low beam)", 5.5, 1.5, 1000.0, shield=h4_shield(5.5, 1.5), watts=55.0,
                           note="55 W coil above its shield (R37 sheet H4/3): light over the edges into the upper "
                                "195°, a trough 2.5 mm in radius closed at the back; the black tip cap ≤ 40°"),
-    "H7": Lamp("H7", 4.1, 1.3, 1500.0, note="55 W, axial coil"),
-    "H8": Lamp("H8", 3.7, 1.2, 800.0, note="35 W, axial coil"),
-    "H9": Lamp("H9", 4.8, 1.4, 2100.0, note="65 W, axial coil"),
-    "H11": Lamp("H11", 4.5, 1.3, 1350.0, note="55 W, axial coil"),
-    "HB3": Lamp("HB3", 4.2, 1.4, 1700.0, note="60 W, axial coil"),
-    "HB4": Lamp("HB4", 5.1, 1.4, 1000.0, note="51 W, axial coil"),
-    "H3": Lamp("H3", 5.0, 1.4, 1450.0, axial=False, note="55 W, transverse coil (fog lamps)"),
+    "H7": Lamp("H7", 4.1, 1.3, 1500.0, note="55 W, axial coil", watts=55.0),
+    "H8": Lamp("H8", 3.7, 1.2, 800.0, note="35 W, axial coil", watts=35.0),
+    "H9": Lamp("H9", 4.8, 1.4, 2100.0, note="65 W, axial coil", watts=65.0),
+    "H11": Lamp("H11", 4.5, 1.3, 1350.0, note="55 W, axial coil", watts=55.0),
+    "HB3": Lamp("HB3", 4.2, 1.4, 1700.0, note="60 W, axial coil", watts=60.0),
+    "HB4": Lamp("HB4", 5.1, 1.4, 1000.0, note="51 W, axial coil", watts=51.0),
+    "H3": Lamp("H3", 5.0, 1.4, 1450.0, axial=False, note="55 W, transverse coil (fog lamps)", watts=55.0),
     # signal lamps: the coil lies across the axis
-    "P21W": Lamp("P21W", 5.0, 1.0, 460.0, axial=False, note="21 W, transverse coil"),
-    "PY21W": Lamp("PY21W", 5.0, 1.0, 280.0, axial=False, note="21 W amber, transverse coil"),
-    "R10W": Lamp("R10W", 4.0, 0.8, 125.0, axial=False, note="10 W, transverse coil"),
-    "R5W": Lamp("R5W", 4.0, 0.7, 50.0, axial=False, note="5 W, transverse coil"),
+    "P21W": Lamp("P21W", 5.0, 1.0, 460.0, axial=False, note="21 W, transverse coil", watts=21.0),
+    "PY21W": Lamp("PY21W", 5.0, 1.0, 280.0, axial=False, note="21 W amber, transverse coil", watts=21.0),
+    "R10W": Lamp("R10W", 4.0, 0.8, 125.0, axial=False, note="10 W, transverse coil", watts=10.0),
+    "R5W": Lamp("R5W", 4.0, 0.7, 50.0, axial=False, note="5 W, transverse coil", watts=5.0),
 }
 CUSTOM = "Custom"
 

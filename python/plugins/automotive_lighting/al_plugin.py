@@ -13,15 +13,18 @@ from __future__ import annotations
 
 import hashlib
 import math
+import time
 
 import numpy as np
 
 from nfcad import Param, Plugin, UserError, action
 
+import al_coil
 import al_layout
 import al_lens
 import al_photometry
 import al_reflector
+import al_trace
 from al_design import DesignError
 from al_layout import Zone
 from al_optics import CUSTOM, HORIZONTAL, LAMPS, RISING, Cutoff, Lamp
@@ -97,6 +100,8 @@ class AutomotiveLighting(Plugin):
                                         label="Custom: filament diameter", group="Lamp"),
         "custom_flux": Param.number(1500.0, min=1.0, max=100000.0, decimals=0, unit="lm", label="Custom: luminous flux",
                                     group="Lamp"),
+        "custom_watts": Param.number(55.0, min=0.1, max=1000.0, decimals=1, unit="W", label="Custom: power",
+                                     group="Lamp", description="at 12 V; for the coil of the ray tracing"),
         "custom_across": Param.boolean(False, label="Custom: filament across the axis", group="Lamp",
                                        description="horizontal, at right angles to the lamp axis (H3, signal "
                                                    "lamps)"),
@@ -196,6 +201,19 @@ class AutomotiveLighting(Plugin):
         "sampling": Param.number(1.0, min=0.2, max=10.0, decimals=2, unit="mm", label="Mirror points every",
                                  group="Analysis", description="lattice of the light distribution"),
         "image_points": Param.integer(150, min=1, max=5000, label="Filament images (number)", group="Analysis"),
+        "trace_rays": Param.integer(5_000_000, min=10_000, max=2_000_000_000, label="Light paths", group="Ray tracing",
+                                    description="from the coil's wire; the noise of a cell of the screen falls with "
+                                                "their root (5 million: some 5 % where the beam is brightest)"),
+        "trace_depth": Param.integer(12, min=1, max=100, unit="segments", label="Longest path", group="Ray tracing",
+                                     description="reflections and refractions a light path may have before it ends"),
+        "coil_wire": Param.number(0.0, min=0.0, max=2.0, decimals=3, unit="mm", label="Coil: wire diameter",
+                                  group="Ray tracing", description="0: estimated from the lamp's power (tungsten "
+                                                                   "at 3100 K, 13.2 V)"),
+        "coil_turns": Param.integer(0, min=0, max=1000, label="Coil: turns", group="Ray tracing",
+                                    description="0: a pitch of 1.5 wire diameters"),
+        "trace_kernel": Param.choice(["automatic", "C++", "NumPy"], "automatic", label="Kernel", group="Ray tracing",
+                                     description="the Path Tracer plugin's: C++ (package pathtracer 0.2.0 or later) "
+                                                 "if installed – NumPy takes minutes for a reflector"),
     }
 
     # ------------------------------------------------------------------ the reflector
@@ -204,7 +222,7 @@ class AutomotiveLighting(Plugin):
         if params["lamp"] != CUSTOM:
             return LAMPS[params["lamp"]]
         return Lamp(CUSTOM, float(params["custom_length"]), float(params["custom_diameter"]),
-                    float(params["custom_flux"]), axial=not params["custom_across"])
+                    float(params["custom_flux"]), axial=not params["custom_across"], watts=float(params["custom_watts"]))
 
     @staticmethod
     def cutoff_of(params: dict) -> Cutoff:
@@ -414,30 +432,10 @@ class AutomotiveLighting(Plugin):
                     + f", up to {dist.direct_max:.0f} cd on the screen"
                     + (" (the H4's cap stops what goes forwards within about 40° of the axis)"
                        if r.settings.lamp.shield is not None and r.settings.lamp.shield.cap_x is not None else ""))
-        run = ctx.result_set(f"Low beam {r.settings.lamp.name}")
-        ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
-                  extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
-                  description=("mirror, then the lens (no light from the steps between its elements)" if patterned
-                               else "single reflection at the facets and the connecting faces")
-                  + ("; with the lamp's direct light" if ctx.params["direct"] else "")
-                  + "; 625 cd = 1 lx at 25 m")
-        if function == LOW_BEAM:
-            ctx.table(run, "R112 test points (class B, passing beam)",
-                      ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
-                      al_photometry.test_points(dist, cutoff))
-        else:
-            ctx.table(run, f"R148 standard light distribution, {function}",
-                      ["point", "H / °", "V / °", "I / cd", "required", ""],
-                      al_photometry.signal_points(dist, function))
-        # the cuts: through the cut-off and the 50 m line of a low beam, through the axis of a signal lamp
-        side = 0.0 if function != LOW_BEAM else -2.5 if cutoff.right_hand_traffic else 2.5
-        level = -0.86 if function == LOW_BEAM else 0.0
-        columns = (dist.h >= side - 0.5) & (dist.h <= side + 0.5)
-        ctx.curve(run, f"Vertical cut at H = {side:g}°", dist.v, dist.intensity[:, columns].mean(axis=1),
-                  x_label="V / °", y_label="I / cd")
-        rows = (dist.v >= level - 0.25) & (dist.v <= level + 0.25)
-        ctx.curve(run, f"Horizontal cut at V = {level:g}°", dist.h, dist.intensity[rows].mean(axis=0),
-                  x_label="H / °", y_label="I / cd")
+        self._present(ctx, dist, r, f"Low beam {r.settings.lamp.name}",
+                      ("mirror, then the lens (no light from the steps between its elements)" if patterned
+                       else "single reflection at the facets and the connecting faces")
+                      + ("; with the lamp's direct light" if ctx.params["direct"] else ""))
         if patterned:
             ctx.log(f"walls between the lens elements: {dist.flux_walls:.0f} lm meet them "
                     f"({100.0 * dist.flux_walls / max(dist.flux_mirror, 1e-9):.1f} % of the light from the mirror), "
@@ -458,6 +456,96 @@ class AutomotiveLighting(Plugin):
                 f"above the cut-off at most {glare:.0f} cd")
         return (f"{dist.flux_beam:.0f} lm in the beam ({100.0 * dist.flux_beam / dist.flux_lamp:.0f} %), maximum "
                 f"{dist.intensity.max():.0f} cd, cut-off G = {g:.2f}")
+
+    @action("Light distribution (ray tracing)",
+            description="The same by ray tracing: the coil as a helix of wire, the H4's shield and cap, the mirror and "
+                        "the lens as surfaces; light paths from the wire through every reflection and refraction, "
+                        "traced by the Path Tracer plugin's kernel")
+    def light_distribution_traced(self, ctx):
+        p = ctx.params
+        patterned = p["system"] == PATTERNED
+        r = self.lens_system(ctx) if patterned else self.reflector(ctx)
+        lamp, cutoff, function = r.settings.lamp, r.settings.cutoff, p["test_points"]
+        field = {} if function == LOW_BEAM else {"h_range": (-40.0, 40.0), "v_range": (-20.0, 20.0), "dv": 0.25}
+        try:
+            kernel = al_trace.kernel(p["trace_kernel"])
+            coil = al_coil.coil_of(lamp, r.filament, float(p["coil_wire"]), int(p["coil_turns"]))
+            ctx.progress(0.9, "the scene: coil, lamp, mirror" + (" and lens" if patterned else "") + " …")
+            bodies = al_trace.lamp_bodies(lamp, coil) + (
+                al_trace.lens_bodies(r, float(p["reflectance"])) if patterned else
+                al_trace.reflector_bodies(r, float(p["reflectance"]), float(p["reflectance_connections"])))
+
+            def progress(fraction: float, text: str) -> None:
+                ctx.check_cancel()
+                ctx.progress(0.9 + 0.1 * fraction, text)
+
+            start = time.time()
+            dist, info = al_trace.trace(bodies, lamp, coil, rays=int(p["trace_rays"]), depth=int(p["trace_depth"]),
+                                        kernel_name=kernel, progress=progress, **field)
+        except (RuntimeError, ValueError) as e:
+            raise UserError(str(e)) from e
+        ctx.log(f"ray tracing with the {kernel} kernel: {info.rays:,} light paths, {info.traced:,} rays, "
+                f"{info.triangles:,} triangles, {time.time() - start:.1f} s")
+        estimated = [what for what, given in (("wire", p["coil_wire"]), ("turns", p["coil_turns"])) if not given]
+        ctx.log(f"coil: {coil.turns} turns of {coil.wire:.3f} mm wire, pitch {coil.pitch:.3f} mm, "
+                f"{coil.wire_length:.0f} mm of wire" + (f" ({' and '.join(estimated)} estimated)" if estimated else "")
+                + f"; {100.0 * info.coil_share:.0f} % of the wire's light gets out of the coil, the rest meets its "
+                  "other turns")
+        own = lamp.flux / info.coil_share - lamp.flux               # what the coil's turns take of their own light
+        ctx.log(f"flux: lamp {lamp.flux:.0f} lm; in the beam {dist.flux_beam:.0f} lm (by the mirror), of it "
+                f"{dist.flux_connections:.0f} lm by the connecting faces; direct {dist.flux_direct:.0f} lm forwards, "
+                f"not by the mirror{' (through the lens)' if patterned else ''}, up to {dist.direct_max:.0f} cd; "
+                f"backwards {info.flux_back:.0f} lm; "
+                + (f"into the housing beside the lens {info.flux_housing:.0f} lm; " if patterned else "")
+                + f"absorbed {max(info.flux_lost - own, 0.0):.0f} lm"
+                + (" (shield and cap, mirror)" if lamp.shield is not None else " (mirror)"))
+        if patterned:
+            ctx.log(f"the lens refracts and reflects by Fresnel (n = {r.settings.index:g}): *Transmittance* is not "
+                    "used here")
+        if math.isfinite(info.noise):
+            ctx.log(f"noise: {100.0 * info.noise:.1f} % per cell where the light is brightest (standard error; four "
+                    f"times the light paths halve it)")
+        self._present(ctx, dist, r, f"Low beam {lamp.name} – ray tracing",
+                      f"ray tracing ({kernel}): the coil as a helix of wire, every reflection and refraction, with the "
+                      "lamp's direct light")
+        if function != LOW_BEAM:
+            failed = [row[0] for row in al_photometry.signal_points(dist, function) if row[-1] != "ok"]
+            return (f"ray tracing: {dist.flux_beam:.0f} lm in the beam, maximum {dist.intensity.max():.0f} cd, "
+                    f"{function}: " + ("met" if not failed else f"{len(failed)} not met"))
+        g, v_cut = al_photometry.sharpness(dist, cutoff)
+        glare = al_photometry.glare(dist, cutoff)
+        ctx.log(f"maximum {dist.intensity.max():.0f} cd; cut-off at V = {v_cut:.2f}° with G = {g:.2f}; more than 0.2° "
+                f"above the cut-off at most {glare:.0f} cd")
+        return (f"ray tracing: {dist.flux_beam:.0f} lm in the beam, maximum {dist.intensity.max():.0f} cd, "
+                f"cut-off G = {g:.2f}")
+
+    @staticmethod
+    def _present(ctx, dist, r, title: str, description: str):
+        """The intensity as an image, the table of the test points and two cuts, in a new result set."""
+        function = ctx.params["test_points"]
+        cutoff = r.settings.cutoff
+        run = ctx.result_set(title)
+        ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
+                  extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
+                  description=description + "; 625 cd = 1 lx at 25 m")
+        if function == LOW_BEAM:
+            ctx.table(run, "R112 test points (class B, passing beam)",
+                      ["point", "H / °", "V / °", "I / cd", "E at 25 m / lx", "required", ""],
+                      al_photometry.test_points(dist, cutoff))
+        else:
+            ctx.table(run, f"R148 standard light distribution, {function}",
+                      ["point", "H / °", "V / °", "I / cd", "required", ""],
+                      al_photometry.signal_points(dist, function))
+        # the cuts: through the cut-off and the 50 m line of a low beam, through the axis of a signal lamp
+        side = 0.0 if function != LOW_BEAM else -2.5 if cutoff.right_hand_traffic else 2.5
+        level = -0.86 if function == LOW_BEAM else 0.0
+        columns = (dist.h >= side - 0.5) & (dist.h <= side + 0.5)
+        ctx.curve(run, f"Vertical cut at H = {side:g}°", dist.v, dist.intensity[:, columns].mean(axis=1),
+                  x_label="V / °", y_label="I / cd")
+        rows = (dist.v >= level - 0.25) & (dist.v <= level + 0.25)
+        ctx.curve(run, f"Horizontal cut at V = {level:g}°", dist.h, dist.intensity[rows].mean(axis=0),
+                  x_label="H / °", y_label="I / cd")
+        return run
 
     @action("Show strips", description="The start curve and some characteristic strips of every facet as lines")
     def show_strips(self, ctx):
