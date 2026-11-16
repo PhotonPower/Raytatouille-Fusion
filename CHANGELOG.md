@@ -30,6 +30,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   it stops after the reflection through a second one. The H4 brings its shield as UN/ECE R37
   draws it (sheets H4/1 to H4/5): a trough under the coil, closed at the back and open in front,
   its edges where the sheet puts them relative to the coil, and the black cap on the bulb's tip.
+  *Direct light of the lamp*: what leaves the coil forwards past the mirror (and through the
+  patterned lens) is part of the light distribution.
   ([python/plugins/automotive_lighting](python/plugins/automotive_lighting/README.md))
 - **Layer stacks** in the node workflow: the FourierGrating plugin provides `fg.stack` (coatings,
   filters, mirror layers between two media, exact per ray), with an RTT-Fusion that has it.

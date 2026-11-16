@@ -190,6 +190,9 @@ class AutomotiveLighting(Plugin):
                                  description="facetted reflector with connecting faces: a ray that a step of the "
                                              "mirror stops on its way from the coil is left out; one it stops after "
                                              "the reflection is reflected there a second time (takes longer)"),
+        "direct": Param.boolean(True, label="Direct light of the lamp", group="Analysis",
+                                description="light that leaves the coil forwards past the mirror – over an H4's "
+                                            "shield and around its cap; with the patterned lens through the lens"),
         "sampling": Param.number(1.0, min=0.2, max=10.0, decimals=2, unit="mm", label="Mirror points every",
                                  group="Analysis", description="lattice of the light distribution"),
         "image_points": Param.integer(150, min=1, max=5000, label="Filament images (number)", group="Analysis"),
@@ -388,20 +391,35 @@ class AutomotiveLighting(Plugin):
                                            np.full(len(P), float(ctx.params["reflectance"])),
                                            after=lambda origins, d: r.through(origins, d, transmittance),
                                            n_axial=8, n_around=16, progress=progress, **field)
+            if ctx.params["direct"]:     # as far as the elements may turn light into the screen
+                reach = [max([abs(e.deflect_h) + abs(e.spread_h) for e in r.settings.elements] + [0.0]),
+                         max([abs(e.deflect_v) + abs(e.spread_v) for e in r.settings.elements] + [0.0])]
+                dist.add_direct(*al_photometry.direct_light(
+                    r.settings.lamp, r.filament, dist.h, dist.v, progress=progress,
+                    after=lambda origins, d: r.through(origins, d, transmittance),
+                    margin=(reach[0] + 5.0, reach[1] + 5.0)))
         else:
             dist = al_photometry.light_distribution(
                 r, spacing=float(ctx.params["sampling"]), reflectance=float(ctx.params["reflectance"]),
                 reflectance_connections=float(ctx.params["reflectance_connections"]),
-                shadows=bool(ctx.params["shadows"]), progress=progress, **field)
+                shadows=bool(ctx.params["shadows"]), direct=bool(ctx.params["direct"]), progress=progress, **field)
             if ctx.params["shadows"] and r.transitions is not None:
                 ctx.log(f"shadows of the steps: {dist.flux_shadow:.0f} lm of the light onto the mirror are stopped "
                         f"by a step ({100.0 * dist.flux_shadow / max(dist.flux_mirror, 1e-9):.1f} %); what is stopped "
                         "after the reflection is reflected there once more and counts as stray light")
+        if ctx.params["direct"]:
+            ctx.log(f"direct light of the lamp: {dist.flux_direct:.0f} lm leave it forwards past the mirror"
+                    + " (not counted in the flux of the beam)"
+                    + (" and through the lens" if patterned else "")
+                    + f", up to {dist.direct_max:.0f} cd on the screen"
+                    + (" (the H4's cap stops what goes forwards within about 40° of the axis)"
+                       if r.settings.lamp.shield is not None and r.settings.lamp.shield.cap_x is not None else ""))
         run = ctx.result_set(f"Low beam {r.settings.lamp.name}")
         ctx.image(run, "Luminous intensity", dist.intensity.reshape(-1), len(dist.h), len(dist.v),
                   extent=_extent(dist), x_label="H / °", y_label="V / °", unit="cd",
                   description=("mirror, then the lens (no light from the steps between its elements)" if patterned
                                else "single reflection at the facets and the connecting faces")
+                  + ("; with the lamp's direct light" if ctx.params["direct"] else "")
                   + "; 625 cd = 1 lx at 25 m")
         if function == LOW_BEAM:
             ctx.table(run, "R112 test points (class B, passing beam)",

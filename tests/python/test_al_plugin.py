@@ -265,6 +265,14 @@ dark = al_photometry.light_distribution(rc, spacing=1.0, n_axial=6, n_around=12,
 assert dark.flux_shadow == shaded.flux_shadow and dark.flux_connections == 0.0   # black walls: no second reflection
 assert shaded.flux_beam - dark.flux_beam > dist_c.flux_connections - 0.2 * shaded.flux_shadow
 assert al_photometry.light_distribution(r, spacing=2.0, n_axial=6, n_around=12, shadows=True).flux_shadow == 0.0
+# the lamp's direct light past the mirror: what runs into the mirror stays out (the reflection counts it)
+with_direct = al_photometry.light_distribution(rc, spacing=1.0, n_axial=6, n_around=12, direct=True)
+assert with_direct.flux_beam == dist_c.flux_beam and with_direct.intensity.sum() > dist_c.intensity.sum()
+assert 0.0 < with_direct.flux_direct < 0.5 * H7.flux and with_direct.direct_max > 0.0
+Pd = rc.samples(1.0)[0]
+inner = Pd[np.argmin(np.abs(np.hypot(Pd[:, 1], Pd[:, 2]) - 30.0) + 100.0 * (Pd[:, 0] < 0.0))]   # in front, 30 mm out
+towards = np.array([inner / np.linalg.norm(inner), [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+assert rc._height_map.escapes(towards).tolist() == [False, True, False]
 
 # ---- strips cut into rows: a third level of connecting faces, every further row starts where the last ends
 breaks = al_transitions.stations((0.0, 20.0), [8.0])
@@ -480,6 +488,23 @@ h4_before = dataclasses.replace(al_optics.LAMPS["H4 (low beam)"], shield=before)
 low_before = lens_beam((0, 0, 0, 0), lamp=h4_before, focus_behind=4.0)[1]
 assert 0.9 * low_before.flux_mirror < low_beam.flux_mirror < 0.98 * low_before.flux_mirror   # edges 0.15 mm higher
 # (this mirror lies wholly behind the coil: the cap, ≤ 40° about +X, does not see it)
+# the lamp's direct light: a bare coil gives I(θ) = Φ sin θ / π² (a Lambertian cylinder), Φ/2 forwards
+screen_h, screen_v = np.arange(-39.875, 40.0, 0.25), np.arange(-14.95, 10.0, 0.1)
+th = math.radians(30.0)
+assert abs(al_photometry.lamp_intensity(H7, al_optics.Filament.of(H7), np.array([[math.cos(th), math.sin(th), 0.0]]))[0]
+           / (H7.flux * 0.5 / math.pi ** 2) - 1.0) < 0.02
+bare, bare_flux = al_photometry.direct_light(H7, al_optics.Filament.of(H7), screen_h, screen_v)
+assert bare.shape == (len(screen_v), len(screen_h)) and abs(bare_flux / (0.5 * H7.flux) - 1.0) < 0.02
+H4 = al_optics.LAMPS["H4 (low beam)"]
+capped, capped_flux = al_photometry.direct_light(H4, al_optics.Filament.of(H4), screen_h, screen_v)
+assert capped[:, np.abs(screen_h) < 30.0].max() == 0.0 < capped.max()          # the cap: nothing within 30°
+assert capped_flux < 0.3 * H4.flux                                             # (only far out, past its rim)
+plane_glass = lens_beam((0, 0, 0, 0))[0]                                      # through plane glass: the same, × 0.9
+glass, glass_flux = al_photometry.direct_light(H7, plane_glass.filament, screen_h, screen_v, margin=(5.0, 5.0),
+                                               after=lambda o, d: plane_glass.through(o, d, 0.9))
+middle = (np.abs(screen_h) < 20.0)                                            # (the lens ends at ±28°)
+assert np.allclose(glass[:, middle], 0.9 * bare[:, middle], rtol=0.04, atol=0.5) and glass_flux < 0.9 * bare_flux
+assert glass[:, np.abs(screen_h) > 30.0].max() == 0.0
 lens_faces = al_lens.faces(pillow, (1.0, 2.0, 3.0))
 assert [k for k, _, _ in lens_faces[:2]] == ["mirror", "lens"] and len(lens_faces) >= 2 + pillow.cells
 assert "holes" in lens_faces[0][2] and len(lens_faces[0][2]["surface"]["points"]) == 108
