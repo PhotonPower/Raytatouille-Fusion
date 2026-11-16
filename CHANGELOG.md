@@ -14,6 +14,15 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   optimised one by one in sweeps, the lens is built and checked in rounds; with the lamp's blur
   measured by ray tracing the limits hold for the lamp as it is too. Zone I of R112 (the
   foreground, at most 2 × I(50R)) is now in the table of the test points.
+- **Colour images** in the *Image* window: `ctx.image(…, rgb=)` shows an image in the colours the
+  plugin gives it (red, green, blue per pixel), without colour map, colour bar and log scale; the
+  value under the cursor stays the number of `values`.
+- **Path Tracer plugin**: *Camera image* adds an image in colour when the scene has several
+  wavelengths (*Colour image* in the Camera group, on by default) – every wavelength in the colour
+  of the CIE 1931 observer, equal power on all wavelengths as white, exposed by *White at
+  percentile*. The prism example now shows its rainbow in the application; the example documents
+  ask for the colour image instead of one grey image per wavelength, and `make_examples.py`
+  writes that image as the picture.
 - **Path Tracer plugin**: example documents in `examples/pathtracer` – a Cornell box, caustics of
   glass and polished metal, a prism that fans white light into its colours (31 wavelengths) and
   materials with depth of field –, each ready for *Camera image*, with `make_examples.py` that

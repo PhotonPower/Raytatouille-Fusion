@@ -18,6 +18,7 @@ sys.path.insert(0, str(root / "python"))
 sys.path.insert(0, str(root / "python" / "plugins" / "pathtracer"))
 
 import pt_bsdf  # noqa: E402
+import pt_colour  # noqa: E402
 import pt_bvh  # noqa: E402
 import pt_integrator  # noqa: E402
 import pt_mesh  # noqa: E402
@@ -1055,11 +1056,50 @@ p.update(method="light tracing", per_wavelength=True,
 before = len(cad.fields), len(cad.images)
 plugin.irradiance(cad)
 plugin.camera_image(cad)
-assert (len(cad.fields) - before[0], len(cad.images) - before[1]) == (24, 3)        # the sum and two wavelengths
-assert cad.fields[-1][0] == "E ball · face 6 · 650 nm" and cad.images[-1][0] == "Radiance 650 nm – light tracing"
+assert (len(cad.fields) - before[0], len(cad.images) - before[1]) == (24, 4)   # the sum, two wavelengths, in colour
+assert cad.fields[-1][0] == "E ball · face 6 · 650 nm" and cad.images[-2][0] == "Radiance 650 nm – light tracing"
 assert any("at 450, 650 nm" in line for line in cad.logs)
-assert abs(cad.images[-1][1].sum() / cad.images[-2][1].sum() - 3) < 0.6               # the shares of the flux
+assert abs(cad.images[-2][1].sum() / cad.images[-3][1].sum() - 3) < 0.6               # the shares of the flux
+# ---- the colour image: every wavelength in its colour, last (the image window shows the newest)
+name, grey, extra = cad.images[-1]
+picture = np.asarray(extra["rgb"])
+assert name == "Colour – light tracing" and np.array_equal(grey, cad.images[-4][1]) and extra["colormap"] == "grey"
+assert picture.shape == (16 * 12, 3) and picture.min() >= 0 and picture.max() <= 1 and picture.max() > 0.9
+lit = picture[grey > np.percentile(grey, 60)].mean(axis=0)
+assert lit[0] > lit[1] and lit[0] > lit[2], lit                      # three parts of 650 nm, one of 450: reddish
+assert np.allclose(picture, pt_colour.develop(np.stack([cad.images[-3][1], cad.images[-2][1]]), [450, 650],
+                                               p["camera_white"]), atol=1e-6)
+p.update(units="photometric (lm)")                                   # the colours do not depend on the units
+plugin.camera_image(cad)
+assert cad.images[-1][0] == "Colour – light tracing" and cad.images[-1][2]["unit"] == "cd/m²"
+assert np.allclose(cad.images[-1][2]["rgb"], picture, atol=1e-6)
+p.update(units="radiometric (W)", camera_colour=False)
+before = len(cad.images)
+plugin.camera_image(cad)
+assert len(cad.images) - before == 3 and all("rgb" not in kw for _, _, kw in cad.images[before:])
+p.update(camera_colour=True)
+p["sources"][0]["spectrum"] = "900, 1000"                           # nothing the eye sees: no colour image
+before = len(cad.images)
+plugin.camera_image(cad)
+assert len(cad.images) - before == 3 and any("none of the wavelengths is visible" in line for line in cad.logs)
+# the colours themselves: red, green and blue where they belong; equal power on the lines is white
+assert [max(range(3), key=lambda k: pt_colour.colour_of(nm)[k]) for nm in (650.0, 540.0, 450.0)] == [0, 1, 2]
+five = np.linspace(450.0, 650.0, 5)
+assert np.allclose(pt_colour.table(five).sum(axis=0), 1.0) and pt_colour.table([900.0, 1000.0]) is None
+assert np.isclose(pt_colour.table([500.0, 510.0]).sum(axis=0) @ pt_colour.LUMINANCE, 1.0)   # no white from these
+flat = pt_colour.develop(np.full((5, 4, 6), 0.2), five, 99.0)
+assert flat.shape == (4, 6, 3) and np.allclose(flat, 1.0)            # all the same: the white of the picture
+beside = np.zeros((5, 4, 6))
+beside[:, :, :3] = 1.0                                               # left: all wavelengths
+beside[4, :, 3:] = 1.0                                               # right: 650 nm alone
+red = pt_colour.develop(beside, five, 99.0)
+assert np.allclose(red[:, :3], 1.0) and red[0, 5, 0] > 0.4 and red[0, 5, 1] < 0.12 and red[0, 5, 2] < 0.12, red[0, 5]
+glare = np.full((2, 4, 6), 1.0)
+glare[1, 0, 5] = 100.0                                               # one pixel of 650 nm far above white
+assert pt_colour.develop(glare, [450.0, 650.0], 50.0)[0, 5].min() > 0.9      # it runs into white
+assert pt_colour.develop(np.zeros((2, 3, 3)), [450.0, 650.0]).max() == 0.0
 p["sources"][0]["spectrum"] = "blue"
+p.update(camera_colour=True)
 try:
     plugin.irradiance(cad)
     raise AssertionError("not refused")

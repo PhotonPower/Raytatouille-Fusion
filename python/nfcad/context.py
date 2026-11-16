@@ -152,9 +152,13 @@ class Context:
     def image(self, result_set: int, name: str, values, width: int, height: int, *,
               extent: tuple[float, float, float, float] | None = None, x_label: str = "x / mm",
               y_label: str = "y / mm", colormap: str = "inferno", unit: str = "",
-              value_range: tuple[float, float] | None = None, description: str = "", key: str = "") -> int:
+              value_range: tuple[float, float] | None = None, description: str = "", key: str = "",
+              rgb=None) -> int:
         """A 2D image in the *Image* dock (e.g. a camera image): values[j * width + i], row 0 at
-        y0; extent = (x0, x1, y0, y1) of the grid (cell edges), e.g. in mm."""
+        y0; extent = (x0, x1, y0, y1) of the grid (cell edges), e.g. in mm. With `rgb` – red,
+        green, blue in 0 … 1 for every pixel (height, width, 3), the colours as the screen shows
+        them (sRGB) – it is a colour image: shown as it is, without colour map and scale;
+        `values` is then the number read out under the cursor."""
         args: dict[str, Any] = {"set": result_set, "name": name, "width": int(width), "height": int(height),
                                 "values": arrays.write(values, "f4"), "x_label": x_label, "y_label": y_label,
                                 "colormap": colormap, "unit": unit, "description": description}
@@ -164,6 +168,10 @@ class Context:
             args["range"] = [float(value_range[0]), float(value_range[1])]
         if key:
             args["key"] = key
+        if rgb is not None:
+            args["rgb"] = arrays.write(rgb, "f4")
+            if args["rgb"]["count"] != 3 * int(width) * int(height):
+                raise ValueError("image: rgb needs three values per pixel")
         return self._host.request("results.image", args)
 
     def curve(self, result_set: int, name: str, x=(), y=(), *, x_label: str = "", y_label: str = "",

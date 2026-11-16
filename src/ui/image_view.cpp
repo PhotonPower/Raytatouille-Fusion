@@ -98,6 +98,7 @@ void ImageView::rebuild() {
   chooser_->setVisible(images.size() > 1);
   chooser_->blockSignals(false);
   const results::ResultItem* item = current();
+  log_->setEnabled(item == nullptr || !item->image->coloured());  // a colour image has no scale
   canvas_->setImage(item != nullptr ? item->image : nullptr, item != nullptr ? item->name : QString(), log_->isChecked());
   readout_->setText(item != nullptr ? item->image->description : QString());
 }
@@ -124,6 +125,15 @@ void ImageCanvas::render() {
   rendered_ = {};
   if (!image_ || image_->width <= 0 || image_->height <= 0) return;
   const results::Image& im = *image_;
+  if (im.coloured()) {  // the colours as they are
+    rendered_ = QImage(im.width, im.height, QImage::Format_RGB32);
+    for (int j = 0; j < im.height; ++j) {
+      auto* line = reinterpret_cast<QRgb*>(rendered_.scanLine(im.height - 1 - j));  // row 0 = y0 at the bottom
+      const unsigned char* c = im.rgb.data() + 3 * static_cast<std::size_t>(j) * static_cast<std::size_t>(im.width);
+      for (int i = 0; i < im.width; ++i, c += 3) line[i] = qRgb(c[0], c[1], c[2]);
+    }
+    return;
+  }
   const results::Range r = im.effectiveRange();
   lo_ = r.min;
   hi_ = r.max;
@@ -214,6 +224,7 @@ void ImageCanvas::paintEvent(QPaintEvent* /*event*/) {
   p.drawText(QRectF(-box.height() / 2, -7, box.height(), 14), Qt::AlignHCenter, im.y_label);
   p.restore();
   p.drawText(QRectF(kLeft, 4, width() - kLeft - kRight, 18), Qt::AlignLeft | Qt::AlignVCenter, title_);
+  if (im.coloured()) return;  // a colour image has no scale
   // colour bar
   const QRectF bar(width() - kRight + 14, box.top(), 14, box.height());
   for (int k = 0; k < static_cast<int>(bar.height()); ++k) {

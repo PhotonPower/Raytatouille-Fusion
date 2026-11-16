@@ -1,9 +1,8 @@
 """Example scenes for the Path Tracer plugin: writes them as documents (.rttf) next to this file
-and, with --render, a colour preview (.png) of each – the plugin's *Camera image* per wavelength,
-put together to colours here.
+and, with --render, a picture (.png) of each – the colour image of the plugin's *Camera image*.
 
     python make_examples.py                 the documents
-    python make_examples.py --render        and the previews (the plugin's Python: NumPy; fast
+    python make_examples.py --render        and the pictures (the plugin's Python: NumPy; fast
                                             only with the C++ kernel, package pathtracer)
     python make_examples.py --render --scale 0.5 prism      one scene, half the size, a quick look
 
@@ -152,7 +151,7 @@ class Scene:
         self.name, self.title, self.text = name, title, text
         self.entities, self.groups, self.params = [], [], {}
         self.materials, self.sources = [], []
-        self.white = 99.0                  # preview: the luminance of this percentile becomes white
+        self.white = 99.0                  # the luminance of this percentile of the lit pixels is white
         self.nm: list[float] = []
 
     def group(self, name: str) -> int:
@@ -176,14 +175,14 @@ class Scene:
     def compute(self, method: str, per_pixel: int, depth: int) -> None:
         pixels = self.params["camera_width"] * self.params["camera_height"]
         self.params.update({"method": method, "samples": pixels * per_pixel, "depth": depth, "kernel": "automatic",
-                            "per_wavelength": True, "adaptive": True, "seed": 1})
+                            "per_wavelength": False, "camera_colour": True, "adaptive": True, "seed": 1})
 
     def document(self) -> dict:
         used = {e["attributes"]["pt.material"] for e in self.entities}
         assert used <= {m["name"] for m in self.materials}, used
         params = {"materials": self.materials, "default_material": self.materials[0]["name"],
                   "assign_material": self.materials[0]["name"], "sources": self.sources,
-                  "assign_source": self.sources[0]["name"], **self.params}
+                  "assign_source": self.sources[0]["name"], **self.params, "camera_white": self.white}
         return {"format": "nfcad", "version": 2, "units": "mm",
                 "layers": [{"id": 0, "name": "Default", "color": "#bec6d2", "visible": True}],
                 "groups": self.groups, "entities": self.entities, "plugins": {"pathtracer": {"params": params}}}
@@ -318,19 +317,6 @@ SCENES = [cornell_box, caustics, prism_scene, depth_of_field]
 
 
 # ------------------------------------------------------------------ previews
-def colour_of(nm: float) -> tuple[float, float, float]:
-    """Linear sRGB of light of one wavelength with unit power: the CIE 1931 observer in the fit of
-    Wyman, Sloan and Shirley (JCGT 2 (2013) 1), then XYZ to sRGB (may be negative: outside sRGB)."""
-    def lobe(mu: float, s1: float, s2: float) -> float:
-        return math.exp(-0.5 * ((nm - mu) / (s1 if nm < mu else s2)) ** 2)
-
-    x = 1.056 * lobe(599.8, 37.9, 31.0) + 0.362 * lobe(442.0, 16.0, 26.7) - 0.065 * lobe(501.1, 20.4, 26.2)
-    y = 0.821 * lobe(568.8, 46.9, 40.5) + 0.286 * lobe(530.9, 16.3, 31.1)
-    z = 1.217 * lobe(437.0, 11.8, 36.0) + 0.681 * lobe(459.0, 26.0, 13.8)
-    return (3.2406 * x - 1.5372 * y - 0.4986 * z, -0.9689 * x + 1.8758 * y + 0.0415 * z,
-            0.0557 * x - 0.2040 * y + 1.0570 * z)
-
-
 def write_png(path: Path, rgb) -> None:
     """rgb: (height, width, 3) of uint8, row 0 on top."""
     h, w, _ = rgb.shape
@@ -341,27 +327,6 @@ def write_png(path: Path, rgb) -> None:
 
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
                      + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
-
-
-def develop(channels, nm: list[float], white: float):
-    """The images of the wavelengths (count, height, width; row 0 at the bottom) as sRGB bytes:
-    each wavelength in its colour, equal power on all of them is white, the luminance of the
-    percentile `white` the brightest value; above it the colours run softly into white."""
-    import numpy as np
-
-    table = np.array([colour_of(v) for v in nm])
-    table /= table.sum(axis=0)                                  # equal power on every line: (1, 1, 1)
-    rgb = np.maximum(np.tensordot(channels, table, axes=(0, 0)), 0.0)        # (height, width, 3)
-    lum = rgb @ np.array([0.2126, 0.7152, 0.0722])
-    lit = lum[lum > 0]
-    rgb /= float(np.percentile(lit, white)) if lit.size else 1.0
-    peak = rgb.max(axis=2, keepdims=True)
-    over = np.maximum(peak - 1.0, 0.0)
-    rgb = np.where(peak > 1.0, rgb / np.maximum(peak, 1e-30) + (1.0 - rgb / np.maximum(peak, 1e-30))
-                   * (1.0 - np.exp(-0.5 * over)), rgb)          # brighter than white: towards white
-    rgb = np.clip(rgb, 0.0, 1.0)
-    rgb = np.where(rgb <= 0.0031308, 12.92 * rgb, 1.055 * rgb ** (1 / 2.4) - 0.055)
-    return (rgb[::-1] * 255.0 + 0.5).astype(np.uint8)
 
 
 class Host:
@@ -388,15 +353,21 @@ class Host:
         if method == "results.create_set":
             return 1
         if method == "results.image":
-            file = Path(args["values"]["file"])
-            self.images.append((args["name"], np.fromfile(file, dtype="<f4").reshape(args["height"], args["width"])))
-            file.unlink()
+            shape = (args["height"], args["width"])
+            image = {"name": args["name"]}
+            for key, size in (("values", shape), ("rgb", shape + (3,))):
+                if key in args:
+                    file = Path(args[key]["file"])
+                    image[key] = np.fromfile(file, dtype="<f4").reshape(size)
+                    file.unlink()
+            self.images.append(image)
             return len(self.images)
         raise RuntimeError(f"unexpected request {method}")
 
 
 def render(scene: Scene, scale: float, quality: float):
-    """The plugin's Camera image of the scene's document: the images per wavelength and the time."""
+    """The plugin's Camera image of the scene's document: its colour image as bytes (height, width,
+    3; row 0 on top) and the time."""
     import numpy as np
 
     for folder in (ROOT / "python", ROOT / "python" / "plugins" / "pathtracer"):
@@ -418,11 +389,8 @@ def render(scene: Scene, scale: float, quality: float):
     host = Host(document)
     start = time.time()
     plugin.camera_image(Context(host, 1, plugin.convert_params(raw), []))
-    per_line = [(float(m.group(1)), image) for name, image in host.images[1:]
-                if (m := re.search(r" ([0-9.]+) nm ", name))]
-    if not per_line:                                            # one wavelength: its image alone
-        per_line = [(scene.nm[0], host.images[0][1])]
-    return [v for v, _ in per_line], np.stack([image for _, image in per_line]), time.time() - start
+    rgb = host.images[-1]["rgb"]                                # the last image: the one in colour
+    return (rgb[::-1] * 255.0 + 0.5).astype(np.uint8), time.time() - start
 
 
 def main() -> None:
@@ -443,9 +411,9 @@ def main() -> None:
         path.write_text(json.dumps(document, separators=(",", ":")) + "\n", encoding="utf-8")
         print(f"{path.name}: {len(document['entities'])} objects, {len(scene.nm)} wavelengths")
         if args.render:
-            nm, channels, seconds = render(scene, args.scale, args.quality)
-            write_png(args.out / f"{scene.name}.png", develop(channels, nm, scene.white))
-            print(f"    {scene.name}.png: {channels.shape[2]} x {channels.shape[1]} in {seconds:.0f} s")
+            picture, seconds = render(scene, args.scale, args.quality)
+            write_png(args.out / f"{scene.name}.png", picture)
+            print(f"    {scene.name}.png: {picture.shape[1]} x {picture.shape[0]} in {seconds:.0f} s")
 
 
 if __name__ == "__main__":

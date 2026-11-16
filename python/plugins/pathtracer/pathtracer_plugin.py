@@ -15,6 +15,7 @@ from nfcad import Param, Plugin, UserError, action
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pt_bsdf  # noqa: E402
+import pt_colour  # noqa: E402
 import pt_integrator  # noqa: E402
 import pt_native  # noqa: E402
 import pt_parallel  # noqa: E402
@@ -139,8 +140,14 @@ class PathTracerPlugin(Plugin):
                                                  "0: the distance of \"Looks at\""),
         "camera_white": Param.number(99.5, min=50.0, max=100.0, decimals=1, unit="%", label="White at percentile",
                                      group="Camera",
-                                     description="The brightest value of the grey scale: this share of the "
-                                                 "pixels is not brighter (100: the brightest pixel)"),
+                                     description="The brightest value of the grey scale and of the colour "
+                                                 "image: this share of the lit pixels is not brighter (100: the "
+                                                 "brightest pixel)"),
+        "camera_colour": Param.boolean(True, label="Colour image", group="Camera",
+                                       description="With several wavelengths: also an image with every wavelength "
+                                                   "in its colour (CIE 1931 observer, sRGB) – equal power on all "
+                                                   "wavelengths is white. A picture for the eye; the numbers are "
+                                                   "in the grey images"),
         "preview_paths": Param.integer(200, min=1, max=20_000, label="Light paths drawn", group="Preview"),
     }
 
@@ -253,9 +260,10 @@ class PathTracerPlugin(Plugin):
                 f"({out['rays'] / seconds:,.0f} rays/s, {out['processes']} "
                 f"{'thread(s)' if self._native(ctx) else 'process(es)'})")
         note = "" if out["samples"] >= p["samples"] else f" (stopped at {out['samples']:,} samples)"
+        spectral = out["channels"]                           # in watts, whatever the units of the result
         if p["units"].startswith("photometric"):
             out = pt_setup.photometric(out, scene.wavelengths)
-        return out, note
+        return {**out, "spectral": spectral}, note
 
     @staticmethod
     def _noise(ctx, out: dict, what: str) -> None:
@@ -351,6 +359,16 @@ class PathTracerPlugin(Plugin):
                 ctx.image(run, f"{unit['L']} {nm:g} nm – {p['method']}", channel * 1e6, camera.w, camera.h,
                           extent=(0, camera.w, 0, camera.h), x_label="x / pixel", y_label="y / pixel",
                           colormap="grey", unit=unit["radiance"], description=f"{nm:g} nm{note}")
+        if p["camera_colour"] and len(scene.wavelengths) > 1:    # last: the image the window shows
+            rgb = pt_colour.develop(out["spectral"], scene.wavelengths, p["camera_white"])
+            if rgb is None:
+                ctx.log("no colour image: none of the wavelengths is visible")
+            else:
+                ctx.image(run, f"Colour – {p['method']}", values, camera.w, camera.h, rgb=rgb,
+                          extent=(0, camera.w, 0, camera.h), x_label="x / pixel", y_label="y / pixel",
+                          colormap="grey", unit=unit["radiance"], value_range=(0.0, white),
+                          description=f"{len(scene.wavelengths)} wavelengths in their colours, equal power on all "
+                                      f"of them is white; {out['samples']:,} samples{note}")
         self._noise(ctx, out, "pixel")
         self._export(ctx, lambda path: pt_setup.export_image(path, camera, out, self._info(ctx, scene, out)))
         return f"Camera image {camera.w} × {camera.h}, {out['samples']:,} samples{note}"

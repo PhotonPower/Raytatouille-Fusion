@@ -169,7 +169,7 @@ interface the plugin host (P3) fills:
 | `Bars` | labels and values, y label | Plot dock as a bar chart (when no curves are shown) |
 
 Results are listed in the *Results* dock (visibility per run and item, delete a run, *Convert to
-CAD curves* for rays). Colour maps: viridis, inferno, plasma, coolwarm, grey. 2D images (`ctx.image`) open in the *Image* window. Not yet: saving results with the document.
+CAD curves* for rays). Colour maps: viridis, inferno, plasma, coolwarm, grey. 2D images (`ctx.image`) open in the *Image* window – scalar with a colour map, or in colour (`rgb=`). Not yet: saving results with the document.
 
 ## 4. Milestones
 
