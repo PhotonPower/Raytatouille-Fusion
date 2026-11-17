@@ -42,7 +42,7 @@ and V upwards.
   radius at their foot and head.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
   element size, draft angle and fillet radius of the walls between the elements, the position of
-  the mirror's focus and the **elements**; for *Optimise lens* its margin, rounds, the weight of
+  the mirror's focus, the **sectors** and the **elements**; for *Optimise lens* its margin, rounds, the weight of
   the beam's evenness, what the cells start with, whether the elements follow the edges of their
   light, the band under the cut-off and the rising branch a real beam has, and whether the lamp's
   blur is measured by ray tracing.
@@ -104,7 +104,8 @@ bottom spread the light.
   the panel.
 - **Optimise lens** (patterned lens): chooses every cell's element so that the low beam meets the
   R112 test points and zones with *Optimise: margin* (see *Optimising the lens* below) and writes
-  the element table, one row per cell; the result sets *… – optimised lens, filament images* and
+  the element table, one row per cell (per part of a cell the sectors cut) – and, if it was empty,
+  the sector table; the result sets *… – optimised lens, filament images* and
   (with the lamp's blur measured) *…, ray tracing* show how the lens built does.
 - **Show strips**: the start curve and some characteristic strips of every facet as lines.
 - **Default zones**: the zone table for the chosen traffic side.
@@ -215,6 +216,20 @@ what the cells with their centre in it do; the first row that holds a cell count
   rises by 15° – as the facets of a clear-lens reflector lay their filament images along the
   cut-off. The spread is reached at the cell's farthest corner along its direction.
 - All 0: plane glass.
+- *sector*: the sector whose part of the cell the row is for (their number by azimuth, from 0);
+  −1: every part.
+
+**Sectors.** The table cuts the lens into radial sections about the lamp axis – as the zones of a
+clear-lens reflector, each from its azimuth (0 left, 90 up, seen in the driving direction) to the
+next one's, with the cut-off branch its light ends at. With two or more, the cells the radial
+lines cross are cut along them: each part is an element of its own (its patch designed over the
+whole cell, its deflection about the part's middle and its spread over the part's extent, used in
+its part), the step between two parts a wall along the radial line (ruled between the two patches
+along it – a patch of degree 5 along a line is a curve of degree 10, exact). The H4's light that
+leaves the shield by its slanting edge reaches a wedge from the middle of the lens whose borders
+are radial lines – a classic H4 lens has its slanted flutes there – and cells of a square grid
+mix it with the rest at both borders: some 40 % of that light lies in cells half in, half out.
+Empty: one sector; *Optimise lens* (along the edges) fills it. Not with a draft angle yet.
 
 For a point of a cell, the ray that comes from the filament centre by way of the mirror
 (direction d) is to leave the lens turned by these angles (direction t). The direction g inside
@@ -303,13 +318,16 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   with its cylinder kept, then its cylinder (strength and direction together) with the deflection
   kept, in sweeps over all cells; after the first sweep only choices near the present ones.
 - **Along the edges** (*Optimise: along the edges*, on): as the flutes of a classic lens, every
-  element spreads and deflects along the edge of its own light. On the plane lens a cell's light
-  ends at the horizontal branch – it gets cylinders across and any deflection – or, where more than
-  half of it lies above that branch on the driver's side, at the rising one: the wedge from the
-  middle of the lens in front of the mirror's sector that the shield's slanting edge lets light
-  reach (for the H4 141 of 1063 cells). Those get cylinders turned by the rise (15°) and
-  deflections along it (within 0.15°), so the rise stays on its line; free, the search pulls that
-  light down to the oncoming traffic's side, where R112 counts it, and leaves the rise dark.
+  element spreads and deflects along the edge of its own light – the branch of its sector. With
+  the sector table empty the lens is cut first: on the plane lens, in 1° steps of azimuth, where
+  more than half of the light lies above the horizontal branch on the driver's side it ends at the
+  rising one – the wedge in front of the mirror's sector that the shield's slanting edge lets light
+  reach (H4: from 316° to 4°, 1110 elements instead of 1063 cells); the rest ends at the
+  horizontal branch. The wedge's elements get cylinders turned by the rise (15°) and deflections
+  along it (within 0.15°), so the rise stays on its line; the others cylinders across and any
+  deflection. Free, the search pulls the wedge's light down to the oncoming traffic's side, where
+  R112 counts it, and leaves the rise dark. (Without a wedge: per cell, by the majority of its
+  light.)
 - **The start** (*Optimise: start with*): every cell begins as a cylinder lens spreading 6° across
   (the default), as plane glass, or both are tried – two searches, twice the time – and the better
   kept. The search ends near where it begins: from plane glass nearly every cell becomes a prism,
@@ -331,19 +349,21 @@ What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at th
 6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, from cylinder
 lenses, about 9 minutes, 0.75 GB): all of R112 met by the filament images and by the ray tracing.
 
-| ray tracing | along the edges, band and rise (default) | free, R112 alone |
+| ray tracing | sectors, along the edges, band and rise (default) | free, R112 alone |
 |---|---|---|
-| under the cut-off, −10 … −2° / −2 … 0° | 6 500 / 13 800 cd | 2 500 / 7 400 cd |
-| under the cut-off, 0 … 2° / 2 … 6° (rise) | 12 000 / 3 100 cd | 11 800 / 3 700 cd |
-| 75R / 50R / 50V | 11 900 / 17 500 / 12 500 cd | 11 000 / 19 500 / 11 900 cd |
-| 25L / zone III | 2 100 / 542 cd | 2 600 / 594 cd |
-| at most | 19 700 cd | 20 200 cd |
-| cut-off | −0.70°, G = 0.27 | −0.70°, G = 0.46 |
-| bumps (of 50R's minimum) | 4.1 % | 3.7 % |
+| under the cut-off, −10 … −2° / −2 … 0° | 6 700 / 14 000 cd | 2 500 / 7 400 cd |
+| under the cut-off, 0 … 2° / 2 … 6° (rise) | 12 400 / 3 300 cd | 11 800 / 3 700 cd |
+| 75R / 50R / 50V | 12 400 / 16 900 / 13 300 cd | 11 000 / 19 500 / 11 900 cd |
+| 25L / zone III | 2 200 / 582 cd | 2 600 / 594 cd |
+| at most | 19 000 cd | 20 200 cd |
+| cut-off | −0.70°, G = 0.28 | −0.70°, G = 0.46 |
+| bumps (of 50R's minimum) | 3.8 % | 3.7 % |
 
 Free, the light gathers in a patch 2 … 3° under the cut-off and the horizontal branch is a faint
 seam; with the band it lies at the cut-off and falls off downwards, as in a real beam – the
-horizontal branch carried from below, the kink seen. Its price: a softer cut-off (G) and a darker
+horizontal branch carried from below, the kink seen. Cut into sectors the rise is a little
+brighter and follows its line further than with square cells alone (the 5000 cd line at H = 4°:
+−0.25° instead of −0.75°; 102 elements with 15° cylinders instead of 39). Its price: a softer cut-off (G) and a darker
 rise (the wedge's light goes to the kink). How bright it can be at all is set by the mirror: every
 cell placed on its own as well as it can, the band would hold some 7 600 cd on average with the
 focus 6.7 mm behind the coil, 11 900 cd with it 3 mm behind; a longer focal length (35 mm) gives

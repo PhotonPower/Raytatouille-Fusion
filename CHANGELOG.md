@@ -7,6 +7,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**: lens **sectors** – radial sections about the lamp axis, as the
+  zones of a clear-lens reflector (a new table: azimuth and cut-off branch). They cut the cells along
+  radial lines, each part an element of its own (a new *sector* column of the element table), the
+  step between two parts a wall along the line (exact, degree 10). *Optimise lens* cuts out the
+  wedge whose light ends at the rising branch – where a classic H4 lens has its slanted flutes –
+  and the elements there follow the rise: for the H4 a brighter rise that follows its line further,
+  R112 met in the ray tracing.
 - **Node editor: a link on auto shows what the last run used**, e.g. **R→H** at the link into the
   pupil camera when it switched to fields near a focus; the tooltip says why (RTT-Fusion #85). The
   label stays while the camera's result is up to date and goes back to the planned representation

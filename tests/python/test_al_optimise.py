@@ -222,15 +222,20 @@ assert len(traced) == 1 + n and len(calls) == 2 + 2 * n and edged.rounds[-n - 1]
 assert all(r.get("checked") for r in edged.rounds[-n:]) and edged.traced is not None
 assert edged.objective == min(r["objective"] for r in edged.rounds[-n - 1:])
 assert "under the line" in edged.rounds[0]["model"] and np.isfinite(edged.objective)
-rising = O.edges(O.lens_rays(plane, spacing=2.0), cut)
+assert [x.branch for x in edged.sectors] == ["rising", "horizontal"]           # the wedge, cut out radially
+a0, a1 = edged.sectors[0].az_from, edged.sectors[1].az_from
+assert 270.0 < a0 < 360.0 and (a1 > a0 or a1 < 30.0), (a0, a1)                    # below the left side (driver's view)
+cutlens = al_lens.build(dataclasses.replace(settings, sectors=edged.sectors), frame)
+assert len(edged.elements) == cutlens.cells > plane.cells and all(e.sector in (0, 1) for e in edged.elements)
 slope = cut.slope
+rising = [cutlens.branch(e.sector) == "rising" for e in edged.elements]
 for e, up in zip(edged.elements, rising):
     if up:
         assert abs(e.deflect_v - slope * e.deflect_h) <= O.ALONG + 1e-9, e
         assert e.spread_h == 0.0 or e.spread_angle == 15.0, e
     else:
         assert e.spread_h == 0.0 or e.spread_angle == 0.0, e
-assert rising.any() and any(e.spread_angle == 15.0 for e in edged.elements)
+assert any(rising)
 
 # ---- R112's zone I in the table of the test points
 dist = al_photometry.Distribution(np.arange(-20, 20.01, 0.25), np.arange(-6, 3.01, 0.1), np.zeros((91, 161)), 0, 0, 1000)
@@ -286,13 +291,17 @@ except al_plugin.UserError as e:
     assert "patterned lens" in str(e)
 ctx.params["system"] = al_plugin.PATTERNED
 summary = plugin.optimise_lens(ctx)
-assert summary.startswith(f"lens optimised ({plane.cells} cells); filament images: R112"), summary
-assert len(host.set["elements"]) == plane.cells and ctx.params["elements"] == host.set["elements"]
+n_parts = len(host.set["elements"])
+assert summary.startswith(f"lens optimised ({n_parts} elements); filament images: R112"), summary
+assert n_parts > plane.cells and ctx.params["elements"] == host.set["elements"]
+assert [r["branch"] for r in host.set["lens_sectors"]] == ["rising", "horizontal"]
+assert {r["sector"] for r in host.set["elements"]} == {0, 1}
 assert host.results == ["image", "table", "curve", "curve"], host.results
 log = "\n".join(host.logs)
 assert "start 1 (cylinder lenses), round 1:" in log and "start 2 (plane glass), round 1:" in log
 assert "kept: the search from" in log and "filament images: R112" in log and "cut-off at V" in log
-again = plugin.lens_system(ctx)                    # the table builds the lens it was optimised for
-assert again.cells == plane.cells and len(again.settings.elements) == plane.cells
+assert "the lens cut into sectors" in log
+again = plugin.lens_system(ctx)                    # the tables build the lens it was optimised for
+assert again.cells == n_parts and len(again.settings.elements) == n_parts and again.count == 2
 
 print("al optimise ok")
