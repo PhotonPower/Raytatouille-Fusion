@@ -7,6 +7,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Workflow panel: *Wave optics near a focus (automatic)*, on by default.** A camera on a link
+  left on auto checks whether the rays cross or focus near it and then computes fields from the
+  last surface on, as if the link were set to H; elsewhere it keeps rays. A link set to R or H
+  keeps its setting. The log says why it switched. With the default ε (0.02) the pupil camera of
+  the reflected-light microscope switches by itself and takes about 3 minutes; Debye stands in
+  for a Rayleigh–Sommerfeld step that would only cover a few micrometres of the window, with its
+  estimated error in the log (RTT-Fusion #84).
 - **Automotive Lighting plugin**: *Optimise: start with* – *Optimise lens* starts every cell
   with a cylinder lens spreading 6° across (new default), with plane glass, or from both and keeps
   the better. The search stays near its start: from cylinder lenses about 45 % of the H4's cells keep
