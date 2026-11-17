@@ -35,6 +35,11 @@ from al_spline import curve_points
 RIGHT, LEFT = "right-hand", "left-hand"
 CLEAR, PATTERNED = "clear lens: facetted reflector", "patterned lens: paraboloid and lens"
 LOW_BEAM = "low beam (UN R112, class B)"
+# Optimise lens: what every cell begins with (al_optimise.optimise's starts)
+CYLINDER_START = "cylinder lenses (6° across)"
+OPTIMISE_STARTS = {CYLINDER_START: (al_optimise.CYLINDERS,), "plane glass": (None,),
+                   "both, the better kept": (al_optimise.CYLINDERS, None)}
+STARTED = {al_optimise.CYLINDERS: "cylinder lenses", None: "plane glass"}
 # the lamp's parts in the model tree (Generate lamp): group and face names by their role in the ray tracing
 _LAMP_PARTS = {al_trace.COIL: "Coil (lit)", al_trace.OFF: "Other coil (dark)", al_trace.SHIELD: "Shield",
                al_trace.BULB: "Bulb glass", al_trace.CAP: "Black top"}
@@ -199,6 +204,12 @@ class AutomotiveLighting(Plugin):
                                             description="the weight of the beam's evenness below the cut-off: patches, "
                                                         "stripes and hot spots (bumps over 1° across, 0.3° up and down, "
                                                         "relative to 50R's minimum) cost; 0: R112 alone"),
+        "optimise_start": Param.choice(list(OPTIMISE_STARTS), CYLINDER_START, label="Optimise: start with",
+                                       group="Lens",
+                                       description="what every cell begins with: the search stays near it – from "
+                                                   "plane glass it mostly makes prisms, from cylinder lenses it "
+                                                   "keeps many of them (a more even beam); both: two searches, the "
+                                                   "better kept (twice the time)"),
         "connect": Param.boolean(True, label="Connecting faces", group="Connecting faces",
                                  description="walls with draft and fillets between the facets: one mirror surface "
                                              "that can be moulded; off: the bare facets with steps between them"),
@@ -773,8 +784,11 @@ class AutomotiveLighting(Plugin):
             ctx.check_cancel()
             ctx.progress(fraction, text)
 
+        starts = OPTIMISE_STARTS[p["optimise_start"]]
+
         def log(r_: int, sweeps: int, values: dict) -> None:
-            ctx.log(f"round {r_ + 1}: {sweeps} sweeps; " + ", ".join(
+            begun = f"start {values['start'] + 1} ({STARTED[starts[values['start']]]}), " if len(starts) > 1 else ""
+            ctx.log(f"{begun}round {r_ + 1}: {sweeps} sweeps; " + ", ".join(
                 f"{k} {values['surrogate'][k]:.0f}/{values['model'][k]:.0f}" for k in values["model"])
                 + " cd (the surrogate's / the filament images'); bumps "
                 + "/".join(f"{100.0 * b:.1f}" for b in values["bumps"]) + " % of 50R's minimum")
@@ -795,7 +809,10 @@ class AutomotiveLighting(Plugin):
                                           rounds=int(p["optimise_rounds"]), blur=blur,
                                           spacing=float(p["sampling"]), reflectance=float(p["reflectance"]),
                                           transmittance=float(p["lens_transmittance"]), direct=bool(p["direct"]),
-                                          progress=progress, log=log, uniformity=float(p["optimise_uniformity"]))
+                                          progress=progress, log=log, uniformity=float(p["optimise_uniformity"]),
+                                          starts=starts)
+            if len(starts) > 1:
+                ctx.log(f"kept: the search from {STARTED[starts[result.start]]}")
             checked = trace(result.system) if traced else None
         except (DesignError, RuntimeError, ValueError) as e:
             raise UserError(str(e)) from e
