@@ -12,9 +12,11 @@ are evaluated in this process (RTT-Fusion's evaluators).
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import math
 import tempfile
+from pathlib import Path
 
 from nfcad import Param, Plugin, UserError, action
 
@@ -82,6 +84,11 @@ class WorkflowEngine(Plugin):
                                                     "within it. 0.02 is its default; near a focus 0.05 often lets "
                                                     "Debye (seconds) through instead of Rayleigh–Sommerfeld "
                                                     "(minutes to hours); the log names the method and its error"),
+        "catalogs": Param.files([], filter="Glass catalogues (*.agf *.AGF);;All files (*)", label="Glass catalogues",
+                                description="AGF files for the Raytatouille blocks, e.g. when the log says a "
+                                            "catalogue cannot be read: the next Check or Run stores them in the "
+                                            "workflow (the document then computes without them) and empties "
+                                            "this list"),
     }
 
     def __init__(self):
@@ -125,10 +132,19 @@ class WorkflowEngine(Plugin):
         embed = getattr(workflow, "embed_files", None)
         if embed is None:
             return False, []
+        added = [str(Path(p).expanduser().resolve()) for p in (ctx.params.get("catalogs") or []) if p]
+        if added:  # the panel's glass catalogues go to the sources, which store them
+            for node in model.nodes.values():
+                if node.type_id == "rtt.source":
+                    node.params["rtt_catalogs"] = list(dict.fromkeys([*(node.params.get("rtt_catalogs") or []),
+                                                                      *added]))
         done = embed(model)
         for line in done.stored:
             ctx.log(line)
-        return bool(done.stored), [dict(d.__dict__) for d in done.diagnostics]
+        problems = [dict(d.__dict__) for d in done.diagnostics]
+        if added and hasattr(ctx, "set_params") and not any(p in d["message"] for d in problems for p in added):
+            ctx.set_params({"catalogs": []})  # stored: no paths of this machine in the document
+        return bool(done.stored), problems
 
     @staticmethod
     def _document(workflow, model, registry, wf, providers):
@@ -200,8 +216,9 @@ class WorkflowEngine(Plugin):
         if wf.get("model"):  # RTT-Fusion R24: exactly the branches of the model, unrolled
             model = io.model_from_dict(wf["model"], registry)
             stored, files = self._embed(ctx, workflow, model)
-            if stored:  # the files are in the document from now on (saved with it)
-                ctx.set_workflow({**wf, **self._document(workflow, model, registry, wf, providers)})
+            if stored:  # the files are in the document from now on (saved with it), and this run uses them
+                wf = {**wf, **self._document(workflow, model, registry, wf, providers)}
+                ctx.set_workflow(wf)
             self._log_files(ctx, files)
             try:
                 graph = fg.unroll(model, registry)
@@ -214,7 +231,8 @@ class WorkflowEngine(Plugin):
             graph = io.from_dict(wf["graph"])
             stored, files = self._embed(ctx, workflow, graph)
             if stored:
-                ctx.set_workflow({**wf, "graph": io.to_dict(graph)})
+                wf = {**wf, "graph": io.to_dict(graph)}
+                ctx.set_workflow(wf)
             self._log_files(ctx, files)
             self._model_ids = None
         self._require_data(graph)
@@ -266,25 +284,48 @@ class WorkflowEngine(Plugin):
                             "Workflow from system once in the Raytracer plugin, then Run workflow again.")
 
     @staticmethod
-    def _materials(wf: dict):
-        """Raytatouille's material library with the glass catalogues the Raytracer wrote into the
-        source (`rtt_catalogs`); None without raytatouille."""
+    def _materials(wf: dict, log=None):
+        """Raytatouille's material library with the glass catalogues of the source: those stored
+        in the workflow (`rtt_catalog_data`) and the files the Raytracer wrote (`rtt_catalogs`).
+        A catalogue that cannot be loaded is left out and reported to `log` – the glasses from it
+        are then missing, which the system's check names. None without raytatouille."""
         try:
             rt = importlib.import_module("raytatouille")
         except ImportError:
             return None
+        try:
+            load = importlib.import_module("rtt_fusion.graph.embedded").load_catalogs
+        except (ImportError, AttributeError):  # an RTT-Fusion before the stored catalogues
+            load = None
         lib = rt.MaterialLibrary()
         for node in (wf.get("model") or wf.get("graph") or {}).get("nodes", []):
-            if node.get("type") == "rtt.source":
-                for path in node.get("params", {}).get("rtt_catalogs", []):
-                    lib.add_catalog(str(path))
+            if node.get("type") != "rtt.source":
+                continue
+            params = node.get("params", {})
+            if load is not None:
+                problems = load(lib, params)
+            else:
+                problems = []
+                for path in params.get("rtt_catalogs", []):
+                    try:
+                        lib.add_catalog(str(path))
+                    except Exception as e:  # noqa: BLE001 - a missing catalogue should not stop the run
+                        problems.append(f"glass catalogue {path}: {e}")
+            for line in problems:
+                if log is not None:
+                    log(f"warning: {line}")
         return lib
 
     @staticmethod
     def _catalogues(wf: dict) -> list:
+        """What the results depend on of the glass catalogues: the files and the stored ones (a
+        hash of their content)."""
         for node in (wf.get("model") or wf.get("graph") or {}).get("nodes", []):
             if node.get("type") == "rtt.source":
-                return list(node.get("params", {}).get("rtt_catalogs", []))
+                params = node.get("params", {})
+                held = [f"{c.get('name')}:{hashlib.sha1(str(c.get('base64', '')).encode()).hexdigest()[:12]}"
+                        for c in params.get("rtt_catalog_data") or []]
+                return list(params.get("rtt_catalogs", [])) + held
         return []
 
     def _hook(self, ctx, ex, a: float, b: float, workflow) -> None:
@@ -408,7 +449,7 @@ class WorkflowEngine(Plugin):
                   "gaussian_waist": float(ctx.params.get("gaussian_waist", 0.0) or 0.0),
                   "field_tolerance": float(ctx.params.get("field_tolerance", 0.02) or 0.02),
                   "auto_fields": bool(ctx.params.get("auto_fields", True))}
-        materials = self._materials(wf)
+        materials = self._materials(wf, ctx.log)
         if materials is not None:
             shared["materials"] = materials
         available = workflow.available()

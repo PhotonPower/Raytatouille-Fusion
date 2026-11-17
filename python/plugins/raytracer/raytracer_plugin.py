@@ -652,12 +652,24 @@ class RaytracerPlugin(Plugin):
             registry, _ = workflow.registry()
             types = [t for t in registry.types() if t.type_id in backend_rtt.EVALUATORS]
 
+            try:  # the catalogues stored in the workflow and the files (RTT-Fusion graph.embedded)
+                load = importlib.import_module("rtt_fusion.graph.embedded").load_catalogs
+            except (ImportError, AttributeError):
+                load = None
+
             def prepare(graph, plain):
                 lib = rt.MaterialLibrary()
                 for node in graph.nodes.values():
-                    if node.type_id == "rtt.source":
-                        for path in node.params.get("rtt_catalogs", []):
+                    if node.type_id != "rtt.source":
+                        continue
+                    if load is not None:  # a missing catalogue: the engine's run reports it
+                        load(lib, node.params)
+                        continue
+                    for path in node.params.get("rtt_catalogs", []):
+                        try:
                             lib.add_catalog(str(path))
+                        except Exception:  # noqa: BLE001 - reported by the engine's run
+                            continue
                 return {"materials": lib}
 
             self._provider = remote.BlockProvider(types, dict(backend_rtt.EVALUATORS), prepare)

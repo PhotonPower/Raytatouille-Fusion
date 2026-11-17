@@ -163,4 +163,30 @@ with tempfile.TemporaryDirectory() as tmp:
         finally:
             workflow_plugin._evaluators = plain
 
-print("workflow plugin: files stored in the document, failures in the status line, R→H at the link")
+    # a glass catalogue the document names only by its file name: added once in the panel, stored
+    from rtt_fusion.graph import embedded
+
+    if hasattr(embedded, "load_catalogs"):
+        agf = Path(tmp) / "K.agf"
+        agf.write_text("CC Test\nNM TESTGLAS 2 0 1.5 60 0 0 0\nCD 1.0 0.005 0 0 0 0 0 0 0 0\nLD 0.3 2.5\n",
+                       encoding="utf-8")
+        g = Graph()
+        g.add(Node("source", "rtt.source", params={"rtt_system": {}, "rtt_catalogs": ["k.agf"]}))
+        ctx = Ctx(io.to_dict(g))
+        engine = workflow_plugin.WorkflowEngine()
+        stored, problems = engine._embed(ctx, workflow, g)
+        assert not stored and problems[0]["code"] == "graph.file_unreadable", problems
+        ctx.params["catalogs"] = [str(agf)]
+        ctx.set_params = lambda values: ctx.params.update(values)
+        stored, problems = engine._embed(ctx, workflow, g)
+        assert stored and not problems and ctx.params["catalogs"] == [], (problems, ctx.params)
+        assert g.nodes["source"].params["rtt_catalogs"] == []
+        agf.unlink()
+        lines: list[str] = []
+        lib = engine._materials({"graph": io.to_dict(g)}, lines.append)
+        if lib is not None:  # with raytatouille
+            assert lib.catalogs() == ["K"] and not lines, lines
+        assert engine._materials({"graph": io.to_dict(Graph())}, lines.append) is None or not lines
+
+print("workflow plugin: files stored in the document, failures in the status line, R→H at the link, "
+      "glass catalogues stored")
