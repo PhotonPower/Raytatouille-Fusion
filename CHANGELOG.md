@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Node editor: a link on auto shows what the last run used**, e.g. **R→H** at the link into the
+  pupil camera when it switched to fields near a focus; the tooltip says why (RTT-Fusion #85). The
+  label stays while the camera's result is up to date and goes back to the planned representation
+  once the result is out of date.
 - **Workflow panel: *Wave optics near a focus (automatic)*, on by default.** A camera on a link
   left on auto checks whether the rays cross or focus near it and then computes fields from the
   last surface on, as if the link were set to H; elsewhere it keeps rays. A link set to R or H

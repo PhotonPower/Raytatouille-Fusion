@@ -128,4 +128,39 @@ with tempfile.TemporaryDirectory() as tmp:
     assert message.startswith("workflow: nothing computed – Camera: exec.param: cannot read"), message
     assert "Check workflow" in message, message
 
-print("workflow plugin: files stored in the document, failures in the status line")
+    # what a camera used at run time on an auto link (fields near a focus) is shown at the link
+    if hasattr(workflow, "with_used"):
+        table = write_mirror_table(Path(tmp) / "mirror2.json")
+        plain = workflow_plugin._evaluators
+
+        def deciding(extra):
+            evaluators = plain(extra)
+            if "optics.detector" not in evaluators:  # the evaluators the remote blocks fall back to
+                return evaluators
+            camera = evaluators["optics.detector"]
+
+            def detector(ctx_, node, socket, inputs):
+                ctx_.used["gr.out -> cam.in"] = {"representation": "H", "reason": "a focus"}
+                return camera(ctx_, node, socket, inputs)
+
+            return {**evaluators, "optics.detector": detector}
+
+        workflow_plugin._evaluators = deciding
+        try:
+            ctx = Ctx(socket_graph(table))
+            engine = workflow_plugin.WorkflowEngine()
+            engine.check_workflow(ctx)
+            assert "used" not in ctx.wf["plan"]["links"]["gr.out -> cam.in"]
+            engine.run_workflow(ctx)
+            shown = ctx.wf["plan"]["links"]["gr.out -> cam.in"]
+            assert shown["representation"] == "R" and shown["used"] == "H", shown
+            assert shown["used_reason"] == "a focus", shown
+            engine.check_workflow(ctx)  # the result is still up to date: the check keeps it
+            assert ctx.wf["plan"]["links"]["gr.out -> cam.in"]["used"] == "H"
+            ctx.params["pixels"] = 32  # out of date: only the plan
+            engine.check_workflow(ctx)
+            assert "used" not in ctx.wf["plan"]["links"]["gr.out -> cam.in"]
+        finally:
+            workflow_plugin._evaluators = plain
+
+print("workflow plugin: files stored in the document, failures in the status line, R→H at the link")
