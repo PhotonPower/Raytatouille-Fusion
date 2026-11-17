@@ -142,6 +142,10 @@ std::vector<const ResultItem*> ResultStore::itemsWithKey(const QString& key, Res
   return {};
 }
 
+void ResultStore::setStamp(ResultId id, const QString& stamp) {
+  if (ResultItem* i = mutableItem(id)) i->stamp = stamp;
+}
+
 ResultItem* ResultStore::mutableItem(ResultId id) {
   for (ResultSet& s : sets_) {
     for (ResultItem& i : s.items) {

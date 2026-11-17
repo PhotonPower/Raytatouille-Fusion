@@ -172,7 +172,7 @@ Geometry geometry_from_json(const QJsonObject& o) {
 }
 
 // ------------------------------------------------------------------ document
-QString save_nfcad(const Document& doc, const QString& path) {
+QString save_nfcad(const Document& doc, const QString& path, const QJsonObject& extra) {
   QJsonArray layers;
   for (const Layer& l : doc.layers()) {
     layers.append(QJsonObject{{"id", static_cast<int>(l.id)},
@@ -213,6 +213,9 @@ QString save_nfcad(const Document& doc, const QString& path) {
     root.insert("plugins", plugins);  // v2, optional: parameter values per plugin (P4)
   }
   if (!doc.workflow().isEmpty()) root.insert("workflow", doc.workflow());  // v2, optional: node workflow
+  for (auto it = extra.begin(); it != extra.end(); ++it) {  // v2, optional: e.g. the kept results
+    if (!root.contains(it.key())) root.insert(it.key(), it.value());
+  }
 
   QSaveFile file(path);
   if (!file.open(QIODevice::WriteOnly)) return file.errorString();
@@ -221,7 +224,7 @@ QString save_nfcad(const Document& doc, const QString& path) {
   return {};
 }
 
-QString load_nfcad(Document& doc, const QString& path) {
+QString load_nfcad(Document& doc, const QString& path, QJsonObject* extra) {
   QFile file(path);
   if (!file.open(QIODevice::ReadOnly)) return file.errorString();
   QJsonParseError parse_error;
@@ -272,6 +275,13 @@ QString load_nfcad(Document& doc, const QString& path) {
   // (before, the workflow was set silently after it and the node workflow window stayed empty)
   doc.reset(std::move(layers), std::move(entities), std::move(groups), params, root["workflow"].toObject());
   doc.setFilePath(path);
+  if (extra != nullptr) {
+    static const QStringList kOwn = {"format", "version", "units", "layers", "groups", "entities", "plugins", "workflow"};
+    *extra = {};
+    for (auto it = root.begin(); it != root.end(); ++it) {
+      if (!kOwn.contains(it.key())) extra->insert(it.key(), it.value());
+    }
+  }
   return {};
 }
 

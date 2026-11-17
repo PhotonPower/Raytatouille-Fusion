@@ -7,6 +7,15 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Results are saved in the `.rttf` file.** The newest result of every display window of the
+  node workflow (camera images, pupil images, curves of sweeps, tables, bars) is written with
+  the document and shown again after opening. Each result carries a fingerprint of what it was
+  computed from. If the workflow and its settings are unchanged, the display counts as up to
+  date (green tick), and *Run workflow* does not compute it again ("(unchanged)" in the status
+  line). Change something and it is computed anew. The intermediate results (ray bundles, fields)
+  are not saved. A run with new results marks the document as modified. Plugin API: `stamp=` for
+  `ctx.image`/`curve`/`table`/`bars` and `ctx.result_stamps()`. File format: optional section
+  `results` (docs/file-format.md).
 - **Glass catalogues in one place: the Raytracer panel.** The workflow takes the catalogues listed
   there (and *.agf next to the system file) and stores them in the document at the next Check or
   Run. The `.rttf` file then computes without the .agf files, also in the Raytracer panel, which

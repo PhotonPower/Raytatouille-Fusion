@@ -188,5 +188,34 @@ with tempfile.TemporaryDirectory() as tmp:
             assert lib.catalogs() == ["K"] and not lines, lines
         assert engine._materials({"graph": io.to_dict(Graph())}, lines.append) is None or not lines
 
+    # results kept with their fingerprint (CAD: saved in the .rttf): an unchanged display is not
+    # computed again – also with a new engine, as after reopening the document – a changed one is
+    table = write_mirror_table(Path(tmp) / "mirror3.json")
+    ctx = Ctx(socket_graph(table))
+    kept: dict[str, str] = {}
+
+    def image(run, title, *args, key="", stamp="", **kwargs):
+        ctx.images.append(title)
+        if key and stamp:
+            kept[key] = stamp
+
+    ctx.image = image
+    ctx.result_stamps = lambda: dict(kept)
+    engine = workflow_plugin.WorkflowEngine()
+    engine.check_workflow(ctx)
+    assert engine.run_workflow(ctx).startswith("workflow: Camera"), ctx.lines
+    assert list(kept) == ["workflow:show"] and len(ctx.images) == 1, (kept, ctx.images)
+    message = workflow_plugin.WorkflowEngine().run_workflow(ctx)  # a fresh engine: no cache
+    assert message == "workflow: Camera (unchanged)", message
+    assert len(ctx.images) == 1
+    states: list[dict] = []
+    ctx.workflow_state = states.append
+    workflow_plugin.WorkflowEngine().check_workflow(ctx)
+    assert states and all(states[-1].values()), states  # up to date from the kept result
+    ctx.params["pixels"] = 32  # changed: computed again with a new fingerprint
+    message = workflow_plugin.WorkflowEngine().run_workflow(ctx)
+    assert message == "workflow: Camera", message
+    assert len(ctx.images) == 2
+
 print("workflow plugin: files stored in the document, failures in the status line, R→H at the link, "
-      "glass catalogues stored")
+      "glass catalogues stored, kept results not computed again")

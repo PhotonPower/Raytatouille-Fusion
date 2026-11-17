@@ -33,6 +33,8 @@ class ResultStore : public QObject {
   ResultId addBars(ResultId set, const QString& name, Bars bars, const QString& key = {});
   /// Sets the key of an item (ResultItem::key).
   void setKey(ResultId item, const QString& key);
+  /// Sets the fingerprint of an item (ResultItem::stamp).
+  void setStamp(ResultId item, const QString& stamp);
   /// Items with `key` (of `kind`) from the newest result set that has any (empty if none).
   [[nodiscard]] std::vector<const ResultItem*> itemsWithKey(const QString& key, ResultItem::Kind kind) const;
   /// Appends points to a curve (live plots, e.g. a merit function per iteration).

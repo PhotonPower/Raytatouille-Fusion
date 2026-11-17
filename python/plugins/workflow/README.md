@@ -4,7 +4,9 @@ The engine of Raytatouille Fusion's node workflow ([ADR 0010](../../../docs/adr/
 stage W1): **Check workflow** checks the model, plans the representation per link and marks the
 blocks; **Run workflow** computes what the display blocks show (camera images, sweep curves, beam
 probes; links set to H as fields), keeps earlier results and turns every display's view into a
-result with the key `workflow:<block>`.
+result with the key `workflow:<block>` and a fingerprint (`stamp`: the executor's content hash of
+the display, the same in every session). CAD saves these results in the `.rttf` file. After
+opening, a display whose kept fingerprint still matches counts as up to date, and a run skips it.
 
 Blocks of other plugins (ADR 0010, W2): the engine asks CAD for the other plugins' block catalogues,
 adds those types to its library and has such a block evaluated in its plugin's process (inputs and

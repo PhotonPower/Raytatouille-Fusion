@@ -109,6 +109,7 @@ document as modified but is not an undo step.
 | `ctx.image(set, name, values, width, height, extent=(x0, x1, y0, y1), x_label=, y_label=, colormap=, unit=, value_range=, description=, rgb=)` | 2D image in the *Image* window (e.g. a camera image): `values[j * width + i]`, row 0 at y0, extent in physical units; with `rgb` (red, green, blue in 0 … 1 per pixel, sRGB) a colour image, shown as it is – `values` is then the number read out under the cursor |
 | `ctx.table(set, name, columns, rows, key=)` | a table in the *Table* dock (opens with the first one; the newest is shown, a choice with several): column heads and rows; floats written with 10 significant digits |
 | `ctx.bars(set, name, labels, values, y_label=, key=)` | a bar chart in the *Plot* dock (shown when no curves are) |
+| `stamp=` (image, curve, table, bars, with `key=`) / `ctx.result_stamps()` | a fingerprint of what a keyed result was computed from: the document keeps keyed results with their fingerprint (saved in the `.rttf`, shown again after opening); `ctx.result_stamps()` gives `{key: stamp}` of the newest ones, so a plugin need not compute an unchanged result again |
 | `ctx.workflow()` / `ctx.set_workflow(wf)` | Node workflow of the document (RTT-Fusion): `{"graph": rtt-fusion-graph, "types": [...], "diagnostics": [...], "plan": planner result}`; the editor shows the planned representation per link and the conversions per block; shown and edited in the *Node workflow* window, saved in the `.rttf` file |
 
 ### Blocks for the node workflow (ADR 0010)

@@ -79,6 +79,13 @@ class TestPlugin(Plugin):
         other = ctx.plugin_params("raytracer")
         return f"{other.get('catalogs')}|{ctx.plugin_params('nobody')}"
 
+    @action("Kept result")
+    def kept_result(self, ctx):
+        run = ctx.result_set("kept")
+        ctx.image(run, "cam", [1.0, 2.0], 2, 1, key="workflow:cam", stamp="s1")
+        ctx.curve(run, "loose", [0.0], [1.0])  # no key, no fingerprint
+        return str(ctx.result_stamps())
+
     @action("Tables")
     def tables(self, ctx):
         run = ctx.result_set("orders")
