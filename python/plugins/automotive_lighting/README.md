@@ -42,8 +42,8 @@ and V upwards.
   radius at their foot and head.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
   element size, draft angle and fillet radius of the walls between the elements, the position of
-  the mirror's focus and the **elements**; for *Optimise lens* its margin, rounds and whether the
-  lamp's blur is measured by ray tracing.
+  the mirror's focus and the **elements**; for *Optimise lens* its margin, rounds, the weight of
+  the beam's evenness and whether the lamp's blur is measured by ray tracing.
 - *Analysis*: the shadows of the steps on / off, the **direct light of the lamp** on / off, the
   **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
@@ -285,6 +285,12 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   above the line (|H| ≤ 10°) at most zone III's 625 cd, and at 2.5° to the side of the oncoming
   traffic – where R112 measures the cut-off – a fall by a factor 10 from just below the line to
   just above it. Small elements are preferred where nothing depends on a cell.
+- **Evenness** (*Optimise: evenness*, a weight; 0: R112 alone): below the cut-off (from 0.4°
+  under the line down to −5°, |H| ≤ 20°) the beam is to be free of patches, stripes and hot
+  spots. On a lattice of 1° across and 0.3° up and down, the second differences between
+  neighbours – zero for a plane or a steady slope – are taken in the blurred view (the lamp as it
+  is); their rms relative to 50R's minimum (10 100 cd), squared and weighted, is added to the
+  objective. The rounds log it as *bumps* (the surrogate's / the filament images').
 - **The search**: one cell after the other (the brightest first), its deflection over all choices
   with its cylinder kept, then its cylinder (strength and direction together) with the deflection
   kept, in sweeps over all cells; after the first sweep only choices near the present ones.
@@ -298,11 +304,13 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   darker one, every upper limit in the brighter one. At the end the lens built is ray traced.
 
 What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
-6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, about 10 minutes, 0.5 GB):
-all of R112 met by the filament images and by the ray tracing – in the ray tracing 75R 12 000 cd,
-50R 29 300 cd, zone III 510 cd, the cut-off at −0.70° with G = 0.40. Nearly every cell takes a
-prism alone (about 40 a weak cylinder, mostly 0 … 10° turned): with the focus there the filament
-images are large enough. Without the blur the filament images are met but the ray tracing finds
+6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, about 9
+minutes, 0.75 GB): all of R112 met by the filament images and by the ray tracing – in the ray
+tracing 75R 12 200 cd, 50R 22 200 cd, 50V 12 500 cd, zone III 540 cd, at most 23 400 cd, the cut-off
+at −0.70° with G = 0.35; bumps 4.2 % of 50R's minimum. Without the evenness (0) the bumps are
+twice as high (9.2 %) and the hot spot 32 400 cd (50R 29 300 cd). Nearly every cell takes a prism
+alone (about 45 a weak cylinder, mostly 0 … 15° turned): with the focus there the filament images
+are large enough. Without the blur the filament images are met but the ray tracing finds
 light in zone III at the cut-off's kink. With the focus close to the coil (3 mm) the shining
 shield sends light above the cut-off that no lens can take back (zone III about 5 500 cd): its
 rear part reflects the coil's light backwards and up, as from a coil behind the focus; at 6.7 mm

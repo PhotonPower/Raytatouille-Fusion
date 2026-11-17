@@ -74,6 +74,20 @@ both = O.objective(np.stack([ok, bad])[:, None, :], pr, 0.1)[0]       # the dark
 assert abs(both - O.objective(bad[None, None, :], pr, 0.1)[0]) < 1e-9
 report = O.report(np.stack([ok, glare]), pr)
 assert report["zone III"] == 2000.0 and report["75R"] == 12000.0
+# the evenness: the field below the cut-off on its lattice; a slope has no bumps, a patch has
+fh, fv = h[pr.bins[pr.field] % len(h)], v[pr.bins[pr.field] // len(h)]
+assert np.allclose(np.diff(fh[0]), O.BUMP_H * O.DH) and np.allclose(np.diff(fv[:, 0]), O.BUMP_V * O.DV)
+line = np.degrees(np.arctan(cut.line(np.tan(np.radians(fh)))))
+assert (fv[pr.inside] <= line[pr.inside] - O.FIELD_GAP + 1e-9).all() and pr.inside.mean() > 0.5
+assert pr.reference == 10100.0
+slope = ok.copy()
+slope[pr.field] = 5000.0 + 100.0 * fh + 300.0 * fv
+assert O.evenness(slope, pr) < 1e-12
+patch = slope.copy()
+patch[pr.field[5, 10]] += 3000.0
+assert O.evenness(patch, pr) > 0.01
+assert O.objective(patch[None, None, :], pr, 0.1, 1.0)[0] > O.objective(slope[None, None, :], pr, 0.1, 1.0)[0] + 1e-4
+assert O.objective(patch[None, None, :], pr, 0.1)[0] == O.objective(slope[None, None, :], pr, 0.1)[0]
 
 # ---- a small H4 lens: the cells' light, the surrogate against the filament images
 frame = al_layout.rounded_rectangle(80.0, 50.0, 8.0)
