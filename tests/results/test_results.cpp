@@ -52,7 +52,7 @@ class TestResults : public QObject {
     const auto old_set = store.createSet(QStringLiteral("run 1"));
     results::Image old_im;
     old_im.width = old_im.height = 1;
-    old_im.values = {9.0F};
+    old_im.values.assign(1, 9.0F);  // (GCC 14: a one-element initializer list trips -Warray-bounds)
     store.addImage(old_set, QStringLiteral("old"), old_im, QStringLiteral("workflow:cam"));
     const auto set = store.createSet(QStringLiteral("run 2"));
     results::Image im;
@@ -85,8 +85,8 @@ class TestResults : public QObject {
     b.values = {0.5, 0.25};
     store.addBars(set, QStringLiteral("bars"), b, QStringLiteral("workflow:tab"));
     results::Curve loose;
-    loose.x = {0.0};
-    loose.y = {1.0};
+    loose.x.assign(1, 0.0);
+    loose.y.assign(1, 1.0);
     store.addCurve(set, QStringLiteral("not kept"), loose);
 
     const QJsonArray saved = results::saved_results(store);

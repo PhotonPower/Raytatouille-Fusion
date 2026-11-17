@@ -198,6 +198,7 @@ class TestPluginHost : public QObject {
     // ctx.image(..., key=, stamp=): the fingerprint is kept with the result and the document
     // counts as modified (it saves the result); ctx.result_stamps() gives it back
     QSignalSpy finished(host_.get(), &plugins::PluginHost::finished);
+    doc_.markSaved();  // earlier tests changed the document
     QVERIFY(!doc_.isModified());
     QVERIFY(host_->run(QStringLiteral("kept_result")) > 0);
     QVERIFY(waitFinished(finished));
