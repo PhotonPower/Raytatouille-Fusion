@@ -55,6 +55,12 @@ _ELEMENT = {
     "spread_h": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="spread ± H"),
     "spread_v": Param.number(0.0, min=-60.0, max=60.0, decimals=2, unit="°", label="spread ± V"),
     "spread_angle": Param.number(0.0, min=-180.0, max=180.0, decimals=1, unit="°", label="spread turned by"),
+    "sector": Param.integer(-1, min=-1, max=99, label="sector"),
+}
+
+_SECTOR = {
+    "from": Param.number(0.0, min=-360.0, max=360.0, decimals=1, unit="°", label="from azimuth"),
+    "branch": Param.choice([HORIZONTAL, RISING], HORIZONTAL, label="cut-off branch"),
 }
 
 _ZONE = {
@@ -178,6 +184,14 @@ class AutomotiveLighting(Plugin):
                                      label="Mirror focus behind the filament centre", group="Lens",
                                      description="0: the filament sits in the focus of the paraboloid (its focal "
                                                  "length: Reflector → Focal length)"),
+        "lens_sectors": Param.table(_SECTOR, [], label="Sectors", group="Lens",
+                                    description="radial sections of the lens about the lamp axis, as the zones of a "
+                                                "clear-lens reflector: each from its azimuth (0 left, 90 up, seen in "
+                                                "the driving direction) to the next one's, with the cut-off branch its "
+                                                "light ends at; they cut the cells along radial lines, each part an "
+                                                "element of its own (the element table's sector: their number by "
+                                                "azimuth, from 0). Empty: one; Optimise lens (along the edges) then "
+                                                "finds the wedge whose light ends at the rising branch"),
         "elements": Param.table(_ELEMENT, [{"y_from": -500.0, "y_to": 500.0, "z_from": -500.0, "z_to": 500.0,
                                             "deflect_h": 0.0, "deflect_v": -1.0, "spread_h": 15.0, "spread_v": 4.0,
                                             "spread_angle": 0.0}],
@@ -326,15 +340,18 @@ class AutomotiveLighting(Plugin):
             frame = self.frame_of(ctx)
             elements = tuple(al_lens.Element(float(r["y_from"]), float(r["y_to"]), float(r["z_from"]), float(r["z_to"]),
                                              float(r["deflect_h"]), float(r["deflect_v"]), float(r["spread_h"]),
-                                             float(r["spread_v"]), float(r.get("spread_angle") or 0.0))
+                                             float(r["spread_v"]), float(r.get("spread_angle") or 0.0),
+                                             -1 if r.get("sector") is None else int(r["sector"]))
                              for r in p["elements"])
+            sectors = tuple(al_lens.Sector(float(r["from"]), str(r["branch"])) for r in p.get("lens_sectors") or [])
             settings = al_lens.LensSettings(self.lamp_of(p), self.cutoff_of(p), elements, focal=float(p["focal"]),
                                             focus_behind=float(p["focus_behind"]), hole_radius=float(p["hole_radius"]),
                                             lens_x=float(p["lens_x"]), thickness=float(p["lens_thickness"]),
                                             index=float(p["lens_index"]), cell_width=float(p["cell_width"]),
                                             cell_height=float(p["cell_height"]), rake=float(p["lens_rake"]),
                                             sweep=float(p["lens_sweep"]), radius=float(p["lens_radius"]),
-                                            wall_draft=float(p["wall_draft"]), wall_fillet=float(p["wall_fillet"]))
+                                            wall_draft=float(p["wall_draft"]), wall_fillet=float(p["wall_fillet"]),
+                                            sectors=sectors)
             key = hashlib.sha256(repr(settings).encode() + frame.tobytes()).hexdigest()
             if getattr(self, "_lens", (None, None))[0] != key:
                 def progress(fraction: float, text: str) -> None:
@@ -851,24 +868,31 @@ class AutomotiveLighting(Plugin):
         except (DesignError, RuntimeError, ValueError) as e:
             raise UserError(str(e)) from e
         rows = [{"y_from": e.y0, "y_to": e.y1, "z_from": e.z0, "z_to": e.z1, "deflect_h": e.deflect_h,
-                 "deflect_v": e.deflect_v, "spread_h": e.spread_h, "spread_v": e.spread_v, "spread_angle": e.spread_angle}
+                 "deflect_v": e.deflect_v, "spread_h": e.spread_h, "spread_v": e.spread_v, "spread_angle": e.spread_angle,
+                 "sector": e.sector}
                 for e in result.elements]
-        ctx.set_params({"elements": rows})
+        changes = {"elements": rows}
+        if result.sectors and not p.get("lens_sectors"):
+            changes["lens_sectors"] = [{"from": x.az_from, "branch": x.branch} for x in result.sectors]
+            spans = ", ".join(f"{x.branch} from {x.az_from:g}°" for x in result.sectors)
+            ctx.log(f"the lens cut into sectors ({spans}): the wedge whose light ends at the rising branch, cut out "
+                    "along radial lines – the sector table now has them")
+        ctx.set_params(changes)
         cutoff = r.settings.cutoff
         verdicts = []
         for name, dist in (("filament images", result.dist), ("ray tracing", checked)):
             if dist is None:
                 continue
             self._present(ctx, dist, r, f"Low beam {r.settings.lamp.name} – optimised lens, {name}",
-                          f"the optimised lens ({len(rows)} cells), {name}")
+                          f"the optimised lens ({len(rows)} elements), {name}")
             failed = [row[0] for row in al_photometry.test_points(dist, cutoff) if row[-1] != "ok"]
             g, v_cut = al_photometry.sharpness(dist, cutoff)
             ctx.log(f"{name}: R112 " + ("met" if not failed else "not met: " + ", ".join(failed))
                     + f"; cut-off at V = {v_cut:.2f}° with G = {g:.2f}")
             verdicts.append(f"{name}: R112 " + ("met" if not failed else "not met: " + ", ".join(failed)))
-        ctx.log(f"optimised {len(rows)} cells in {time.time() - start:.0f} s; the element table now has a row per "
-                "cell")
-        return f"lens optimised ({len(rows)} cells); " + "; ".join(verdicts)
+        ctx.log(f"optimised {len(rows)} elements in {time.time() - start:.0f} s; the element table now has a row per "
+                "cell (per part of a cell cut by the sectors)")
+        return f"lens optimised ({len(rows)} elements); " + "; ".join(verdicts)
 
     @action("Default zones", description="Sets the zone table for the chosen traffic side")
     def set_default_zones(self, ctx):

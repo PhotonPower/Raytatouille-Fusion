@@ -44,7 +44,7 @@ import al_layout
 import al_lens
 import al_photometry
 from al_design import DesignError
-from al_optics import Cutoff
+from al_optics import HORIZONTAL, RISING, Cutoff
 
 DH, DV = 0.5, 0.1                                  # degrees: the surrogate's grid
 H_RANGE, V_RANGE = (-45.0, 45.0), (-12.0, 6.0)
@@ -76,14 +76,28 @@ ALONG = 0.15                                       # degrees: a rising cell's de
 
 @dataclass
 class Rays:
-    """The light of the plane lens' cells: per ray its cell (index into `cells`), H, V (degrees) and
-    flux (lm)."""
+    """The light of the plane lens' cells (their parts in the sectors): per ray its cell (index into
+    `cells`), H, V (degrees), flux (lm) and where it meets the lens (y, z mm)."""
 
-    cells: list                                    # (i, j) of the lens' grid
+    cells: list                                    # (i, j, sector) of the lens' grid
     cell: np.ndarray
     H: np.ndarray
     V: np.ndarray
     flux: np.ndarray
+    y: np.ndarray | None = None
+    z: np.ndarray | None = None
+
+    def regrouped(self, system: al_lens.LensSystem) -> "Rays":
+        """The same light by the cells (parts) of `system` – the same lens cut otherwise."""
+        iy, iz, k, inside = system.part(self.y.astype(float), self.z.astype(float))
+        cells = [tuple(int(c) for c in x) for x in np.argwhere(system.used)]
+        index = -np.ones(system.used.shape, dtype=np.int64)
+        for n, c in enumerate(cells):
+            index[c] = n
+        keep = np.flatnonzero(inside)
+        cell = index[iy[keep], iz[keep], k[keep]]
+        keep, cell = keep[cell >= 0], cell[cell >= 0]
+        return Rays(cells, cell, self.H[keep], self.V[keep], self.flux[keep], self.y[keep], self.z[keep])
 
 
 def lens_rays(system: al_lens.LensSystem, *, spacing: float = 1.0, reflectance: float = 0.85,
@@ -96,10 +110,10 @@ def lens_rays(system: al_lens.LensSystem, *, spacing: float = 1.0, reflectance: 
     P, N, A = system.samples(spacing)
     Q, nu, dA = fil.surface_samples(n_axial, n_around)
     luminance = lamp.flux / (math.pi * dA * len(Q))
-    index = -np.ones((system.ny, system.nz), dtype=np.int64)
-    cells = [tuple(int(k) for k in c) for c in np.argwhere(system.used)]
-    for k, (i, j) in enumerate(cells):
-        index[i, j] = k
+    index = -np.ones(system.used.shape, dtype=np.int64)
+    cells = [tuple(int(k) for k in c) for c in np.argwhere(system.used)]     # (i, j, sector)
+    for k, c in enumerate(cells):
+        index[c] = k
     parts = []
     chunk = max(1, 120_000 // len(Q))
     for start in range(0, len(P), chunk):
@@ -122,15 +136,16 @@ def lens_rays(system: al_lens.LensSystem, *, spacing: float = 1.0, reflectance: 
             y, z = o[:, 1] + t * dd[:, 1], o[:, 2] + t * dd[:, 2]
             t = np.maximum((s.lens_x + system.shape(y, z)[0] - o[:, 0]) / dd[:, 0], 0.0)
         y, z = o[:, 1] + t * dd[:, 1], o[:, 2] + t * dd[:, 2]
-        iy, iz, inside = system.cell(y, z)
+        iy, iz, sector, inside = system.part(y, z)
         cut = np.flatnonzero(inside & ~system.whole[np.clip(iy, 0, system.ny - 1), np.clip(iz, 0, system.nz - 1)])
         if len(cut):
             inside[cut] = al_layout.contains(system._outline, np.column_stack([y[cut], z[cut]]))
         keep = np.flatnonzero(inside)
-        parts.append((index[iy[keep], iz[keep]], np.degrees(np.arctan(-dd[keep, 1] / dd[keep, 0])),
-                      np.degrees(np.arctan(dd[keep, 2] / dd[keep, 0])), ww[keep]))
-    cell, H, V, flux = (np.concatenate([q[k] for q in parts]) for k in range(4))
-    return Rays(cells, cell, H.astype(np.float32), V.astype(np.float32), flux.astype(np.float32))
+        parts.append((index[iy[keep], iz[keep], sector[keep]], np.degrees(np.arctan(-dd[keep, 1] / dd[keep, 0])),
+                      np.degrees(np.arctan(dd[keep, 2] / dd[keep, 0])), ww[keep], y[keep], z[keep]))
+    cell, H, V, flux, y, z = (np.concatenate([q[k] for q in parts]) for k in range(6))
+    return Rays(cells, cell, H.astype(np.float32), V.astype(np.float32), flux.astype(np.float32),
+                y.astype(np.float32), z.astype(np.float32))
 
 
 # ------------------------------------------------------------------ the objective
@@ -442,6 +457,32 @@ def edges(rays: Rays, cutoff: Cutoff) -> np.ndarray:
     return above > RISING_SHARE * np.maximum(total, 1e-300)
 
 
+def default_sectors(rays: Rays, cutoff: Cutoff) -> tuple:
+    """The lens' sectors from the plane lens' light: the wedge (azimuths about the lamp axis, in
+    1° steps) where more than RISING_SHARE of the light lies above the horizontal branch on the
+    driver's side – it ends at the rising branch – and the rest; () if there is none."""
+    sign = 1.0 if cutoff.right_hand_traffic else -1.0
+    az = np.floor(np.degrees(np.arctan2(rays.z, rays.y)) % 360.0).astype(int) % 360
+    up = (rays.V > cutoff.v_deg + 0.1) & (sign * (rays.H - cutoff.kink_deg) > 0.0)
+    total = np.bincount(az, rays.flux, minlength=360)
+    above = np.bincount(az[up], rays.flux[up], minlength=360)
+    smooth = lambda a: (np.roll(a, 1) + a + np.roll(a, -1)) / 3.0         # noqa: E731
+    rising = smooth(above) > RISING_SHARE * np.maximum(smooth(total), 1e-300)
+    if not rising.any() or rising.all():
+        return ()
+    start = int(np.flatnonzero(rising & ~np.roll(rising, 1))[0])        # the runs, the one with the most light kept
+    runs, a = [], start
+    for _ in range(360):
+        if rising[a % 360] and not rising[(a - 1) % 360]:
+            b = a
+            while rising[b % 360]:
+                b += 1
+            runs.append((float(above[np.arange(a, b) % 360].sum()), a % 360, b % 360))
+        a += 1
+    _, a0, a1 = max(runs)
+    return (al_lens.Sector(float(a0), RISING), al_lens.Sector(float(a1), HORIZONTAL))
+
+
 class Surrogate:
     """The cells' patterns (flux per bin of the plane cell, each cut to where it has light, with room
     for the widest spread) in its views – as they are and, with a `blur` (sigma H, V in degrees:
@@ -633,6 +674,7 @@ class Result:
     system: al_lens.LensSystem | None = None
     start: int = 0                      # which of optimise's starts it came from
     checked: bool = False               # whether the ray tracing's round is the one kept
+    sectors: tuple = ()                 # the lens' sectors (al_lens.Sector) the elements are for
     traced: al_photometry.Distribution | None = None   # check()'s of the lens kept
     background: np.ndarray | None = None   # (views, grid) the surrogate's in its best round
 
@@ -640,10 +682,11 @@ class Result:
 def elements_of(system: al_lens.LensSystem, cells: list, choice: Choice) -> tuple:
     s = system.settings
     out = []
-    for k, (i, j) in enumerate(cells):
+    for k, (i, j, sector) in enumerate(cells):
         y0, z0 = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
         out.append(al_lens.Element(round(y0, 6), round(y0 + s.cell_width, 6), round(z0, 6),
-                                   round(z0 + s.cell_height, 6), *choice.element(k)))
+                                   round(z0 + s.cell_height, 6), *choice.element(k),
+                                   sector=sector if system.count > 1 else -1))
     return tuple(out)
 
 
@@ -689,9 +732,12 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     best kept – None: plane glass, or (deflect H, deflect V, spread, angle) in degrees (the nearest
     choices; a spread too deep for the lens is made weaker). The descent ends near where it begins:
     from plane glass it seldom takes up a cylinder lens, from CYLINDERS it keeps many. along_edges:
-    every element spreads and deflects along the edge of its own light (edges()) – the horizontal
-    branch or the rising one –, as the flutes of a classic lens: the kink stays sharp and the
-    rising branch lit; False: any direction. band, rise: what a real beam has beyond R112 (probes).
+    every element spreads and deflects along the edge of its own light – the horizontal branch or
+    the rising one –, as the flutes of a classic lens: the kink stays sharp and the rising branch
+    lit; False: any direction. The edge is the branch of the element's sector; without sectors the
+    lens is cut into them first (default_sectors: the wedge whose light ends at the rising branch,
+    radial lines about the lamp axis, as the zones of a clear-lens reflector) – or, if there is no
+    such wedge, it is found per cell (edges()). band, rise: what a real beam has beyond R112 (probes).
     check(system) -> Distribution: the lamp as it is (ray tracing) – once the rounds are done, what
     it adds to the blurred view of the lens kept is carried back and the cells optimised again, CHECKS
     times, each lens ray traced; the best by its ray tracing is kept (Result.traced)."""
@@ -703,6 +749,13 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     plane = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),), wall_draft=0.0), frame)
     rays = lens_rays(plane, spacing=spacing, reflectance=reflectance, transmittance=transmittance,
                      progress=step(0.0, 0.1))
+    if along_edges and not settings.sectors:      # the wedge's radial lines, from the plane lens' light
+        found = default_sectors(rays, settings.cutoff)
+        if found:
+            settings = replace(settings, sectors=found)
+            plane = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),),
+                                          wall_draft=0.0), frame)
+            rays = rays.regrouped(plane)
     pr = probes(settings.cutoff, band, rise)
     h, v = grid()
     omega = al_photometry._solid_angle(h[None, :], v[:, None], DH, DV)
@@ -719,7 +772,8 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     first = np.stack([blurred(direct_light, b) for b in sur.blurs])
     if along_edges:
         cut = settings.cutoff
-        rising = edges(rays, cut)
+        rising = np.array([plane.branch(k) == RISING for _, _, k in rays.cells]) if plane.count > 1 \
+            else edges(rays, cut)
         level = int(np.argmin(np.abs(ANGLE)))
         sur.edge_angle = np.where(rising, int(np.argmin(np.abs(ANGLE - math.degrees(math.atan(cut.slope))))), level)
         sur.edge_slope = np.where(rising, cut.slope, np.nan)
@@ -756,7 +810,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
             choice.dh[off], choice.dv[off] = zero[0], zero[1]
             bad = ~sur.fits(choice.dh, choice.dv, choice.sp, choice.an)
             choice.sp[bad], choice.an[bad] = 0, zero[3]
-        result = Result((), choice, rays.cells, start=n)
+        result = Result((), choice, rays.cells, start=n, sectors=settings.sectors)
         background = first
         for r in range(rounds + 1):
             choice, elements, system, dist, score, record, missed = judge(

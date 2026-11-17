@@ -183,6 +183,43 @@ on_inner, on_outer = np.abs(p[:, 0] - inner) < 0.01, np.abs(p[:, 0] - outer) < 0
 assert on_inner.sum() > 1000 and on_outer.sum() > 1000
 assert (n[on_inner, 0] < 0).all() and (n[on_outer, 0] > 0).all()
 
+# ---- a lens cut into sectors: a part of a cell per sector, a wall along every radial line
+cut_up = (al_lens.Sector(320.0, al_optics.RISING), al_lens.Sector(20.0, al_optics.HORIZONTAL))
+parts = al_lens.build(al_lens.LensSettings(H7, cut, (al_lens.Element(-1e3, 1e3, -1e3, 1e3, 5.0, 0.0, sector=1),
+                                                     al_lens.Element(-1e3, 1e3, -1e3, 1e3, 0.0, 0.0, sector=0)),
+                                           cell_width=8.0, cell_height=8.0, sectors=cut_up), lens_frame)
+whole = al_lens.build(al_lens.LensSettings(H7, cut, (al_lens.Element(-1e3, 1e3, -1e3, 1e3),), cell_width=8.0,
+                                           cell_height=8.0), lens_frame)
+split = parts.used.sum(axis=2) == 2
+assert parts.count == 2 and parts.cells == whole.cells + split.sum() and split.sum() >= 8
+assert list(parts.sector(np.array([10.0, 10.0, 0.0]), np.array([-1.0, 1.0, 10.0]))) == [1, 1, 0]   # 354°, 6°, 90°: by azimuth, from 20° and 320°
+a = math.radians(320.0)                                       # just either side of the line at 320°
+ray = np.array([math.cos(a), math.sin(a)]) * 20.0
+side = np.array([-math.sin(a), math.cos(a)]) * 0.05
+yz = np.array([ray + side, ray - side])                       # counter-clockwise of it sector 1, clockwise sector 0
+assert list(parts.sector(yz[:, 0], yz[:, 1])) == [1, 0]
+dy = parts.inner(yz[:, 0], yz[:, 1])[1]
+assert abs(dy[0] - dy[1]) > 0.05                              # the prism (5° across) on one side only
+radial = [f for kind, name, f in al_lens.faces(parts) if kind == "wall" and "/0|1" in f["label"] or "/1|0" in f["label"]]
+assert radial and all(f["surface"]["degree_v"] == 10 for f in radial)
+i, j = np.argwhere(split)[0]                                  # the wall's rims are the two patches along the line
+f = next(f for f in radial if f["label"].startswith(f"lens wall {i}.{j}/"))
+rim, _, _ = pt_nurbs.surface_grid(f["surface"], [0.0, 1.0], [0.5])
+k0, k1 = (int(x) for x in f["label"].split("/")[1].split("|"))
+for point, k in zip(rim.reshape(-1, 3), (k0, k1)):
+    C = parts.coeff[i, j, k]
+    ta = (point[1] - parts.y0) / parts.settings.cell_width - i
+    tb = (point[2] - parts.z0) / parts.settings.cell_height - j
+    sag = (al_lens._bernstein(np.array([ta])) @ C @ al_lens._bernstein(np.array([tb])).T).item()
+    assert abs(point[0] - parts.settings.lens_x - sag) < 1e-6
+glass = al_trace.lens_bodies(parts, 0.85)[1]                  # and its glass body: faces turned out of the glass
+mesh = pt_mesh.build([{"id": 0, "geometry": {"type": "shell", "faces": glass.faces}}], 0.005)
+tri, b1, b2 = mesh.sample(np.arange(len(glass.faces)), 3000, rng)
+p = mesh.v0[tri] + b1[:, None] * mesh.e1[tri] + b2[:, None] * mesh.e2[tri]
+n, _ = mesh.shade(tri, b1, b2)
+on_inner = np.abs(p[:, 0] - parts.settings.lens_x - parts.inner(p[:, 1], p[:, 2])[0]) < 0.01
+assert on_inner.sum() > 1000 and (n[on_inner, 0] < 0).all()
+
 # ---- the bare coil: what leaves it is the lamp's flux, half of it forwards
 share = al_trace.coil_share(coil, "NumPy", rays=40_000)
 assert 0.5 < share < 0.65, share

@@ -20,6 +20,12 @@ before the elements or in the glass behind them – is mirrored there once (with
 at that angle, or totally) and goes on as stray light. With a draft angle the walls lean and are
 rounded at foot and head (_join): then they are part of the inner surface and refract like it.
 
+Sectors (radial sections about the lamp axis, as the zones of a clear-lens reflector) cut the
+cells along radial lines: each part of a cell in a sector is an element of its own – its patch
+designed over the whole cell, used in its part, the step to its neighbour a wall along the radial
+line. Where the light of a cell ends at different branches of the cut-off on either side of such
+a line (the wedge in front of the H4 shield's slanting edge), each part can follow its own.
+
 The lens may lean back (rake), run back to one side (sweep) and be domed (a sphere's radius): its
 outer side is that shape, its inner side the same shape `thickness` behind it (measured along X)
 with the elements on it. The refraction at the outer side then uses the normal of the shape there.
@@ -36,7 +42,7 @@ import numpy as np
 
 import al_layout
 from al_design import DesignError
-from al_optics import Cutoff, Filament, Lamp, direction
+from al_optics import HORIZONTAL, Cutoff, Filament, Lamp, direction
 from al_spline import Graph
 
 DEGREE = 5
@@ -59,6 +65,7 @@ class Element:
     spread_h: float = 0.0
     spread_v: float = 0.0
     spread_angle: float = 0.0
+    sector: int = -1               # the lens' sector (index by azimuth) whose parts it is for; -1: every one
 
     def offsets(self, a, b, width: float, height: float):
         """The turn (H, V degrees) besides the deflection at points of the cell – a to the right, b
@@ -71,6 +78,16 @@ class Element:
         along = self.spread_h * u / (0.5 * width * abs(c) + 0.5 * height * abs(s))
         across = self.spread_v * w / (0.5 * width * abs(s) + 0.5 * height * abs(c))
         return along * c - across * s, along * s + across * c
+
+
+@dataclass(frozen=True)
+class Sector:
+    """A radial section of the lens from azimuth atan2(z, y) `az_from` (degrees, counter-clockwise
+    seen in the driving direction: 0 = left, 90 = up) to the next sector's, and the cut-off branch
+    its light ends at."""
+
+    az_from: float
+    branch: str = HORIZONTAL
 
 
 @dataclass(frozen=True)
@@ -91,6 +108,7 @@ class LensSettings:
     radius: float = 0.0            # mm: domed outwards, a sphere of this radius (0: flat)
     wall_draft: float = 0.0        # degrees between the walls of the elements and X (0: walls along X)
     wall_fillet: float = 0.0       # mm, radius at the foot and the head of these walls (with a draft only)
+    sectors: tuple[Sector, ...] = ()   # radial sections (at least two to cut the cells; else one)
 
 
 def _bernstein(t: np.ndarray, degree: int = DEGREE) -> np.ndarray:
@@ -134,8 +152,8 @@ class LensSystem:
     z0: float = 0.0
     ny: int = 0
     nz: int = 0
-    coeff: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, DEGREE + 1, DEGREE + 1)))   # sag, Bernstein
-    used: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))
+    coeff: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 1, DEGREE + 1, DEGREE + 1)))   # sag, Bernstein,
+    used: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 1), dtype=bool))  # per cell and sector
     whole: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=bool))   # cells the outline does not cut
     fit_error: float = 0.0         # largest slope error of the patches against the wanted slopes
     sag: tuple[float, float] = (0.0, 0.0)     # the elements' depth and height about the lens' shape
@@ -184,8 +202,53 @@ class LensSystem:
             x, dy, dz = x + root - s.radius, dy - y / root, dz - z / root
         return x, dy, dz
 
-    def element(self, y: float, z: float) -> Element | None:
-        return next((e for e in self.settings.elements if e.y0 <= y < e.y1 and e.z0 <= z < e.z1), None)
+    def element(self, y: float, z: float, sector: int = 0) -> Element | None:
+        return next((e for e in self.settings.elements if e.y0 <= y < e.y1 and e.z0 <= z < e.z1
+                     and e.sector in (-1, sector)), None)
+
+    # ---- the sectors
+    @property
+    def bounds(self) -> np.ndarray:
+        """The sectors' first azimuths (degrees, 0 … 360, rising); empty: one sector."""
+        if not hasattr(self, "_bounds"):
+            a = sorted(float(x.az_from) % 360.0 for x in self.settings.sectors)
+            self._bounds = np.array(a if len(a) >= 2 else [])
+        return self._bounds
+
+    @property
+    def count(self) -> int:
+        """How many sectors."""
+        return max(len(self.bounds), 1)
+
+    def branch(self, k: int) -> str:
+        """The cut-off branch of sector k."""
+        if not len(self.bounds):
+            return HORIZONTAL
+        rows = sorted(self.settings.sectors, key=lambda x: float(x.az_from) % 360.0)
+        return rows[k].branch
+
+    def sector(self, y, z) -> np.ndarray:
+        """The sector of points (index by azimuth: k from bounds[k] to bounds[k + 1])."""
+        y, z = np.asarray(y, dtype=float), np.asarray(z, dtype=float)
+        if not len(self.bounds):
+            return np.zeros(np.shape(y), dtype=int)
+        az = np.degrees(np.arctan2(z, y)) % 360.0
+        k = np.searchsorted(self.bounds, az, side="right") - 1
+        return np.where(k < 0, len(self.bounds) - 1, k)
+
+    def sector_pieces(self, polys: list[np.ndarray], k: int) -> list[np.ndarray]:
+        """The parts of polygons (y, z) in sector k: between the radial lines at its azimuths."""
+        if not len(self.bounds):
+            return polys
+        a0, a1 = self.bounds[k], self.bounds[(k + 1) % len(self.bounds)]
+        span = (a1 - a0) % 360.0 or 360.0
+        n = math.ceil(span / 180.0 - 1e-9)
+        out = []
+        for m in range(n):              # in pieces of at most 180°: two half planes each
+            lo, hi = math.radians(a0 + span * m / n), math.radians(a0 + span * (m + 1) / n)
+            part = al_layout.clip_all(polys, al_layout.Line(np.array([-math.sin(lo), math.cos(lo)]), 0.0))
+            out += al_layout.clip_all(part, al_layout.Line(np.array([math.sin(hi), -math.cos(hi)]), 0.0))
+        return [q for q in out if abs(al_layout.area(q)) > 1e-9]
 
     def inner(self, y: np.ndarray, z: np.ndarray):
         """x - lens_x of the inner side and its slopes at points; `inside` marks the points that lie
@@ -231,10 +294,11 @@ class LensSystem:
         iz = np.floor((z - self.z0) / s.cell_height).astype(int)
         inside = (iy >= 0) & (iy < self.ny) & (iz >= 0) & (iz < self.nz)
         iy, iz = np.clip(iy, 0, self.ny - 1), np.clip(iz, 0, self.nz - 1)
-        inside &= self.used[iy, iz]
+        k = self.sector(y, z)
+        inside &= self.used[iy, iz, k]
         ta = (y - self.y0) / s.cell_width - iy
         tb = (z - self.z0) / s.cell_height - iz
-        C = self.coeff[iy, iz]                                             # (n, 6, 6)
+        C = self.coeff[iy, iz, k]                                          # (n, 6, 6)
         Ba, Bb = _bernstein(ta), _bernstein(tb)
         low_a, low_b = _bernstein(ta, DEGREE - 1), _bernstein(tb, DEGREE - 1)
         Db = np.zeros_like(Bb)                                             # d/dt of the Bernstein polynomials
@@ -247,12 +311,18 @@ class LensSystem:
         return sag, dy, dz, inside, self.whole[iy, iz]
 
     def cell(self, y, z):
-        """Indices of the cell at points and whether it is one of the lens."""
+        """Indices of the cell at points and whether it (its part there) is one of the lens."""
+        iy, iz, _, inside = self.part(y, z)
+        return iy, iz, inside
+
+    def part(self, y, z):
+        """Indices of the cell and the sector at points and whether that part is one of the lens."""
         s = self.settings
         iy = np.floor((y - self.y0) / s.cell_width).astype(int)
         iz = np.floor((z - self.z0) / s.cell_height).astype(int)
+        k = self.sector(y, z)
         inside = (iy >= 0) & (iy < self.ny) & (iz >= 0) & (iz < self.nz)
-        return iy, iz, inside & self.used[np.clip(iy, 0, self.ny - 1), np.clip(iz, 0, self.nz - 1)]
+        return iy, iz, k, inside & self.used[np.clip(iy, 0, self.ny - 1), np.clip(iz, 0, self.nz - 1), k]
 
     def _wall(self, start: np.ndarray, v: np.ndarray, end_yz: tuple, in_air: bool):
         """Whether straight paths from `start` (n, 3) along v to the points end_yz meet a wall between
@@ -345,9 +415,9 @@ class LensSystem:
         far = np.maximum(t, t_before)
         air = self._wall(origins + front[:, None] * d, d,
                          (origins[:, 1] + far * d[:, 1], origins[:, 2] + far * d[:, 2]), True)
-        ia, ja, _ = self.cell(y, z)
-        ib, jb, _ = self.cell(origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2])
-        air = (air[0] | (ia != ib) | (ja != jb), air[1], air[2])
+        ia, ja, ka, _ = self.part(y, z)
+        ib, jb, kb, _ = self.part(origins[:, 1] + t * d[:, 1], origins[:, 2] + t * d[:, 2])
+        air = (air[0] | (ia != ib) | (ja != jb) | (ka != kb), air[1], air[2])
         gx = np.where(glass[:, 0] > 1e-6, glass[:, 0], 1.0)
         on = np.maximum(form + self.sag[1] + 0.01 - x_in, 0.0) / gx
         in_glass = self._wall(hit, glass, (y + on * glass[:, 1], z + on * glass[:, 2]), False)
@@ -420,14 +490,18 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
     j0, j1 = math.floor(lo[1] / s.cell_height + 0.5), math.floor(hi[1] / s.cell_height + 0.5)
     system.y0, system.z0 = (i0 - 0.5) * s.cell_width, (j0 - 0.5) * s.cell_height
     system.ny, system.nz = i1 - i0 + 1, j1 - j0 + 1
-    system.coeff = np.zeros((system.ny, system.nz, DEGREE + 1, DEGREE + 1))
-    system.used = np.zeros((system.ny, system.nz), dtype=bool)
+    S = system.count
+    if S > 1 and s.wall_draft > 0.0:
+        raise DesignError("walls with a draft angle and lens sectors together are not supported yet: set the draft "
+                          "angle to 0 or leave the sector table empty")
+    system.coeff = np.zeros((system.ny, system.nz, S, DEGREE + 1, DEGREE + 1))
+    system.used = np.zeros((system.ny, system.nz, S), dtype=bool)
     system.whole = np.zeros((system.ny, system.nz), dtype=bool)
     t = np.linspace(0.0, 1.0, NODES)
     fit = np.linalg.pinv(_bernstein(t))                                    # values at the nodes -> coefficients
     B = _bernstein(t)
     low = _bernstein(t, DEGREE - 1)
-    mid = NODES // 2
+    KRON = np.kron(B, B)                                                   # node (a, b) <- coefficient (p, q)
     outline = al_layout.simplified(frame, 0.05)
     without = 0
     sag_lo, sag_hi = 0.0, 0.0
@@ -444,48 +518,72 @@ def build(settings: LensSettings, frame: np.ndarray, progress=None) -> LensSyste
             edge = np.concatenate([corners[k] + np.linspace(0, 1, 9)[:, None] * (corners[(k + 1) % 4] - corners[k])
                                    for k in range(4)])
             system.whole[i, j] = bool(al_layout.contains(outline, edge).all())
-            e = system.element(ya + 0.5 * s.cell_width, za + 0.5 * s.cell_height)
-            if e is None:
-                without += 1
-                e = Element(0, 0, 0, 0)
             Y, Z = np.meshgrid(ya + t * s.cell_width, za + t * s.cell_height, indexing="ij")
             arrive = system.chief(Y, Z)
-            # y runs to the left: the cell's left part turns its light to the left
-            turn_h, turn_v = e.offsets((0.5 - t)[:, None] * s.cell_width + 0.0 * t[None, :],
-                                       (t - 0.5)[None, :] * s.cell_height + 0.0 * t[:, None],
-                                       s.cell_width, s.cell_height)
-            H = np.degrees(np.arctan(-arrive[..., 1] / arrive[..., 0])) + e.deflect_h + turn_h
-            V = np.degrees(np.arctan(arrive[..., 2] / arrive[..., 0])) + e.deflect_v + turn_v
-            want = direction(np.tan(np.radians(H)), np.tan(np.radians(V)))
             base, base_y, base_z = system.shape(Y, Z)
             outer = np.stack([np.ones_like(base_y), -base_y, -base_z], axis=-1)
             outer /= np.linalg.norm(outer, axis=-1, keepdims=True)
-            # the direction in the glass: the wanted ray followed backwards through the outer side
-            back, _ = refract(-want.reshape(-1, 3), -outer.reshape(-1, 3), 1.0 / s.index)
-            glass = -back.reshape(want.shape)
-            normal = arrive - s.index * glass
-            if np.any(normal[..., 0] >= -1e-6):
-                raise DesignError(f"the lens element at y = {ya + 0.5 * s.cell_width:.0f}, z = "
-                                  f"{za + 0.5 * s.cell_height:.0f} mm cannot bend the light that far – reduce "
-                                  "its deflection or spread")
-            sy, sz = -normal[..., 1] / normal[..., 0], -normal[..., 2] / normal[..., 0]
-            # the element on the lens' shape: its slopes along y through the cell's centre, then along z
-            ey, ez = sy - base_y, sz - base_z
-            da, db = s.cell_width / (NODES - 1), s.cell_height / (NODES - 1)
-            line = np.concatenate([[0.0], np.cumsum(0.5 * (ey[1:, mid] + ey[:-1, mid]) * da)])
-            up = np.concatenate([np.zeros((NODES, 1)), np.cumsum(0.5 * (ez[:, 1:] + ez[:, :-1]) * db, axis=1)], axis=1)
-            sag = line[:, None] + up - up[:, mid:mid + 1]
-            sag -= sag[mid, mid]
-            sag_lo, sag_hi = min(sag_lo, float(sag.min())), max(sag_hi, float(sag.max()))
-            C = fit @ (base + sag) @ fit.T
-            system.coeff[i, j], system.used[i, j] = C, True
-            fy = DEGREE * (low @ (C[1:] - C[:-1]) @ B.T) / s.cell_width
-            fz = DEGREE * (B @ (C[:, 1:] - C[:, :-1]) @ low.T) / s.cell_height
-            system.fit_error = max(system.fit_error, float(np.abs(fy - sy).max()), float(np.abs(fz - sz).max()))
+            parts = [(0, corners[4], (s.cell_width, s.cell_height), np.ones((NODES, NODES), dtype=bool))]
+            if S > 1:                                                       # the cell's parts in the sectors
+                parts = []
+                at = system.sector(Y, Z)
+                for k in range(S):
+                    pieces = system.sector_pieces([corners[:4]], k)
+                    if sum(al_layout.area(q) for q in pieces) < 1e-6 * s.cell_width * s.cell_height:
+                        continue
+                    pts = np.vstack(pieces)
+                    lo_, hi_ = pts.min(axis=0), pts.max(axis=0)
+                    mask = at == k
+                    if not mask.any():                                      # a sliver between the nodes
+                        mask = np.zeros_like(mask)
+                        mask[np.unravel_index(np.argmin(np.hypot(Y - 0.5 * (lo_[0] + hi_[0]), Z - 0.5 * (lo_[1] + hi_[1]))),
+                                              mask.shape)] = True
+                    parts.append((k, 0.5 * (lo_ + hi_), tuple(np.maximum(hi_ - lo_, 1e-3)), mask))
+            for k, centre, (width, height), mask in parts:
+                e = system.element(ya + 0.5 * s.cell_width, za + 0.5 * s.cell_height, k)
+                if e is None:
+                    without += 1
+                    e = Element(0, 0, 0, 0)
+                # y runs to the left: the part's left side turns its light to the left
+                turn_h, turn_v = e.offsets(np.clip(centre[0] - Y, -0.5 * width, 0.5 * width),
+                                           np.clip(Z - centre[1], -0.5 * height, 0.5 * height), width, height)
+                H = np.degrees(np.arctan(-arrive[..., 1] / arrive[..., 0])) + e.deflect_h + turn_h
+                V = np.degrees(np.arctan(arrive[..., 2] / arrive[..., 0])) + e.deflect_v + turn_v
+                want = direction(np.tan(np.radians(H)), np.tan(np.radians(V)))
+                # the direction in the glass: the wanted ray followed backwards through the outer side
+                back, _ = refract(-want.reshape(-1, 3), -outer.reshape(-1, 3), 1.0 / s.index)
+                glass = -back.reshape(want.shape)
+                normal = arrive - s.index * glass
+                if np.any(normal[..., 0][mask] >= -1e-6):
+                    raise DesignError(f"the lens element at y = {centre[0]:.0f}, z = {centre[1]:.0f} mm cannot bend "
+                                      "the light that far – reduce its deflection or spread")
+                nx = np.where(normal[..., 0] < -1e-6, normal[..., 0], -1e-6)
+                sy, sz = -normal[..., 1] / nx, -normal[..., 2] / nx
+                # the element on the lens' shape: its slopes along y through the part's centre, then along z
+                ey, ez = sy - base_y, sz - base_z
+                da, db = s.cell_width / (NODES - 1), s.cell_height / (NODES - 1)
+                ma = int(np.clip(np.rint((centre[0] - ya) / da), 0, NODES - 1))
+                mb = int(np.clip(np.rint((centre[1] - za) / db), 0, NODES - 1))
+                line = np.concatenate([[0.0], np.cumsum(0.5 * (ey[1:, mb] + ey[:-1, mb]) * da)])
+                up = np.concatenate([np.zeros((NODES, 1)), np.cumsum(0.5 * (ez[:, 1:] + ez[:, :-1]) * db, axis=1)],
+                                    axis=1)
+                sag = line[:, None] + up - up[:, mb:mb + 1]
+                sag -= sag[ma, mb]
+                sag_lo, sag_hi = min(sag_lo, float(sag[mask].min())), max(sag_hi, float(sag[mask].max()))
+                if mask.all():
+                    C = fit @ (base + sag) @ fit.T
+                else:            # a part: fitted where it is, the rest of the cell only held loosely
+                    w = np.where(mask, 1.0, 1e-2).ravel()
+                    C = np.linalg.lstsq(w[:, None] * KRON, w * (base + sag).ravel(), rcond=None)[0].reshape(B.shape[1], -1)
+                system.coeff[i, j, k], system.used[i, j, k] = C, True
+                fy = DEGREE * (low @ (C[1:] - C[:-1]) @ B.T) / s.cell_width
+                fz = DEGREE * (B @ (C[:, 1:] - C[:, :-1]) @ low.T) / s.cell_height
+                system.fit_error = max(system.fit_error, float(np.abs(fy - sy)[mask].max()),
+                                       float(np.abs(fz - sz)[mask].max()))
     if not system.used.any():
         raise DesignError("the lens has no cell within the frame")
     if without:
-        system.warnings.append(f"{without} cells lie in no row of the element table: they are plane")
+        system.warnings.append(f"{without} cells (or their parts) lie in no row of the element table: they are plane")
     system.sag = (sag_lo, sag_hi)
     if s.wall_draft > 0.0:
         _join(system, progress)
@@ -524,7 +622,7 @@ def _join(system: LensSystem, progress=None) -> None:
             progress(0.5 * j / system.nz, "walls of the lens elements …")
         za = system.z0 + j * s.cell_height
         for i in range(1, system.ny):
-            if not (system.used[i - 1, j] and system.used[i, j]):
+            if not (system.used[i - 1, j].any() and system.used[i, j].any()):
                 continue
             border = T.LineBorder(np.array([system.y0 + i * s.cell_width, 0.0]), np.array([0.0, -1.0]))   # ξ along +y
             # (the stations stay inside the row: on its upper border a point belongs to the next row)
@@ -534,7 +632,7 @@ def _join(system: LensSystem, progress=None) -> None:
     for j in range(1, system.nz):                                          # between the rows
         if progress is not None:
             progress(0.5 + 0.5 * j / system.nz, "walls of the lens elements …")
-        both = np.flatnonzero(system.used[:, j - 1] & system.used[:, j])
+        both = np.flatnonzero(system.used[:, j - 1].any(axis=1) & system.used[:, j].any(axis=1))
         if not len(both):
             continue
         border = T.LineBorder(np.array([0.0, system.z0 + j * s.cell_height]), np.array([1.0, 0.0]))      # ξ along +z
@@ -586,35 +684,39 @@ def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, di
              "points": [round(float(c), 8) for c in pts.reshape(-1)]}
     out.append(("lens", "Lens outer side", {"type": "trimmed_surface", "surface": plane,
                                             "outer": [_loop(system.frame)], "label": "lens outer side"}))
-    # the cells: Bézier patches of degree 5
+    # the cells (their parts in the sectors): Bézier patches of degree 5
+    S = system.count
     for i in range(system.ny):
         for j in range(system.nz):
-            if not system.used[i, j]:
-                continue
             ya, za = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
             yb, zb = ya + s.cell_width, za + s.cell_height
             cell = np.array([[ya, za], [yb, za], [yb, zb], [ya, zb]])
-            pieces = [system.frame]
-            left, right = system.column_bands.get((i, j)), system.column_bands.get((i + 1, j))   # the bands take
-            below, above = system.row_bands.get(j), system.row_bands.get(j + 1)                    # their share
-            for normal, offset in (((1.0, 0.0), ya + (left.half_width if left else 0.0)),
-                                   ((-1.0, 0.0), -yb + (right.half_width if right else 0.0)),
-                                   ((0.0, 1.0), za + (below.half_width if below else 0.0)),
-                                   ((0.0, -1.0), -zb + (above.half_width if above else 0.0))):
-                pieces = al_layout.clip_all(pieces, al_layout.Line(np.array(normal), offset))
-            if not pieces:
-                continue
-            ctrl = [(s.lens_x + system.coeff[i, j, a, b] + ox, ya + (yb - ya) * a / DEGREE + oy,
-                     za + (zb - za) * b / DEGREE + oz) for a in range(DEGREE + 1) for b in range(DEGREE + 1)]
-            patch = {"degree_u": DEGREE, "degree_v": DEGREE, "knots_u": [ya] * (DEGREE + 1) + [yb] * (DEGREE + 1),
-                     "knots_v": [za] * (DEGREE + 1) + [zb] * (DEGREE + 1), "num_u": DEGREE + 1, "num_v": DEGREE + 1,
-                     "points": [round(float(c), 8) for p in ctrl for c in p]}
-            for piece in pieces:
-                whole = abs(al_layout.area(piece) - al_layout.area(cell)) < 1e-6 and not (left or right or below or above)
-                face = {"type": "trimmed_surface", "surface": patch, "label": f"lens element {i}.{j}"}
-                if not whole:
-                    face["outer"] = [_loop(piece)]
-                out.append(("element", f"Lens element {i}.{j}", face))
+            for k in np.flatnonzero(system.used[i, j]):
+                pieces = [system.frame]
+                left, right = system.column_bands.get((i, j)), system.column_bands.get((i + 1, j))   # the bands take
+                below, above = system.row_bands.get(j), system.row_bands.get(j + 1)                    # their share
+                for normal, offset in (((1.0, 0.0), ya + (left.half_width if left else 0.0)),
+                                       ((-1.0, 0.0), -yb + (right.half_width if right else 0.0)),
+                                       ((0.0, 1.0), za + (below.half_width if below else 0.0)),
+                                       ((0.0, -1.0), -zb + (above.half_width if above else 0.0))):
+                    pieces = al_layout.clip_all(pieces, al_layout.Line(np.array(normal), offset))
+                if S > 1:
+                    pieces = system.sector_pieces(pieces, int(k))
+                if not pieces:
+                    continue
+                C = system.coeff[i, j, k]
+                ctrl = [(s.lens_x + C[a_, b_] + ox, ya + (yb - ya) * a_ / DEGREE + oy, za + (zb - za) * b_ / DEGREE + oz)
+                        for a_ in range(DEGREE + 1) for b_ in range(DEGREE + 1)]
+                patch = {"degree_u": DEGREE, "degree_v": DEGREE, "knots_u": [ya] * (DEGREE + 1) + [yb] * (DEGREE + 1),
+                         "knots_v": [za] * (DEGREE + 1) + [zb] * (DEGREE + 1), "num_u": DEGREE + 1,
+                         "num_v": DEGREE + 1, "points": [round(float(c), 8) for p in ctrl for c in p]}
+                name = f"lens element {i}.{j}" + (f"/{k}" if S > 1 else "")
+                for piece in pieces:
+                    whole = abs(al_layout.area(piece) - al_layout.area(cell)) < 1e-6 and not (left or right or below or above)
+                    face = {"type": "trimmed_surface", "surface": patch, "label": name}
+                    if not whole:
+                        face["outer"] = [_loop(piece)]
+                    out.append(("element", name.capitalize(), face))
     if system.column_bands or system.row_bands:        # walls with a draft: the bands that join the cells
         here = (ox + s.lens_x, oy, oz)
         for key, band in sorted(system.row_bands.items()) + sorted(system.column_bands.items()):
@@ -639,36 +741,115 @@ def faces(system: LensSystem, origin=(0.0, 0.0, 0.0)) -> list[tuple[str, str, di
                 out.append(("wall", name, {"type": "trimmed_surface", "surface": surface, "label": name.lower(),
                                            "outer": [_loop(loop if al_layout.area(loop) > 0 else loop[::-1])]}))
         return out
-    # the walls between neighbouring cells: ruled along X between the two patches' rims
+    # the walls between neighbouring cells: ruled along X between the two patches' rims – on a border
+    # the radial lines cross, piece by piece between them
     outline = al_layout.simplified(system.frame, 0.05)
     fraction = np.arange(DEGREE + 1) / DEGREE
     for i in range(system.ny):
         for j in range(system.nz):
-            if not system.used[i, j]:
+            if not system.used[i, j].any():
                 continue
             ya, za = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
             yb, zb = ya + s.cell_width, za + s.cell_height
-            for (ni, nj), mine, theirs, fixed, lo_v, hi_v, across in (
-                    ((i + 1, j), system.coeff[i, j, DEGREE, :], None, yb, za, zb, False),
-                    ((i, j + 1), system.coeff[i, j, :, DEGREE], None, zb, ya, yb, True)):
-                if ni >= system.ny or nj >= system.nz or not system.used[ni, nj]:
+            for (ni, nj), fixed, lo_v, hi_v, across in (((i + 1, j), yb, za, zb, False), ((i, j + 1), zb, ya, yb, True)):
+                if ni >= system.ny or nj >= system.nz or not system.used[ni, nj].any():
                     continue
-                theirs = system.coeff[ni, nj, :, 0] if across else system.coeff[ni, nj, 0, :]
-                if np.abs(mine - theirs).max() < 1e-6:
-                    continue                                                # no step here
-                v = lo_v + (hi_v - lo_v) * np.linspace(0.0, 1.0, 33)
-                line = np.column_stack([v, np.full(33, fixed)] if across else [np.full(33, fixed), v])
-                on = v[al_layout.contains(outline, line)]
+                for va, vb in _between(system, fixed, lo_v, hi_v, across):
+                    vm = 0.5 * (va + vb)
+                    k = int(system.sector(*((vm, fixed) if across else (fixed, vm))))
+                    if not (system.used[i, j, k] and system.used[ni, nj, k]):
+                        continue
+                    mine = system.coeff[i, j, k, :, DEGREE] if across else system.coeff[i, j, k, DEGREE, :]
+                    theirs = system.coeff[ni, nj, k, :, 0] if across else system.coeff[ni, nj, k, 0, :]
+                    if np.abs(mine - theirs).max() < 1e-6:
+                        continue                                            # no step here
+                    v = va + (vb - va) * np.linspace(0.0, 1.0, 33)
+                    line = np.column_stack([v, np.full(33, fixed)] if across else [np.full(33, fixed), v])
+                    on = v[al_layout.contains(outline, line)]
+                    if len(on) < 2:
+                        continue
+                    ctrl = [(s.lens_x + edge[b_] + ox, (lo_v + (hi_v - lo_v) * fraction[b_] if across else fixed) + oy,
+                             (fixed if across else lo_v + (hi_v - lo_v) * fraction[b_]) + oz)
+                            for edge in (mine, theirs) for b_ in range(DEGREE + 1)]
+                    wall = {"degree_u": 1, "degree_v": DEGREE, "knots_u": [0.0, 0.0, 1.0, 1.0],
+                            "knots_v": [lo_v] * (DEGREE + 1) + [hi_v] * (DEGREE + 1), "num_u": 2,
+                            "num_v": DEGREE + 1, "points": [round(float(c), 8) for p in ctrl for c in p]}
+                    name = f"lens wall {i}.{j}|{ni}.{nj}" + (f"/{k}" if S > 1 else "")
+                    face = {"type": "trimmed_surface", "surface": wall, "label": name}
+                    if on[0] > lo_v + 1e-9 or on[-1] < hi_v - 1e-9:        # the outline or a radial line ends it
+                        face["outer"] = [_loop(np.array([[0.0, on[0]], [1.0, on[0]], [1.0, on[-1]], [0.0, on[-1]]]))]
+                    out.append(("wall", name.capitalize(), face))
+    out += _radial_walls(system, outline, origin)
+    return out
+
+
+def _between(system: LensSystem, fixed: float, lo_v: float, hi_v: float, across: bool) -> list[tuple[float, float]]:
+    """The pieces of a cell border (z = fixed for `across`, else y = fixed; v from lo_v to hi_v)
+    between the radial lines of the sectors that cross it."""
+    cuts = [lo_v, hi_v]
+    for a in np.radians(system.bounds):
+        c, n = math.cos(a), math.sin(a)
+        reach, along = (n, c) if across else (c, n)
+        if abs(reach) > 1e-12 and fixed / reach > 0.0:
+            v = fixed / reach * along
+            if lo_v + 1e-9 < v < hi_v - 1e-9:
+                cuts.append(v)
+    cuts = sorted(cuts)
+    return [(a, b) for a, b in zip(cuts[:-1], cuts[1:]) if b - a > 1e-9]
+
+
+def _radial_walls(system: LensSystem, outline: np.ndarray, origin) -> list[tuple[str, str, dict]]:
+    """The walls along the radial lines between the parts of a cut cell: ruled along X between the
+    two patches along the line – a patch of degree 5 along a straight line is a curve of degree 10,
+    exact as such."""
+    s = system.settings
+    ox, oy, oz = origin
+    out = []
+    S = system.count
+    if S < 2:
+        return out
+    m = 2 * DEGREE
+    tau = np.linspace(0.0, 1.0, m + 1)
+    solve = np.linalg.inv(_bernstein(tau, m))
+    for i in range(system.ny):
+        for j in range(system.nz):
+            if system.used[i, j].sum() < 2:
+                continue
+            ya, za = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
+            yb, zb = ya + s.cell_width, za + s.cell_height
+            for q, a in enumerate(np.radians(system.bounds)):
+                d = np.array([math.cos(a), math.sin(a)])
+                lo, hi = 0.0, np.inf                                        # the ray t d (t >= 0) within the cell
+                for axis, (c0, c1) in enumerate(((ya, yb), (za, zb))):
+                    if abs(d[axis]) < 1e-12:
+                        if not c0 <= 0.0 <= c1:
+                            hi = -1.0
+                        continue
+                    t0, t1 = sorted((c0 / d[axis], c1 / d[axis]))
+                    lo, hi = max(lo, t0), min(hi, t1)
+                if not hi - lo > 1e-6:
+                    continue
+                before, after = (q - 1) % S, q                              # clockwise of the line, counter-clockwise
+                if not (system.used[i, j, before] and system.used[i, j, after]):
+                    continue
+                p0, p1 = lo * d, hi * d
+                pts = p0 + tau[:, None] * (p1 - p0)
+                ta, tb = (pts[:, 0] - ya) / s.cell_width, (pts[:, 1] - za) / s.cell_height
+                Ba, Bb = _bernstein(ta), _bernstein(tb)
+                edges = [solve @ np.einsum("np,pq,nq->n", Ba, system.coeff[i, j, k], Bb) for k in (before, after)]
+                if np.abs(edges[0] - edges[1]).max() < 1e-6:
+                    continue
+                v = np.linspace(0.0, 1.0, 33)
+                on = v[al_layout.contains(outline, p0 + v[:, None] * (p1 - p0))]
                 if len(on) < 2:
                     continue
-                ctrl = [(s.lens_x + edge[b] + ox, (lo_v + (hi_v - lo_v) * fraction[b] if across else fixed) + oy,
-                         (fixed if across else lo_v + (hi_v - lo_v) * fraction[b]) + oz)
-                        for edge in (mine, theirs) for b in range(DEGREE + 1)]
-                wall = {"degree_u": 1, "degree_v": DEGREE, "knots_u": [0.0, 0.0, 1.0, 1.0],
-                        "knots_v": [lo_v] * (DEGREE + 1) + [hi_v] * (DEGREE + 1), "num_u": 2, "num_v": DEGREE + 1,
+                ctrl = [(s.lens_x + edge[b] + ox, pts[b, 0] + oy, pts[b, 1] + oz) for edge in edges for b in range(m + 1)]
+                wall = {"degree_u": 1, "degree_v": m, "knots_u": [0.0, 0.0, 1.0, 1.0],
+                        "knots_v": [0.0] * (m + 1) + [1.0] * (m + 1), "num_u": 2, "num_v": m + 1,
                         "points": [round(float(c), 8) for p in ctrl for c in p]}
-                face = {"type": "trimmed_surface", "surface": wall, "label": f"lens wall {i}.{j}|{ni}.{nj}"}
-                if on[0] > lo_v or on[-1] < hi_v:                           # the outline ends the wall
+                name = f"lens wall {i}.{j}/{before}|{after}"
+                face = {"type": "trimmed_surface", "surface": wall, "label": name}
+                if on[0] > 1e-9 or on[-1] < 1.0 - 1e-9:
                     face["outer"] = [_loop(np.array([[0.0, on[0]], [1.0, on[0]], [1.0, on[-1]], [0.0, on[-1]]]))]
-                out.append(("wall", f"Lens wall {i}.{j}|{ni}.{nj}", face))
+                out.append(("wall", name.capitalize(), face))
     return out
