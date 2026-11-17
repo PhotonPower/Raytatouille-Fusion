@@ -115,10 +115,31 @@ class RaytracerPlugin(Plugin):
                 loaded.append(f)
             except Exception as e:  # noqa: BLE001 - a broken catalogue should not stop the others
                 ctx.log(f"catalogue {f}: {e}")
-        if loaded:
-            ctx.log("glass catalogues: " + ", ".join(Path(f).name for f in loaded))
+        stored = self._stored_catalogues(ctx, lib)
+        if loaded or stored:
+            ctx.log("glass catalogues: " + ", ".join([Path(f).name for f in loaded] + stored))
         self.catalogue_paths = loaded  # written into the workflow for the engine (ADR 0010)
         return lib
+
+    @staticmethod
+    def _stored_catalogues(ctx, lib) -> list[str]:
+        """The glass catalogues the workflow holds (stored by the workflow engine from this panel's
+        list) that no file gave: the document computes without the .agf files. Their names."""
+        try:
+            embedded = importlib.import_module("rtt_fusion.graph.embedded")
+            nodes = (ctx.workflow().get("model") or ctx.workflow().get("graph") or {}).get("nodes", [])
+        except Exception:  # noqa: BLE001 - an older RTT-Fusion or CAD: the files only
+            return []
+        have = set(lib.catalogs())
+        out = []
+        for node in nodes:
+            if node.get("type") != "rtt.source":
+                continue
+            missing = [c for c in node.get("params", {}).get("rtt_catalog_data") or [] if c.get("name") not in have]
+            for line in embedded.load_catalogs(lib, {"rtt_catalog_data": missing}):
+                ctx.log(line)
+            out += [f"{c.get('file')} (stored)" for c in missing if c.get("name") in set(lib.catalogs())]
+        return out
 
     def _entities(self, ctx) -> list[dict]:
         return [e for e in ctx.entities() if "rtt.surface" in e["attributes"] or "rtt.rim" in e["attributes"]]

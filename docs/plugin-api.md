@@ -94,6 +94,7 @@ document as modified but is not an undo step.
 | `ctx.selection` | ids of the selected objects when the action started |
 | `ctx.params` | parameter values from the *Plugin* panel, converted to Python types (see below) |
 | `ctx.export_step(ids, path)` | writes shells and surfaces as STEP, one body each named after its entity, in the given order (as *File → Export*); a curve or point among them is an error |
+| `ctx.plugin_params(plugin_id)` | the parameters another plugin's panel holds in this document (read only; only the values set there, not its defaults) |
 | `ctx.set_params({name: value})` | sets parameters of this plugin (e.g. from a configuration file the user loads): saved in the document, shown in the panel, given to the next action; an unknown name is an error |
 | `ctx.entities(ids=None, selection=False)` | objects as dicts; `geometry` in the [.nfcad format](file-format.md) |
 | `ctx.add(geometry, name, attributes, group=0)` | new object (in a model tree group), returns its id |

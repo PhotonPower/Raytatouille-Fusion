@@ -397,6 +397,9 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     emit doc_->pluginParametersSet(manifest_.id);
     return true;
   }
+  if (method == QLatin1String("params.of")) {  // another plugin's parameters, as its panel holds them (read only)
+    return doc_->pluginParameters(args["plugin"].toString());
+  }
   if (method == QLatin1String("workflow.get")) return doc_->workflow();
   if (method == QLatin1String("workflow.state")) {
     doc_->reportWorkflowState(args["states"].toObject());

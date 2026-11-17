@@ -7,11 +7,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
-- **Workflow panel: *Glass catalogues*.** A document that names a glass catalogue this machine
-  cannot read (e.g. only `de10316415.agf`) no longer stops *Run workflow* with an `AgfError`. The
-  log names the catalogue and says how to fix it. Add the .agf file once under *Glass
-  catalogues*, and the next Check or Run stores it in the document and empties the list. Stored
-  catalogues travel with the `.rttf` file, like the grating tables (RTT-Fusion #87).
+- **Glass catalogues in one place: the Raytracer panel.** The workflow takes the catalogues listed
+  there (and *.agf next to the system file) and stores them in the document at the next Check or
+  Run. The `.rttf` file then computes without the .agf files, also in the Raytracer panel, which
+  uses the stored catalogues when a file is missing. A catalogue that cannot be read no longer
+  stops *Run workflow* with a traceback. The log and the status line name the catalogue, the
+  glasses that are missing, and the fix (RTT-Fusion #87, #89). Plugin API:
+  `ctx.plugin_params(plugin_id)` reads another plugin's panel values.
 - **Automotive Lighting plugin**: lens **sectors** – radial sections about the lamp axis, as the
   zones of a clear-lens reflector (a new table: azimuth and cut-off branch). They cut the cells along
   radial lines, each part an element of its own (a new *sector* column of the element table), the

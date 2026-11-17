@@ -106,6 +106,12 @@ class Context:
         self._host.request("params.set", {"values": dict(values)})
         self.params.update(values)
 
+    def plugin_params(self, plugin: str) -> dict:
+        """The parameters another plugin's panel holds in this document (read only): the values set
+        there, without that plugin's defaults; {} if none are set. E.g. the workflow engine uses
+        the glass catalogues of the Raytracer panel."""
+        return dict(self._host.request("params.of", {"plugin": plugin}) or {})
+
     def block_catalogues(self) -> list:
         """The block types the other plugins provide (ADR 0010): {"provider", "version", "type"}
         per type; for the workflow engine."""
