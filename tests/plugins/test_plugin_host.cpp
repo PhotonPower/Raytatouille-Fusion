@@ -52,7 +52,7 @@ class TestPluginHost : public QObject {
     host_->start(python_, plugins::PluginManager::nfcadPythonPath());
     QVERIFY2(ready.wait(20000), qPrintable(failed.isEmpty() ? QStringLiteral("timeout")
                                                             : failed.first().at(0).toString()));
-    QCOMPARE(host_->actions().size(), std::size_t{11});
+    QCOMPARE(host_->actions().size(), std::size_t{12});
     QCOMPARE(host_->paramsSchema().size(), 5);
     QCOMPARE(host_->paramsSchema()[0].toObject()["name"].toString(), QStringLiteral("count"));  // order kept
   }
@@ -192,6 +192,17 @@ class TestPluginHost : public QObject {
     QCOMPARE(doc_.pluginParameters(QStringLiteral("test"))["count"].toInt(), 9);
     QCOMPARE(told.count(), 1);
     QCOMPARE(told.first().at(0).toString(), QStringLiteral("test"));
+  }
+
+  void pluginReadsAnotherPluginsParameters() {
+    // ctx.plugin_params: what another plugin's panel holds in the document (the workflow engine
+    // takes the Raytracer's glass catalogues); {} for a plugin without values
+    doc_.setPluginParameters(QStringLiteral("raytracer"),
+                             QJsonObject{{"catalogs", QJsonArray{QStringLiteral("/a/b.agf")}}});
+    QSignalSpy finished(host_.get(), &plugins::PluginHost::finished);
+    QVERIFY(host_->run(QStringLiteral("other_params")) > 0);
+    QVERIFY(waitFinished(finished));
+    QCOMPARE(finished.first().at(3).toString(), QStringLiteral("['/a/b.agf']|{}"));
   }
 
   void tablesAndBars() {

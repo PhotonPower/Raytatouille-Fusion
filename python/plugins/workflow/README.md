@@ -21,7 +21,7 @@ the rays cross or focus near it, and rays otherwise; after the run such a link s
 used, e.g. **R→H** (planned R, computed as fields). The engine knows no kernel – the blocks' data
 come with the workflow (a Raytatouille system from the data of the `rtt.*` blocks, its glass
 catalogues stored in the source, `rtt_catalog_data`, from the files the Raytracer plugin writes
-into `rtt_catalogs` or that *Glass catalogues* in the panel adds once). Until stage W3 the
+into `rtt_catalogs` or lists under *Glass catalogues* in its panel – the one place for them). Until stage W3 the
 blocks of all kernels are evaluated in this plugin's process, so its Python environment needs
 `rtt_fusion` and, for Raytatouille blocks, `raytatouille` (the same environment as the Raytracer).
 

@@ -74,6 +74,11 @@ class TestPlugin(Plugin):
             return f"{ctx.params['count']}|refused: {e}"
         return "not refused"
 
+    @action("Other plugin's parameters")
+    def other_params(self, ctx):
+        other = ctx.plugin_params("raytracer")
+        return f"{other.get('catalogs')}|{ctx.plugin_params('nobody')}"
+
     @action("Tables")
     def tables(self, ctx):
         run = ctx.result_set("orders")

@@ -163,7 +163,8 @@ with tempfile.TemporaryDirectory() as tmp:
         finally:
             workflow_plugin._evaluators = plain
 
-    # a glass catalogue the document names only by its file name: added once in the panel, stored
+    # a glass catalogue the document names only by its file name: the Raytracer panel's list is
+    # stored in the workflow
     from rtt_fusion.graph import embedded
 
     if hasattr(embedded, "load_catalogs"):
@@ -176,10 +177,9 @@ with tempfile.TemporaryDirectory() as tmp:
         engine = workflow_plugin.WorkflowEngine()
         stored, problems = engine._embed(ctx, workflow, g)
         assert not stored and problems[0]["code"] == "graph.file_unreadable", problems
-        ctx.params["catalogs"] = [str(agf)]
-        ctx.set_params = lambda values: ctx.params.update(values)
+        ctx.plugin_params = lambda plugin: {"catalogs": [str(agf)]} if plugin == "raytracer" else {}
         stored, problems = engine._embed(ctx, workflow, g)
-        assert stored and not problems and ctx.params["catalogs"] == [], (problems, ctx.params)
+        assert stored and not problems, problems
         assert g.nodes["source"].params["rtt_catalogs"] == []
         agf.unlink()
         lines: list[str] = []

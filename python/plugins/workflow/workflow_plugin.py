@@ -44,6 +44,35 @@ def _fusion():
     return workflow, fg, execute, io
 
 
+#: the Raytracer plugin's folder: its process resolves a catalogue named without a folder there
+_RAYTRACER = Path(__file__).resolve().parents[1] / "raytracer"
+
+
+def _raytracer_catalogues(ctx) -> list[str]:
+    """The glass catalogues of the Raytracer panel, as the Raytracer finds them: the listed files
+    (one without a folder next to the system file or in the Raytracer's folder) and *.agf next to
+    the system file and in its folder "catalogs". One place for the catalogues: the workflow
+    stores what the Raytracer uses. [] without `ctx.plugin_params` (an older CAD)."""
+    if not hasattr(ctx, "plugin_params"):
+        return []
+    try:
+        params = ctx.plugin_params("raytracer")
+    except Exception:  # noqa: BLE001 - no Raytracer: only what the workflow holds
+        return []
+    system = Path(str(params.get("system") or "")).expanduser()
+    folder = system.parent if system.is_absolute() else None
+    out: list[str] = []
+    for name in params.get("catalogs") or []:
+        path = Path(str(name)).expanduser()
+        if not path.is_absolute():
+            candidates = [d / path for d in (folder, _RAYTRACER) if d is not None]
+            path = next((c for c in candidates if c.is_file()), candidates[-1])
+        out.append(str(path.resolve()))
+    if folder is not None and folder.is_dir():
+        out += [str(p.resolve()) for p in sorted(folder.glob("*.agf")) + sorted((folder / "catalogs").glob("*.agf"))]
+    return list(dict.fromkeys(out))
+
+
 def _link_target(key: str) -> str:
     """The block a link key "a.out -> b.in" leads to."""
     return key.split(" -> ", 1)[-1].rsplit(".", 1)[0]
@@ -84,11 +113,6 @@ class WorkflowEngine(Plugin):
                                                     "within it. 0.02 is its default; near a focus 0.05 often lets "
                                                     "Debye (seconds) through instead of Rayleigh–Sommerfeld "
                                                     "(minutes to hours); the log names the method and its error"),
-        "catalogs": Param.files([], filter="Glass catalogues (*.agf *.AGF);;All files (*)", label="Glass catalogues",
-                                description="AGF files for the Raytatouille blocks, e.g. when the log says a "
-                                            "catalogue cannot be read: the next Check or Run stores them in the "
-                                            "workflow (the document then computes without them) and empties "
-                                            "this list"),
     }
 
     def __init__(self):
@@ -132,8 +156,8 @@ class WorkflowEngine(Plugin):
         embed = getattr(workflow, "embed_files", None)
         if embed is None:
             return False, []
-        added = [str(Path(p).expanduser().resolve()) for p in (ctx.params.get("catalogs") or []) if p]
-        if added:  # the panel's glass catalogues go to the sources, which store them
+        added = _raytracer_catalogues(ctx)
+        if added:  # the Raytracer panel's glass catalogues go to the sources, which store them
             for node in model.nodes.values():
                 if node.type_id == "rtt.source":
                     node.params["rtt_catalogs"] = list(dict.fromkeys([*(node.params.get("rtt_catalogs") or []),
@@ -141,10 +165,7 @@ class WorkflowEngine(Plugin):
         done = embed(model)
         for line in done.stored:
             ctx.log(line)
-        problems = [dict(d.__dict__) for d in done.diagnostics]
-        if added and hasattr(ctx, "set_params") and not any(p in d["message"] for d in problems for p in added):
-            ctx.set_params({"catalogs": []})  # stored: no paths of this machine in the document
-        return bool(done.stored), problems
+        return bool(done.stored), [dict(d.__dict__) for d in done.diagnostics]
 
     @staticmethod
     def _document(workflow, model, registry, wf, providers):
