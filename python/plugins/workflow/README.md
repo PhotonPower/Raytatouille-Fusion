@@ -20,7 +20,8 @@ near a focus*: a detector on a link left on auto computes fields from the last s
 the rays cross or focus near it, and rays otherwise; after the run such a link shows what was
 used, e.g. **R→H** (planned R, computed as fields). The engine knows no kernel – the blocks' data
 come with the workflow (a Raytatouille system from the data of the `rtt.*` blocks, its glass
-catalogues from the source's `rtt_catalogs`, written by the Raytracer plugin). Until stage W3 the
+catalogues stored in the source, `rtt_catalog_data`, from the files the Raytracer plugin writes
+into `rtt_catalogs` or that *Glass catalogues* in the panel adds once). Until stage W3 the
 blocks of all kernels are evaluated in this plugin's process, so its Python environment needs
 `rtt_fusion` and, for Raytatouille blocks, `raytatouille` (the same environment as the Raytracer).
 
