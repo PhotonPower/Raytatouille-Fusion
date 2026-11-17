@@ -60,6 +60,9 @@ SWEEPS, LATER = 8, 3                               # sweeps at most: the first r
 DEPTH = 0.85                                       # share of the lens' thickness (less 0.3 mm) the elements may take
 DAMPING = 0.5                                      # share of the full model's difference carried back per round
 STEP = 0.1                                         # the cut-off's fall where R112 measures it
+FIELD_H, FIELD_V = 20.0, -5.0                      # degrees: the beam judged for its evenness: |H| ≤ 20°, V ≥ −5° …
+FIELD_GAP = 0.4                                    # … up to this far below the cut-off line
+BUMP_H, BUMP_V = 2, 3                              # bins (1°, 0.3°): the field's lattice, the scale of the bumps counted
 ABOVE = 0.3                                        # degrees above the cut-off from which it must be dark
 
 
@@ -144,6 +147,9 @@ class Probes:
     bins: np.ndarray
     omega: np.ndarray                               # solid angle of each bin (sr)
     groups: list = field(default_factory=list)
+    field: np.ndarray | None = None                 # positions in bins of the field judged for evenness (rows, columns)
+    inside: np.ndarray | None = None                # which of them lie below the cut-off
+    reference: float = 1.0                          # cd: the evenness' measure (R112's minimum at 50R)
 
 
 def grid() -> tuple[np.ndarray, np.ndarray]:
@@ -205,20 +211,47 @@ def probes(cutoff: Cutoff) -> Probes:
     groups.append(Group("under the cut-off", add(np.flatnonzero((near & (V >= level - 0.35) & (V <= level - 0.15)).ravel()))))
     groups.append(Group("over the cut-off", add(np.flatnonzero((near & (V >= level + 0.15) & (V <= level + 1.0)).ravel())),
                         each=True, relative="under the cut-off", factor=STEP))
+    # the field whose evenness counts: below the cut-off (FIELD_GAP), |H| ≤ FIELD_H, V ≥ FIELD_V, on
+    # a lattice of every BUMP_H-th bin across and BUMP_V-th up and down (the views judged blurred as
+    # the lamp blurs: nothing hides between its points)
+    cols = np.flatnonzero(np.abs(h) <= FIELD_H + 1e-9)[::BUMP_H]
+    line = np.degrees(np.arctan(cutoff.line(np.tan(np.radians(h[cols])))))
+    rows = np.flatnonzero((v >= FIELD_V - 1e-9) & (v <= line.max() - FIELD_GAP))[::BUMP_V]
+    where = add((rows[:, None] * len(h) + cols[None, :]).ravel()).reshape(len(rows), len(cols))
+    inside = v[rows][:, None] <= line[None, :] - FIELD_GAP
+    reference = next(tp.minimum for tp in al_photometry.R112_CLASS_B if tp.name == "50R")
     flat = np.asarray(bins)
     omega = al_photometry._solid_angle(h[flat % len(h)], v[flat // len(h)], DH, DV)
-    return Probes(flat, omega, groups)
+    return Probes(flat, omega, groups, where, inside, float(reference))
+
+
+def bumps(F: np.ndarray, inside: np.ndarray) -> np.ndarray:
+    """The mean square of the bumps of intensities F (..., rows, columns) on the field's lattice:
+    second differences between neighbours across and up and down, where all three points are
+    inside. A plane or a steady slope has none; a patch, a stripe, a hot spot has."""
+    a, b = 1, 1
+    across = F[..., :, 2 * a:] - 2.0 * F[..., :, a:-a] + F[..., :, :-2 * a]
+    ok_a = inside[:, 2 * a:] & inside[:, a:-a] & inside[:, :-2 * a]
+    up = F[..., 2 * b:, :] - 2.0 * F[..., b:-b, :] + F[..., :-2 * b, :]
+    ok_u = inside[2 * b:] & inside[b:-b] & inside[:-2 * b]
+    return ((across ** 2 * ok_a).sum(axis=(-2, -1)) + (up ** 2 * ok_u).sum(axis=(-2, -1))) / (ok_a.sum() + ok_u.sum())
+
+
+def evenness(I: np.ndarray, pr: Probes) -> np.ndarray:
+    """The rms of the bumps relative to pr.reference, for intensities I (..., bins) at the probes."""
+    return np.sqrt(bumps(I[..., pr.field], pr.inside)) / pr.reference
 
 
 CAP, TAU = 2.0, 0.05      # the margins counted up to 2x what is needed; softness of their minimum
 
 
-def objective(I: np.ndarray, pr: Probes, margin: float) -> np.ndarray:
+def objective(I: np.ndarray, pr: Probes, margin: float, uniformity: float = 0.0) -> np.ndarray:
     """The objective for intensities I (views, k, bins) of k candidates at the probes' bins, seen
     in one or more views (the filament images and the same blurred as the lamp blurs them): the
     squared shortfalls (in the darkest view) and excesses (in the brightest) beyond the margin, less
     EPSILON x the (soft) smallest of the ratios value / minimum and maximum / value (each up to
-    CAP) – the weakest requirement raised."""
+    CAP) – the weakest requirement raised –, plus `uniformity` x the squared rms of the bumps
+    (relative to 50R's minimum) in the last view – the lamp's as it is if it has one."""
     low_view, high_view = I.min(axis=0), I.max(axis=0)
     total = np.zeros(I.shape[1])
 
@@ -242,6 +275,8 @@ def objective(I: np.ndarray, pr: Probes, margin: float) -> np.ndarray:
     R = np.stack(ratios, axis=1)
     weakest = R.min(axis=1)
     soft = weakest - TAU * np.log(np.exp(-(R - weakest[:, None]) / TAU).sum(axis=1))
+    if uniformity > 0.0 and pr.field is not None:
+        total += uniformity * bumps(I[-1][:, pr.field], pr.inside) / pr.reference ** 2
     return total - EPSILON * soft
 
 
@@ -481,14 +516,15 @@ def _cost(dh, dv, sp, an, sur: Surrogate) -> np.ndarray:
     return LAMBDA * (np.abs(DEFLECT_H[dh]) + 5.0 * np.abs(DEFLECT_V[dv]) + sur.part_h[sp, an] + 5.0 * sur.part_v[sp, an])
 
 
-def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, progress=None) -> tuple[Choice, int]:
+def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, progress=None,
+            uniformity: float = 0.0) -> tuple[Choice, int]:
     """Coordinate descent over the cells (brightest first): each cell's deflection with its
     cylinder kept, then its cylinder (strength, direction) with its deflection kept. Returns the
     choice and the sweeps made."""
     pr = sur.probes
 
     def judged(flux):                            # (views, k, probes) -> objective (k)
-        return objective(flux / pr.omega + sur.background[:, None, :], pr, margin)
+        return objective(flux / pr.omega + sur.background[:, None, :], pr, margin, uniformity)
 
     total = sur.beam(choice)
     order = np.argsort(-sur.flux)
@@ -580,11 +616,12 @@ def resampled(dist: al_photometry.Distribution) -> tuple[np.ndarray, np.ndarray]
 def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, margin: float = 0.1,
              rounds: int = 2, blur: tuple[float, float] = (0.0, 0.0), spacing: float = 1.0,
              reflectance: float = 0.85, transmittance: float = 0.92, direct: bool = True, progress=None,
-             log=None) -> Result:
+             log=None, uniformity: float = 0.0) -> Result:
     """The elements of every cell. evaluate(system) -> Distribution: the filament images (with the
     lamp's direct light) of a lens built; rounds: how often half its difference from the surrogate
     is carried back; blur (fit_blur, sigma H, V in degrees): a second view in which the beam must
-    hold too – lower limits in the darker view, upper ones in the brighter."""
+    hold too – lower limits in the darker view, upper ones in the brighter; uniformity: the weight
+    of the beam's evenness (objective)."""
     def step(lo: float, hi: float):
         if progress is None:
             return None
@@ -614,7 +651,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     share = 0.8 / (rounds + 1)
     for r in range(rounds + 1):
         choice, sweeps = descend(sur, choice, margin, sweeps=SWEEPS if r == 0 else LATER,
-                                 progress=step(0.1 + r * share, 0.1 + r * share + 0.7 * share))
+                                 progress=step(0.1 + r * share, 0.1 + r * share + 0.7 * share), uniformity=uniformity)
         predicted = sur.full(choice) / omega + background
         elements = elements_of(plane, rays.cells, choice)
         system = al_lens.build(replace(settings, elements=elements), frame,
@@ -623,9 +660,10 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
         model, seen = resampled(dist)
         actual = np.stack([blurred(model, b) for b in sur.blurs])       # the model in the surrogate's views
         at = lambda a: a.reshape(len(sur.blurs), -1)[:, pr.bins]       # noqa: E731
-        score = float(objective(at(actual)[:, None, :], pr, margin)[0])
+        score = float(objective(at(actual)[:, None, :], pr, margin, uniformity)[0])
         result.rounds.append({"sweeps": sweeps, "surrogate": report(at(predicted), pr),
-                              "model": report(at(actual), pr), "objective": score})
+                              "model": report(at(actual), pr), "objective": score,
+                              "bumps": (float(evenness(at(predicted)[-1], pr)), float(evenness(at(actual)[-1], pr)))})
         if log is not None:
             log(r, sweeps, result.rounds[-1])
         if r == 0 or score < result.objective:       # the best round is kept

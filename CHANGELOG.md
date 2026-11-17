@@ -6,6 +6,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Added
+- **Automotive Lighting plugin**: *Optimise: evenness* – *Optimise lens* also makes the beam even
+  below the cut-off: the bumps (second differences over 1° across and 0.3° up and down, in the
+  lamp's blur) cost in the objective. For the H4 they halve (9.2 → 4.2 % of 50R's minimum in the
+  ray tracing) with R112 still met.
+
 ### Changed
 - **Automotive Lighting plugin**: the elements of a patterned lens may be turned (*spread turned
   by*, a new column of the element table): a cylinder lens turned by 15° spreads the light along a

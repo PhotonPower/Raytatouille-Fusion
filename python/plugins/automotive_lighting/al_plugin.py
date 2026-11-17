@@ -194,6 +194,11 @@ class AutomotiveLighting(Plugin):
                                                   "hold for it; the result is then checked by ray tracing"),
         "optimise_rounds": Param.integer(2, min=0, max=10, label="Optimise: rounds", group="Lens",
                                          description="how often the lens is built, checked and optimised again"),
+        "optimise_uniformity": Param.number(1.0, min=0.0, max=100.0, decimals=2, label="Optimise: evenness",
+                                            group="Lens",
+                                            description="the weight of the beam's evenness below the cut-off: patches, "
+                                                        "stripes and hot spots (bumps over 1° across, 0.3° up and down, "
+                                                        "relative to 50R's minimum) cost; 0: R112 alone"),
         "connect": Param.boolean(True, label="Connecting faces", group="Connecting faces",
                                  description="walls with draft and fillets between the facets: one mirror surface "
                                              "that can be moulded; off: the bare facets with steps between them"),
@@ -771,7 +776,8 @@ class AutomotiveLighting(Plugin):
         def log(r_: int, sweeps: int, values: dict) -> None:
             ctx.log(f"round {r_ + 1}: {sweeps} sweeps; " + ", ".join(
                 f"{k} {values['surrogate'][k]:.0f}/{values['model'][k]:.0f}" for k in values["model"])
-                + " cd (the surrogate's / the filament images')")
+                + " cd (the surrogate's / the filament images'); bumps "
+                + "/".join(f"{100.0 * b:.1f}" for b in values["bumps"]) + " % of 50R's minimum")
 
         start = time.time()
         blur = (0.0, 0.0)
@@ -789,7 +795,7 @@ class AutomotiveLighting(Plugin):
                                           rounds=int(p["optimise_rounds"]), blur=blur,
                                           spacing=float(p["sampling"]), reflectance=float(p["reflectance"]),
                                           transmittance=float(p["lens_transmittance"]), direct=bool(p["direct"]),
-                                          progress=progress, log=log)
+                                          progress=progress, log=log, uniformity=float(p["optimise_uniformity"]))
             checked = trace(result.system) if traced else None
         except (DesignError, RuntimeError, ValueError) as e:
             raise UserError(str(e)) from e
