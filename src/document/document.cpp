@@ -474,6 +474,13 @@ void Document::setPluginParameters(const QString& plugin, const QJsonObject& val
 
 void Document::setAllPluginParameters(const QJsonObject& all) { plugin_parameters_ = all; }
 
+void Document::markKeptChanged() {
+  if (!settings_dirty_) {
+    settings_dirty_ = true;
+    emit modificationChanged(true);
+  }
+}
+
 void Document::setWorkflow(const QJsonObject& workflow) {
   if (workflow_ == workflow) return;
   workflow_ = workflow;

@@ -377,11 +377,16 @@ class WorkflowEngine(Plugin):
         made = []
         ex = self._executor(ctx, graph, registry, evaluators, execute, wf)
         self._ran = set()
+        kept = self._kept(ctx)
         for k, node in enumerate(displays):
             ctx.check_cancel()
             a, b = k / len(displays), (k + 1) / len(displays)
             self._hook(ctx, ex, a, b, workflow)
             ctx.progress(a, f"display: {node.name or node.id}")
+            stamp = self._stamp(ex, node.id)
+            if stamp and kept.get(f"workflow:{node.id}") == stamp:  # the shown result is up to date
+                made.append(f"{node.name or node.id} (unchanged)")
+                continue
             try:
                 view = ex.evaluate(node.id, "view")
             except execute.ExecutionError as e:
@@ -407,11 +412,11 @@ class WorkflowEngine(Plugin):
                     ctx.log(f"{node.name or node.id}: dark – the light focuses into less than a pixel; {hint}")
                 ctx.image(run, view.title, view.image.values.reshape(-1), nx, ny, extent=view.image.extent,
                           x_label=view.x_label, y_label=view.y_label, unit=view.unit,
-                          description=f"{view.title}: {nx}×{ny} px", key=key)
+                          description=f"{view.title}: {nx}×{ny} px", key=key, **self._stamped(ctx, stamp))
             else:
                 for c in view.curves:
                     ctx.curve(run, f"{view.title}: {c.name}", c.x, c.y, x_label=view.x_label,
-                              y_label=view.y_label, key=key)
+                              y_label=view.y_label, key=key, **self._stamped(ctx, stamp))
             made.append(f"{node.name or node.id}")
         for line in ex.context.log:
             ctx.log(line)
@@ -484,12 +489,48 @@ class WorkflowEngine(Plugin):
         return execute.Executor(graph, registry, evaluators, shared, available=available, cache=self._cache,
                                 environment=environment)
 
+    @staticmethod
+    def _kept(ctx) -> dict:
+        """Fingerprints of the shown display results ({"workflow:<block>": stamp}), also of those
+        the document kept from an earlier session; {} with an older CAD."""
+        try:
+            return dict(ctx.result_stamps()) if hasattr(ctx, "result_stamps") else {}
+        except Exception:  # noqa: BLE001 - without fingerprints everything is computed
+            return {}
+
+    @staticmethod
+    def _stamp(ex, node_id: str) -> str:
+        """Fingerprint of a display's result: the content hash of everything it depends on (the
+        executor's cache key: parameters, inputs, settings), the same in every session."""
+        try:
+            ex.check()  # the plan is part of the key: the same before and after the first evaluation
+            return str(ex._key(node_id, "view"))
+        except Exception:  # noqa: BLE001 - no fingerprint: the result is not kept as up to date
+            return ""
+
+    @staticmethod
+    def _stamped(ctx, stamp: str) -> dict:
+        """`stamp=` for ctx.image / ctx.curve where CAD knows it (kept with the document)."""
+        if not stamp or not hasattr(ctx, "result_stamps"):
+            return {}
+        return {"stamp": stamp}
+
     def _send_status(self, ctx, ex) -> None:
-        """Up to date / out of date per block (R23) for the node editor, per block of the model."""
+        """Up to date / out of date per block (R23) for the node editor, per block of the model; a
+        display whose shown result (also one the document kept) has the present fingerprint counts
+        as up to date with everything it needs."""
         workflow, _, _, _ = _fusion()
         try:
             shown = [(n.id, "view") for n in ex.graph.nodes.values() if n.type_id.startswith("display.")]
             raw = {k: bool(v) for k, v in ex.status(wanted=shown).items()}
+            kept = self._kept(ctx)
+            fresh = [(d, s) for d, s in shown if (st := self._stamp(ex, d)) and kept.get(f"workflow:{d}") == st]
+            stale = [w for w in shown if w not in fresh]
+            if fresh:  # blocks only unchanged displays need (not those another display still waits for)
+                waiting = set(ex.needed(stale)) if stale else set()
+                for block in ex.needed(fresh):
+                    if block not in waiting:
+                        raw[block] = True
             ctx.workflow_state(workflow.block_states(raw, self._model_ids))
         except Exception as e:  # noqa: BLE001 - the state is a display hint only
             ctx.log(f"workflow state: {e}")

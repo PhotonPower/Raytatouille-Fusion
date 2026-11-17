@@ -107,6 +107,10 @@ struct ResultItem {
   /// Optional key of the producer, e.g. "workflow:<block id>" – a display window shows the items
   /// with its key from the newest result set that has them.
   QString key;
+  /// Optional fingerprint of what the producer computed it from (the workflow engine: the content
+  /// hash of the display's inputs); a document keeps keyed results with it, and the producer can
+  /// tell after reopening whether a kept result is still up to date.
+  QString stamp;
   Kind kind = Kind::Lines;
   bool visible = true;
   std::shared_ptr<const LineSet> lines;

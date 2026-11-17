@@ -1,3 +1,5 @@
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -89,6 +91,35 @@ class TestDocument : public QObject {
     doc.setLayerVisible(layer, false);
     QCOMPARE(changed.count(), 1);
     QVERIFY(!doc.isDisplayed(*doc.entity(id)));
+  }
+
+  void extraSectionsTravelWithTheDocument() {
+    // sections the application keeps with the document (e.g. "results"): written as given, read
+    // back by name; the document's own sections are not handed out
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("t.rttf"));
+    Document doc;
+    doc.addEntities(sample_entities(), QStringLiteral("add"));
+    const QJsonObject extra{{"results", QJsonArray{QJsonObject{{"key", "workflow:cam"}}}}};
+    QVERIFY(nfcad::document::save_nfcad(doc, path, extra).isEmpty());
+    Document loaded;
+    QJsonObject got;
+    QCOMPARE(nfcad::document::load_nfcad(loaded, path, &got), QString());
+    QCOMPARE(got, extra);
+    QCOMPARE(loaded.entities().size(), doc.entities().size());
+    QVERIFY(nfcad::document::save_nfcad(doc, path).isEmpty());  // without: no section
+    QCOMPARE(nfcad::document::load_nfcad(loaded, path, &got), QString());
+    QVERIFY(got.isEmpty());
+  }
+
+  void keptChangesMarkTheDocumentModified() {
+    Document doc;
+    QSignalSpy modified(&doc, &Document::modificationChanged);
+    doc.markKeptChanged();
+    QVERIFY(doc.isModified());
+    QCOMPARE(modified.count(), 1);
+    doc.markSaved();
+    QVERIFY(!doc.isModified());
   }
 
   void saveLoadRoundTrip() {

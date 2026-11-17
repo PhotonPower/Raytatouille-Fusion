@@ -18,6 +18,7 @@
 #include "document/nfcad_io.hpp"
 #include "kernel/geometry_ops.hpp"
 #include "document/selection.hpp"
+#include "results/result_io.hpp"
 #include "results/result_store.hpp"
 
 namespace nfcad::plugins {
@@ -273,6 +274,13 @@ void PluginHost::handle(const QJsonObject& msg) {
 
 QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
   using document::EntityId;
+  // a keyed result with a fingerprint is kept with the document: it now counts as modified
+  const auto keep = [this](results::ResultId id, const QJsonObject& a) {
+    const QString stamp = a["stamp"].toString();
+    if (stamp.isEmpty() || a["key"].toString().isEmpty()) return;
+    results_->setStamp(id, stamp);
+    doc_->markKeptChanged();
+  };
   if (method == QLatin1String("model.entities")) {
     QJsonArray out;
     std::vector<EntityId> ids;
@@ -486,6 +494,7 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     im.range = range_of(args);
     const auto id = results_->addImage(static_cast<results::ResultId>(args["set"].toInteger()),
                                        args["name"].toString(), std::move(im), args["key"].toString());
+    keep(id, args);
     return static_cast<qint64>(id);
   }
   if (method == QLatin1String("results.curve")) {
@@ -496,6 +505,7 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     c.y_label = args["y_label"].toString();
     const auto id = results_->addCurve(static_cast<results::ResultId>(args["set"].toInteger()),
                                        args["name"].toString(), std::move(c), args["key"].toString());
+    keep(id, args);
     return static_cast<qint64>(id);
   }
   if (method == QLatin1String("results.table")) {
@@ -509,6 +519,7 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     }
     const auto id = results_->addTable(static_cast<results::ResultId>(args["set"].toInteger()),
                                        args["name"].toString(), std::move(t), args["key"].toString());
+    keep(id, args);
     return static_cast<qint64>(id);
   }
   if (method == QLatin1String("results.bars")) {
@@ -521,7 +532,11 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     b.y_label = args["y_label"].toString();
     const auto id = results_->addBars(static_cast<results::ResultId>(args["set"].toInteger()),
                                       args["name"].toString(), std::move(b), args["key"].toString());
+    keep(id, args);
     return static_cast<qint64>(id);
+  }
+  if (method == QLatin1String("results.stamps")) {  // fingerprints of the newest keyed results
+    return results::result_stamps(*results_);
   }
   if (method == QLatin1String("results.append")) {
     results_->appendToCurve(static_cast<results::ResultId>(args["item"].toInteger()), args["x"].toDouble(),

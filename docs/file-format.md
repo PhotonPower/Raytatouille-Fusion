@@ -21,7 +21,9 @@ Geometry is stored exactly: degrees, knot vectors, control points and weights â€
                   "attributes": { "rtt.role": "mirror", "sim.inactive": true },   // v2, optional
                   "geometry": { "type": "shell", "faces": [ ... ] } } ],
   "plugins":  { "demo": { "params": { "rays": 300, "origin": [0, 0, 0] } } },  // v2, optional
-  "workflow": { "graph": { "format": "rtt-fusion-graph", ... }, "types": [], "diagnostics": [], "plan": {} }  // v2, optional
+  "workflow": { "graph": { "format": "rtt-fusion-graph", ... }, "types": [], "diagnostics": [], "plan": {} },  // v2, optional
+  "results":  [ { "key": "workflow:Kamerabild", "name": "Kamera", "kind": "image", "stamp": "3f1câ€¦",
+                  "image": { "width": 512, "height": 512, "values": "<base64>", "extent": [-1, 1, -1, 1], ... } } ]  // v2, optional
 }
 ```
 
@@ -39,6 +41,15 @@ excludes an object from computations ([plugins.md](plugins.md), D11).
 
 `plugins` holds the values of each plugin's parameter panel by plugin id (P4,
 [plugin-api.md](plugin-api.md)); readers that do not know a plugin keep its entry unchanged.
+
+`results` keeps the newest result of every keyed display window, e.g. `workflow:<block>`, the
+display blocks of the node workflow. It holds images, curves, tables and bars, each with the
+fingerprint (`stamp`) of what the producer computed it from. Number arrays are stored as base64
+of their little-endian bytes: float32 for image values, float64 for curves and bars, bytes for
+colours. When the document is opened they come back as the result set "Saved results". The
+workflow engine compares the fingerprints with what it would compute now: an unchanged display
+counts as up to date, and a run does not compute it again. Readers that do not know the section
+skip it.
 
 Entity ids are strings (64-bit). Readers reject newer versions and invalid geometry with a
 message; the document is unchanged in that case.

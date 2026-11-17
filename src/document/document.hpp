@@ -114,6 +114,9 @@ class Document : public QObject {
   }
   [[nodiscard]] const QJsonObject& allPluginParameters() const { return plugin_parameters_; }
   void setPluginParameters(const QString& plugin, const QJsonObject& values);
+  /// Something the document keeps besides its content changed (e.g. a new kept result): it now
+  /// counts as modified until saved.
+  void markKeptChanged();
   void setAllPluginParameters(const QJsonObject& all);  ///< loading
 
   // ---- node workflow (RTT-Fusion R16): {"graph": rtt-fusion-graph, "types": [...],

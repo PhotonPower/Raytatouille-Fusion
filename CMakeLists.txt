@@ -60,6 +60,7 @@ add_library(nfcad_core STATIC
   ${CMAKE_CURRENT_BINARY_DIR}/generated/trusted_keys.cpp
   src/results/colormap.cpp
   src/results/result_store.cpp
+  src/results/result_io.cpp
   src/snap/snap_engine.cpp
   src/snap/snap_types.cpp
   src/support/crash_handler.cpp

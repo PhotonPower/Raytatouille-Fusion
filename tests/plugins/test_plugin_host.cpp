@@ -52,7 +52,7 @@ class TestPluginHost : public QObject {
     host_->start(python_, plugins::PluginManager::nfcadPythonPath());
     QVERIFY2(ready.wait(20000), qPrintable(failed.isEmpty() ? QStringLiteral("timeout")
                                                             : failed.first().at(0).toString()));
-    QCOMPARE(host_->actions().size(), std::size_t{12});
+    QCOMPARE(host_->actions().size(), std::size_t{13});
     QCOMPARE(host_->paramsSchema().size(), 5);
     QCOMPARE(host_->paramsSchema()[0].toObject()["name"].toString(), QStringLiteral("count"));  // order kept
   }
@@ -192,6 +192,19 @@ class TestPluginHost : public QObject {
     QCOMPARE(doc_.pluginParameters(QStringLiteral("test"))["count"].toInt(), 9);
     QCOMPARE(told.count(), 1);
     QCOMPARE(told.first().at(0).toString(), QStringLiteral("test"));
+  }
+
+  void keyedResultWithAFingerprintIsKept() {
+    // ctx.image(..., key=, stamp=): the fingerprint is kept with the result and the document
+    // counts as modified (it saves the result); ctx.result_stamps() gives it back
+    QSignalSpy finished(host_.get(), &plugins::PluginHost::finished);
+    doc_.markSaved();  // earlier tests changed the document
+    QVERIFY(!doc_.isModified());
+    QVERIFY(host_->run(QStringLiteral("kept_result")) > 0);
+    QVERIFY(waitFinished(finished));
+    QCOMPARE(finished.first().at(3).toString(), QStringLiteral("{'workflow:cam': 's1'}"));
+    QVERIFY(doc_.isModified());
+    doc_.markSaved();
   }
 
   void pluginReadsAnotherPluginsParameters() {

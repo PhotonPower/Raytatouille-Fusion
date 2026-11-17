@@ -3,6 +3,8 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QStatusBar>
 #include <QTimer>
@@ -15,6 +17,7 @@
 #include "kernel/geometry_ops.hpp"
 #include "kernel/step_import.hpp"
 #include "plugins/distribution.hpp"
+#include "results/result_io.hpp"
 #include "document/selection.hpp"
 #include "tessellation/stl_export.hpp"
 #include "render/scene.hpp"
@@ -85,7 +88,11 @@ bool MainWindow::openFile(const QString& path, bool quiet) {
     return true;  // asynchronous; errors are reported when reading finished
   }
   QApplication::setOverrideCursor(Qt::WaitCursor);
-  const QString error = document::load_nfcad(*doc_, path);
+  QJsonObject extra;
+  const QString error = document::load_nfcad(*doc_, path, &extra);
+  // the results the document keeps (display windows of the node workflow), after the reset that
+  // cleared the old ones
+  if (error.isEmpty()) results::restore_results(*results_, extra["results"].toArray());
   QApplication::restoreOverrideCursor();
   if (!error.isEmpty()) {
     if (!quiet) {
@@ -179,7 +186,10 @@ bool MainWindow::saveAs() {
 }
 
 bool MainWindow::saveTo(const QString& path) {
-  const QString error = document::save_nfcad(*doc_, path);
+  QJsonObject extra;
+  const QJsonArray kept = results::saved_results(*results_);  // the keyed results (display windows)
+  if (!kept.isEmpty()) extra["results"] = kept;
+  const QString error = document::save_nfcad(*doc_, path, extra);
   if (!error.isEmpty()) {
     QMessageBox::critical(this, tr("Save"), tr("Cannot save %1:\n%2").arg(path, error));
     return false;

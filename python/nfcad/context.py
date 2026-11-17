@@ -159,7 +159,7 @@ class Context:
               extent: tuple[float, float, float, float] | None = None, x_label: str = "x / mm",
               y_label: str = "y / mm", colormap: str = "inferno", unit: str = "",
               value_range: tuple[float, float] | None = None, description: str = "", key: str = "",
-              rgb=None) -> int:
+              rgb=None, stamp: str = "") -> int:
         """A 2D image in the *Image* dock (e.g. a camera image): values[j * width + i], row 0 at
         y0; extent = (x0, x1, y0, y1) of the grid (cell edges), e.g. in mm. With `rgb` – red,
         green, blue in 0 … 1 for every pixel (height, width, 3), the colours as the screen shows
@@ -174,6 +174,8 @@ class Context:
             args["range"] = [float(value_range[0]), float(value_range[1])]
         if key:
             args["key"] = key
+        if stamp:
+            args["stamp"] = stamp
         if rgb is not None:
             args["rgb"] = arrays.write(rgb, "f4")
             if args["rgb"]["count"] != 3 * int(width) * int(height):
@@ -181,15 +183,17 @@ class Context:
         return self._host.request("results.image", args)
 
     def curve(self, result_set: int, name: str, x=(), y=(), *, x_label: str = "", y_label: str = "",
-              key: str = "") -> int:
+              key: str = "", stamp: str = "") -> int:
         """A curve in the *Plot* dock; `key` ties it to a display window (e.g. "workflow:<block>")."""
         args = {"set": result_set, "name": name, "x": [float(v) for v in x], "y": [float(v) for v in y],
                 "x_label": x_label, "y_label": y_label}
         if key:
             args["key"] = key
+        if stamp:
+            args["stamp"] = stamp
         return self._host.request("results.curve", args)
 
-    def table(self, result_set: int, name: str, columns, rows, *, key: str = "") -> int:
+    def table(self, result_set: int, name: str, columns, rows, *, key: str = "", stamp: str = "") -> int:
         """A table in the *Table* dock (e.g. the diffraction orders): column heads and rows; cells
         as text – numbers are written with up to 10 significant digits (format them yourself
         for other precision)."""
@@ -200,15 +204,26 @@ class Context:
                                 "rows": [[text(v) for v in row] for row in rows]}
         if key:
             args["key"] = key
+        if stamp:
+            args["stamp"] = stamp
         return self._host.request("results.table", args)
 
-    def bars(self, result_set: int, name: str, labels, values, *, y_label: str = "", key: str = "") -> int:
+    def bars(self, result_set: int, name: str, labels, values, *, y_label: str = "", key: str = "",
+             stamp: str = "") -> int:
         """A bar chart in the *Plot* dock (e.g. the efficiency per order): one bar per label."""
         args: dict[str, Any] = {"set": result_set, "name": name, "labels": [str(v) for v in labels],
                                 "values": [float(v) for v in values], "y_label": y_label}
         if key:
             args["key"] = key
+        if stamp:
+            args["stamp"] = stamp
         return self._host.request("results.bars", args)
+
+    def result_stamps(self) -> dict:
+        """Fingerprint (`stamp`) of the newest keyed result per key – also of results the document
+        kept from an earlier session: {key: stamp}. A producer compares it with the fingerprint
+        of what it would compute now and need not compute an unchanged result again."""
+        return dict(self._host.request("results.stamps", {}) or {})
 
     def append(self, curve: int, x: float, y: float) -> None:
         self._host.send({"type": "notify", "method": "results.append",
