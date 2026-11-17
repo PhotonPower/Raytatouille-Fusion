@@ -233,7 +233,14 @@ class LinkItem : public QGraphicsPathItem {
     representation_ = planned["representation"].toString();
     if (!representation_.isEmpty()) {
       tip << QObject::tr("planned: %1 – %2").arg(representation_, planned["reason"].toString());
-      label_ = new QGraphicsSimpleTextItem(representation_ + (transport == QLatin1String("auto") ? QString() : QStringLiteral("*")), this);
+      // what a block used at run time on an auto link (a camera near a focus: fields), R→H
+      const QString used = transport == QLatin1String("auto") ? planned["used"].toString() : QString();
+      QString text = representation_ + (transport == QLatin1String("auto") ? QString() : QStringLiteral("*"));
+      if (!used.isEmpty() && used != representation_) {
+        text += QStringLiteral("→") + used;
+        tip << QObject::tr("last run: %1 – %2").arg(used, planned["used_reason"].toString());
+      }
+      label_ = new QGraphicsSimpleTextItem(text, this);
       QFont f = label_->font();
       f.setBold(true);
       f.setPointSizeF(f.pointSizeF() * 0.85);
@@ -673,6 +680,8 @@ void NodeEditor::rebuild() {
     const QString fixed_back = per_direction ? c["transport"].toObject()["back"].toString() : fixed_forward;
     const QString transport = fixed_forward == fixed_back ? fixed_forward : fixed_forward + QLatin1Char('/') + fixed_back;
     const QJsonObject reps = planned_connections[QString::number(k)].toObject();
+    // what a block used at run time on an auto direction (a camera near a focus: fields), R→H
+    const QJsonObject used = plan["connections_used"].toObject()[QString::number(k)].toObject();
     const bool stale = plan["stale"].toBool();
     const QString name_a = node_of(g, ends.at(0).toArray().at(0).toString())["name"].toString(ends.at(0).toArray().at(0).toString());
     const QString name_b = node_of(g, ends.at(1).toArray().at(0).toString())["name"].toString(ends.at(1).toArray().at(0).toString());
@@ -689,20 +698,25 @@ void NodeEditor::rebuild() {
       }
     }
     // per direction: the planned representation, else a fixed transport (marked *)
-    auto text_of = [&reps](const char* side, const QString& fixed, bool used) {
-      if (!used) return QString();
+    auto text_of = [&reps, &used](const char* side, const QString& fixed, bool in_use) {
+      if (!in_use) return QString();
       if (fixed != QLatin1String("auto")) return fixed + QStringLiteral("*");  // the planner keeps it
-      return reps[QLatin1String(side)].toString();
+      const QString r = reps[QLatin1String(side)].toString();
+      const QString u = used[QLatin1String(side)].toString();
+      return u.isEmpty() || u == r ? r : r + QStringLiteral("→") + u;
     };
     const QString forward_text = text_of("forward", fixed_forward, forward_used);
     const QString back_text = text_of("back", fixed_back, back_used);
     QJsonObject planned;  // the tooltip
-    auto line = [&reps, stale](const QString& from, const QString& to, const char* side, const QString& fixed, bool used) {
+    auto line = [&reps, &used, stale](const QString& from, const QString& to, const char* side, const QString& fixed,
+                                      bool in_use) {
       QString r = reps[QLatin1String(side)].toString();
       QString t = QStringLiteral("%1 → %2: ").arg(from, to);
-      if (!used) return t + tr_("no branch");
+      if (!in_use) return t + tr_("no branch");
       t += r.isEmpty() ? QStringLiteral("–") : r + (stale ? tr_(" (out of date)") : QString());
       t += fixed == QLatin1String("auto") ? tr_(", transport auto") : tr_(", transport fixed %1").arg(fixed);
+      const QString u = used[QLatin1String(side)].toString();
+      if (fixed == QLatin1String("auto") && !u.isEmpty() && u != r) t += tr_(", last run: %1 (see the log)").arg(u);
       return t;
     };
     planned["reason"] = line(name_a, name_b, "forward", fixed_forward, forward_used) + QLatin1Char('\n') +

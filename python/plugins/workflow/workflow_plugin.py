@@ -42,6 +42,11 @@ def _fusion():
     return workflow, fg, execute, io
 
 
+def _link_target(key: str) -> str:
+    """The block a link key "a.out -> b.in" leads to."""
+    return key.split(" -> ", 1)[-1].rsplit(".", 1)[0]
+
+
 def _evaluators(extra: dict) -> dict:
     """RTT-Fusion's evaluators: the Raytatouille backend when raytatouille is installed, and the
     ones of the optional modules."""
@@ -82,6 +87,10 @@ class WorkflowEngine(Plugin):
     def __init__(self):
         self._portdata = tempfile.TemporaryDirectory(prefix="nfcad-portdata-")  # remote blocks (D4)
         self._cache = None
+        #: what blocks used at run time on links on "auto" (link key -> representation, reason):
+        #: shown at the link (R→H) while the block's result is up to date
+        self._used = {}
+        self._ran = set()
         self._notes: list[str] = []
         self._model_ids: set[str] | None = None
         self._failures: list[str] = []
@@ -140,7 +149,7 @@ class WorkflowEngine(Plugin):
         registry, extra = workflow.registry()
         remote, providers = self._blocks(ctx, registry)
         extra = {**extra, **remote}
-        graph = None
+        graph = model = None
         if wf.get("model"):
             model = io.model_from_dict(wf["model"], registry)
             _, files = self._embed(ctx, workflow, model)
@@ -156,12 +165,17 @@ class WorkflowEngine(Plugin):
             wf["diagnostics"], wf["plan"] = workflow.checked(graph, registry)
             self._model_ids = None
         wf["diagnostics"] = list(wf["diagnostics"]) + files
-        ctx.set_workflow(wf)
+        ex = None
         if graph is not None and not any(d["severity"] == "error" for d in wf["diagnostics"]):
             try:  # which blocks the kept results still cover
-                self._send_status(ctx, self._executor(ctx, graph, registry, _evaluators(extra), execute, wf))
+                ex = self._executor(ctx, graph, registry, _evaluators(extra), execute, wf)
+                fresh = self._fresh(ex)
+                wf["plan"] = self._plan_with_used(workflow, wf["plan"], graph, model, registry, fresh)
             except Exception as e:  # noqa: BLE001 - only a hint
                 ctx.log(f"workflow state: {e}")
+        ctx.set_workflow(wf)
+        if ex is not None:
+            self._send_status(ctx, ex)
         diagnostics = wf["diagnostics"]
         n_err = sum(1 for d in diagnostics if d["severity"] == "error")
         for d in diagnostics:
@@ -182,6 +196,7 @@ class WorkflowEngine(Plugin):
         registry, extra = workflow.registry()
         remote, providers = self._blocks(ctx, registry)
         extra = {**extra, **remote}
+        model = None
         if wf.get("model"):  # RTT-Fusion R24: exactly the branches of the model, unrolled
             model = io.model_from_dict(wf["model"], registry)
             stored, files = self._embed(ctx, workflow, model)
@@ -219,8 +234,9 @@ class WorkflowEngine(Plugin):
         run = ctx.result_set(f"Workflow {name or 'run'}")
         self._notes = []
         self._failures = []
-        made = self._run_displays(ctx, run, graph, registry, _evaluators(extra), execute, wf, displays)
+        made, fresh = self._run_displays(ctx, run, graph, registry, _evaluators(extra), execute, wf, displays)
         ctx.workflow_running("")
+        self._show_used(ctx, workflow, graph, model, registry, providers, fresh)
         if made:
             message = "workflow: " + ", ".join(made)
         else:  # the reason in the status line, not only in the log
@@ -281,6 +297,7 @@ class WorkflowEngine(Plugin):
             ctx.progress(a + (b - a) * part, text)
 
         def on_node(node_id: str) -> None:
+            self._ran.add(node_id)
             node_id = workflow.model_id(node_id)
             if node_id != last["node"]:
                 last["node"] = node_id
@@ -297,6 +314,7 @@ class WorkflowEngine(Plugin):
         workflow, _, _, _ = _fusion()
         made = []
         ex = self._executor(ctx, graph, registry, evaluators, execute, wf)
+        self._ran = set()
         for k, node in enumerate(displays):
             ctx.check_cancel()
             a, b = k / len(displays), (k + 1) / len(displays)
@@ -340,8 +358,46 @@ class WorkflowEngine(Plugin):
             ctx.log(line)
         if cache is not None and hasattr(cache, "warnings"):
             cache.warnings.clear()
+        used = getattr(ex.context, "used", None)
+        if used is not None:  # the blocks computed now replace what they decided before
+            self._used = {k: v for k, v in self._used.items() if _link_target(k) not in self._ran}
+            self._used.update(used)
         self._send_status(ctx, ex)
-        return made
+        try:
+            fresh = self._fresh(ex)
+        except Exception:  # noqa: BLE001 - only a hint
+            fresh = set()
+        return made, fresh
+
+    @staticmethod
+    def _fresh(ex) -> set:
+        """The blocks (of the run's graph) whose results the cache holds."""
+        shown = [(n.id, "view") for n in ex.graph.nodes.values() if n.type_id.startswith("display.")]
+        return {k for k, v in ex.status(wanted=shown).items() if v}
+
+    def _plan_with_used(self, workflow, plan, graph, model, registry, fresh):
+        """The plan with what the blocks used on links on "auto" in the run whose results are up to
+        date (a detector that computed fields near a focus: R→H at the link); RTT-Fusion #85."""
+        with_used = getattr(workflow, "with_used", None)
+        used = {k: v for k, v in self._used.items() if _link_target(k) in fresh}
+        if with_used is None or not used or not plan:
+            return plan
+        if model is None:
+            return with_used(plan, used)
+        return with_used(plan, used, graph, model, registry)
+
+    def _show_used(self, ctx, workflow, graph, model, registry, providers, fresh) -> None:
+        """After a run: the plan of the current workflow with what the blocks used (R→H)."""
+        try:
+            wf = ctx.workflow()
+            plan = wf.get("plan") or {}
+            if model is not None:  # the plan of the model as it is now (a transport set since)
+                plan = self._document(workflow, model, registry, wf, providers)["plan"]
+            shown = self._plan_with_used(workflow, plan, graph, model, registry, fresh)
+            if shown is not plan or plan is not wf.get("plan"):
+                ctx.set_workflow({**wf, "plan": shown})
+        except Exception as e:  # noqa: BLE001 - only a hint at the links
+            ctx.log(f"workflow plan: {e}")
 
     def _executor(self, ctx, graph, registry, evaluators, execute, wf):
         """An executor with the results of earlier runs (R23): only what changed is computed again.

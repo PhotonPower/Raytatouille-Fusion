@@ -17,7 +17,8 @@ detector's own size), a Gaussian illumination and the field accuracy ε of links
 error Fieldtracing may make, relative to the peak amplitude; it takes the cheapest method within
 it, e.g. Debye near a focus at 0.05 instead of Rayleigh–Sommerfeld at 0.02) and *Wave optics
 near a focus*: a detector on a link left on auto computes fields from the last surface on when
-the rays cross or focus near it, and rays otherwise. The engine knows no kernel – the blocks' data
+the rays cross or focus near it, and rays otherwise; after the run such a link shows what was
+used, e.g. **R→H** (planned R, computed as fields). The engine knows no kernel – the blocks' data
 come with the workflow (a Raytatouille system from the data of the `rtt.*` blocks, its glass
 catalogues from the source's `rtt_catalogs`, written by the Raytracer plugin). Until stage W3 the
 blocks of all kernels are evaluated in this plugin's process, so its Python environment needs
