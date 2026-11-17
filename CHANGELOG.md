@@ -11,6 +11,14 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   pupil camera when it switched to fields near a focus; the tooltip says why (RTT-Fusion #85). The
   label stays while the camera's result is up to date and goes back to the planned representation
   once the result is out of date.
+- **Automotive Lighting plugin**: *Optimise lens* makes a real beam's cut-off. *Optimise: along
+  the edges* – every element spreads and deflects along the edge of its own light, as the flutes of
+  a classic lens (cylinders turned by 15° in the wedge in front of the shield's slanting edge);
+  *Optimise: under the cut-off* and *under the rise* – the beam brightest just under both branches
+  and the rise lit and sharp, weighted below R112's limits; and the lens is ray traced (20 million
+  paths at least) and optimised twice more for what the ray tracing has beyond the blurred view.
+  For the H4 the band under the horizontal branch is 2.5 times as bright (6 500 instead of 2 500 cd
+  at −10 … −2°) with R112 met in the ray tracing.
 - **Workflow panel: *Wave optics near a focus (automatic)*, on by default.** A camera on a link
   left on auto checks whether the rays cross or focus near it and then computes fields from the
   last surface on, as if the link were set to H; elsewhere it keeps rays. A link set to R or H

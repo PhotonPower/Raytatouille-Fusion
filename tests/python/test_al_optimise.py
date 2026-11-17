@@ -44,6 +44,22 @@ assert groups["zone I"].relative == "50R" and groups["over the cut-off"].relativ
 left = O.probes(dataclasses.replace(cut, right_hand_traffic=False))
 b50 = lambda p: (h[p.bins[p.groups[0].at] % len(h)]).mean()                          # noqa: E731
 assert b50(pr) < 0 < b50(left)                                                       # B50L / B50R
+# a real beam's: a band under both branches, the rising branch lit and sharp
+real = O.probes(cut, band=6000.0, rise=3000.0)
+assert [g.name for g in real.groups][15:18] == ["under the line", "under the rise", "over the rise"]
+rg = {g.name: g for g in real.groups}
+bh, bv = h[real.bins % len(h)], v[real.bins // len(h)]
+bl = np.degrees(np.arctan(cut.line(np.tan(np.radians(bh)))))
+u = rg["under the line"].at
+assert rg["under the line"].low == 6000.0 and np.all(np.abs(bh[u]) <= O.BAND_H)
+assert np.all((bl[u] - bv[u] >= O.BAND_V[0] - 1e-9) & (bl[u] - bv[u] <= O.BAND_V[1] + 1e-9))
+assert bh[u].min() < -5 and bh[u].max() > 5                                          # both branches
+r_, o_ = rg["under the rise"].at, rg["over the rise"].at
+assert rg["under the rise"].low == 3000.0 and np.all((bh[r_] >= 1.0) & (bh[r_] <= 5.0)) and np.all(bv[r_] < bl[r_])
+assert rg["over the rise"].relative == "under the rise" and np.all(bv[o_] > bl[o_])
+mirrored = O.probes(dataclasses.replace(cut, right_hand_traffic=False), rise=3000.0)
+mg = {g.name: g for g in mirrored.groups}
+assert np.all(h[mirrored.bins[mg["under the rise"].at] % len(h)] < 0) and "under the line" not in mg
 
 # ---- smearing and blurring keep the flux
 rng = np.random.default_rng(3)
@@ -72,6 +88,20 @@ both = O.objective(np.stack([ok, glare])[:, None, :], pr, 0.1)[0]     # the brig
 assert abs(both - O.objective(glare[None, None, :], pr, 0.1)[0]) < 1e-9
 both = O.objective(np.stack([ok, bad])[:, None, :], pr, 0.1)[0]       # the darker one a lower limit
 assert abs(both - O.objective(bad[None, None, :], pr, 0.1)[0]) < 1e-9
+lit = np.full(len(real.bins), 3000.0)                # the same beam with a band and a rise
+lit[rg["zone III"].at] = lit[rg["above the cut-off"].at] = lit[rg["over the cut-off"].at] = 100.0
+lit[rg["B50L"].at] = lit[rg["BR"].at] = lit[rg["over the rise"].at] = 100.0
+for name in ("75R", "50R", "50V"):
+    lit[rg[name].at] = 12000.0
+lit[rg["under the cut-off"].at] = 5000.0
+lit[rg["under the line"].at] = lit[rg["under the rise"].at] = 7000.0
+dark = lit.copy()
+dark[rg["under the line"].at] = dark[rg["under the rise"].at] = 3000.0
+assert O.objective(lit[None, None, :], real, 0.1)[0] < 0
+assert O.objective(dark[None, None, :], real, 0.1)[0] > O.objective(lit[None, None, :], real, 0.1)[0] + 0.05
+legal = lit.copy()                                   # but R112 comes first: a shortfall at 75R costs more
+legal[rg["75R"].at] = 6000.0
+assert O.objective(legal[None, None, :], real, 0.1)[0] > O.objective(dark[None, None, :], real, 0.1)[0]
 report = O.report(np.stack([ok, glare]), pr)
 assert report["zone III"] == 2000.0 and report["75R"] == 12000.0
 # the evenness: the field below the cut-off on its lattice; a slope has no bumps, a patch has
@@ -166,6 +196,41 @@ assert [r["start"] for r in both.rounds] == [0, 1] and len(calls) == 2
 assert both.objective == min(r["objective"] for r in both.rounds)
 assert both.rounds[both.start]["objective"] == both.objective
 assert any(e.spread_h > 0 for e in both.elements) or both.start == 1
+
+# ---- which cells' light ends at the rising branch: above the horizontal one on the driver's side
+fake = O.Rays([(0, 0), (1, 0), (2, 0)], np.array([0, 0, 1, 1, 2, 2]), np.array([-3.0, 2.0, 3.0, 4.0, -3.0, -4.0]),
+              np.array([-1.5, -2.0, 0.3, 0.6, 0.3, 0.6]), np.ones(6))
+assert list(O.edges(fake, cut)) == [False, True, False]
+assert list(O.edges(fake, dataclasses.replace(cut, right_hand_traffic=False))) == [False, False, True]
+
+# ---- along the edges, a real beam's band and rise, and a round for what the ray tracing adds
+calls.clear()
+traced = []
+
+
+def check(system):
+    traced.append(system)
+    d = evaluate(system)
+    d.intensity = d.intensity + 300.0 * ((d.v[:, None] > 1.0) & (np.abs(d.h[None, :]) < 6.0))   # stray light above
+    return d
+
+
+edged = O.optimise(settings, frame, evaluate, rounds=0, spacing=2.0, direct=False, starts=(O.CYLINDERS,),
+                   along_edges=True, band=4000.0, rise=1500.0, check=check)
+n = O.CHECKS
+assert len(traced) == 1 + n and len(calls) == 2 + 2 * n and edged.rounds[-n - 1].get("traced") is True
+assert all(r.get("checked") for r in edged.rounds[-n:]) and edged.traced is not None
+assert edged.objective == min(r["objective"] for r in edged.rounds[-n - 1:])
+assert "under the line" in edged.rounds[0]["model"] and np.isfinite(edged.objective)
+rising = O.edges(O.lens_rays(plane, spacing=2.0), cut)
+slope = cut.slope
+for e, up in zip(edged.elements, rising):
+    if up:
+        assert abs(e.deflect_v - slope * e.deflect_h) <= O.ALONG + 1e-9, e
+        assert e.spread_h == 0.0 or e.spread_angle == 15.0, e
+    else:
+        assert e.spread_h == 0.0 or e.spread_angle == 0.0, e
+assert rising.any() and any(e.spread_angle == 15.0 for e in edged.elements)
 
 # ---- R112's zone I in the table of the test points
 dist = al_photometry.Distribution(np.arange(-20, 20.01, 0.25), np.arange(-6, 3.01, 0.1), np.zeros((91, 161)), 0, 0, 1000)

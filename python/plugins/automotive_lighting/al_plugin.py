@@ -35,6 +35,7 @@ from al_spline import curve_points
 RIGHT, LEFT = "right-hand", "left-hand"
 CLEAR, PATTERNED = "clear lens: facetted reflector", "patterned lens: paraboloid and lens"
 LOW_BEAM = "low beam (UN R112, class B)"
+CHECK_RAYS = 20_000_000          # Optimise lens: rays at least in its ray tracing (zone III within its noise)
 # Optimise lens: what every cell begins with (al_optimise.optimise's starts)
 CYLINDER_START = "cylinder lenses (6° across)"
 OPTIMISE_STARTS = {CYLINDER_START: (al_optimise.CYLINDERS,), "plane glass": (None,),
@@ -204,6 +205,21 @@ class AutomotiveLighting(Plugin):
                                             description="the weight of the beam's evenness below the cut-off: patches, "
                                                         "stripes and hot spots (bumps over 1° across, 0.3° up and down, "
                                                         "relative to 50R's minimum) cost; 0: R112 alone"),
+        "optimise_edges": Param.boolean(True, label="Optimise: along the edges", group="Lens",
+                                        description="every element spreads and deflects along the edge of its own "
+                                                    "light, as the flutes of a classic lens: cylinders across where "
+                                                    "the light ends at the horizontal branch, turned by the rise "
+                                                    "(15°) in the wedge in front of the shield's slanting edge"),
+        "optimise_band": Param.number(6000.0, min=0.0, max=50000.0, decimals=0, unit="cd",
+                                      label="Optimise: under the cut-off", group="Lens",
+                                      description="at least this on average 0.15–0.65° under the cut-off, ± 10° about "
+                                                  "the kink: the beam brightest at its cut-off, as a real one, not in "
+                                                  "a patch below it (0: as R112 alone asks)"),
+        "optimise_rise": Param.number(3000.0, min=0.0, max=50000.0, decimals=0, unit="cd",
+                                      label="Optimise: under the rise", group="Lens",
+                                      description="at least this on average 0.15–0.35° under the rising branch, "
+                                                  "1–5° from the kink, and above it at most a tenth: the kink seen, "
+                                                  "the rise lit and sharp (0: not asked)"),
         "optimise_start": Param.choice(list(OPTIMISE_STARTS), CYLINDER_START, label="Optimise: start with",
                                        group="Lens",
                                        description="what every cell begins with: the search stays near it – from "
@@ -772,13 +788,16 @@ class AutomotiveLighting(Plugin):
             ctx.log(f"{r.settings.lamp.name} has no shield: the paraboloid makes no cut-off – the lens alone cannot "
                     "meet the low beam's limits above it")
 
-        def trace(system):
+        def trace(system, rays: int | None = None):
             coil, other, lit, bulb = self._traced_lamp(p, system.settings.lamp, system.filament)
             bodies = self._lamp_bodies(p, system.settings.lamp, coil, other, bulb) + \
                 al_trace.lens_bodies(system, float(p["reflectance"]))
-            dist, _ = al_trace.trace(bodies, lit, coil, rays=int(p["trace_rays"]), depth=int(p["trace_depth"]),
+            dist, _ = al_trace.trace(bodies, lit, coil, rays=rays or int(p["trace_rays"]), depth=int(p["trace_depth"]),
                                      kernel_name=al_trace.kernel(p["trace_kernel"]))
             return dist
+
+        def check(system):      # the lens' ray tracing: enough rays that its noise does not count (zone III)
+            return trace(system, max(int(p["trace_rays"]), CHECK_RAYS))
 
         def progress(fraction: float, text: str) -> None:
             ctx.check_cancel()
@@ -788,6 +807,16 @@ class AutomotiveLighting(Plugin):
 
         def log(r_: int, sweeps: int, values: dict) -> None:
             begun = f"start {values['start'] + 1} ({STARTED[starts[values['start']]]}), " if len(starts) > 1 else ""
+            if values.get("traced") is True:
+                ctx.log(f"{begun}the lens so far, ray traced: " + ", ".join(
+                    f"{k} {v:.0f}" for k, v in values["model"].items()) + " cd")
+                return
+            if values.get("checked"):
+                ctx.log(f"{begun}after the ray tracing: {sweeps} sweeps; " + ", ".join(
+                    f"{k} {values['surrogate'][k]:.0f}/{values['model'][k]:.0f}/{values['traced'][k]:.0f}"
+                    for k in values["model"]) + " cd (the surrogate's / the filament images' with what the ray "
+                    "tracing added / the ray tracing's)")
+                return
             ctx.log(f"{begun}round {r_ + 1}: {sweeps} sweeps; " + ", ".join(
                 f"{k} {values['surrogate'][k]:.0f}/{values['model'][k]:.0f}" for k in values["model"])
                 + " cd (the surrogate's / the filament images'); bumps "
@@ -810,10 +839,15 @@ class AutomotiveLighting(Plugin):
                                           spacing=float(p["sampling"]), reflectance=float(p["reflectance"]),
                                           transmittance=float(p["lens_transmittance"]), direct=bool(p["direct"]),
                                           progress=progress, log=log, uniformity=float(p["optimise_uniformity"]),
-                                          starts=starts)
+                                          starts=starts, along_edges=bool(p["optimise_edges"]),
+                                          band=float(p["optimise_band"]), rise=float(p["optimise_rise"]),
+                                          check=check if traced else None)
+            if traced:
+                ctx.log("kept: " + ("the lens optimised once more for what the ray tracing adds" if result.checked
+                                    else "the lens before (the one optimised once more is worse in the ray tracing)"))
             if len(starts) > 1:
                 ctx.log(f"kept: the search from {STARTED[starts[result.start]]}")
-            checked = trace(result.system) if traced else None
+            checked = result.traced
         except (DesignError, RuntimeError, ValueError) as e:
             raise UserError(str(e)) from e
         rows = [{"y_from": e.y0, "y_to": e.y1, "z_from": e.z0, "z_to": e.z1, "deflect_h": e.deflect_h,
