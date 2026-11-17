@@ -65,6 +65,12 @@ class WorkflowEngine(Plugin):
         "gaussian_waist": Param.number(0.0, min=0.0, max=10.0, label="Gaussian illumination (w / pupil radius)",
                                        description="0: uniform (a hard-edged beam, whose Fresnel diffraction a "
                                                    "field link shows); e.g. 0.5 for a laser beam"),
+        "auto_fields": Param.boolean(True, label="Wave optics near a focus (automatic)",
+                                     description="A detector on a link left on auto checks whether the rays cross "
+                                                 "or focus near it (Fieldtracing's caustic rule with ε below) and "
+                                                 "then computes fields from the last surface on, as if the link "
+                                                 "were set to H; elsewhere it keeps rays. A link set to R or H "
+                                                 "keeps its setting. Needs fieldtracing"),
         "field_tolerance": Param.number(0.02, min=0.001, max=0.2, label="Field accuracy ε (H links)",
                                         description="Allowed error of a field propagation (link set to H), relative "
                                                     "to the peak amplitude: Fieldtracing takes the cheapest method "
@@ -313,8 +319,9 @@ class WorkflowEngine(Plugin):
                     ctx.log(f"warning: {node.name or node.id}: {note}")
                     self._notes.append(f"{node.name or node.id}: {note}")
                 elif float(view.image.values.max()) <= 0.0:
-                    hint = ("set the link into the camera to H (right-click on the link → Transport → H) and "
-                            "choose a small image window" if "H" in workflow.available() else
+                    hint = ("switch on Wave optics near a focus (Workflow panel) or set the link into the camera "
+                            "to H (right-click on the link → Transport → H), and choose a small image window"
+                            if "H" in workflow.available() else
                             "install fieldtracing in the plugin environment, then set the link into the "
                             "camera to H")
                     ctx.log(f"{node.name or node.id}: dark – the light focuses into less than a pixel; {hint}")
@@ -343,7 +350,8 @@ class WorkflowEngine(Plugin):
         shared = {"rings": rings_for(int(ctx.params["rays"])),
                   "pixels": [int(ctx.params["pixels"])] * 2,
                   "gaussian_waist": float(ctx.params.get("gaussian_waist", 0.0) or 0.0),
-                  "field_tolerance": float(ctx.params.get("field_tolerance", 0.02) or 0.02)}
+                  "field_tolerance": float(ctx.params.get("field_tolerance", 0.02) or 0.02),
+                  "auto_fields": bool(ctx.params.get("auto_fields", True))}
         materials = self._materials(wf)
         if materials is not None:
             shared["materials"] = materials
@@ -352,7 +360,8 @@ class WorkflowEngine(Plugin):
             self._cache = execute.ResultCache(limit_bytes=1 << 30)
         environment = {
             "rings": shared["rings"], "pixels": shared["pixels"], "window": ctx.params.get("window"),
-            "gaussian": shared["gaussian_waist"], "field_tolerance": shared["field_tolerance"], "catalogs": self._catalogues(wf), "available": sorted(available),
+            "gaussian": shared["gaussian_waist"], "field_tolerance": shared["field_tolerance"],
+            "auto_fields": shared["auto_fields"], "catalogs": self._catalogues(wf), "available": sorted(available),
         }
         return execute.Executor(graph, registry, evaluators, shared, available=available, cache=self._cache,
                                 environment=environment)
