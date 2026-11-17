@@ -1,7 +1,7 @@
 {
   "id": "al",
   "name": "Automotive Lighting",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "api": 1,
   "entry": "al_plugin:AutomotiveLighting",
   "requires": ["numpy"],

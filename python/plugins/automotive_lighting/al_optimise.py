@@ -60,10 +60,18 @@ SWEEPS, LATER = 8, 3                               # sweeps at most: the first r
 DEPTH = 0.85                                       # share of the lens' thickness (less 0.3 mm) the elements may take
 DAMPING = 0.5                                      # share of the full model's difference carried back per round
 STEP = 0.1                                         # the cut-off's fall where R112 measures it
+RISE_H = (1.0, 5.0)                                # degrees from the kink: where the rising branch is lit and sharp
+BAND_H = 10.0                                      # degrees about the kink: the band under the cut-off
+BAND_V = (0.15, 0.65)                              # degrees under the line: the band (and the rising branch's: the upper part)
+REAL = 0.2                                         # the weight of a real beam's requirements (band, rise) against R112's
+CHECKS = 2                                         # rounds with what the ray tracing adds (check)
+CHECK_BLUR = (0.5, 0.3)                             # degrees: what the ray tracing adds, smoothed so (its noise)
 FIELD_H, FIELD_V = 20.0, -5.0                      # degrees: the beam judged for its evenness: |H| ≤ 20°, V ≥ −5° …
 FIELD_GAP = 0.4                                    # … up to this far below the cut-off line
 BUMP_H, BUMP_V = 2, 3                              # bins (1°, 0.3°): the field's lattice, the scale of the bumps counted
 ABOVE = 0.3                                        # degrees above the cut-off from which it must be dark
+RISING_SHARE = 0.5                                 # a cell whose light lies this much above the horizontal branch: its edge rises
+ALONG = 0.15                                       # degrees: a rising cell's deflection at most this far off its edge's line
 
 
 @dataclass
@@ -138,6 +146,7 @@ class Group:
     each: bool = False
     relative: str = ""
     factor: float = 1.0
+    weight: float = 1.0                             # of its shortfalls and excesses; below 1: not R112's, yields to it
 
 
 @dataclass
@@ -158,11 +167,15 @@ def grid() -> tuple[np.ndarray, np.ndarray]:
     return H_RANGE[0] + (np.arange(nh) + 0.5) * DH, V_RANGE[0] + (np.arange(nv) + 0.5) * DV
 
 
-def probes(cutoff: Cutoff) -> Probes:
+def probes(cutoff: Cutoff, band: float = 0.0, rise: float = 0.0) -> Probes:
     """R112's test points (their photometer windows: ± 0.25° x ± 0.1°) and every bin of its zones
     III, IV and I – of III and I every bin that touches them: an optimiser finds any gap between the
     probes –, for the traffic side of `cutoff`; and, to keep the cut-off where it is aimed, every
-    bin from ABOVE degrees above the cut-off line (|H| ≤ 10°, up to 1.5° up) at most as zone III."""
+    bin from ABOVE degrees above the cut-off line (|H| ≤ 10°, up to 1.5° up) at most as zone III.
+    Beyond R112, as a real beam has it: `band` cd at least on average in a band under both
+    branches (BAND_V under the line, BAND_H about the kink) – the beam brightest at its cut-off,
+    not in a patch below it –, and `rise` cd just under the rising branch (RISE_H from the kink)
+    with a fall by STEP above it – the kink seen, the rise sharp (0: neither)."""
     h, v = grid()
     sign = 1.0 if cutoff.right_hand_traffic else -1.0
     bins: list[int] = []
@@ -211,6 +224,17 @@ def probes(cutoff: Cutoff) -> Probes:
     groups.append(Group("under the cut-off", add(np.flatnonzero((near & (V >= level - 0.35) & (V <= level - 0.15)).ravel()))))
     groups.append(Group("over the cut-off", add(np.flatnonzero((near & (V >= level + 0.15) & (V <= level + 1.0)).ravel())),
                         each=True, relative="under the cut-off", factor=STEP))
+    # a real beam's: brightest under its cut-off, the rising branch lit and sharp
+    line = np.degrees(np.arctan(cutoff.line(np.tan(np.radians(H)))))
+    if band > 0.0:
+        under = (np.abs(H - cutoff.kink_deg) <= BAND_H) & (V <= line - BAND_V[0]) & (V >= line - BAND_V[1])
+        groups.append(Group("under the line", add(np.flatnonzero(under.ravel())), low=band, weight=REAL))
+    if rise > 0.0:
+        along = (sign * (H - cutoff.kink_deg) >= RISE_H[0]) & (sign * (H - cutoff.kink_deg) <= RISE_H[1])
+        groups.append(Group("under the rise", add(np.flatnonzero((along & (V >= line - 0.35) & (V <= line - BAND_V[0])).ravel())),
+                            low=rise, weight=REAL))
+        groups.append(Group("over the rise", add(np.flatnonzero((along & (V >= line + 0.15) & (V <= line + 1.0)).ravel())),
+                            each=True, relative="under the rise", factor=STEP, weight=REAL))
     # the field whose evenness counts: below the cut-off (FIELD_GAP), |H| ≤ FIELD_H, V ≥ FIELD_V, on
     # a lattice of every BUMP_H-th bin across and BUMP_V-th up and down (the views judged blurred as
     # the lamp blurs: nothing hides between its points)
@@ -264,14 +288,16 @@ def objective(I: np.ndarray, pr: Probes, margin: float, uniformity: float = 0.0)
         if g.low is not None:
             x = value(low_view, g)
             short = np.maximum((1.0 + margin) * g.low - x, 0.0) / g.low
-            total += (short ** 2).sum(axis=1) / math.sqrt(x.shape[1])
-            ratios.append(np.minimum(x.min(axis=1) / g.low, CAP))
+            total += g.weight * (short ** 2).sum(axis=1) / math.sqrt(x.shape[1])
+            if g.weight >= 1.0:
+                ratios.append(np.minimum(x.min(axis=1) / g.low, CAP))
         high = g.factor * value(low_view, by_name[g.relative])[:, :1] if g.relative else g.high
         if high is not None:
             x = value(high_view, g)
             over = np.maximum(x - (1.0 - margin) * high, 0.0) / np.maximum(high, 1.0)
-            total += (over ** 2).sum(axis=1) / math.sqrt(x.shape[1])
-            ratios.append(np.minimum(np.ravel(high * np.ones((len(x), 1))) / np.maximum(x.max(axis=1), 1e-9), CAP))
+            total += g.weight * (over ** 2).sum(axis=1) / math.sqrt(x.shape[1])
+            if g.weight >= 1.0:
+                ratios.append(np.minimum(np.ravel(high * np.ones((len(x), 1))) / np.maximum(x.max(axis=1), 1e-9), CAP))
     R = np.stack(ratios, axis=1)
     weakest = R.min(axis=1)
     soft = weakest - TAU * np.log(np.exp(-(R - weakest[:, None]) / TAU).sum(axis=1))
@@ -404,6 +430,18 @@ def _smear(a: np.ndarray, axis: int, slope: float, halves) -> np.ndarray:
     return sheared[:, idx_other, idx_along] if axis == 2 else sheared[:, idx_along.T, idx_other.T]
 
 
+def edges(rays: Rays, cutoff: Cutoff) -> np.ndarray:
+    """Per cell: whether the edge of its light is the cut-off's rising branch (True) or its
+    horizontal one – whether more than RISING_SHARE of its flux on the plane lens lies above the
+    horizontal branch on the driver's side (the light that leaves the shield by its 15° edge: in
+    front of the mirror's sector below it, a wedge from the middle of the lens)."""
+    sign = 1.0 if cutoff.right_hand_traffic else -1.0
+    total = np.bincount(rays.cell, rays.flux, minlength=len(rays.cells))
+    up = (rays.V > cutoff.v_deg + 0.1) & (sign * (rays.H - cutoff.kink_deg) > 0.0)
+    above = np.bincount(rays.cell[up], rays.flux[up], minlength=len(rays.cells))
+    return above > RISING_SHARE * np.maximum(total, 1e-300)
+
+
 class Surrogate:
     """The cells' patterns (flux per bin of the plane cell, each cut to where it has light, with room
     for the widest spread) in its views – as they are and, with a `blur` (sigma H, V in degrees:
@@ -452,6 +490,8 @@ class Surrogate:
         self.depth_v = np.zeros(len(DEFLECT_V))
         self.depth_c = np.zeros((len(SPREAD), len(ANGLE)))
         self.deepest = np.inf
+        self.edge_angle = np.full(count, -1)                         # per cell: the one direction its cylinder may
+        self.edge_slope = np.full(count, np.nan)                     # have, the line its deflection keeps to (-1, nan: any)
 
     def smeared(self, k: int, sp: int, an: int) -> np.ndarray:
         axis, slope, halves = self.lines[(int(sp), int(an))]
@@ -548,6 +588,8 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
             rest = total - sur.at_probes(k, m, choice.dh[k], choice.dv[k])[:, 0]
             # the deflection, the cylinder kept: all in the first sweep, then those near the present one
             fits = sur.fits(DHg, DVg, choice.sp[k], choice.an[k])
+            if not np.isnan(sur.edge_slope[k]):        # along its edge
+                fits &= np.abs(DEFLECT_V[DVg] - sur.edge_slope[k] * DEFLECT_H[DHg]) <= ALONG
             if sweep > 0:
                 fits &= (np.abs(DHg - choice.dh[k]) <= NEAR) & (np.abs(DVg - choice.dv[k]) <= NEAR)
             fits |= (DHg == choice.dh[k]) & (DVg == choice.dv[k])
@@ -557,6 +599,8 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
             choice.dh[k], choice.dv[k] = DHg[fits][best], DVg[fits][best]
             # the cylinder, the deflection kept: all in the first sweep, then those near the present one
             fits = sur.fits(choice.dh[k], choice.dv[k], SPg, ANg)
+            if sur.edge_angle[k] >= 0:                  # spreading along its edge
+                fits &= (ANg == sur.edge_angle[k]) | (SPREAD[SPg] == 0.0)
             if sweep > 0:
                 turn = np.abs(ANg - choice.an[k])
                 fits &= (np.abs(SPg - choice.sp[k]) <= 2) & (np.minimum(turn, len(ANGLE) - turn) <= 2)
@@ -588,6 +632,9 @@ class Result:
     dist: al_photometry.Distribution | None = None   # the full model's, of the lens built last
     system: al_lens.LensSystem | None = None
     start: int = 0                      # which of optimise's starts it came from
+    checked: bool = False               # whether the ray tracing's round is the one kept
+    traced: al_photometry.Distribution | None = None   # check()'s of the lens kept
+    background: np.ndarray | None = None   # (views, grid) the surrogate's in its best round
 
 
 def elements_of(system: al_lens.LensSystem, cells: list, choice: Choice) -> tuple:
@@ -632,7 +679,8 @@ def nearest(start: tuple, sur: "Surrogate") -> tuple[int, int, int, int]:
 def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, margin: float = 0.1,
              rounds: int = 2, blur: tuple[float, float] = (0.0, 0.0), spacing: float = 1.0,
              reflectance: float = 0.85, transmittance: float = 0.92, direct: bool = True, progress=None,
-             log=None, uniformity: float = 0.0, starts: tuple = (None,)) -> Result:
+             log=None, uniformity: float = 0.0, starts: tuple = (None,), along_edges: bool = False,
+             band: float = 0.0, rise: float = 0.0, check=None) -> Result:
     """The elements of every cell. evaluate(system) -> Distribution: the filament images (with the
     lamp's direct light) of a lens built; rounds: how often half its difference from the surrogate
     is carried back; blur (fit_blur, sigma H, V in degrees): a second view in which the beam must
@@ -640,7 +688,13 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     of the beam's evenness (objective); starts: what every cell begins with, one search each, the
     best kept – None: plane glass, or (deflect H, deflect V, spread, angle) in degrees (the nearest
     choices; a spread too deep for the lens is made weaker). The descent ends near where it begins:
-    from plane glass it seldom takes up a cylinder lens, from CYLINDERS it keeps many."""
+    from plane glass it seldom takes up a cylinder lens, from CYLINDERS it keeps many. along_edges:
+    every element spreads and deflects along the edge of its own light (edges()) – the horizontal
+    branch or the rising one –, as the flutes of a classic lens: the kink stays sharp and the
+    rising branch lit; False: any direction. band, rise: what a real beam has beyond R112 (probes).
+    check(system) -> Distribution: the lamp as it is (ray tracing) – once the rounds are done, what
+    it adds to the blurred view of the lens kept is carried back and the cells optimised again, CHECKS
+    times, each lens ray traced; the best by its ray tracing is kept (Result.traced)."""
     def step(lo: float, hi: float):
         if progress is None:
             return None
@@ -649,7 +703,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     plane = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),), wall_draft=0.0), frame)
     rays = lens_rays(plane, spacing=spacing, reflectance=reflectance, transmittance=transmittance,
                      progress=step(0.0, 0.1))
-    pr = probes(settings.cutoff)
+    pr = probes(settings.cutoff, band, rise)
     h, v = grid()
     omega = al_photometry._solid_angle(h[None, :], v[:, None], DH, DV)
     direct_light = np.zeros((len(v), len(h)))
@@ -663,45 +717,92 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     if not sur.fits(*zero):
         raise DesignError("the lens is too thin for even plane elements")
     first = np.stack([blurred(direct_light, b) for b in sur.blurs])
+    if along_edges:
+        cut = settings.cutoff
+        rising = edges(rays, cut)
+        level = int(np.argmin(np.abs(ANGLE)))
+        sur.edge_angle = np.where(rising, int(np.argmin(np.abs(ANGLE - math.degrees(math.atan(cut.slope))))), level)
+        sur.edge_slope = np.where(rising, cut.slope, np.nan)
     count = len(rays.cells)
     at = lambda a: a.reshape(len(sur.blurs), -1)[:, pr.bins]           # noqa: E731
     best = None
-    share = 0.8 / (len(starts) * (rounds + 1))
+    share = 0.8 / (len(starts) * (rounds + 1) + (CHECKS if check is not None else 0))
+
+    def judge(choice, background, sweeps, lo, extra=0.0):
+        """Descend from `choice`, build the lens, take its filament images: the round's record."""
+        sur.background = at(background)
+        choice, sweeps = descend(sur, choice, margin, sweeps=sweeps, progress=step(lo, lo + 0.7 * share),
+                                 uniformity=uniformity)
+        predicted = sur.full(choice) / omega + background
+        elements = elements_of(plane, rays.cells, choice)
+        system = al_lens.build(replace(settings, elements=elements), frame,
+                               progress=step(lo + 0.7 * share, lo + 0.8 * share))
+        dist = evaluate(system)
+        model, seen = resampled(dist)
+        actual = np.stack([blurred(model, b) for b in sur.blurs])       # the model in the surrogate's views
+        actual[-1] += extra                                             # (and what the ray tracing adds)
+        score = float(objective(at(actual)[:, None, :], pr, margin, uniformity)[0])
+        record = {"sweeps": sweeps, "surrogate": report(at(predicted), pr), "model": report(at(actual), pr),
+                  "objective": score, "bumps": (float(evenness(at(predicted)[-1], pr)),
+                                                float(evenness(at(actual)[-1], pr)))}
+        return choice, elements, system, dist, score, record, np.where(seen[None], actual - predicted, 0.0)
+
     for n, start in enumerate(starts):
         z = zero if start is None else nearest(start, sur)
         choice = Choice(*(np.full(count, c, dtype=np.int64) for c in z))
+        if along_edges:                             # a start's cylinders turned along each cell's edge
+            choice.an[:] = np.where(SPREAD[choice.sp] > 0.0, sur.edge_angle, choice.an)
+            off = ~np.isnan(sur.edge_slope) & (np.abs(DEFLECT_V[choice.dv] - cut.slope * DEFLECT_H[choice.dh]) > ALONG)
+            choice.dh[off], choice.dv[off] = zero[0], zero[1]
+            bad = ~sur.fits(choice.dh, choice.dv, choice.sp, choice.an)
+            choice.sp[bad], choice.an[bad] = 0, zero[3]
         result = Result((), choice, rays.cells, start=n)
         background = first
-        sur.background = at(background)
         for r in range(rounds + 1):
-            lo = 0.1 + (n * (rounds + 1) + r) * share
-            choice, sweeps = descend(sur, choice, margin, sweeps=SWEEPS if r == 0 else LATER,
-                                     progress=step(lo, lo + 0.7 * share), uniformity=uniformity)
-            predicted = sur.full(choice) / omega + background
-            elements = elements_of(plane, rays.cells, choice)
-            system = al_lens.build(replace(settings, elements=elements), frame,
-                                   progress=step(lo + 0.7 * share, lo + 0.8 * share))
-            dist = evaluate(system)
-            model, seen = resampled(dist)
-            actual = np.stack([blurred(model, b) for b in sur.blurs])       # the model in the surrogate's views
-            score = float(objective(at(actual)[:, None, :], pr, margin, uniformity)[0])
-            result.rounds.append({"start": n, "sweeps": sweeps, "surrogate": report(at(predicted), pr),
-                                  "model": report(at(actual), pr), "objective": score,
-                                  "bumps": (float(evenness(at(predicted)[-1], pr)),
-                                            float(evenness(at(actual)[-1], pr)))})
+            choice, elements, system, dist, score, record, missed = judge(
+                choice, background, SWEEPS if r == 0 else LATER, 0.1 + (n * (rounds + 1) + r) * share)
+            result.rounds.append({"start": n, **record})
             if log is not None:
-                log(r, sweeps, result.rounds[-1])
+                log(r, record["sweeps"], result.rounds[-1])
             if r == 0 or score < result.objective:       # the best round is kept
                 result.elements, result.dist, result.system, result.objective = elements, dist, system, score
-                result.choice = choice.copy()
+                result.choice, result.background = choice.copy(), background
             if r < rounds:                               # half of what the surrogate misses, kept
-                background = background + DAMPING * np.where(seen[None], actual - predicted, 0.0)
-                sur.background = at(background)
+                background = background + DAMPING * missed
         if best is None or result.objective < best.objective:
             if best is not None:
                 result.rounds = best.rounds + result.rounds
             best = result
         else:
             best.rounds += result.rounds
+    if check is not None:          # what the lamp as it is adds to the blurred view, carried back
+
+        def traced_score(dist, traced):
+            """The objective with the ray tracing as the blurred view, and that view's report."""
+            views = np.stack([blurred(resampled(dist)[0], b) for b in sur.blurs])
+            views[-1] = resampled(traced)[0]
+            return float(objective(at(views)[:, None, :], pr, margin, uniformity)[0]), report(at(views), pr)
+
+        best.traced = check(best.system)
+        best.objective, told = traced_score(best.dist, best.traced)
+        best.rounds.append({"start": best.start, "traced": True, "objective": best.objective, "model": told})
+        if log is not None:
+            log(-1, 0, best.rounds[-1])
+        choice, dist, traced = best.choice, best.dist, best.traced
+        for c in range(CHECKS):                    # from the lens last traced, what it misses carried back
+            model, seen = resampled(dist)
+            ray, hit = resampled(traced)
+            extra = np.where(seen & hit, blurred(ray - blurred(model, sur.blurs[-1]), CHECK_BLUR), 0.0)
+            background = best.background.copy()
+            background[-1] += extra
+            choice, elements, system, dist, _, record, _ = judge(
+                choice.copy(), background, LATER, 0.1 + (len(starts) * (rounds + 1) + c) * share, extra)
+            traced = check(system)
+            score, told = traced_score(dist, traced)
+            best.rounds.append({"start": best.start, "checked": True, **record, "objective": score, "traced": told})
+            if log is not None:
+                log(-1, record["sweeps"], best.rounds[-1])
+            if score < best.objective:
+                best.elements, best.dist, best.system, best.objective = elements, dist, system, score
+                best.choice, best.checked, best.traced = choice.copy(), True, traced
     return best
-    return result

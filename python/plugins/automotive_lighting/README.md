@@ -43,8 +43,9 @@ and V upwards.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
   element size, draft angle and fillet radius of the walls between the elements, the position of
   the mirror's focus and the **elements**; for *Optimise lens* its margin, rounds, the weight of
-  the beam's evenness, what the cells start with and whether the lamp's blur is measured by ray
-  tracing.
+  the beam's evenness, what the cells start with, whether the elements follow the edges of their
+  light, the band under the cut-off and the rising branch a real beam has, and whether the lamp's
+  blur is measured by ray tracing.
 - *Analysis*: the shadows of the steps on / off, the **direct light of the lamp** on / off, the
   **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
@@ -286,6 +287,12 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   above the line (|H| ≤ 10°) at most zone III's 625 cd, and at 2.5° to the side of the oncoming
   traffic – where R112 measures the cut-off – a fall by a factor 10 from just below the line to
   just above it. Small elements are preferred where nothing depends on a cell.
+- **A real beam** – what R112 does not ask but a headlamp's beam has, at a fifth of R112's weight,
+  so that R112 comes first: brightest at its cut-off, not in a patch below it (*Optimise: under the
+  cut-off*, 6000 cd: at least that on average 0.15–0.65° under both branches, ± 10° about the
+  kink), and the kink seen with the rise lit and sharp (*Optimise: under the rise*, 3000 cd: at
+  least that 0.15–0.35° under the rising branch, 1–5° from the kink, above it at most a tenth);
+  0 leaves either out.
 - **Evenness** (*Optimise: evenness*, a weight; 0: R112 alone): below the cut-off (from 0.4°
   under the line down to −5°, |H| ≤ 20°) the beam is to be free of patches, stripes and hot
   spots. On a lattice of 1° across and 0.3° up and down, the second differences between
@@ -295,6 +302,14 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
 - **The search**: one cell after the other (the brightest first), its deflection over all choices
   with its cylinder kept, then its cylinder (strength and direction together) with the deflection
   kept, in sweeps over all cells; after the first sweep only choices near the present ones.
+- **Along the edges** (*Optimise: along the edges*, on): as the flutes of a classic lens, every
+  element spreads and deflects along the edge of its own light. On the plane lens a cell's light
+  ends at the horizontal branch – it gets cylinders across and any deflection – or, where more than
+  half of it lies above that branch on the driver's side, at the rising one: the wedge from the
+  middle of the lens in front of the mirror's sector that the shield's slanting edge lets light
+  reach (for the H4 141 of 1063 cells). Those get cylinders turned by the rise (15°) and
+  deflections along it (within 0.15°), so the rise stays on its line; free, the search pulls that
+  light down to the oncoming traffic's side, where R112 counts it, and leaves the rise dark.
 - **The start** (*Optimise: start with*): every cell begins as a cylinder lens spreading 6° across
   (the default), as plane glass, or both are tried – two searches, twice the time – and the better
   kept. The search ends near where it begins: from plane glass nearly every cell becomes a prism,
@@ -304,26 +319,37 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   round is kept. The patterns' sum and the filament images agree within a few per cent.
 - **The lamp's blur** (*Optimise: the lamp's blur → measured by ray tracing*): the lamp as it is
   (helix, cooler ends, bulb) makes the beam softer than the filament images – on the plane lens of
-  an H4 by σ = 0.25° across and 0.2° up and down (a Gaussian fitted to the ray tracing). The beam is
+  an H4 by σ = 0.5° across and 0.2° up and down (a Gaussian fitted to the ray tracing). The beam is
   then judged in two views, as the filament images have it and blurred: every lower limit in the
-  darker one, every upper limit in the brighter one. At the end the lens built is ray traced.
+  darker one, every upper limit in the brighter one. Then the lens kept is ray traced (at least 20
+  million light paths: below that the noise of a zone III bin is some 100 cd); what the ray
+  tracing has beyond the blurred view – a faint veil, some 300 cd over zone III, that the filament
+  images do not have – is carried back and the cells optimised again, twice, each lens ray traced;
+  the best by its ray tracing is kept.
 
 What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
-6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, about 9
-minutes per start, 0.75 GB): all of R112 met by the filament images and by the ray tracing.
+6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, from cylinder
+lenses, about 9 minutes, 0.75 GB): all of R112 met by the filament images and by the ray tracing.
 
-| ray tracing | start: cylinder lenses | start: plane glass |
+| ray tracing | along the edges, band and rise (default) | free, R112 alone |
 |---|---|---|
-| 75R / 50R / 50V | 11 000 / 19 500 / 11 900 cd | 12 200 / 22 200 / 12 500 cd |
-| 25L / zone III | 2 600 / 594 cd | 2 400 / 540 cd |
-| at most | 20 200 cd | 23 400 cd |
-| cut-off | −0.70°, G = 0.46 | −0.70°, G = 0.35 |
-| bumps (of 50R's minimum) | 3.7 % | 4.2 % |
-| cells | 375 a 6° cylinder, 96 a weak one, 592 a prism | about 45 a weak cylinder, the rest a prism |
+| under the cut-off, −10 … −2° / −2 … 0° | 6 500 / 13 800 cd | 2 500 / 7 400 cd |
+| under the cut-off, 0 … 2° / 2 … 6° (rise) | 12 000 / 3 100 cd | 11 800 / 3 700 cd |
+| 75R / 50R / 50V | 11 900 / 17 500 / 12 500 cd | 11 000 / 19 500 / 11 900 cd |
+| 25L / zone III | 2 100 / 542 cd | 2 600 / 594 cd |
+| at most | 19 700 cd | 20 200 cd |
+| cut-off | −0.70°, G = 0.27 | −0.70°, G = 0.46 |
+| bumps (of 50R's minimum) | 4.1 % | 3.7 % |
 
-From cylinder lenses the beam is flatter and more even, with less to spare at 75R (the 10 %
-margin is just missed there in the ray tracing). Without the evenness (0, from plane glass) the
-bumps are twice as high (9.2 %) and the hot spot 32 400 cd (50R 29 300 cd). Without the blur the filament images are met but the ray tracing finds
+Free, the light gathers in a patch 2 … 3° under the cut-off and the horizontal branch is a faint
+seam; with the band it lies at the cut-off and falls off downwards, as in a real beam – the
+horizontal branch carried from below, the kink seen. Its price: a softer cut-off (G) and a darker
+rise (the wedge's light goes to the kink). How bright it can be at all is set by the mirror: every
+cell placed on its own as well as it can, the band would hold some 7 600 cd on average with the
+focus 6.7 mm behind the coil, 11 900 cd with it 3 mm behind; a longer focal length (35 mm) gives
+no more – the frame's mirror takes in less light. From plane glass (free) the beam is less even
+(4.2 %) with a higher hot spot (23 400 cd); without the evenness the bumps are twice as high
+(9.2 %) and the hot spot 32 400 cd. Without the blur the filament images are met but the ray tracing finds
 light in zone III at the cut-off's kink. With the focus close to the coil (3 mm) the shining
 shield sends light above the cut-off that no lens can take back (zone III about 5 500 cd): its
 rear part reflects the coil's light backwards and up, as from a coil behind the focus; at 6.7 mm
