@@ -587,6 +587,7 @@ class Result:
     objective: float = 0.0
     dist: al_photometry.Distribution | None = None   # the full model's, of the lens built last
     system: al_lens.LensSystem | None = None
+    start: int = 0                      # which of optimise's starts it came from
 
 
 def elements_of(system: al_lens.LensSystem, cells: list, choice: Choice) -> tuple:
@@ -613,15 +614,33 @@ def resampled(dist: al_photometry.Distribution) -> tuple[np.ndarray, np.ndarray]
     return (total / np.maximum(count, 1)).reshape(len(v), len(h)), (count > 0).reshape(len(v), len(h))
 
 
+CYLINDERS = (0.0, 0.0, 6.0, 0.0)     # a start: cylinder lenses spreading 6° across in every cell
+
+
+def nearest(start: tuple, sur: "Surrogate") -> tuple[int, int, int, int]:
+    """The choice nearest to (deflect H, deflect V, spread, angle); its spread made weaker until the
+    element fits the lens."""
+    dh, dv, sp, an = (int(np.argmin(np.abs(table - value))) for table, value in
+                      zip((DEFLECT_H, DEFLECT_V, SPREAD, ANGLE), start))
+    while sp > 0 and not sur.fits(dh, dv, sp, an):
+        sp -= 1
+    if not sur.fits(dh, dv, sp, an):
+        raise DesignError(f"the lens is too thin for the start {start}")
+    return dh, dv, sp, an
+
+
 def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, margin: float = 0.1,
              rounds: int = 2, blur: tuple[float, float] = (0.0, 0.0), spacing: float = 1.0,
              reflectance: float = 0.85, transmittance: float = 0.92, direct: bool = True, progress=None,
-             log=None, uniformity: float = 0.0) -> Result:
+             log=None, uniformity: float = 0.0, starts: tuple = (None,)) -> Result:
     """The elements of every cell. evaluate(system) -> Distribution: the filament images (with the
     lamp's direct light) of a lens built; rounds: how often half its difference from the surrogate
     is carried back; blur (fit_blur, sigma H, V in degrees): a second view in which the beam must
     hold too – lower limits in the darker view, upper ones in the brighter; uniformity: the weight
-    of the beam's evenness (objective)."""
+    of the beam's evenness (objective); starts: what every cell begins with, one search each, the
+    best kept – None: plane glass, or (deflect H, deflect V, spread, angle) in degrees (the nearest
+    choices; a spread too deep for the lens is made weaker). The descent ends near where it begins:
+    from plane glass it seldom takes up a cylinder lens, from CYLINDERS it keeps many."""
     def step(lo: float, hi: float):
         if progress is None:
             return None
@@ -643,33 +662,46 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     zero = (int(np.argmin(np.abs(DEFLECT_H))), int(np.argmin(np.abs(DEFLECT_V))), 0, int(np.argmin(np.abs(ANGLE))))
     if not sur.fits(*zero):
         raise DesignError("the lens is too thin for even plane elements")
-    background = np.stack([blurred(direct_light, b) for b in sur.blurs])
-    sur.background = background.reshape(len(sur.blurs), -1)[:, pr.bins]
+    first = np.stack([blurred(direct_light, b) for b in sur.blurs])
     count = len(rays.cells)
-    choice = Choice(*(np.full(count, z, dtype=np.int64) for z in zero))
-    result = Result((), choice, rays.cells)
-    share = 0.8 / (rounds + 1)
-    for r in range(rounds + 1):
-        choice, sweeps = descend(sur, choice, margin, sweeps=SWEEPS if r == 0 else LATER,
-                                 progress=step(0.1 + r * share, 0.1 + r * share + 0.7 * share), uniformity=uniformity)
-        predicted = sur.full(choice) / omega + background
-        elements = elements_of(plane, rays.cells, choice)
-        system = al_lens.build(replace(settings, elements=elements), frame,
-                               progress=step(0.1 + r * share + 0.7 * share, 0.1 + r * share + 0.8 * share))
-        dist = evaluate(system)
-        model, seen = resampled(dist)
-        actual = np.stack([blurred(model, b) for b in sur.blurs])       # the model in the surrogate's views
-        at = lambda a: a.reshape(len(sur.blurs), -1)[:, pr.bins]       # noqa: E731
-        score = float(objective(at(actual)[:, None, :], pr, margin, uniformity)[0])
-        result.rounds.append({"sweeps": sweeps, "surrogate": report(at(predicted), pr),
-                              "model": report(at(actual), pr), "objective": score,
-                              "bumps": (float(evenness(at(predicted)[-1], pr)), float(evenness(at(actual)[-1], pr)))})
-        if log is not None:
-            log(r, sweeps, result.rounds[-1])
-        if r == 0 or score < result.objective:       # the best round is kept
-            result.elements, result.dist, result.system, result.objective = elements, dist, system, score
-            result.choice = choice.copy()
-        if r < rounds:                               # half of what the surrogate misses, kept
-            background = background + DAMPING * np.where(seen[None], actual - predicted, 0.0)
-            sur.background = at(background)
+    at = lambda a: a.reshape(len(sur.blurs), -1)[:, pr.bins]           # noqa: E731
+    best = None
+    share = 0.8 / (len(starts) * (rounds + 1))
+    for n, start in enumerate(starts):
+        z = zero if start is None else nearest(start, sur)
+        choice = Choice(*(np.full(count, c, dtype=np.int64) for c in z))
+        result = Result((), choice, rays.cells, start=n)
+        background = first
+        sur.background = at(background)
+        for r in range(rounds + 1):
+            lo = 0.1 + (n * (rounds + 1) + r) * share
+            choice, sweeps = descend(sur, choice, margin, sweeps=SWEEPS if r == 0 else LATER,
+                                     progress=step(lo, lo + 0.7 * share), uniformity=uniformity)
+            predicted = sur.full(choice) / omega + background
+            elements = elements_of(plane, rays.cells, choice)
+            system = al_lens.build(replace(settings, elements=elements), frame,
+                                   progress=step(lo + 0.7 * share, lo + 0.8 * share))
+            dist = evaluate(system)
+            model, seen = resampled(dist)
+            actual = np.stack([blurred(model, b) for b in sur.blurs])       # the model in the surrogate's views
+            score = float(objective(at(actual)[:, None, :], pr, margin, uniformity)[0])
+            result.rounds.append({"start": n, "sweeps": sweeps, "surrogate": report(at(predicted), pr),
+                                  "model": report(at(actual), pr), "objective": score,
+                                  "bumps": (float(evenness(at(predicted)[-1], pr)),
+                                            float(evenness(at(actual)[-1], pr)))})
+            if log is not None:
+                log(r, sweeps, result.rounds[-1])
+            if r == 0 or score < result.objective:       # the best round is kept
+                result.elements, result.dist, result.system, result.objective = elements, dist, system, score
+                result.choice = choice.copy()
+            if r < rounds:                               # half of what the surrogate misses, kept
+                background = background + DAMPING * np.where(seen[None], actual - predicted, 0.0)
+                sur.background = at(background)
+        if best is None or result.objective < best.objective:
+            if best is not None:
+                result.rounds = best.rounds + result.rounds
+            best = result
+        else:
+            best.rounds += result.rounds
+    return best
     return result

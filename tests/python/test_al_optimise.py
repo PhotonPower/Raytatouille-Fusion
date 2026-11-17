@@ -159,6 +159,14 @@ cells = {(e.y0, e.z0) for e in result.elements}
 assert len(cells) == len(result.elements)
 assert all(abs(e.deflect_h) + e.spread_h <= O.REACH for e in result.elements)
 
+# ---- two starts, one search each: the better kept, both searches' rounds told
+calls.clear()
+both = O.optimise(settings, frame, evaluate, rounds=0, spacing=2.0, direct=False, starts=(O.CYLINDERS, None))
+assert [r["start"] for r in both.rounds] == [0, 1] and len(calls) == 2
+assert both.objective == min(r["objective"] for r in both.rounds)
+assert both.rounds[both.start]["objective"] == both.objective
+assert any(e.spread_h > 0 for e in both.elements) or both.start == 1
+
 # ---- R112's zone I in the table of the test points
 dist = al_photometry.Distribution(np.arange(-20, 20.01, 0.25), np.arange(-6, 3.01, 0.1), np.zeros((91, 161)), 0, 0, 1000)
 dist.intensity[(dist.v > -1.0) & (dist.v < -0.7)] = 12000.0
@@ -204,7 +212,8 @@ host = Host()
 ctx = Context(host, 1, plugin.convert_params({"lamp": "H4 (low beam)", "frame_width": 80.0, "frame_height": 50.0,
                                               "frame_radius": 8.0, "cell_width": 8.0, "cell_height": 8.0,
                                               "focus_behind": 3.0, "sampling": 2.0, "optimise_rounds": 0,
-                                              "optimise_blur": "none"}), [])
+                                              "optimise_blur": "none",
+                                              "optimise_start": "both, the better kept"}), [])
 try:
     plugin.optimise_lens(ctx)
     raise AssertionError("the facetted reflector has no lens")
@@ -216,7 +225,8 @@ assert summary.startswith(f"lens optimised ({plane.cells} cells); filament image
 assert len(host.set["elements"]) == plane.cells and ctx.params["elements"] == host.set["elements"]
 assert host.results == ["image", "table", "curve", "curve"], host.results
 log = "\n".join(host.logs)
-assert "round 1:" in log and "filament images: R112" in log and "cut-off at V" in log
+assert "start 1 (cylinder lenses), round 1:" in log and "start 2 (plane glass), round 1:" in log
+assert "kept: the search from" in log and "filament images: R112" in log and "cut-off at V" in log
 again = plugin.lens_system(ctx)                    # the table builds the lens it was optimised for
 assert again.cells == plane.cells and len(again.settings.elements) == plane.cells
 

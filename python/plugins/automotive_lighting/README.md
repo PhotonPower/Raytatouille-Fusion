@@ -43,7 +43,8 @@ and V upwards.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
   element size, draft angle and fillet radius of the walls between the elements, the position of
   the mirror's focus and the **elements**; for *Optimise lens* its margin, rounds, the weight of
-  the beam's evenness and whether the lamp's blur is measured by ray tracing.
+  the beam's evenness, what the cells start with and whether the lamp's blur is measured by ray
+  tracing.
 - *Analysis*: the shadows of the steps on / off, the **direct light of the lamp** on / off, the
   **test points** – the low beam's (UN R112) or a signal lamp's (UN R148) –,
   reflectance of the mirror and of the connecting faces (0: masked or matt walls),
@@ -294,6 +295,10 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
 - **The search**: one cell after the other (the brightest first), its deflection over all choices
   with its cylinder kept, then its cylinder (strength and direction together) with the deflection
   kept, in sweeps over all cells; after the first sweep only choices near the present ones.
+- **The start** (*Optimise: start with*): every cell begins as a cylinder lens spreading 6° across
+  (the default), as plane glass, or both are tried – two searches, twice the time – and the better
+  kept. The search ends near where it begins: from plane glass nearly every cell becomes a prism,
+  from cylinder lenses many keep theirs.
 - **Rounds** (*Optimise: rounds*): the lens is built and its filament images taken; half the
   difference from the patterns' sum is carried back, the cells are optimised again, the best
   round is kept. The patterns' sum and the filament images agree within a few per cent.
@@ -305,12 +310,20 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
 
 What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
 6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, about 9
-minutes, 0.75 GB): all of R112 met by the filament images and by the ray tracing – in the ray
-tracing 75R 12 200 cd, 50R 22 200 cd, 50V 12 500 cd, zone III 540 cd, at most 23 400 cd, the cut-off
-at −0.70° with G = 0.35; bumps 4.2 % of 50R's minimum. Without the evenness (0) the bumps are
-twice as high (9.2 %) and the hot spot 32 400 cd (50R 29 300 cd). Nearly every cell takes a prism
-alone (about 45 a weak cylinder, mostly 0 … 15° turned): with the focus there the filament images
-are large enough. Without the blur the filament images are met but the ray tracing finds
+minutes per start, 0.75 GB): all of R112 met by the filament images and by the ray tracing.
+
+| ray tracing | start: cylinder lenses | start: plane glass |
+|---|---|---|
+| 75R / 50R / 50V | 11 000 / 19 500 / 11 900 cd | 12 200 / 22 200 / 12 500 cd |
+| 25L / zone III | 2 600 / 594 cd | 2 400 / 540 cd |
+| at most | 20 200 cd | 23 400 cd |
+| cut-off | −0.70°, G = 0.46 | −0.70°, G = 0.35 |
+| bumps (of 50R's minimum) | 3.7 % | 4.2 % |
+| cells | 375 a 6° cylinder, 96 a weak one, 592 a prism | about 45 a weak cylinder, the rest a prism |
+
+From cylinder lenses the beam is flatter and more even, with less to spare at 75R (the 10 %
+margin is just missed there in the ray tracing). Without the evenness (0, from plane glass) the
+bumps are twice as high (9.2 %) and the hot spot 32 400 cd (50R 29 300 cd). Without the blur the filament images are met but the ray tracing finds
 light in zone III at the cut-off's kink. With the focus close to the coil (3 mm) the shining
 shield sends light above the cut-off that no lens can take back (zone III about 5 500 cd): its
 rear part reflects the coil's light backwards and up, as from a coil behind the focus; at 6.7 mm

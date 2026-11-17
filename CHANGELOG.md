@@ -7,6 +7,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**: *Optimise: start with* – *Optimise lens* starts every cell
+  with a cylinder lens spreading 6° across (new default), with plane glass, or from both and keeps
+  the better. The search stays near its start: from cylinder lenses about 45 % of the H4's cells keep
+  one and the beam is more even (ray tracing: bumps 3.7 instead of 4.2 %, hot spot 20 200 instead of
+  23 400 cd, G 0.46 instead of 0.35), with less to spare at 75R (11 000 instead of 12 200 cd).
 - **Automotive Lighting plugin**: *Optimise: evenness* – *Optimise lens* also makes the beam even
   below the cut-off: the bumps (second differences over 1° across and 0.3° up and down, in the
   lamp's blur) cost in the objective. For the H4 they halve (9.2 → 4.2 % of 50R's minimum in the
