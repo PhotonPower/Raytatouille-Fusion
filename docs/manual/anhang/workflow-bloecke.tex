@@ -1,0 +1,975 @@
+\chapter{Workflow-Blöcke}\label{kap:workflow-bloecke}\index{Workflow-Block}
+
+Dieser Anhang beschreibt alle Blocktypen, die der Node-Workflow (Kapitel~\ref{kap:workflow})
+in der vorliegenden Version kennt: die eingebauten Typen der Workflow-Maschine (RTT-Fusion) und die
+Typen, die die Plugins \plugin{Raytracer} und \plugin{FourierGrating} liefern. Die Angaben stammen
+aus der Blockbibliothek, die die Workflow-Maschine dem Editor übergibt; im Editor finden Sie
+dieselben Typen unter \gui{Add block}, geordnet nach Kategorie.
+
+\section{Lesehilfe}\label{sec:bloecke-lesehilfe}
+
+Zu jedem Block stehen:
+
+\begin{description}
+  \item[Kategorie] die Kategorie (bestimmt die Farbe der Kopfzeile und das Untermenü von
+        \gui{Add block}): \code{source}, \code{domain}, \code{splitter}, \code{detector},
+        \code{conversion}, \code{data}, \code{analysis}, \code{meta}.
+  \item[Anbieter] das Plugin, das den Typ liefert und rechnet. \enquote{Workflow (RTT-Fusion,
+        eingebaut)} heißt: Die Workflow-Maschine rechnet ihn selbst.
+  \item[Beschreibung] die Kurzbeschreibung der Bibliothek (englisch, kursiv; sie erscheint auch
+        als Tooltip in \gui{Add block}) und eine Erläuterung.
+  \item[Licht und Daten] alle Anschlüsse (\emph{sockets}), getrennt nach Licht und Daten, je
+        als \textit{Name} (\textit{Richtung}, \textit{Darstellungen} bzw.\ \textit{Datentyp},
+        ggf.\ \textit{Seite}, ggf.\ \enquote{\textit{Beschriftung im Editor}}). Richtung ist
+        \enquote{ein} oder \enquote{aus}, die Seite \enquote{vorn} oder \enquote{hinten} bei
+        zweiseitigen Elementen.
+  \item[Ports] wie die Licht-Anschlüsse in der Form mit Ports und Verbindungen zu Ports
+        zusammengefasst sind: Ein Port bündelt einen Eingang und einen Ausgang derselben Stelle.
+  \item[Parameter] Name (darunter ggf.\ die Beschriftung im Dialog), Typ, Standardwert,
+        Einheit oder Wertebereich und Bedeutung.
+\end{description}
+
+\paragraph{Darstellungen.} Die Kennbuchstaben der Licht-Anschlüsse bedeuten:
+\code{R} Strahlen, \code{H} hybrides Feld, \code{G} Gitterfeld, \code{S} Ebene-Wellen-Spektrum,
+\code{T} Jones-Tabelle, \code{P} radiometrisch ohne Phase
+(Abschnitt~\ref{sec:workflow-darstellungen}). Gerechnet werden derzeit R und, mit
+\code{fieldtracing}, H.
+
+\paragraph{Datentypen.} \code{result} (ein Ergebnis: Bild, Kurven, Zahlen; der Ausgang
+\code{view} eines Anzeigeblocks ist ebenfalls \code{result}), \code{drive} (ein Antriebswert
+eines Meta-Blocks), \code{N} (Brechzahlprofil), \code{Q} (Dipolquellen).
+
+\paragraph{Gemeinsame Anschlüsse.} Jeder Block der Kategorien \code{source}, \code{domain},
+\code{splitter} und \code{detector} hat zusätzlich den Daten-Eingang \code{pose} (Datentyp
+\code{drive}): eine Lageänderung aus sechs Werten (\code{dx}, \code{dy}, \code{dz} in mm,
+\code{rx}, \code{ry}, \code{rz} in rad) im lokalen System des Blocks, gedreht um seinen
+Bezugspunkt (\param{point} bzw.\ \param{center}). Er wird von einem Meta-Block angetrieben
+und ist in den Tabellen nicht wiederholt.
+
+\paragraph{Dynamische Anschlüsse.} Die Raytatouille-Blöcke \block{rtt.section},
+\block{rtt.mirror}, \block{rtt.splitter} und \block{rtt.detector} bekommen ihre Anschlüsse und Ports
+beim Import aus dem optischen System; die Tabellen zeigen die Grundform. Ihre Daten (Elemente,
+Flächen, Gläser, Durchläufe) stehen in internen Parametern und erscheinen im Parameterdialog als
+Reiter, die der Raytracer beschreibt.
+
+\paragraph{Typen von Vektoren.} Parameter vom Typ \enquote{Vektor} sind drei Zahlen, im
+Parameterdialog durch Kommas getrennt eingegeben (\code{0, 0, 1}); Punkte in mm, Richtungen
+ohne Einheit. Parameter vom Typ \enquote{Daten} sind interne Daten, die der
+Dialog nicht direkt zeigt.
+
+\section{Übersicht}\label{sec:bloecke-uebersicht}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.3\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}p{0.17\linewidth}X@{}}
+\toprule
+\textbf{Typ} & \textbf{Kategorie} & \textbf{Anbieter} & \textbf{Kurz} \\
+\midrule
+\endhead
+\block{rtt.source} & source & Raytracer & Quelle eines Systems \\
+\block{optics.collimated\_source} & source & Workflow & kollimiertes Bündel \\
+\block{rtt.section} & domain & Raytracer & Flächenfolge eines Systems \\
+\block{rtt.mirror} & domain & Raytracer & Spiegel eines Systems \\
+\block{rtt.part.lens} & domain & Raytracer & neue Linse \\
+\block{rtt.part.mirror} & domain & Raytracer & neuer Spiegel \\
+\block{rtt.part.stop} & domain & Raytracer & neue Blende \\
+\block{optics.plane\_mirror} & domain & Workflow & ebener Spiegel \\
+\block{optics.interface} & domain & Workflow & ebene Grenzfläche \\
+\block{optics.thin\_lens} & domain & Workflow & dünne Linse \\
+\block{optics.aplanatic\_lens} & domain & Workflow & ideale aplanatische Linse \\
+\block{fg.stack} & domain & FourierGrating & Schichtstapel \\
+\block{fusion.particle} & domain & Workflow & Partikel (CliffordBem) \\
+\block{rtt.splitter} & splitter & Raytracer & Strahlteiler eines Systems \\
+\block{rtt.part.splitter} & splitter & Raytracer & neuer Strahlteiler \\
+\block{optics.beam\_splitter} & splitter & Workflow & ebener Strahlteiler \\
+\block{optics.splitter} & splitter & Workflow & Teiler mit vier Ports \\
+\block{fg.grating} & splitter & FourierGrating & Gitter \\
+\block{rtt.detector} & detector & Raytracer & Detektor eines Systems \\
+\block{rtt.part.detector} & detector & Raytracer & neuer Detektor \\
+\block{optics.detector} & detector & Workflow & ebener Detektor \\
+\block{fusion.convert} & conversion & Workflow & Umwandlung \\
+\block{analysis.camera\_image} & analysis & Workflow & Kamerabild \\
+\block{biooptomd.layer} & data & Workflow & BioOptoMD-Daten \\
+\block{display.image} & analysis & Workflow & Bildanzeige \\
+\block{display.plot} & analysis & Workflow & Kurvenanzeige \\
+\block{display.beam} & analysis & Workflow & Sonde \\
+\block{meta.sweep} & meta & Workflow & Parameterstudie \\
+\block{meta.replicates} & meta & Workflow & Wiederholungen \\
+\block{meta.optimise} & meta & Workflow & Optimierung \\
+\block{group} & domain & Workflow & Gruppe \\
+\block{fusion.condensed} & domain & Workflow & verdichtete Gruppe \\
+\block{fusion.sum} & splitter & Workflow & Knotenpunkt \\
+\bottomrule
+\end{referenz}
+
+\section{Quellen}\label{sec:bloecke-quellen}
+
+\subsection{\block{rtt.source}}\label{sec:block-rtt-source}\index{rtt.source@\texttt{rtt.source} (Block)}
+
+\textbf{Kategorie:} \code{source} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Field points, wavelengths, polarisation of a system (coherence groups)}
+
+Die Lichtquelle eines Raytatouille-Systems: Feldpunkte, Wellenlängen und Polarisation
+(Kohärenzgruppen). Sie entsteht mit \gui{Workflow from system} oder \gui{New Raytatouille system}
+und hält die Einstellungen des ganzen Systems. Im Parameterdialog zeigt sie die
+Systemeinstellungen (Wellenlängen, Felder, Apertur, Objekt) als eigene Felder, die der Raytracer
+beschreibt. Die Zahl der Strahlen je Feld und Wellenlänge kommt aus dem Panel des
+Workflow-Plugins (\gui{Rays per field and wavelength}).
+
+\textbf{Licht:} \code{out} (aus, RHGSP, \enquote{light}).
+
+\textbf{Ports:} \code{out} (aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{system} \newline\small\gui{Raytatouille system} & Datei & leer & -- & Systemdatei (\datei{.rtt.json}) eines älteren Workflows; neue Workflows halten das System in den Daten der Blöcke. \\
+\param{fields} & Text & leer & -- & Indizes der Feldpunkte, die gerechnet werden; leer: alle. \\
+\param{wavelengths} & Text & leer & -- & Indizes der Wellenlängen; leer: alle. \\
+\param{rtt\_\allowbreak{}system} & Daten & -- & -- & Einstellungen des Systems (Wellenlängen, Felder, Apertur, Objekt); im Dialog als eigene Felder. \\
+\param{rtt\_\allowbreak{}tree} & Daten & -- & -- & Knoten des Raytatouille-Modellbaums, die kein Block besitzt. \\
+\param{rtt\_\allowbreak{}paths} & Daten & -- & -- & Reihenfolge und Schlüssel der Pfade des Systems. \\
+\param{rtt\_\allowbreak{}catalogs} & Daten & -- & -- & Glaskatalog-Dateien (vom Raytracer-Panel übernommen). \\
+\param{rtt\_\allowbreak{}catalog\_\allowbreak{}data} & Daten & -- & -- & Inhalt der Glaskataloge, im Dokument gespeichert. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.collimated\_source}}\label{sec:block-optics-collimated-source}\index{optics.collimatedsource@\texttt{optics.collimated\_source} (Block)}
+
+\textbf{Kategorie:} \code{source} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Collimated beam (plane wave per field angle and wavelength)}
+
+Ein kollimiertes Bündel ohne Raytatouille: je Feldwinkel und Wellenlänge eine ebene Welle über
+einer Kreisscheibe, auf einem hexapolaren Raster abgetastet. Für einfache Interferometer
+(Michelson, Linnik ohne Objektive) und Tests.
+
+\textbf{Licht:} \code{out} (aus, RH).
+
+\textbf{Ports:} \code{out} (aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{center} & Vektor & \code{0.0, 0.0, 0.0} & mm & Mittelpunkt des Bündels. \\
+\param{direction} & Vektor & \code{0.0, 0.0, 1.0} & -- & Ausbreitungsrichtung (Achse) des Bündels. \\
+\param{radius} & Zahl & \code{1.0} & mm; $\geq$ 0.0 & Radius des Bündels. \\
+\param{rings} & Ganzzahl & \code{20} & $\geq$ 1 & Ringe des hexapolaren Strahlrasters ($1 + 3r(r+1)$ Strahlen). \\
+\param{wavelengths\_\allowbreak{}um} & Zahlenliste & \code{0.6328} & \si{\micro\metre} & Wellenlängen. \\
+\param{field\_\allowbreak{}angles\_\allowbreak{}deg} & Zahlenliste & \code{(0.0, 0.0)} & \si{\degree} & Feldwinkel als Paare, z.\,B.\ \code{[0, 0], [1, 0]}. \\
+\param{irradiance} & Zahl & \code{1.0} & W/mm$^2$ & Bestrahlungsstärke (bei Gauß-Profil: auf der Achse). \\
+\param{polarisation} & Vektor & \code{1.0, 0.0, 0.0} & -- & Richtung des elektrischen Felds. \\
+\param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
+\param{gaussian\_\allowbreak{}waist} & Zahl & \code{0.0} & mm; $\geq$ 0.0 & 0: gleichmäßig; $> 0$: Gauß-Amplitude $\exp(-\rho^2/w^2)$ mit diesem $w$. \\
+\bottomrule
+\end{referenz}
+
+\section{Optische Elemente (Domänen)}\label{sec:bloecke-elemente}
+
+\subsection{\block{rtt.section}}\label{sec:block-rtt-section}\index{rtt.section@\texttt{rtt.section} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Sequential surfaces of a Raytatouille system (e.g. an objective)}
+
+Sequentielle Flächen eines Raytatouille-Systems, z.\,B.\ ein Objektiv. Licht durchläuft den
+Block in beiden Richtungen (vorn hinein und hinten heraus oder umgekehrt). Die Anschlüsse
+werden beim Import aus dem System erzeugt; der Dialog zeigt einen Reiter je Element mit Radien,
+Kegelschnittkonstanten, Aperturen, Flächenlagen und Gläsern. Mit \gui{Section $\to$ group} wird
+daraus eine Gruppe mit einem Block je Element. Der Daten-Eingang \code{drive} verschiebt den
+Block längs der Flächennormalen (Phasenschieber).
+
+\textbf{Licht:} \code{front\_in} (ein, RHGSTP, vorn, \enquote{front in}); \code{back\_out} (aus, RHGSTP, hinten, \enquote{back out}); \code{back\_in} (ein, RHGSTP, hinten, \enquote{back in}); \code{front\_out} (aus, RHGSTP, vorn, \enquote{front out}).\\
+\textbf{Daten:} \code{drive} (ein, \code{drive}).
+
+\textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{location} & Text & leer & -- & Knoten des Raytatouille-Modellbaums, den der Block darstellt. \\
+\param{offset} & Vektor & \code{0.0, 0.0, 0.0} & mm & Verschiebung der Elemente des Blocks. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Flächennormalen (vom \code{drive} eines Phasenschiebers gesetzt). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{rtt.mirror}}\label{sec:block-rtt-mirror}\index{rtt.mirror@\texttt{rtt.mirror} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Mirror (one surface, reflecting)}
+
+Ein Spiegel eines Raytatouille-Systems (eine reflektierende Fläche). Licht kommt durch den Port
+\code{front} herein und verlässt ihn durch denselben Port.
+
+\textbf{Licht:} \code{in} (ein, RHGS); \code{out} (aus, RHGS).\\
+\textbf{Daten:} \code{drive} (ein, \code{drive}).
+
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{surface} & Text & leer & -- & Kennung der Fläche im Raytatouille-System. \\
+\param{offset} & Vektor & \code{0.0, 0.0, 0.0} & mm & Verschiebung der Elemente des Blocks. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Flächennormalen (vom \code{drive} eines Phasenschiebers gesetzt). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{rtt.part.lens}}\label{sec:block-rtt-part-lens}\index{rtt.part.lens@\texttt{rtt.part.lens} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Raytatouille lens (a new element)}
+
+Eine neue Raytatouille-Linse aus der Bibliothek (nicht importiert). Ihr Element – Lage, Flächen
+mit Form und Apertur, Glas – steht im Parameter \param{rtt\_new} und wird im Parameterdialog wie
+die Daten eines importierten Blocks bearbeitet. Vorlage: Linse aus \code{CONST:1.5168} mit den
+Radien 51{,}68~mm und $-51{,}68$~mm, 4~mm dick, kreisförmige Apertur mit 12{,}5~mm Radius.
+Verlässt das Licht den Block durch die Seite, durch die es kam, ist das eine Reflexion, sonst
+eine Transmission.
+
+\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+
+\textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{rtt\_\allowbreak{}new} & Daten & -- & -- & Das Raytatouille-Element (Lage, Flächen, Glas); im Dialog als eigene Felder. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{rtt.part.mirror}}\label{sec:block-rtt-part-mirror}\index{rtt.part.mirror@\texttt{rtt.part.mirror} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Raytatouille mirror (a new element)}
+
+Ein neuer Raytatouille-Spiegel aus der Bibliothek. Vorlage: idealer Spiegel, kreisförmige
+Apertur mit 12{,}5~mm Radius.
+
+\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn).
+
+\textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{rtt\_\allowbreak{}new} & Daten & -- & -- & Das Raytatouille-Element (Lage, Flächen, Glas); im Dialog als eigene Felder. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{rtt.part.stop}}\label{sec:block-rtt-part-stop}\index{rtt.part.stop@\texttt{rtt.part.stop} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Raytatouille stop (a new element)}
+
+Eine neue Raytatouille-Blende aus der Bibliothek. Vorlage: kreisförmige Öffnung mit 5~mm Radius.
+\gui{New Raytatouille system} legt eine solche Blende bei $z = 0$ an.
+
+\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+
+\textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{rtt\_\allowbreak{}new} & Daten & -- & -- & Das Raytatouille-Element (Lage, Flächen, Glas); im Dialog als eigene Felder. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.plane\_mirror}}\label{sec:block-optics-plane-mirror}\index{optics.planemirror@\texttt{optics.plane\_mirror} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Plane mirror}
+
+Ein ebener Spiegel (analytisch, ohne Raytatouille). Die Ebene geht durch \param{point} mit der
+Normalen \param{normal}; zwischen den Elementen breitet sich das Licht frei in Luft ($n = 1$) aus.
+
+\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH).\\
+\textbf{Daten:} \code{drive} (ein, \code{drive}).
+
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{normal} & Vektor & \code{0.0, 0.0, -1.0} & -- & Flächennormale. \\
+\param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Normalen. \\
+\param{reflectance\_\allowbreak{}amplitude} & Zahl & \code{-1.0} & -- & Amplitudenreflexionsgrad (Standard $-1$: idealer Spiegel mit Phasensprung). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.interface}}\label{sec:block-optics-interface}\index{optics.interface@\texttt{optics.interface} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Plane interface of two media (Fresnel, s and p)}
+
+Eine ebene Grenzfläche zweier Medien mit Fresnel-Koeffizienten für s- und p-Polarisation,
+in beiden Richtungen durchlaufbar.
+
+\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+
+\textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{normal} & Vektor & \code{0.0, 0.0, -1.0} & -- & Flächennormale. \\
+\param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Normalen. \\
+\param{n\_\allowbreak{}front} & Zahl & \code{1.0} & -- & Brechzahl auf der Seite, in die die Normale zeigt. \\
+\param{n\_\allowbreak{}back} & Zahl & \code{1.5} & -- & Brechzahl dahinter. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.thin\_lens}}\label{sec:block-optics-thin-lens}\index{optics.thinlens@\texttt{optics.thin\_lens} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Paraxial thin lens (matrix optics, any incidence)}
+
+Eine paraxiale dünne Linse (Matrixoptik, beliebiger Einfall).
+
+\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH).
+
+\textbf{Ports:} \code{in} (ein \code{in}); \code{out} (aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{axis} & Vektor & \code{0.0, 0.0, 1.0} & -- & Optische Achse. \\
+\param{focal\_\allowbreak{}length} & Zahl & \code{10.0} & mm & Brennweite. \\
+\param{aperture\_\allowbreak{}radius} & Zahl & $10^{9}$ & mm & Radius der Apertur. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.aplanatic\_lens}}\label{sec:block-optics-aplanatic-lens}\index{optics.aplanaticlens@\texttt{optics.aplanatic\_lens} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Ideal aplanatic lens (sine condition, Richards-Wolf illumination)}
+
+Eine ideale aplanatische Linse (Sinusbedingung, Beleuchtung nach Richards-Wolf), z.\,B.\ als
+Ersatz eines realen Objektivs in einer Variante einer Gruppe.
+
+\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH).
+
+\textbf{Ports:} \code{in} (ein \code{in}); \code{out} (aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{axis} & Vektor & \code{0.0, 0.0, 1.0} & -- & Optische Achse. \\
+\param{focal\_\allowbreak{}length} & Zahl & \code{10.0} & mm & Brennweite. \\
+\param{aperture\_\allowbreak{}radius} & Zahl & \code{5.0} & mm & Radius der Apertur. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{fg.stack}}\label{sec:block-fg-stack}\index{fg.stack@\texttt{fg.stack} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{FourierGrating} (gerechnet in seinem Prozess)
+
+\textit{Layer stack (FourierGrating, exact per ray): coating, filter, mirror layers}
+
+Ein Schichtstapel (Beschichtung, Filter, Spiegelschichten) zwischen zwei Medien, exakt je Strahl
+mit FourierGrating gerechnet. Die Schichten stehen in einer FourierGrating-Konfiguration
+(homogene Schichten vom Substrat hinten bis zum Superstrat vorn). \gui{Check workflow} speichert
+die Konfiguration im Block. Mit \gui{Store panel configuration in block} übernehmen Sie die
+Konfiguration aus dem FourierGrating-Panel (Kapitel~\ref{kap:fouriergrating}).
+
+\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+
+\textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{fouriergrating} & Datei & leer & -- & FourierGrating-Konfiguration des Stapels; \gui{Check workflow} speichert sie im Block (\param{config}) und leert den Pfad. \\
+\param{config} & Daten & -- & -- & Die im Block gehaltene Konfiguration (hat Vorrang vor der Datei). \\
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt des Stapels. \\
+\param{normal} & Vektor & \code{0.0, 0.0, 1.0} & -- & Normale, zeigt nach vorn (zum Superstrat). \\
+\param{field\_\allowbreak{}threshold} & Zahl & $10^{-10}$ & -- & Ebene Wellen unter diesem Anteil der größten Amplitude werden weggelassen (H). \\
+\param{field\_\allowbreak{}transfer} & Auswahl & \code{exact} & \code{exact}, \code{interpolated} & \code{exact}: FourierGrating je ebener Welle; \code{interpolated}: aus einem geprüften Teilraster des Spektrums ($10^{-8}$), viel schneller für breite Bündel. \\
+\param{field\_\allowbreak{}grid\_\allowbreak{}max} & Ganzzahl & \code{1024} & -- & Höchstens so viele Gitterpunkte je Achse für ein Feld (H). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{fusion.particle}}\label{sec:block-fusion-particle}\index{fusion.particle@\texttt{fusion.particle} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut); braucht das Paket \code{cliffordbem}
+
+\textit{Particle (CliffordBem BEM): backscattered light of a focused beam}
+
+Ein kugelförmiges Partikel als Probe, gerechnet mit dem BEM-Löser CliffordBem: Die einfallenden
+Strahlen (z.\,B.\ der Fokus eines Objektivs) werden in ein Winkelspektrum umgerechnet, am
+Partikel gestreut und als rückgestreute Strahlen zurückgeschickt. Gleiche Anschlüsse wie ein
+Spiegel, sodass er einen Probenspiegel mit \gui{Replace with} ersetzen kann.
+
+\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH, \enquote{backscattered}).
+
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Mittelpunkt des Partikels. \\
+\param{radius\_\allowbreak{}um} & Zahl & \code{0.25} & \si{\micro\metre}; $\geq$ 0.0 & Radius der Kugel. \\
+\param{index} & Zahl & \code{1.5} & -- & Brechzahl des Partikels. \\
+\param{n\_\allowbreak{}medium} & Zahl & \code{1.0} & -- & Brechzahl des umgebenden Mediums. \\
+\param{refinement} & Ganzzahl & \code{4} & 1 … 7 & Verfeinerungsstufe des Ikosaeder-Netzes. \\
+\param{n\_\allowbreak{}theta} & Ganzzahl & \code{40} & $\geq$ 4 & Stützstellen der Fernfeld-Quadratur in $\theta$. \\
+\param{n\_\allowbreak{}phi} & Ganzzahl & \code{80} & $\geq$ 8 & Stützstellen der Fernfeld-Quadratur in $\varphi$. \\
+\bottomrule
+\end{referenz}
+
+\section{Strahlteiler und Gitter}\label{sec:bloecke-teiler}
+
+\subsection{\block{rtt.splitter}}\label{sec:block-rtt-splitter}\index{rtt.splitter@\texttt{rtt.splitter} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Beam splitter: splits into channels, combines coherently per group}
+
+Ein Strahlteiler eines Raytatouille-Systems. Licht aus \code{in} wird reflektiert (\code{r}) und
+durchgelassen (\code{t}); zurückkehrendes Licht auf \code{r\_in} und \code{t\_in} wird kohärent je
+Kohärenzgruppe zu \code{merged} vereinigt. Der Daten-Eingang \code{drive} verschiebt den Teiler
+längs seiner Normalen.
+
+\textbf{Licht:} \code{in} (ein, RHGS); \code{r} (aus, RHGS, \enquote{reflected}); \code{t} (aus, RHGS, \enquote{transmitted}); \code{r\_in} (ein, RHGS); \code{t\_in} (ein, RHGS); \code{merged} (aus, RHGS, \enquote{combined}).\\
+\textbf{Daten:} \code{drive} (ein, \code{drive}).
+
+\textbf{Ports:} \code{in} (ein \code{in}); \code{r} (ein \code{r\_in}, aus \code{r}); \code{t} (ein \code{t\_in}, aus \code{t}); \code{merged} (aus \code{merged}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{surface} & Text & leer & -- & Kennung der Fläche im Raytatouille-System. \\
+\param{offset} & Vektor & \code{0.0, 0.0, 0.0} & mm & Verschiebung der Elemente des Blocks. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Flächennormalen (vom \code{drive} eines Phasenschiebers gesetzt). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{rtt.part.splitter}}\label{sec:block-rtt-part-splitter}\index{rtt.part.splitter@\texttt{rtt.part.splitter} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Raytatouille beam splitter (a new element)}
+
+Ein neuer Raytatouille-Strahlteiler aus der Bibliothek mit vier Ports. Vorlage: idealer
+Strahlteiler, um 45\si{\degree} um x gedreht, Apertur 12{,}5~mm. Verlässt das Licht den Teiler
+durch die Seite, durch die es kam, ist das eine Reflexion.
+
+\textbf{Licht:} \code{front\_a\_in} (ein, RH, vorn); \code{front\_a\_out} (aus, RH, vorn); \code{front\_b\_in} (ein, RH, vorn); \code{front\_b\_out} (aus, RH, vorn); \code{back\_a\_in} (ein, RH, hinten); \code{back\_a\_out} (aus, RH, hinten); \code{back\_b\_in} (ein, RH, hinten); \code{back\_b\_out} (aus, RH, hinten).
+
+\textbf{Ports:} \code{front\_a} (ein \code{front\_a\_in}, aus \code{front\_a\_out}); \code{front\_b} (ein \code{front\_b\_in}, aus \code{front\_b\_out}); \code{back\_a} (ein \code{back\_a\_in}, aus \code{back\_a\_out}); \code{back\_b} (ein \code{back\_b\_in}, aus \code{back\_b\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{rtt\_\allowbreak{}new} & Daten & -- & -- & Das Raytatouille-Element (Lage, Flächen, Glas); im Dialog als eigene Felder. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.beam\_splitter}}\label{sec:block-optics-beam-splitter}\index{optics.beamsplitter@\texttt{optics.beam\_splitter} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Plane beam splitter (Michelson / Linnik arrangement)}
+
+Ein ebener Strahlteiler in Michelson-/Linnik-Anordnung (analytisch): Licht aus \code{in} geht
+reflektiert nach \code{r} und durchgelassen nach \code{t}; was auf dem durchgelassenen Arm
+zurückkommt (\code{t\_in}), wird nach \code{merged} reflektiert, was auf dem reflektierten Arm
+zurückkommt (\code{r\_in}), nach \code{merged} durchgelassen.
+
+\textbf{Licht:} \code{in} (ein, RH); \code{r} (aus, RH); \code{t} (aus, RH); \code{r\_in} (ein, RH); \code{t\_in} (ein, RH); \code{merged} (aus, RH).
+
+\textbf{Ports:} \code{in} (ein \code{in}); \code{r} (ein \code{r\_in}, aus \code{r}); \code{t} (ein \code{t\_in}, aus \code{t}); \code{merged} (aus \code{merged}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{normal} & Vektor & \code{0.0, 0.0, -1.0} & -- & Flächennormale. \\
+\param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Normalen. \\
+\param{r} & Zahl & $1/\sqrt{2}$ & -- & Amplitudenreflexionsgrad. \\
+\param{t} & Zahl & $1/\sqrt{2}$ & -- & Amplitudentransmissionsgrad. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.splitter}}\label{sec:block-optics-splitter}\index{optics.splitter@\texttt{optics.splitter} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Lossless splitter with four ports (Stokes relations)}
+
+Ein verlustfreier Teiler mit vier Ports nach den Stokes-Relationen: Licht in einen Port verlässt
+den Block durch den anderen Port derselben Seite (reflektiert, z.\,B.\ \code{front\_a} $\to$
+\code{front\_b}) und durch den Port mit demselben Buchstaben auf der anderen Seite (durchgelassen,
+z.\,B.\ \code{front\_a} $\to$ \code{back\_a}).
+
+\textbf{Licht:} \code{front\_a\_in} (ein, RH, vorn); \code{front\_a\_out} (aus, RH, vorn); \code{front\_b\_in} (ein, RH, vorn); \code{front\_b\_out} (aus, RH, vorn); \code{back\_a\_in} (ein, RH, hinten); \code{back\_a\_out} (aus, RH, hinten); \code{back\_b\_in} (ein, RH, hinten); \code{back\_b\_out} (aus, RH, hinten).
+
+\textbf{Ports:} \code{front\_a} (ein \code{front\_a\_in}, aus \code{front\_a\_out}); \code{front\_b} (ein \code{front\_b\_in}, aus \code{front\_b\_out}); \code{back\_a} (ein \code{back\_a\_in}, aus \code{back\_a\_out}); \code{back\_b} (ein \code{back\_b\_in}, aus \code{back\_b\_out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{normal} & Vektor & \code{0.0, 0.0, -1.0} & -- & Flächennormale. \\
+\param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Normalen. \\
+\param{r} & Zahl & $1/\sqrt{2}$ & -- & Amplitudenreflexionsgrad. \\
+\param{t} & Zahl & $1/\sqrt{2}$ & -- & Amplitudentransmissionsgrad. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{fg.grating}}\label{sec:block-fg-grating}\index{fg.grating@\texttt{fg.grating} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{FourierGrating} (gerechnet in seinem Prozess)
+
+\textit{Periodic sample (FourierGrating table): diffraction orders as channels}
+
+Eine periodische Probe (Gitter): Jede Beugungsordnung wird ein eigener Kanal. Die Wirkung kommt
+entweder aus einer gespeicherten Jones-Tabelle (rechnet ohne Löser) oder aus einer
+FourierGrating-Konfiguration, aus der der Block seine Tabelle um die einfallenden Strahlen herum
+selbst baut (R) bzw.\ jede ebene Welle eines Felds rechnet (H). \gui{Check workflow} speichert
+Tabelle und Konfiguration im Block und leert die Pfade. Der frühere Typname
+\block{fusion.grating} wird beim Öffnen auf \block{fg.grating} umgesetzt. Strahlen, deren Ordnung
+verschwindet oder die außerhalb der Tabelle bzw.\ nahe einer Rayleigh-Anomalie liegen, werden mit
+einer Log-Zeile verworfen.
+
+\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH, \enquote{orders}).
+
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{table} & Datei & leer & -- & Jones-Tabelle (\code{raytatouille-result}-Datei); \gui{Check workflow} speichert sie im Block (\param{table\_data}) und leert den Pfad. \\
+\param{fouriergrating} & Datei & leer & -- & FourierGrating-Konfiguration: Der Block baut seine Tabelle um die Strahlen (R) oder rechnet jede ebene Welle eines Felds (H); wird beim Prüfen im Block gespeichert (\param{config}). \\
+\param{config} & Daten & -- & -- & Die im Block gehaltene Konfiguration (hat Vorrang vor der Datei). \\
+\param{table\_\allowbreak{}data} & Daten & -- & -- & Die im Block gehaltene Jones-Tabelle (hat Vorrang vor der Datei). \\
+\param{side} & Auswahl & \code{reflected} & \code{reflected}, \code{transmitted} & Weitergegebene Ordnungen (mit einer Konfiguration): reflektiert oder durchgelassen. \\
+\param{orders} & Zahlenliste & leer & -- & Weitergegebene Ordnungen; leer: alle der Tabelle. \\
+\param{n\_\allowbreak{}in} & Zahl & \code{1.0} & -- & Brechzahl des Einfallsmediums (R, selbst gebaute Tabelle). \\
+\param{sigma\_\allowbreak{}step} \newline\small\gui{$\sigma$ step of the table} & Zahl & \code{0.01} & $\geq$ $10^{-5}$ & Abstand der Stützstellen der Jones-Tabelle in den Richtungskosinus $\sigma = n \sin\theta$ (kubisch interpoliert); kleiner ist genauer und braucht mehr FourierGrating-Rechnungen. \\
+\param{sigma\_\allowbreak{}margin} \newline\small\gui{$\sigma$ margin of the table} & Zahl & \code{0.01} & $\geq$ 0.0 & Wie weit die Tabelle über den $\sigma$-Bereich der einfallenden Strahlen hinausreicht. \\
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt des Gitters (Phase bezogen auf $x = 0$). \\
+\param{normal} & Vektor & \code{0.0, 0.0, 1.0} & -- & Flächennormale des Gitters. \\
+\param{grating\_\allowbreak{}vector} & Vektor & \code{1.0, 0.0, 0.0} & -- & Gittervektor: lokale x-Achse, senkrecht zu den Furchen. \\
+\param{field\_\allowbreak{}transfer} & Auswahl & \code{exact} & \code{exact}, \code{interpolated} & \code{exact}: FourierGrating je ebener Welle; \code{interpolated}: aus einem geprüften Teilraster des Spektrums ($10^{-8}$), viel schneller für breite Bündel. \\
+\param{field\_\allowbreak{}threshold} & Zahl & $10^{-10}$ & -- & Ebene Wellen unter diesem Anteil der größten Amplitude werden weggelassen (H). \\
+\param{field\_\allowbreak{}grid\_\allowbreak{}max} & Ganzzahl & \code{1024} & -- & Höchstens so viele Gitterpunkte je Achse für ein Feld (H). \\
+\bottomrule
+\end{referenz}
+
+\section{Detektoren}\label{sec:bloecke-detektoren}
+
+\subsection{\block{rtt.detector}}\label{sec:block-rtt-detector}\index{rtt.detector@\texttt{rtt.detector} (Block)}
+
+\textbf{Kategorie:} \code{detector} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Detector / camera: amplitudes within, intensities across coherence groups}
+
+Detektor bzw.\ Kamera eines Raytatouille-Systems: Amplituden addieren sich innerhalb einer
+Kohärenzgruppe, Intensitäten über die Gruppen. Der Ausgang \code{image} liefert das Bild an
+einen \block{display.image}. Ist im Workflow-Panel ein \gui{Image window} größer als 0
+eingestellt, ersetzt es \param{half\_size}.
+
+\textbf{Licht:} \code{in} (ein, RHGSP).\\
+\textbf{Daten:} \code{image} (aus, \code{result}).
+
+\textbf{Ports:} \code{in} (ein \code{in}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{surface} & Text & leer & -- & Kennung der Fläche im Raytatouille-System. \\
+\param{pixels} \newline\small\gui{pixels (long side)} & Ganzzahl & \code{512} & 16 … 8192 & Pixelzahl an der langen Seite. \\
+\param{half\_\allowbreak{}size} & Zahlenliste & leer & mm & Bildfenster $[h_u, h_v]$ (halbe Breiten); leer: die Apertur des Detektors. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{rtt.part.detector}}\label{sec:block-rtt-part-detector}\index{rtt.part.detector@\texttt{rtt.part.detector} (Block)}
+
+\textbf{Kategorie:} \code{detector} \quad \textbf{Anbieter:} \plugin{Raytracer} (gerechnet in seinem Prozess; ohne Raytracer rechnet die Workflow-Maschine selbst, mit \code{raytatouille})
+
+\textit{Raytatouille detector (a new element)}
+
+Ein neuer Raytatouille-Detektor aus der Bibliothek. Vorlage: rechteckige Fläche
+$10 \times 10$~mm. \gui{New Raytatouille system} legt einen solchen Detektor bei $z = 50$~mm an.
+
+\textbf{Licht:} \code{in\_in} (ein, RH, vorn).\\
+\textbf{Daten:} \code{image} (aus, \code{result}).
+
+\textbf{Ports:} \code{in} (ein \code{in\_in}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{rtt\_\allowbreak{}new} & Daten & -- & -- & Das Raytatouille-Element (Lage, Flächen, Glas); im Dialog als eigene Felder. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{optics.detector}}\label{sec:block-optics-detector}\index{optics.detector@\texttt{optics.detector} (Block)}
+
+\textbf{Kategorie:} \code{detector} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Plane detector: coherent image (amplitudes per coherence group)}
+
+Ein ebener Detektor (analytisch): kohärentes Bild, Amplituden je Kohärenzgruppe.
+
+\textbf{Licht:} \code{in} (ein, RH).\\
+\textbf{Daten:} \code{image} (aus, \code{result}).
+
+\textbf{Ports:} \code{in} (ein \code{in}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Bezugspunkt der Ebene bzw.\ des Elements. \\
+\param{normal} & Vektor & \code{0.0, 0.0, -1.0} & -- & Flächennormale. \\
+\param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
+\param{drive} & Zahl & \code{0.0} & mm & Verschiebung längs der Normalen. \\
+\param{half\_\allowbreak{}size} & Zahlenliste & \code{1.0, 1.0} & mm & Halbe Breiten des Bildfensters $[h_u, h_v]$. \\
+\param{pixels} & Zahlenliste & \code{128, 128} & -- & Pixel in u und v. \\
+\bottomrule
+\end{referenz}
+
+\section{Umwandlung, Auswertung und Daten}\label{sec:bloecke-auswertung}
+
+
+\begin{hinweis}
+Für \block{fusion.convert}, \block{analysis.camera\_image} und \block{biooptomd.layer} hat die
+Workflow-Maschine in der vorliegenden Version keinen Rechner; ein Lauf, der einen von ihnen
+braucht, meldet \code{exec.no\_evaluator}. Umwandlungen plant der Planer ohnehin selbst; für
+Kamerabilder verwenden Sie den Detektor eines Systems mit einem \block{display.image}.
+\end{hinweis}
+
+
+\subsection{\block{fusion.convert}}\label{sec:block-fusion-convert}\index{fusion.convert@\texttt{fusion.convert} (Block)}
+
+\textbf{Kategorie:} \code{conversion} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Conversion between representations (R $\to$ H, H $\leftrightarrow$ G, G $\leftrightarrow$ S, …)}
+
+Eine ausdrückliche Umwandlung zwischen Darstellungen (R $\to$ H, H $\leftrightarrow$ G,
+G $\leftrightarrow$ S …). Normalerweise plant der Planer Umwandlungen selbst; sichtbar wird eine
+Umwandlung nur, wenn Sie sie festlegen.
+
+\textbf{Licht:} \code{in} (ein, RHGSTP); \code{out} (aus, RHGSTP).
+
+\textbf{Ports:} \code{in} (ein \code{in}); \code{out} (aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{to} & Auswahl & \code{S} & \code{R}, \code{H}, \code{G}, \code{S}, \code{P} & Ziel-Darstellung. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{analysis.camera\_image}}\label{sec:block-analysis-camera-image}\index{analysis.cameraimage@\texttt{analysis.camera\_image} (Block)}
+
+\textbf{Kategorie:} \code{analysis} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Irradiance image of a detector with many rays}
+
+Bestrahlungsstärkebild eines Detektors mit vielen Strahlen.
+
+\textbf{Licht:} \code{in} (ein, RHGSP).\\
+\textbf{Daten:} \code{image} (aus, \code{result}).
+
+\textbf{Ports:} \code{in} (ein \code{in}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{rays} \newline\small\gui{rays per field and wavelength} & Ganzzahl & \code{200000} & $\geq$ 1000 & Strahlen je Feld und Wellenlänge. \\
+\param{pixels} & Ganzzahl & \code{512} & 16 … 8192 & Pixelzahl. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{biooptomd.layer}}\label{sec:block-biooptomd-layer}\index{biooptomd.layer@\texttt{biooptomd.layer} (Block)}
+
+\textbf{Kategorie:} \code{data} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Refractive-index profile n(z) and dipole ensembles from BioOptoMD}
+
+Datenquelle: Brechzahlprofil $n(z)$ (Datentyp \code{N}) und Dipol-Ensembles (Datentyp \code{Q})
+aus einem Ausgabeordner von BioOptoMD.
+
+\textbf{Daten:} \code{profile} (aus, \code{N}); \code{dipoles} (aus, \code{Q}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{directory} \newline\small\gui{BioOptoMD output} & Datei & leer & -- & Ausgabeordner von BioOptoMD. \\
+\bottomrule
+\end{referenz}
+
+\section{Anzeigeblöcke}\label{sec:bloecke-anzeige}
+
+
+Anzeigeblöcke bestimmen, was \gui{Run workflow} rechnet (Abschnitt~\ref{sec:workflow-was}). Ein
+Doppelklick öffnet ihr Fenster (Abschnitt~\ref{sec:workflow-anzeigen}). Ihr Ausgang \code{view}
+ist das, was das Fenster zeigt.
+
+
+\subsection{\block{display.image}}\label{sec:block-display-image}\index{display.image@\texttt{display.image} (Block)}
+
+\textbf{Kategorie:} \code{analysis} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Display: an image result (camera, detector) in its own window}
+
+Zeigt ein Bild (Kamera, Detektor) in einem eigenen Fenster. Eingang: der Ausgang \code{image}
+eines Detektors.
+
+\textbf{Daten:} \code{in} (ein, \code{result}, \enquote{image}); \code{view} (aus, \code{result}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{title} & Text & leer & -- & Fenstertitel; leer: der Name des Blocks. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{display.plot}}\label{sec:block-display-plot}\index{display.plot@\texttt{display.plot} (Block)}
+
+\textbf{Kategorie:} \code{analysis} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Display: curves of a sweep / optimisation, or profiles of an image}
+
+Zeigt Kurven: an einem Meta-Block die Messgröße über dem variierten Parameter, an einem Bild seine
+mittlere Zeile und Spalte, an Zahlen ihre Werte über dem Index.
+
+\textbf{Daten:} \code{in} (ein, \code{result}, \enquote{result}); \code{view} (aus, \code{result}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{title} & Text & leer & -- & Fenstertitel; leer: der Name des Blocks. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{display.beam}}\label{sec:block-display-beam}\index{display.beam@\texttt{display.beam} (Block)}
+
+\textbf{Kategorie:} \code{analysis} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Display: the light at a block output (probe), intensity on its port plane}
+
+Eine Sonde für das Licht an einem beliebigen Ausgang: Intensität auf der Port-Ebene (durch den
+Schwerpunkt des Lichts, senkrecht zu seiner mittleren Richtung). Strahlen werden als kohärentes
+Strahlbild, Felder als Feldbild gezeigt; Amplituden addieren sich innerhalb einer
+Kohärenzgruppe, Intensitäten über die Gruppen. Verbunden wird sie, indem Sie einen Port auf den
+Block ziehen (Beobachter-Link).
+
+\textbf{Licht:} \code{in} (ein, RH).\\
+\textbf{Daten:} \code{view} (aus, \code{result}).
+
+\textbf{Ports:} \code{in} (ein \code{in}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{title} & Text & leer & -- & Fenstertitel; leer: der Name des Blocks. \\
+\param{pixels} & Ganzzahl & \code{128} & 16 … 2048 & Pixelzahl des Sondenbilds. \\
+\param{margin} & Zahl & \code{0.1} & $\geq$ 0.0 & Rand des Fensters um das Licht (relativ). \\
+\bottomrule
+\end{referenz}
+
+\section{Meta-Blöcke}\label{sec:bloecke-meta}
+
+
+Meta-Blöcke wiederholen den Teil des Workflows vor einem Ausgang mit geänderten Parametern
+(Abschnitt~\ref{sec:workflow-meta}). Alle drei haben dieselben Anschlüsse: \code{observe}
+(der beobachtete Ausgang, alternativ zum Parameter \param{collect}), \code{drive} (Antrieb in den
+\code{drive}- oder \code{pose}-Eingang eines Blocks, alternativ zum Parameter \param{parameter})
+und \code{results} (die gesammelten Ergebnisse, z.\,B.\ für \block{display.plot}). Messgrößen
+eines Bildes: \code{peak} (Maximum), \code{centre} (Mittel der $3 \times 3$ mittleren Pixel),
+\code{power} (Summe); eine Zahl ist ihre eigene Messgröße.
+
+
+\subsection{\block{meta.sweep}}\label{sec:block-meta-sweep}\index{meta.sweep@\texttt{meta.sweep} (Block)}
+
+\textbf{Kategorie:} \code{meta} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Sweep: a parameter over values, the output collected per value}
+
+Ein Parameter über eine Liste von Werten; die Ausgabe wird je Wert gesammelt.
+
+\textbf{Daten:} \code{results} (aus, \code{result}); \code{drive} (aus, \code{drive}); \code{observe} (ein, \code{result}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{parameter} & Text & leer & -- & Variierter Parameter als \code{Block.Parameter} oder \code{Block.Parameter[i]}, z.\,B.\ \code{mirror.point[0]}. \\
+\param{collect} & Text & leer & -- & Gesammelter Ausgang als \code{Block.Anschluss}, z.\,B.\ \code{camera.image}. \\
+\param{measure} & Auswahl & \code{peak} & \code{peak}, \code{centre}, \code{power} & Messgröße jedes Ergebnisses. \\
+\param{component} & Auswahl & \code{dz} & \code{dx}, \code{dy}, \code{dz}, \code{rx}, \code{ry}, \code{rz} & Komponente der Lageänderung, wenn \code{drive} in einen \code{pose}-Eingang geht (mm bzw.\ rad). \\
+\param{values} & Zahlenliste & leer & -- & Werte; leer: aus \param{start}, \param{stop}, \param{count}. \\
+\param{start} & Zahl & \code{0.0} & -- & Erster Wert. \\
+\param{stop} & Zahl & \code{1.0} & -- & Letzter Wert. \\
+\param{count} & Ganzzahl & \code{11} & $\geq$ 1 & Anzahl der Werte. \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{meta.replicates}}\label{sec:block-meta-replicates}\index{meta.replicates@\texttt{meta.replicates} (Block)}
+
+\textbf{Kategorie:} \code{meta} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Replicates: repeated with replicate values, images averaged}
+
+Wiederholungen mit Wiederholungswerten (z.\,B.\ Zufalls-Startwerte, Realisierungen); die
+gesammelten Bilder werden gemittelt.
+
+\textbf{Daten:} \code{results} (aus, \code{result}); \code{drive} (aus, \code{drive}); \code{observe} (ein, \code{result}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{parameter} & Text & leer & -- & Variierter Parameter als \code{Block.Parameter} oder \code{Block.Parameter[i]}, z.\,B.\ \code{mirror.point[0]}. \\
+\param{collect} & Text & leer & -- & Gesammelter Ausgang als \code{Block.Anschluss}, z.\,B.\ \code{camera.image}. \\
+\param{measure} & Auswahl & \code{peak} & \code{peak}, \code{centre}, \code{power} & Messgröße jedes Ergebnisses. \\
+\param{component} & Auswahl & \code{dz} & \code{dx}, \code{dy}, \code{dz}, \code{rx}, \code{ry}, \code{rz} & Komponente der Lageänderung, wenn \code{drive} in einen \code{pose}-Eingang geht (mm bzw.\ rad). \\
+\param{values} & Zahlenliste & leer & -- & Wiederholungswerte; leer: $0 \ldots \text{count} - 1$. \\
+\param{count} & Ganzzahl & \code{8} & $\geq$ 1 & Anzahl der Wiederholungen (wenn \param{values} leer ist). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{meta.optimise}}\label{sec:block-meta-optimise}\index{meta.optimise@\texttt{meta.optimise} (Block)}
+
+\textbf{Kategorie:} \code{meta} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Optimisation of one parameter for the extremum of a measure}
+
+Ein Parameter innerhalb von Grenzen wird so gesucht, dass die Messgröße des gesammelten Ergebnisses
+ihr Maximum oder Minimum erreicht: erst ein grobes Raster, dann eine eindimensionale Suche.
+
+\textbf{Daten:} \code{results} (aus, \code{result}); \code{drive} (aus, \code{drive}); \code{observe} (ein, \code{result}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{parameter} & Text & leer & -- & Variierter Parameter als \code{Block.Parameter} oder \code{Block.Parameter[i]}, z.\,B.\ \code{mirror.point[0]}. \\
+\param{collect} & Text & leer & -- & Gesammelter Ausgang als \code{Block.Anschluss}, z.\,B.\ \code{camera.image}. \\
+\param{measure} & Auswahl & \code{peak} & \code{peak}, \code{centre}, \code{power} & Messgröße jedes Ergebnisses. \\
+\param{component} & Auswahl & \code{dz} & \code{dx}, \code{dy}, \code{dz}, \code{rx}, \code{ry}, \code{rz} & Komponente der Lageänderung, wenn \code{drive} in einen \code{pose}-Eingang geht (mm bzw.\ rad). \\
+\param{bounds} & Zahlenliste & \code{0.0, 1.0} & -- & Untere und obere Grenze. \\
+\param{goal} & Auswahl & \code{maximum} & \code{maximum}, \code{minimum} & Gesucht ist das Maximum oder Minimum. \\
+\param{scan} & Ganzzahl & \code{9} & $\geq$ 3 & Punkte des groben Rasters vor der Suche. \\
+\param{tolerance} & Zahl & \code{0.0} & -- & Abbruchgenauigkeit; 0: $10^{-6}$ der Grenzen. \\
+\bottomrule
+\end{referenz}
+
+\section{Strukturblöcke}\label{sec:bloecke-struktur}
+
+
+Diese Typen legen Sie nicht über \gui{Add block} an; sie entstehen durch Befehle des Editors oder
+beim Abrollen. Ihre Anschlüsse ergeben sich aus ihrem Inhalt.
+
+
+\subsection{\block{group}}\label{sec:block-group}\index{group@\texttt{group} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Group (R28): a sub-model with variants; in the socket form it keeps the group's pose and exported parameters for the blocks inside}
+
+Eine Gruppe (Abschnitt~\ref{sec:workflow-gruppen}): ein Teilmodell mit Varianten, angelegt mit
+\gui{Group selected blocks…} oder \gui{Section $\to$ group}. Nach außen hat sie die exportierten
+Ports der aktiven Variante; sie trägt die Lage der Gruppe und die nach außen gegebenen Parameter.
+
+\textbf{Parameter:} keine.
+
+\subsection{\block{fusion.condensed}}\label{sec:block-fusion-condensed}\index{fusion.condensed@\texttt{fusion.condensed} (Block)}
+
+\textbf{Kategorie:} \code{domain} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Condensed group (R29): plane-wave tables of its inner branches}
+
+Eine verdichtete Gruppe (Häkchen \gui{Condensed (plane-wave tables)}): Je innerem Ast wird einmal
+eine Tabelle über einfallende ebene Wellen gerechnet und dann angewendet. Einstellungen beim
+Einschalten: \code{sigma\_max} 0{,}2 und \code{count} 5.
+
+\textbf{Parameter:} keine.
+
+\subsection{\block{fusion.sum}}\label{sec:block-fusion-sum}\index{fusion.sum@\texttt{fusion.sum} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Junction of unrolled branches: the sum of the light arriving at one state}
+
+Ein Knotenpunkt abgerollter Äste: addiert das Licht, das aus mehreren Ästen am selben Zustand
+ankommt. Entsteht nur intern beim Abrollen.
+
+\textbf{Parameter:} keine.
+

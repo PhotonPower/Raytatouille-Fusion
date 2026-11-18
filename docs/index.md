@@ -1,6 +1,7 @@
 # Raytatouille Fusion – documentation
 
 - **[User guide](user-guide.md)** – installing, working with the views, snaps, files, plugins, shortcuts
+- **[Benutzerhandbuch (PDF, deutsch)](manual/handbuch.pdf)** – the full manual: every window, command, plugin and workflow block, with references for shortcuts, commands, programs and plugin parameters (LaTeX source in [manual/](manual/README.md))
 - [Project plan](plan.md) – goals, milestones, risks
 - [UI concept](ui-concept.md) – main window, tool column, viewports, mouse and keyboard
 - [Object snaps](snapping.md) – snap types, priorities, algorithm

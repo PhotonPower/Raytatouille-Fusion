@@ -1,0 +1,991 @@
+\chapter{Der Node-Workflow}\label{kap:workflow}\index{Node-Workflow}
+
+Viele optische Aufgaben lassen sich nicht mit \emph{einem} Rechenverfahren lösen. Ein
+Auflichtmikroskop etwa besteht aus Objektiven und Strahlteilern, die man mit Strahlen rechnet,
+einer Probe, an der das Licht gebeugt wird (ein Gitter, ein Schichtstapel, ein Partikel), und
+einer Kamera nahe einem Fokus, wo Strahlen versagen und Wellenoptik nötig ist. Der
+\emph{Node-Workflow} setzt eine solche Rechnung aus \emph{Blöcken} zusammen: Jeder Block ist ein
+optisches Element oder eine Auswertung, Verbindungen zeigen, wohin das Licht läuft, und jeder
+Block wird von dem Rechenkern gerechnet, der ihn am besten kann.
+
+Dieses Kapitel erklärt die Idee, den Editor im Fenster \gui{Node workflow}, die Äste, Gruppen und
+Varianten, das Prüfen und Rechnen mit dem Plugin \plugin{Workflow}, die Anzeigefenster und das
+Speichern der Ergebnisse. Alle Blocktypen mit ihren Anschlüssen und Parametern stehen in
+Anhang~\ref{kap:workflow-bloecke}.
+
+% ---------------------------------------------------------------------------
+\section{Die Idee}\label{sec:workflow-idee}
+
+\subsection{Blöcke, Ports und Verbindungen}
+
+Ein Workflow besteht aus:
+
+\begin{description}
+  \item[Blöcken] (engl.\ \emph{blocks} oder \emph{nodes}) – Lichtquellen, optische Elemente
+        (Linsengruppen, Spiegel, Strahlteiler, Gitter, Schichtstapel, ideale Linsen),
+        Detektoren bzw.\ Kameras, Umwandlungen, Meta-Blöcke (Parameterstudien, Optimierung)
+        und Anzeigeblöcke. Jeder Block hat einen \emph{Typ} (z.\,B.\ \block{rtt.section}),
+        eine Kennung (z.\,B.\ \code{objective}), einen Namen und Parameter.
+  \item[Ports] – die Stellen, an denen Licht in einen Block hinein- oder aus ihm herausgeht,
+        z.\,B.\ \code{front} und \code{back} einer Linse. Ein Port ist eine Referenzfläche des
+        Blocks und trägt Licht in \emph{beiden} Richtungen.
+  \item[Verbindungen] (engl.\ \emph{connections}) – sie verbinden zwei Ports zweier Blöcke.
+        Eine Verbindung hat keine Richtung: Das Licht kann sie hin und zurück durchlaufen
+        (etwa zur Probe hin und von ihr zurück).
+  \item[Daten-Anschlüsse] (engl.\ \emph{sockets}) und \emph{Links} – gerichtete Verbindungen
+        für Daten, die kein Licht sind: das Bild einer Kamera zu einer Anzeige, der Antrieb
+        (\emph{drive}) eines Meta-Blocks zu einem Spiegel, die Ergebnisse eines Sweeps zu einem
+        Diagramm.
+  \item[Ästen] (engl.\ \emph{branches}) – benannte Lichtwege von einer Quelle über eine Folge
+        von Blöcken zu einem Detektor. \emph{Genau die Äste werden gerechnet}; eine Verbindung,
+        die kein Ast benutzt, trägt kein Licht (Abschnitt~\ref{sec:workflow-aeste}).
+\end{description}
+
+\begin{hinweis}
+Ältere Workflows bestanden nur aus gerichteten Anschlüssen (Eingänge links, Ausgänge rechts)
+ohne Ports und Äste. Sie lassen sich weiter öffnen, prüfen und rechnen. \gui{Workflow from
+system} des Raytracers verwandelt einen solchen Workflow in die neue Form mit Ports und Ästen und
+übernimmt dabei Ihre Änderungen (Positionen, Parameter, ersetzte und hinzugefügte Blöcke,
+Verbindungen, Transporte, eigene Äste). Dieses Kapitel beschreibt die neue Form; wo sich die alte
+unterscheidet, ist es vermerkt.
+\end{hinweis}
+
+\subsection{Darstellungen: Strahlen und Felder}\label{sec:workflow-darstellungen}\index{Darstellung}
+
+Licht kann auf einer Verbindung in verschiedenen \emph{Darstellungen} (engl.\
+\emph{representations}) transportiert werden. Jede hat einen Kennbuchstaben:
+
+\begin{referenz}{@{}>{\bfseries}p{0.06\linewidth}>{\raggedright\arraybackslash}p{0.3\linewidth}X@{}}
+\toprule
+\textbf{} & \textbf{Darstellung} & \textbf{Inhalt} \\
+\midrule
+\endhead
+R & Strahlen & Strahlbündel mit Ort, Richtung und optischer Weglänge (damit auch Phase);
+  die schnellste Darstellung. \\
+H & hybrides Feld & Feld ohne Gitter (Amplitude und Phase mit ihren Ableitungen), gerechnet
+  mit \emph{Fieldtracing}; für Fokusse, Beugung und Interferenz. \\
+G & Gitterfeld & Feldwerte auf einem Gitter. \\
+S & Ebene-Wellen-Spektrum & ebene Wellen bzw.\ Beugungsordnungen. \\
+T & Tabelle & Jones-Tabelle je Ordnung über Wellenlänge und Einfallsrichtung. \\
+P & radiometrisch & Strahlen ohne Phase (nur inkohärent). \\
+\bottomrule
+\end{referenz}
+
+Gerechnet werden können derzeit \textbf{R} und – wenn das Python-Paket \code{fieldtracing}
+in der Plugin-Umgebung installiert ist – \textbf{H}. Die übrigen Buchstaben kennt der Planer
+bereits; eine Verbindung, die fest auf eine davon gestellt ist, meldet beim Prüfen bzw.\ Rechnen
+einen Fehler.
+
+Normalerweise steht der \emph{Transport} einer Verbindung auf \code{auto}: Der \emph{Planer}
+wählt für jede Verbindung und Richtung die günstigste Darstellung, die beide Enden annehmen
+können, und plant dort, wo ein Block eine andere Darstellung braucht, eine Umwandlung ein
+(z.\,B.\ R $\to$ H). \code{auto} wählt nie P, solange eine Darstellung mit Phase möglich ist.
+Sie können den Transport auch fest einstellen (Abschnitt~\ref{sec:workflow-transport}), etwa
+\code{H} für die Verbindung in eine Kamera nahe einem Fokus.
+
+\paragraph{Automatisch Wellenoptik nahe einem Fokus.} Ist im Panel des Workflow-Plugins
+\gui{Wave optics near a focus (automatic)} eingeschaltet (Standard), prüft ein Detektor an einer
+Verbindung auf \code{auto}, ob sich die Strahlen in seiner Nähe kreuzen oder fokussieren. Dann
+rechnet er ab der letzten Fläche mit Feldern, als stünde die Verbindung auf H; sonst bleibt er
+bei Strahlen. Nach dem Lauf zeigt die Verbindung, was tatsächlich verwendet wurde, z.\,B.\
+\textbf{R$\to$H}: geplant R, gerechnet als Feld. Der Tooltip nennt den Grund, das Plugin-Log
+ebenfalls. Die Anzeige bleibt, solange das Ergebnis des Detektors aktuell ist, und fällt auf die
+geplante Darstellung zurück, sobald es veraltet. Eine Verbindung, die fest auf R oder H steht,
+behält ihre Einstellung.
+
+\subsection{Wer rechnet?}
+
+Den Workflow prüft und rechnet das mitgelieferte Plugin \plugin{Workflow}, die
+\emph{Workflow-Maschine}\index{Workflow-Maschine}. Sie kennt selbst keinen Rechenkern. Die
+Blöcke bringen die Plugins mit, die sie rechnen können:
+
+\begin{itemize}
+  \item der \plugin{Raytracer} die Raytatouille-Blöcke \block{rtt.*} (Abschnitte eines
+        optischen Systems, Strahlteiler, Spiegel, Detektoren, neue Teile),
+  \item \plugin{FourierGrating} das Gitter \block{fg.grating} und den Schichtstapel
+        \block{fg.stack},
+  \item die Workflow-Maschine selbst die allgemeinen Blöcke: ideale optische Elemente
+        (\block{optics.*}), Umwandlungen, Meta- und Anzeigeblöcke.
+\end{itemize}
+
+Die Maschine fragt die anderen Plugins nach ihren Blocktypen, nimmt sie in ihre Bibliothek auf
+und lässt jeden Block im Prozess seines Plugins rechnen. Fehlt ein Plugin, bleibt sein Block mit
+allen Daten im Dokument erhalten; die Prüfung meldet \code{graph.provider\_missing}
+(Abschnitt~\ref{sec:workflow-anbieter}).
+
+\subsection{Was wird gerechnet?}\label{sec:workflow-was}
+
+Ähnlich wie bei den Viewer-Knoten in Blender rechnet \gui{Run workflow} nur, was ein
+\emph{Anzeigeblock} zeigen soll – und alles, was davor liegt. Kameras und Meta-Blöcke liefern
+keine eigenen Ergebnisse: Erst ein \block{display.image} an einer Kamera, ein
+\block{display.plot} an einem Meta-Block oder ein \block{display.beam} als Sonde an einem
+beliebigen Lichtausgang macht ihr Ergebnis sichtbar. Ohne Anzeigeblock meldet \gui{Run workflow}
+\gui{Nothing to show: …} (Abschnitt~\ref{sec:workflow-fehler}).
+
+Ergebnisse früherer Läufe werden aufbewahrt. Ändern Sie einen Parameter, rechnet der nächste
+Lauf nur den geänderten Block und alles, was dahinter liegt (Abschnitt~\ref{sec:workflow-status}).
+
+\subsection{Wie entsteht ein Workflow?}\label{sec:workflow-entstehen}
+
+Einen Workflow legt ein Plugin an; ein leeres Dokument hat keinen. Die üblichen Wege:
+
+\begin{description}
+  \item[Aus einem optischen System] Laden Sie im Raytracer ein System (\gui{Load system}) und
+        wählen Sie \gui{Workflow from system}. Jede Baugruppe (z.\,B.\ ein Objektiv), jeder
+        Strahlteiler und jeder Detektor wird ein Block mit allen Daten, und jeder Pfad des
+        Systems wird ein Ast. Kapitel~\ref{kap:raytracer}.
+  \item[Neu ohne Datei] \gui{New Raytatouille system} (Raytracer) legt eine Quelle mit
+        Standardeinstellungen (mm/\si{\micro\metre}, d-Linie, Eintrittspupille 4~mm, ein
+        Feldpunkt auf der Achse), eine Blende, einen Detektor und den Ast \code{main} an.
+        Dazwischen fügen Sie Teile aus der Bibliothek ein (Abschnitt~\ref{sec:workflow-beispiel}).
+\end{description}
+
+Danach bauen Sie den Workflow im Editor weiter aus: Blöcke hinzufügen, ersetzen, gruppieren,
+Parameter ändern, Äste aufnehmen. Der Workflow wird mit dem Dokument in der
+\datei{.rttf}-Datei gespeichert.
+
+% ---------------------------------------------------------------------------
+\section{Das Fenster \enquote{Node workflow}}\label{sec:workflow-fenster}
+
+Der Editor liegt im Dock \gui{Node workflow} (unten). Es öffnet sich von selbst, sobald ein
+Plugin einen Workflow anlegt oder ein Dokument mit Workflow geöffnet wird, und lässt sich mit
+\menu{View,Node workflow} ein- und ausblenden. Wie jedes Dock können Sie es abreißen, auf einen
+zweiten Bildschirm ziehen oder an einer anderen Seite andocken.
+
+Das Dock ist zweigeteilt (die Trennlinie ist verschiebbar):
+
+\begin{itemize}
+  \item links die \emph{Zeichenfläche} mit den Blöcken und Verbindungen,
+  \item rechts die Liste \gui{Branches} mit den Ästen und darunter \gui{Steps} mit den
+        Schritten des gewählten Asts (Abschnitt~\ref{sec:workflow-aeste}). Bei Workflows in
+        der alten Form fehlt dieser Teil.
+\end{itemize}
+
+Während ein Workflow rechnet, heißt das Dock \gui{Node workflow – running}.
+
+\subsection{So sieht ein Block aus}\label{sec:workflow-blockbild}
+
+Ein Block ist ein Rechteck mit einer farbigen Kopfzeile. Die Farbe zeigt die
+\emph{Kategorie}\index{Kategorie} des Blocktyps:
+
+\begin{referenz}{@{}p{0.22\linewidth}p{0.2\linewidth}X@{}}
+\toprule
+\textbf{Kategorie} & \textbf{Farbe} & \textbf{Beispiele} \\
+\midrule
+\endhead
+\code{source} & grün & Quelle eines Systems, kollimierter Strahl \\
+\code{domain} & blau & Linsengruppe, Spiegel, Grenzfläche, Schichtstapel, Gruppe \\
+\code{splitter} & violett & Strahlteiler, Gitter \\
+\code{detector} & orange & Detektor, Kamera \\
+\code{conversion} & grau & Umwandlung zwischen Darstellungen \\
+\code{data} & türkis & Datenquellen \\
+\code{analysis} & ocker & Kamerabild, Anzeigeblöcke \\
+\code{meta}, \code{group} & dunkelgrau & Sweep, Wiederholungen, Optimierung; Gruppen \\
+\bottomrule
+\end{referenz}
+
+Weitere Kennzeichen:
+
+\begin{itemize}
+  \item \textbf{Titel}: der Name des Blocks (ohne Namen seine Kennung), zu lang gekürzt.
+  \item \textbf{Ports} (gelb-orange Punkte) für Licht: links die Ports, durch die das Licht beim
+        ersten Besuch eines Asts hereinkommt, rechts die übrigen. \textbf{Daten-Anschlüsse}
+        (blaue Punkte) stehen links (Eingänge) bzw.\ rechts (Ausgänge). Neben jedem Punkt steht
+        sein Name; der Tooltip nennt Art und angenommene Darstellungen bzw.\ Datentyp.
+  \item \textbf{Zustand} (Kreis oben links): ein grüner Haken \checkmark{} (\gui{Up to date:
+        kept from the last run}) oder ein rotes Kreuz $\times$ (\gui{Out of date: computed again
+        at the next run}); siehe Abschnitt~\ref{sec:workflow-status}.
+  \item \textbf{Umwandlungen}: Plant der Planer in diesem Block eine Umwandlung, steht oben
+        rechts das Zeichen $\rightleftarrows$; der Tooltip listet unter \gui{planned conversions:}
+        die Umwandlungen (\code{R $\to$ H: …}).
+  \item \textbf{Probleme}: Ein Block mit einem Fehler der letzten Prüfung hat einen
+        \emph{roten Rahmen}; der Tooltip nennt Code und Meldung.
+  \item \textbf{Läuft}: Der gerade gerechnete Block hat einen hellblauen Rahmen und den Zusatz
+        \gui{– running …}.
+  \item \textbf{Stumm}: Ein stummgeschalteter Block hat eine graue Kopfzeile und den Zusatz
+        \gui{(muted)} (Abschnitt~\ref{sec:workflow-bloecke-bearbeiten}).
+\end{itemize}
+
+Der Tooltip eines Blocks zeigt in der ersten Zeile \textit{Kennung}~\code{–}~\textit{Typ} und
+darunter seine einfachen Parameter als \code{Name = Wert}.
+
+\subsection{So sehen Verbindungen aus}
+
+\begin{itemize}
+  \item Licht-Verbindungen sind gelb-orange, Daten-Links blau. Verläuft eine Verbindung
+        rückwärts (das Licht kommt zurück, z.\,B.\ von einem Spiegel), wird sie als Bogen
+        unter den Blöcken gezeichnet.
+  \item Auf der Mitte einer Verbindung steht für jede Richtung, die ein Ast benutzt, ein
+        Schild: ein Pfeil $\blacktriangleright$ bzw.\ $\blacktriangleleft$ (wie auf dem
+        Bildschirm; das Schild über dem Band gilt für die zuerst genannte Richtung, das darunter
+        für die andere) und die Darstellung – die geplante, z.\,B.\ \code{R}, oder ein fester
+        Transport mit Stern, z.\,B.\ \code{H*}. Hat der letzte Lauf etwas anderes verwendet als
+        geplant, steht beides da: \code{R$\to$H}.
+  \item Der Tooltip nennt beide Richtungen mit Blocknamen, z.\,B.\
+        \code{Objective A $\to$ Sample: H,} \code{transport fixed H}, und \code{no branch} für eine
+        unbenutzte Richtung.
+  \item Eine Verbindung mit einem Problem ist rot gestrichelt.
+  \item Fest eingestellte Transporte werden etwas dicker gezeichnet als \code{auto}.
+  \item Die Verbindungen des hervorgehobenen Asts sind dicker und hellblau, die Schilder der
+        benutzten Richtung nehmen diese Farbe an.
+\end{itemize}
+
+Nach einer Änderung bleibt der letzte Plan sichtbar, aber \emph{grau}: Er ist veraltet, bis
+\gui{Check workflow} ihn erneuert; der Tooltip trägt den Zusatz \gui{(planned before the last
+edit – Check workflow renews it)}.
+
+% ---------------------------------------------------------------------------
+\section{Navigation im Editor}\label{sec:workflow-navigation}
+
+Die Zeichenfläche bedienen Sie wie die CAD-Ansichten. Tastenkürzel wirken, solange der Editor
+den Fokus hat (einmal hineinklicken), und dann \emph{nicht} auf die CAD-Ansichten.
+
+\begin{referenz}{@{}p{0.34\linewidth}X@{}}
+\toprule
+\textbf{Aktion} & \textbf{Maus / Tasten} \\
+\midrule
+\endhead
+Verschieben (Pan) & \maus{mittlere Maustaste ziehen}, \maus{rechte Maustaste ziehen},
+  \keys{Alt} + \maus{linke Maustaste ziehen}; Trackpad: \maus{mit zwei Fingern wischen} \\
+Zoomen am Mauszeiger & \maus{Mausrad}; Trackpad: \maus{Spreizen} oder \keys{Strg} +
+  \maus{Wischen mit zwei Fingern} \\
+Alles zeigen & \keys{Z} \keys{E} (nacheinander), \keys{Pos1}, \maus{Doppelklick mit der
+  mittleren Maustaste}, Trackpad: \maus{Doppeltippen mit zwei Fingern}; Kontextmenü
+  \gui{Show all} \\
+Auswahl zeigen & \keys{Z} \keys{S}; Kontextmenü \gui{Zoom selected} (ohne Auswahl: alles) \\
+Blöcke auswählen & \maus{Klick} auf einen Block; \maus{Rechteck aufziehen} mit der linken
+  Maustaste auf leerer Fläche \\
+Block verschieben & \maus{Block an der Kopfzeile oder am Rumpf ziehen} \\
+Kontextmenü & \maus{Rechtsklick ohne Bewegung} \\
+Gruppe verlassen & \keys{Esc} oder Klick auf die Ortsangabe oben links \\
+Aufnahme eines Asts abbrechen & \keys{Esc} \\
+\bottomrule
+\end{referenz}
+
+Ein Rechtsklick, bei dem die Maus bewegt wird, verschiebt nur und öffnet kein Menü. Der Zoom
+reicht vom 0,05-Fachen bis zum 8-Fachen.
+
+% ---------------------------------------------------------------------------
+\section{Blöcke bearbeiten}\label{sec:workflow-bloecke-bearbeiten}
+
+\subsection{Block hinzufügen}
+
+\begin{schritte}
+  \item Rechtsklick auf eine leere Stelle der Zeichenfläche.
+  \item \gui{Add block} öffnet ein Untermenü je Kategorie (\code{analysis}, \code{conversion},
+        \code{data}, \code{detector}, \code{domain}, \code{meta}, \code{source},
+        \code{splitter}); darin stehen die Blocktypen mit ihrer Kennung, der Tooltip
+        beschreibt den Typ. Blöcke anderer Plugins erscheinen hier, sobald \gui{Check workflow}
+        einmal gelaufen ist.
+  \item Wählen Sie einen Typ. Der Block erscheint an der Stelle des Rechtsklicks, mit den
+        Standardwerten seiner Parameter. Seine Kennung ist der letzte Teil des Typs, z.\,B.\
+        \code{image} für \block{display.image}, bei Wiederholung \code{image\_2},
+        \code{image\_3} usw.
+\end{schritte}
+
+\subsection{Verschieben, Anordnen, Löschen}
+
+Blöcke verschieben Sie mit der Maus; die Position wird mit dem Workflow gespeichert.
+\gui{Arrange} (Kontextmenü der Zeichenfläche) ordnet alle Blöcke der aktuellen Ebene neu in
+Spalten an: In der neuen Form steht ein Block in der Spalte des ersten Schritts, in dem ein Ast
+ihn erreicht. Ein importierter Workflow ohne Positionen wird beim ersten Anzeigen von selbst so
+angeordnet.
+
+\gui{Delete block} (Kontextmenü des Blocks) löscht den Block mit seinen Verbindungen und Links.
+Äste, die durch ihn liefen, bleiben stehen; die Prüfung meldet sie dann als fehlerhaft, bis Sie
+sie löschen oder neu aufnehmen.
+
+\subsection{Stummschalten}
+
+\gui{Mute (bypass)} im Kontextmenü schaltet einen Block stumm, \gui{Unmute} wieder ein. Ein
+stummer Block lässt Licht unverändert durch und liefert an Daten-Ausgängen nichts. Bei
+Raytatouille-Blöcken werden Pfade bzw.\ Äste, auf denen ein stummer Block liegt, aus der Rechnung
+genommen; das Log nennt sie (\code{… left out (muted block on it)}).
+
+\subsection{Block ersetzen}\label{sec:workflow-ersetzen}
+
+\gui{Replace with} tauscht einen Block gegen einen anderen Typ aus und \emph{behält seine
+Verbindungen}. Das Untermenü listet nur Typen, bei denen das möglich ist: Jeder verbundene Port
+wandert auf den Port gleichen Namens, sonst auf den einzigen Port des neuen Typs. Meta- und
+Analyseblöcke stehen nicht zur Wahl. Die Schritte der Äste werden auf die neuen Ports
+umgeschrieben; Daten-Links, für die der neue Typ keinen Anschluss hat, entfallen.
+
+Beispiel: Den Probenspiegel eines Linnik-Interferometers ersetzen Sie durch ein Gitter
+\block{fg.grating} – der Port \code{front} bleibt verbunden, die Äste laufen nun über das Gitter.
+Ersetzt ein Block anderer Art einen Raytatouille-Block, behält er dessen Element und
+Durchläufe, sodass der Raytracer ihn weiter zeichnet.
+
+\subsection{Aktionen der Plugins an Blöcken}
+
+Manche Plugins bieten Befehle für bestimmte Blocktypen an. Sie stehen im Kontextmenü des Blocks
+unter \gui{Parameters…}, z.\,B.:
+
+\begin{itemize}
+  \item \gui{Section $\to$ group} (Raytracer) an einem \block{rtt.section}: macht aus einem
+        Abschnitt eines Systems eine Gruppe mit einem Block je Element
+        (Abschnitt~\ref{sec:workflow-gruppen}).
+  \item \gui{Store panel configuration in block} und \gui{Load block configuration into panel}
+        (FourierGrating) an \block{fg.grating} und \block{fg.stack}
+        (Kapitel~\ref{kap:fouriergrating}).
+\end{itemize}
+
+Diese Befehle laufen als normale Plugin-Jobs (Abschnitt~\ref{sec:plugin-jobs}) und sind ein
+Rückgängig-Schritt.
+
+% ---------------------------------------------------------------------------
+\section{Verbinden}\label{sec:workflow-verbinden}
+
+\subsection{Zwei Ports verbinden}
+
+Ziehen Sie mit der linken Maustaste von einem Port zu einem Port eines anderen Blocks. Während
+des Ziehens folgt eine gestrichelte Linie der Maus. Lassen Sie über dem Ziel-Port los, entsteht
+die Verbindung. Regeln:
+
+\begin{itemize}
+  \item Ein Port hat höchstens \emph{eine} Verbindung. Ist einer der beiden Ports schon belegt,
+        passiert nichts. Verzweigen und Zusammenführen geschieht in Blöcken (Strahlteiler).
+  \item Ein Port lässt sich nicht mit einem Daten-Anschluss verbinden.
+  \item Ziehen Sie einen Port auf einen \emph{Anzeigeblock} (z.\,B.\ \block{display.beam}),
+        entsteht keine Verbindung, sondern ein \emph{Beobachter-Link}: Die Anzeige zeigt das Licht,
+        das diesen Port verlässt; ein Ausgang darf mehrere Links speisen.
+\end{itemize}
+
+\subsection{Daten verbinden}
+
+Daten-Anschlüsse bleiben gerichtet: Ziehen Sie von einem Ausgang zu einem Eingang (oder
+umgekehrt). Beide müssen von derselben Art sein; zwei Eingänge oder zwei Ausgänge lassen sich nicht
+verbinden. Ein Eingang nimmt nur \emph{einen} Link an. Typische Daten-Links:
+
+\begin{itemize}
+  \item \code{image} eines Detektors $\to$ \code{in} eines \block{display.image},
+  \item \code{results} eines Meta-Blocks $\to$ \code{in} eines \block{display.plot},
+  \item \code{drive} eines Meta-Blocks $\to$ \code{drive} eines Spiegels, Abschnitts oder
+        Strahlteilers (Verschiebung längs der Flächennormalen, wie ein Piezo-Phasenschieber)
+        oder $\to$ \code{pose} eines Blocks (Lageänderung),
+  \item der zu beobachtende Ausgang (z.\,B.\ \code{camera.image}) $\to$ \code{observe} des
+        Meta-Blocks.
+\end{itemize}
+
+Jeder Block mit Lage – Quellen, optische Elemente, Strahlteiler, Detektoren – hat dazu den
+Daten-Eingang \code{pose} (sechs Werte: Verschiebung \code{dx}, \code{dy}, \code{dz} in mm und
+Drehung \code{rx}, \code{ry}, \code{rz} in rad).
+
+\subsection{Verbindung löschen}
+
+Rechtsklick auf die Verbindung $\to$ \gui{Delete connection}, bei einem Daten-Link
+\gui{Delete link}. Verbindungen lassen sich auch mit der Maus anklicken (sie werden weiß
+hervorgehoben); die Trefferzone ist breiter als die Linie.
+
+\subsection{Transport festlegen}\label{sec:workflow-transport}\index{Transport}
+
+Rechtsklick auf eine Verbindung zweier Ports bietet drei Untermenüs:
+
+\begin{itemize}
+  \item \gui{Transport (both directions)} – für beide Richtungen,
+  \item \gui{Transport} \textit{A}~$\to$~\textit{B} – nur für die Richtung von Block A nach B,
+  \item \gui{Transport} \textit{B}~$\to$~\textit{A} – nur für die Gegenrichtung.
+\end{itemize}
+
+Jedes bietet \code{auto}, \code{R}, \code{H}, \code{G}, \code{S}, \code{T} und \code{P}. Bei einem
+Link der alten Form heißt das Untermenü einfach \gui{Transport}. \code{auto} überlässt die Wahl dem
+Planer; jeder andere Buchstabe legt die Darstellung fest (Schild mit Stern, z.\,B.\ \code{H*}).
+
+\begin{tipp}
+Für ein beugungsbegrenztes Bild nahe einem Fokus (Pupillen- oder Fokuskamera) stellen Sie die
+Verbindung in die Kamera auf \code{H} und wählen im Workflow-Panel ein kleines
+\gui{Image window (half width, mm)}, z.\,B.\ 0.05. Meist genügt es aber, die Verbindung auf
+\code{auto} zu lassen und \gui{Wave optics near a focus (automatic)} eingeschaltet zu haben.
+\end{tipp}
+
+% ---------------------------------------------------------------------------
+\section{Äste}\label{sec:workflow-aeste}\index{Ast}
+
+Ein \emph{Ast} ist ein benannter Lichtweg: von einer Quelle durch eine Folge von Blöcken bis zu
+einem Detektor. Jeder Schritt nennt den Block, den Port, durch den das Licht hereinkommt, und den
+Port, durch den es ihn verlässt. Ein Spiegel wird durch denselben Port verlassen, durch den das
+Licht kam; ein Strahlteiler durch den Port der gewünschten Richtung. \emph{Nur die Äste werden
+gerechnet} – Verbindungen allein bestimmen noch keinen Lichtweg. \gui{Workflow from system} legt
+je Pfad des optischen Systems einen Ast an.
+
+\subsection{Die Liste \enquote{Branches}}
+
+Rechts neben der Zeichenfläche:
+
+\begin{description}
+  \item[\gui{Branches}] alle Äste der aktuellen Ebene (Tooltip: \gui{Exactly these branches are
+        computed. Select one to highlight it.}). Ein Klick hebt den Ast hervor: Seine Blöcke
+        bekommen einen hellblauen Rahmen, seine Verbindungen werden hellblau.
+  \item[\gui{Steps}] die Schritte des gewählten Asts, je Zeile
+        \textit{Block}\code{:}~\textit{Port~ein}~$\to$~\textit{Port~aus}, ggf.\ mit dem
+        Kanal in eckigen Klammern; $\cdot$ steht für \enquote{keiner} (die Quelle hat keinen
+        Eingang, der Detektor keinen Ausgang).
+  \item[\gui{New branch}] beginnt die Aufnahme eines Asts (während der Aufnahme heißt der Knopf
+        \gui{Cancel}).
+  \item[\gui{Delete}] löscht den markierten Ast.
+\end{description}
+
+Innerhalb einer Gruppe steht über der Liste \gui{Inside:} mit dem Namen der Gruppe, und die
+Liste zeigt die \emph{inneren} Äste der Gruppe.
+
+\subsection{Einen Ast aufnehmen}\label{sec:workflow-ast-aufnehmen}
+
+\begin{schritte}
+  \item Klicken Sie auf \gui{New branch} (oder im Kontextmenü der Zeichenfläche auf
+        \gui{New branch…}). Unter der Liste erscheint der Hinweis \gui{New branch: click the
+        port of a source the light leaves by (Esc cancels)}.
+  \item Klicken Sie den Port der \emph{Quelle}, durch den das Licht sie verlässt.
+  \item Klicken Sie nacheinander bei jedem folgenden Block den Port, durch den das Licht ihn
+        \emph{verlässt} (Hinweis: \gui{Click the port the light leaves the next block by, or the
+        detector (Esc cancels)}). Der nächste Block ist immer der am anderen Ende der Verbindung
+        des zuletzt gewählten Ports; Klicks auf andere Blöcke werden ignoriert. Bei einem Spiegel
+        klicken Sie also den Port, durch den das Licht hereinkam.
+  \item Klicken Sie zuletzt den \emph{Detektor} (den Block oder seinen Port). Der Hinweis lautet
+        jetzt \gui{The branch reaches a detector}.
+  \item Der Dialog \gui{New branch} fragt nach dem \gui{Name of the branch:} (Vorschlag
+        \code{branch 1}, \code{branch 2}, …). Der Name muss eindeutig sein.
+\end{schritte}
+
+Der aufgenommene Teil wird während der Aufnahme gelb hervorgehoben. \keys{Esc} oder
+\gui{Cancel} brechen ab. Führt der Ast durch eine Gruppe, wird automatisch der innere Ast der
+Gruppe eingetragen, der zu den beiden Ports passt.
+
+\subsection{Kanäle eines Schritts}\label{sec:workflow-kanaele}
+
+Ein Schritt kann einen \emph{Kanal} tragen, der genauer sagt, wie das Licht den Block durchläuft.
+Doppelklicken Sie in \gui{Steps} auf den Schritt; der Dialog \gui{Channel of the step} bietet
+Vorschläge an, Sie können aber auch frei tippen:
+
+\begin{itemize}
+  \item \gui{(none)} – kein Kanal,
+  \item bei einer Gruppe: die inneren Äste, die zu den Ports des Schritts passen,
+  \item bei einem Raytatouille-Block: \code{ghost:}\textit{Fläche} – ein \emph{Geisterbild},
+        das an dieser Fläche reflektiert wird (eine ungerade Zahl von Flächen verlässt den Block
+        durch den Port, durch den das Licht kam, eine gerade durch den anderen),
+  \item beliebiger Text, z.\,B.\ eine Beugungsordnung.
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Gruppen und Varianten}\label{sec:workflow-gruppen}\index{Gruppe}\index{Variante}
+
+Eine \emph{Gruppe} fasst mehrere Blöcke zu einem zusammen – etwa die Linsen eines Objektivs. Nach
+außen hat sie die Ports, über die Verbindungen in sie hineinführen; innen hat sie eigene Äste.
+Eine Gruppe kann mehrere \emph{Varianten} haben, zwischen denen Sie umschalten, z.\,B.\ ein
+reales Objektiv und eine ideale Linse.
+
+\subsection{Gruppe bilden}
+
+\begin{schritte}
+  \item Wählen Sie die Blöcke aus (Rechteck aufziehen oder anklicken).
+  \item Rechtsklick auf einen der Blöcke $\to$ \gui{Group selected blocks…}.
+  \item Geben Sie im Dialog \gui{Group} den \gui{Name of the group:} ein (Vorschlag
+        \code{Group}).
+\end{schritte}
+
+Verbindungen über den Rand der Gruppe werden zu exportierten Ports
+(\textit{Block}\code{.}\textit{Port}), jedes Stück eines Asts innerhalb der Gruppe wird ein
+innerer Ast, und der Schritt durch die Gruppe nennt ihn als Kanal. Abgelehnt wird – mit
+Begründung in einem Meldungsfenster –, wenn
+
+\begin{itemize}
+  \item die Auswahl leer ist oder der Workflow die alte Form hat
+        (\gui{Select blocks of a model first.}),
+  \item eine Quelle oder ein Detektor dabei ist (\gui{… is a source or a detector: branches
+        begin and end outside a group.}),
+  \item ein Daten-Link den Rand kreuzt (\gui{The data link … crosses the group's border; group
+        the blocks it joins too, or remove it.}),
+  \item ein Ast die Gruppe nicht über Verbindungen betritt und verlässt.
+\end{itemize}
+
+\subsection{In eine Gruppe hineingehen}
+
+Ein Doppelklick auf eine Gruppe (oder \gui{Open group}) zeigt ihr Inneres. Oben links steht die
+Ortsangabe, z.\,B.\ \code{Workflow $\blacktriangleright$ Objective (real)  – Esc: back}, mit
+dem Namen der Gruppe und der aktiven Variante in Klammern. \keys{Esc}, ein Klick auf die
+Ortsangabe oder \gui{Back out of the group} (Kontextmenü der Zeichenfläche) führen eine Ebene
+zurück. Gruppen können geschachtelt sein.
+
+Ein außen hervorgehobener Ast setzt sich innen fort: Beim Hineingehen wird der innere Ast
+hervorgehoben, den sein Schritt durch die Gruppe nennt; beim Verlassen wieder der äußere.
+
+\subsection{Varianten}
+
+Das Untermenü \gui{Variant} im Kontextmenü einer Gruppe listet die Varianten; ein Häkchen
+markiert die aktive. Ein Klick macht eine andere Variante aktiv.
+
+\begin{description}
+  \item[\gui{New variant…}] kopiert die aktive Variante unter einem neuen Namen (Dialog
+        \gui{New variant}, \gui{A copy of "…", named:}, Vorschlag \textit{Name}~\code{copy})
+        und macht die Kopie aktiv. Darin ersetzen Sie dann z.\,B.\ die Linsengruppe durch eine
+        ideale Linse.
+  \item[\gui{Rename variant…}] benennt die aktive Variante um; ein leerer oder vergebener Name
+        wird mit \gui{The name is empty or taken.} abgelehnt.
+  \item[\gui{Delete variant "…"}] löscht die aktive Variante; die letzte bleibt immer.
+\end{description}
+
+Alle Varianten müssen dieselben Ports und Parameter nach außen geben, sonst meldet die Prüfung
+\code{graph.group\_ports} bzw.\ \code{graph.group\_params}.
+
+\subsection{Verdichten und Auflösen}
+
+\gui{Condensed (plane-wave tables)} (Häkchen) rechnet eine Gruppe nicht Block für Block, sondern
+als einen Block, der je innerem Ast eine Tabelle über einfallende ebene Wellen anwendet. Das
+lohnt sich für seitlich unveränderliche Gruppen wie Schichtstapel oder Platten; eine Gruppe,
+deren Wirkung vom Auftreffort abhängt (eine Linse) oder die s- und p-Polarisation mischt, lässt
+sich so nicht verdichten (Fehler \code{exec.condense} beim Rechnen).
+
+\gui{Ungroup} löst die Gruppe auf und setzt ihre Blöcke wieder auf die äußere Ebene.
+
+\subsection{Abschnitt in Gruppe verwandeln}
+
+Ein importierter Raytatouille-Abschnitt (\block{rtt.section}) enthält oft mehrere Elemente einer
+Baugruppe, z.\,B.\ alle Linsen eines Objektivs. \gui{Section $\to$ group} im Kontextmenü (vom
+Raytracer) macht daraus eine Gruppe mit einem Block je Element (Linsengruppe, Blende …), jeder
+mit seinen Daten und seinem Teil jedes Durchlaufs; die Durchläufe des Abschnitts werden die inneren
+Äste. Das Licht bleibt dasselbe. Der Befehl ist ein Rückgängig-Schritt.
+
+% ---------------------------------------------------------------------------
+\section{Parameter der Blöcke}\label{sec:workflow-parameter}
+
+Ein Doppelklick auf einen Block (außer Gruppen und Anzeigeblöcken) oder \gui{Parameters…} im
+Kontextmenü öffnet den Dialog \gui{Parameters of} \textit{Name}. Er zeigt die Parameter des
+Blocktyps (Anhang~\ref{kap:workflow-bloecke}) und – bei Blöcken mit eigenen Daten – die Felder,
+die das zuständige Plugin für diesen Block beschreibt.
+
+\begin{itemize}
+  \item Hat ein Block solche Datenfelder (z.\,B.\ ein importierter Raytatouille-Block), ist der
+        Dialog in \emph{Reiter} gegliedert: \gui{Block} für die Parameter des Typs und ein Reiter
+        je Element bzw.\ Gruppe von Daten – Radien, Konstanten der Kegelschnitte, Aperturen,
+        Lagen der Flächen, Gläser, Wechselwirkungen. Längen stehen in mm, Winkel in Grad; eine
+        Größe, die in der Optimierung \enquote{variabel} ist, erscheint als Kontrollkästchen.
+  \item Die Quelle eines Systems zeigt die Systemeinstellungen (Wellenlängen, Felder, Apertur,
+        Objekt).
+  \item Die Einheit steht in Klammern hinter der Beschriftung, z.\,B.\ \gui{focal\_length (mm)}.
+  \item Zahlen tippen Sie mit Dezimalpunkt; Listen und Punkte als durch Kommas getrennte
+        Zahlen (\gui{comma-separated numbers}), z.\,B.\ \code{0, 0, 1}; Dateien mit \gui{…}.
+  \item Der Tooltip eines Felds beschreibt den Parameter.
+\end{itemize}
+
+Mit \gui{OK} werden \emph{nur die Werte geschrieben, die Sie geändert haben}. Ein Wert mit mehr
+Stellen, als der Dialog zeigt, bleibt dadurch exakt erhalten, solange Sie ihn nicht anfassen. Hat
+ein Block keine Parameter, steht dort \gui{This block has no parameters.}
+
+Interne Datenparameter (z.\,B.\ das gespeicherte System einer Quelle) zeigt der Dialog nicht.
+
+\begin{hinweis}
+Nach jeder Änderung im Editor ruft die Anwendung nach etwa 0,6~Sekunden die Plugins auf, die dem
+Workflow folgen, sofern sie laufen und nichts zu tun haben. Der Raytracer zeichnet so mit
+\gui{Follow the workflow} sein System im CAD-Modell neu, wenn sich Radien, Lagen usw.\ geändert
+haben. Ein halb eingegebener Wert wartet einfach auf die nächste Änderung.
+\end{hinweis}
+
+\begin{warnung}
+Änderungen im Node-Editor selbst (Blöcke, Verbindungen, Parameter, Äste) sind \emph{keine}
+Rückgängig-Schritte; sie markieren nur das Dokument als geändert. Rückgängig machen lassen sich
+die Läufe von Plugins, die den Workflow geändert haben (z.\,B.\ \gui{Workflow from system},
+\gui{Section $\to$ group}, eine Optimierung): \menu{Edit,Undo} setzt den Workflow auf den Stand vor
+diesem Lauf zurück. Speichern Sie vor größeren Umbauten.
+\end{warnung}
+
+% ---------------------------------------------------------------------------
+\section{Das Workflow-Plugin}\label{sec:workflow-plugin}
+
+Geprüft und gerechnet wird mit dem Plugin \plugin{Workflow} (Plugin-Dock, Plugins-Menü oder
+Werkzeugspalte). Es hat zwei Aktionen und ein Panel mit den Bildeinstellungen.
+
+\subsection{Die Einstellungen im Panel}\label{sec:workflow-panel}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.34\linewidth}>{\raggedright\arraybackslash}p{0.17\linewidth}X@{}}
+\toprule
+\textbf{Feld} & \textbf{Standard} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\gui{Rays per field and wavelength} & 20000 (7 … 500000) & Zahl der Strahlen je Feldpunkt
+  und Wellenlänge für die Quellen des Workflows (kohärentes Bild). Die Strahlen liegen auf einem
+  hexapolaren Raster; gewählt wird die Zahl der Ringe $r$, deren $1 + 3r(r+1)$ Strahlen dem Wert
+  am nächsten kommen. Der Speicherbedarf wächst mit Strahlen $\times$ Ereignissen, weil jeder
+  Strahlweg aufgezeichnet wird. \\
+\gui{Pixels (long side)} & 512 (16 … 4096) & Pixelzahl der Bilder an der langen Seite. \\
+\gui{Image window (half width, mm)} & 0 & Halbe Breite des Bildfensters aller
+  Raytatouille-Detektoren; 0: jeder Detektor mit seiner eigenen Größe. Für einen Fokus, der als
+  Feld gerechnet wird, ein kleines Fenster, z.\,B.\ 0.05~mm. \\
+\gui{Gaussian illumination (w / pupil radius)} & 0 (0 … 10) & 0: gleichmäßige Ausleuchtung
+  (ein hart begrenztes Bündel, dessen Fresnel-Beugung eine Feld-Verbindung zeigt); sonst
+  Gauß-Profil mit diesem Verhältnis von Taillenradius zu Pupillenradius, z.\,B.\ 0.5 für einen
+  Laserstrahl. \\
+\gui{Wave optics near a focus (automatic)} & an & Detektoren an Verbindungen auf \code{auto}
+  rechnen nahe einem Fokus oder einer Kaustik mit Feldern (Abschnitt~\ref{sec:workflow-darstellungen}).
+  Braucht \code{fieldtracing}. \\
+\gui{Field accuracy $\varepsilon$ (H links)} & 0.02 (0.001 … 0.2) & Erlaubter Fehler einer
+  Feldausbreitung (Verbindung auf H), bezogen auf die Spitzenamplitude. Fieldtracing wählt das
+  günstigste Verfahren innerhalb dieser Grenze; nahe einem Fokus erlaubt 0.05 oft
+  Debye (Sekunden) statt Rayleigh-Sommerfeld (Minuten bis Stunden). Das Log nennt Verfahren und
+  Fehler. \\
+\bottomrule
+\end{referenz}
+
+Diese Einstellungen gehören zum Dokument. Ändern Sie eine davon, gelten alle Ergebnisse, die von
+ihr abhängen, als veraltet.
+
+\subsection{Check workflow}\label{sec:workflow-pruefen}
+
+\gui{Check workflow} (\enquote{Check the node workflow and mark problems; the plan per link})
+prüft den Workflow, ohne zu rechnen:
+
+\begin{enumerate}
+  \item Es fragt die anderen Plugins nach ihren Blocktypen und ergänzt die Bibliothek
+        (\gui{Add block}).
+  \item Es übernimmt die Glaskataloge aus dem Raytracer-Panel und speichert Dateien, die Blöcke
+        nennen, in den Blöcken (Abschnitt~\ref{sec:workflow-eingebettet}).
+  \item Es prüft Blöcke, Ports, Verbindungen, Äste, Gruppen und Varianten.
+  \item Ist alles fehlerfrei, wird der Workflow entlang der Äste \enquote{abgerollt}, und der
+        Planer wählt für jede Verbindung und Richtung die Darstellung.
+  \item Es bestimmt, welche Blöcke noch aktuelle Ergebnisse haben (Haken und Kreuze).
+\end{enumerate}
+
+Danach sind Probleme im Editor markiert (rote Rahmen, rot gestrichelte Verbindungen, Tooltips),
+und die Verbindungen zeigen den neuen Plan. Das Plugin-Log listet jede Meldung als
+\textit{Schwere}\code{:}~\textit{Code}~\code{–}~\textit{Meldung}~\code{(}\textit{Ort}\code{)},
+die Statuszeile fasst zusammen:
+
+\begin{lstlisting}
+Workflow: workflow: 0 error(s), 1 warning(s); planned RH, 2 conversion(s)
+\end{lstlisting}
+
+Hat das Dokument keinen Workflow, meldet die Aktion \gui{No node workflow yet – a plugin makes
+one (Raytracer: Workflow from system, New Raytatouille system).}
+
+\subsection{Run workflow}\label{sec:workflow-ausfuehren}
+
+\gui{Run workflow} (\enquote{Compute what the display blocks of the node workflow show: camera
+images, sweep curves, beam probes; links set to H as fields}) rechnet:
+
+\begin{enumerate}
+  \item Wie beim Prüfen werden Blockkataloge geholt und Dateien eingebettet. Hat der Workflow
+        Fehler, bricht der Lauf ab: \gui{The workflow has errors – Check workflow marks them:
+        …}.
+  \item Alle Anzeigeblöcke werden der Reihe nach gerechnet, jeweils mit allem, was davor liegt;
+        gemeinsame Blöcke nur einmal. Der Fortschritt steht in der Statuszeile
+        (\code{display:}~\textit{Name}, dann je Pfad, Feldpunkt, Wellenlänge und Wert), der
+        gerade gerechnete Block hat einen hellblauen Rahmen.
+  \item Eine Anzeige, deren gespeichertes Ergebnis zum aktuellen Stand passt, wird
+        übersprungen (\code{(unchanged)}).
+  \item Jede Anzeige wird ein Ergebnis im neuen Ergebnissatz
+        \code{Workflow}~\textit{Systemname} (bzw.\ \code{Workflow run}) – sichtbar im Dock
+        \gui{Results} und im Fenster der Anzeige (Abschnitt~\ref{sec:workflow-anzeigen}).
+  \item Die Blöcke bekommen ihren Zustand, die Verbindungen ggf.\ die tatsächlich verwendete
+        Darstellung (\code{R$\to$H}).
+\end{enumerate}
+
+Die Statuszeile meldet am Ende, was gerechnet wurde, z.\,B.\
+\code{Workflow: workflow: Pupil camera, Image (unchanged)}. Wurde nichts gerechnet, steht dort
+\code{workflow: nothing computed –} und der erste Grund (\code{(and n more in the log)}).
+Warnungen, etwa zu wenige Pixel für einen kleinen Fokus, hängen als \code{– warning: …} an.
+
+\paragraph{Abbrechen.} \gui{Cancel} oder \keys{Esc} wirken zwischen den Rechenschritten
+(Pfad, Feldpunkt, Wellenlänge, Wert). Bereits fertige Anzeigen behalten ihr Ergebnis.
+
+\begin{tipp}
+Ein Kamerabild bleibt schwarz, wenn das Licht in weniger als ein Pixel fokussiert. Das Log
+schlägt dann vor, \gui{Wave optics near a focus} einzuschalten oder die Verbindung in die Kamera
+auf H zu stellen und ein kleines Bildfenster zu wählen. Deckt ein Bild zu wenige Pixelmitten ab,
+nennt die Warnung die Größe des Flecks und ein passendes \gui{Image window} – oder empfiehlt, die
+\gui{Pixels} zu erhöhen.
+\end{tipp}
+
+% ---------------------------------------------------------------------------
+\section{Statusanzeigen und Cache}\label{sec:workflow-status}\index{Cache}
+
+Die Workflow-Maschine bewahrt die Zwischenergebnisse früherer Läufe auf (bis etwa 1~GB; die
+ältesten fallen zuerst heraus, mit einer Notiz im Plugin-Log). Jedes Ergebnis ist unter einem
+\emph{Fingerabdruck} abgelegt: einer Prüfsumme aus Blocktyp, Parametern, Transporten,
+Einstellungen des Panels, Glaskatalogen und den Fingerabdrücken von allem, was davor liegt. Ein
+gleicher Fingerabdruck bedeutet ein gleiches Ergebnis.
+
+\begin{itemize}
+  \item \textbf{Grüner Haken} \checkmark{} an einem Block: Sein Ergebnis ist aktuell und wird
+        beim nächsten Lauf nicht neu gerechnet.
+  \item \textbf{Rotes Kreuz} $\times$: Das Ergebnis ist veraltet und wird beim nächsten Lauf
+        neu gerechnet.
+  \item Kein Kreis: Für diesen Block gibt es (noch) keinen Zustand, z.\,B.\ vor dem ersten
+        Prüfen.
+\end{itemize}
+
+Eine Änderung im Editor färbt den geänderten Block und \emph{alles dahinter} sofort rot: entlang
+der Äste, über Daten-Links und die inneren Abhängigkeiten der Blöcke. Eine Ausnahme ist der
+\code{drive}-Ausgang eines Meta-Blocks: Er gibt zwischen den Läufen nichts weiter. Der nächste
+Lauf rechnet nur die roten Blöcke; \gui{Check workflow} und jeder Lauf melden den Zustand neu.
+
+\begin{hinweis}
+Der Cache liegt im Prozess des Workflow-Plugins. Wird das Plugin neu gestartet
+(\menu{Plugins,Reload plugins}, neuer Interpreter), ist er leer. Die Ergebnisse der Anzeigen
+selbst sind aber im Dokument gespeichert (Abschnitt~\ref{sec:workflow-gespeichert}); eine
+unveränderte Anzeige gilt daher weiter als aktuell.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------
+\section{Anzeigefenster}\label{sec:workflow-anzeigen}\index{Anzeigeblock}
+
+Jeder Anzeigeblock hat ein eigenes Fenster. Ein \emph{Doppelklick} auf den Block oder
+\gui{Show window} im Kontextmenü öffnet es; die Parameter des Anzeigeblocks erreichen Sie dann
+über \gui{Parameters…} im Kontextmenü. Das Fenster öffnet sich schwebend mit dem Titel
+\gui{Display:}~\textit{Name}; ziehen Sie seine Titelleiste an eine Seite des Hauptfensters, um es
+anzudocken. Es zeigt immer das neueste Ergebnis dieser Anzeige.
+
+\begin{description}
+  \item[\block{display.image}] zeigt ein Bild – das Ergebnis eines Detektors oder einer
+        Kamera – wie das Image-Fenster
+        (Abschnitt~\ref{sec:image-fenster}): Achsen in mm, Farbbalken, \gui{log}, Ablesen,
+        Zoomen, Verschieben.
+  \item[\block{display.plot}] zeigt Kurven wie das Plot-Dock (Abschnitt~\ref{sec:plot-dock}):
+        an einem Meta-Block die Messgröße über dem variierten Parameter, an einem Bild seine
+        mittlere Zeile und Spalte, an Zahlen ihre Werte über dem Index.
+  \item[\block{display.beam}] ist eine \emph{Sonde}: Es zeigt das Licht an einem beliebigen
+        Ausgang als Bild der Intensität auf der Port-Ebene (der Ebene durch den Schwerpunkt des
+        Lichts, senkrecht zu seiner mittleren Richtung) – Strahlen als kohärentes Strahlbild,
+        Felder als Feldbild. Das Fenster umfasst das Licht mit einem Rand (Parameter
+        \param{margin}).
+\end{description}
+
+Die Ergebnisse der Anzeigen stehen auch im Dock \gui{Results} (Ergebnissatz des Laufs), öffnen
+aber nicht das allgemeine Image-Fenster oder Plot-Dock.
+
+\subsection{Parameterstudien mit Meta-Blöcken}\label{sec:workflow-meta}
+
+Meta-Blöcke wiederholen den Teil des Workflows vor einem Ausgang mit geänderten Parametern und
+sammeln die Ergebnisse:
+
+\begin{description}
+  \item[\block{meta.sweep}] ein Parameter über eine Liste von Werten (Wellenlänge, Kippung,
+        Defokus, Gangunterschied …),
+  \item[\block{meta.replicates}] Wiederholungen mit Wiederholungswerten (z.\,B.\ Zufallszahlen),
+        die gesammelten Bilder werden gemittelt,
+  \item[\block{meta.optimise}] ein Parameter innerhalb von Grenzen, bis eine Messgröße des
+        Ergebnisses ihr Maximum oder Minimum erreicht.
+\end{description}
+
+Den Parameter geben Sie als \code{Block.Parameter} oder \code{Block.Parameter[i]} an (z.\,B.\
+\code{mirror.point[0]}), den gesammelten Ausgang als \code{Block.Anschluss} (z.\,B.\
+\code{camera.image}). Stattdessen können Sie den Meta-Block auch verschalten: \code{drive} in
+den \code{drive}-Eingang eines Spiegels, Abschnitts oder Strahlteilers (der Block verschiebt sich
+längs seiner Flächennormalen um den Wert in mm – ein Piezo-Phasenschieber) oder in den
+\code{pose}-Eingang eines Blocks (Komponente \param{component}), und den zu beobachtenden Ausgang in
+\code{observe}. Die Messgrößen eines Bildes sind \code{peak} (Maximum), \code{centre} (Mittel der
+$3 \times 3$ mittleren Pixel) und \code{power} (Summe). Verbinden Sie \code{results} mit einem
+\block{display.plot}, um das Ergebnis zu sehen. Dank des Caches rechnet jede Wiederholung nur, was
+hinter dem geänderten Block liegt.
+
+% ---------------------------------------------------------------------------
+\section{Gespeicherte Ergebnisse}\label{sec:workflow-gespeichert}
+
+Beim Speichern schreibt die Anwendung das \emph{neueste Ergebnis jedes Anzeigefensters} –
+Kamerabilder, Pupillenbilder, Kurven von Sweeps, Tabellen, Balken – mit in die
+\datei{.rttf}-Datei (Abschnitt \code{results}, Anhang~\ref{kap:dateiformat}), jeweils mit dem
+Fingerabdruck dessen, woraus es gerechnet wurde. Nach dem Öffnen
+
+\begin{itemize}
+  \item stehen diese Ergebnisse im Ergebnissatz \gui{Saved results} und in den Fenstern ihrer
+        Anzeigeblöcke,
+  \item gilt eine Anzeige, deren Fingerabdruck noch zum Workflow und seinen Einstellungen passt,
+        als aktuell (grüner Haken), und \gui{Run workflow} rechnet sie nicht neu
+        (\code{(unchanged)} in der Statuszeile),
+  \item wird eine Anzeige neu gerechnet, sobald sich etwas geändert hat, wovon sie abhängt.
+\end{itemize}
+
+Die Zwischenergebnisse (Strahlbündel, Felder) werden \emph{nicht} gespeichert. Ein Lauf mit neuen
+Ergebnissen markiert das Dokument als geändert.
+
+% ---------------------------------------------------------------------------
+\section{Eingebettete Dateien und Glaskataloge}\label{sec:workflow-eingebettet}\index{Glaskatalog}
+
+Ein Dokument soll auf jedem Rechner rechnen – auch ohne die Dateien, aus denen es entstanden ist.
+Deshalb speichern \gui{Check workflow} und \gui{Run workflow} Dateien, die Blöcke nennen,
+\emph{in den Blöcken} und leeren die Pfade:
+
+\begin{itemize}
+  \item bei \block{fg.grating} die Jones-Tabelle (\param{table} $\to$ \param{table\_data}) und die
+        FourierGrating-Konfiguration (\param{fouriergrating} $\to$ \param{config}),
+  \item bei \block{fg.stack} die Konfiguration des Stapels.
+\end{itemize}
+
+Das Log nennt jede gespeicherte Datei. Kann eine genannte Datei nicht gelesen werden und hält der
+Block keine Kopie, ist das eine Warnung (\code{graph.file\_unreadable}): Der Block rechnet erst,
+wenn die Datei einmal hier lesbar war. STEP-Dateien von CAD-Schichten in einer
+FourierGrating-Konfiguration bleiben außerhalb (\code{graph.file\_external}).
+
+\subsection{Glaskataloge}
+
+Raytatouille-Systeme brauchen für reale Gläser Glaskataloge (\datei{*.agf}). Der \emph{eine} Ort
+dafür ist das Feld \gui{Glass catalogues} im Panel des Raytracers. Bei jedem Prüfen und Rechnen
+übernimmt die Workflow-Maschine
+
+\begin{itemize}
+  \item die dort aufgeführten Dateien (eine Datei ohne Ordner wird neben der Systemdatei bzw.\
+        im Ordner des Raytracer-Plugins gesucht) und
+  \item alle \datei{*.agf} neben der Systemdatei und in deren Unterordner \datei{catalogs}
+\end{itemize}
+
+in die Quelle des Systems (\param{rtt\_catalogs}) und speichert ihren Inhalt im Dokument
+(\param{rtt\_catalog\_data}). Danach rechnet die \datei{.rttf}-Datei auch ohne die
+\datei{.agf}-Dateien – im Workflow wie im Raytracer-Panel, das bei fehlender Datei die
+gespeicherten Kataloge verwendet. Ein Katalog, der sich nicht lesen lässt, hält den Lauf nicht
+an: Log und Statuszeile nennen den Katalog, die fehlenden Gläser und die Abhilfe.
+
+% ---------------------------------------------------------------------------
+\section{Blöcke anderer Plugins}\label{sec:workflow-anbieter}
+
+Der Workflow vermerkt für jeden Blocktyp, welches Plugin (Kennung und Version) ihn liefert.
+Startet ein solches Plugin nicht oder ist es nicht installiert, bleibt der Block mit allen Daten im
+Dokument; die Prüfung markiert ihn rot mit
+
+\begin{lstlisting}
+graph.provider_missing: block type 'fg.grating' comes from the plugin fg
+(version 0.1.0), which is not available – the block keeps its data;
+install or start the plugin
+\end{lstlisting}
+
+Installieren bzw.\ starten Sie das Plugin (\menu{Plugins,Reload plugins}) und prüfen Sie erneut.
+Ein Plugin, das während einer Rechnung abstürzt, lässt nur seinen Block scheitern.
+
+Ein Detektor, auf dessen Weg ein Block eines anderen Plugins liegt (z.\,B.\ eine Gitterprobe),
+wird von der Workflow-Maschine selbst gerechnet, die beide Plugins erreicht.
+
+\begin{hinweis}
+Ein Workflow aus der Zeit, bevor die Blöcke ihre Daten selbst hielten, kann nicht gerechnet
+werden; \gui{Run workflow} meldet \gui{This workflow holds no Raytatouille system data (made
+before they were kept): run Workflow from system once in the Raytracer plugin, then Run workflow
+again.} Laden Sie das System im Raytracer und wählen Sie einmal \gui{Workflow from system}.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------
+\section{Beispiel: ein neues System mit Kamera}\label{sec:workflow-beispiel}
+
+Das folgende Beispiel baut einen kleinen Workflow von Grund auf. Es braucht den Raytracer und eine
+eingerichtete Python-Umgebung.
+
+\begin{schritte}
+  \item Neues Dokument (\keys{Strg+N}). Im Plugin-Dock den \plugin{Raytracer} wählen und
+        \gui{New Raytatouille system} klicken. Das Fenster \gui{Node workflow} öffnet sich mit
+        einer Quelle, einer Blende, einem Detektor und dem Ast \code{main}.
+  \item Doppelklick auf die Quelle: Wellenlängen, Feldpunkte und Apertur prüfen und ggf.\
+        ändern.
+  \item Rechtsklick auf die freie Fläche $\to$ \gui{Add block} $\to$ \code{domain} $\to$
+        \block{rtt.part.lens}. Doppelklick auf die Linse und im Dialog Lage, Radien, Dicke und
+        Glas eingeben.
+  \item Die Verbindung zwischen Blende und Detektor löschen (Rechtsklick $\to$
+        \gui{Delete connection}) und neu verbinden: Blende $\to$ \code{front} der Linse,
+        \code{back} der Linse $\to$ Detektor.
+  \item Den alten Ast \code{main} löschen und einen neuen aufnehmen
+        (Abschnitt~\ref{sec:workflow-ast-aufnehmen}): Port der Quelle, Port, durch den das
+        Licht die Blende verlässt, \code{back} der Linse, Detektor.
+  \item \gui{Add block} $\to$ \code{analysis} $\to$ \block{display.image}. Den Ausgang
+        \code{image} des Detektors mit dem Eingang \code{in} der Anzeige verbinden.
+  \item Im Plugin \plugin{Workflow} \gui{Check workflow} klicken. Fehler sind rot markiert;
+        das Log nennt sie.
+  \item \gui{Run workflow} klicken. Danach Doppelklick auf die Anzeige: Das Fenster
+        \gui{Display: image} zeigt das Bild.
+  \item Einen Parameter der Linse ändern: Linse, Detektor und Anzeige werden rot. Ein neuer Lauf
+        rechnet nur diese.
+\end{schritte}
+
+Parallel zeichnet der Raytracer das System im CAD-Modell und aktualisiert die Zeichnung nach
+jeder Änderung.
+
+% ---------------------------------------------------------------------------
+\section{Meldungen und Fehler}\label{sec:workflow-fehler}
+
+Die Prüfung meldet Probleme mit einem Code, einer Meldung und dem Ort (Block, Port, Verbindung
+oder Ast). \emph{Fehler} (error) verhindern das Rechnen, \emph{Warnungen} (warning) nicht.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.4\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Code} & \textbf{Bedeutung und Abhilfe} \\
+\midrule
+\endhead
+\multicolumn{2}{@{}l}{\textit{Blöcke und Links}} \\
+\code{graph.node\_type\_unknown} & Unbekannter Blocktyp. Plugin fehlt oder ist zu alt. \\
+\code{graph.provider\_missing} & Der Typ stammt von einem Plugin, das nicht verfügbar ist
+  (Abschnitt~\ref{sec:workflow-anbieter}). \\
+\code{graph.param\_unknown} & Ein Parameter gehört nicht zum Blocktyp. \\
+\code{graph.socket\_unknown} & Ein Link nennt einen Anschluss, den der Block nicht hat. \\
+\code{graph.link\_direction} & Ein Link läuft nicht von einem Ausgang zu einem Eingang. \\
+\code{graph.kind\_mismatch} & Licht-Anschluss mit Daten-Anschluss verbunden. \\
+\code{graph.data\_type\_mismatch} & Die Datentypen der beiden Enden passen nicht. \\
+\code{graph.no\_common\_representation} & Die beiden Enden haben keine gemeinsame
+  Darstellung. \\
+\code{graph.transport\_unsupported} & Der feste Transport wird nicht von beiden Enden
+  angenommen. \\
+\code{graph.input\_multiple} & Mehrere Links in einen Eingang; einen kombinierenden Block
+  verwenden. \\
+\code{graph.cycle} & Rückkopplungsschleife; dafür gibt es Meta-Blöcke. \\
+\code{graph.detector\_unconnected} & Warnung: Detektor ohne Licht. \\
+\multicolumn{2}{@{}l}{\textit{Ports, Verbindungen und Äste}} \\
+\code{graph.port\_unknown} & Eine Verbindung nennt einen Port, den der Block nicht hat. \\
+\code{graph.port\_links} & Mehrere Verbindungen an einem Port. \\
+\code{graph.port\_facing} & Die verbundenen Ports zeigen nicht zueinander. \\
+\code{graph.port\_behind} & Ein Port liegt hinter dem anderen. \\
+\code{graph.port\_medium} & Außerhalb der beiden Ports liegen verschiedene Medien. \\
+\code{graph.port\_aperture} & Warnung: Die Aperturen überlappen nicht. \\
+\code{graph.port\_near\_field} & Warnung: Ports sehr nah beieinander; evaneszente Felder werden
+  nicht übertragen. \\
+\code{graph.port\_tilt} & Warnung: Felder zwischen gekippten Ebenen werden geometrisch
+  umgetastet. \\
+\code{graph.no\_branch} & Das Modell hat keinen Ast, oder an einem Detektor endet keiner. \\
+\code{graph.branch\_duplicate} & Zwei Äste mit gleichem Namen oder gleichen Schritten. \\
+\code{graph.branch\_impossible} & Ein Schritt ist so nicht möglich (z.\,B.\ ohne Verbindung,
+  nicht von Quelle zu Detektor). \\
+\code{graph.branch\_backend} & Kein Pfad des Systems passt zum Schritt durch einen
+  Raytatouille-Block, oder ein Geisterbild passt nicht zu den Ports. \\
+\code{graph.observer\_ambiguous} & Ein beobachteter Ausgang wird von mehreren Ästen durchlaufen;
+  den Ast benennen. \\
+\multicolumn{2}{@{}l}{\textit{Gruppen}} \\
+\code{graph.group\_variant} & Die aktive Variante existiert nicht. \\
+\code{graph.group\_ports}, \code{graph.group\_params} & Varianten exportieren
+  unterschiedliche Ports bzw.\ Parameter. \\
+\code{graph.group\_branch} & Ein Schritt nennt einen inneren Ast, den die Gruppe nicht hat. \\
+\multicolumn{2}{@{}l}{\textit{Dateien}} \\
+\code{graph.file\_unreadable} & Warnung: eine genannte Datei bzw.\ ein Glaskatalog ist nicht
+  lesbar und nicht gespeichert. \\
+\code{graph.file\_external} & Warnung: eine CAD-Schicht einer FourierGrating-Konfiguration
+  bleibt eine externe Datei. \\
+\multicolumn{2}{@{}l}{\textit{Planer}} \\
+\code{plan.representation\_unavailable} & Der feste Transport kann noch nicht gerechnet werden
+  (verfügbar z.\,B.\ nur R bzw.\ RH). \\
+\code{plan.no\_representation} & Keine zulässige Darstellung für eine Verbindung. \\
+\code{plan.no\_operator} & Keine Umwandlung zwischen den geplanten Darstellungen. \\
+\code{plan.incoherent\_merge} & Warnung: Wege ohne Phase addieren sich als Intensitäten. \\
+\code{plan.paths\_truncated} & Warnung: zu viele Wege; die Aufzählung wurde abgebrochen. \\
+\code{plan.no\_output} & Warnung: kein Detektor und keine Auswertung, für die geplant werden
+  kann. \\
+\multicolumn{2}{@{}l}{\textit{Beim Rechnen}} \\
+\code{exec.transport\_unsupported} & Der feste Transport kommt erst in einer späteren Stufe;
+  meist fehlt \code{fieldtracing} für H. \\
+\code{exec.no\_evaluator} & Für den Blocktyp gibt es keinen Rechner (Plugin oder Paket fehlt). \\
+\code{exec.param} & Ein Parameter ist ungültig, z.\,B.\ eine Datei nicht lesbar. \\
+\code{exec.field} & Fehler bei einer Feldrechnung. \\
+\code{exec.condense} & Die Gruppe lässt sich nicht verdichten. \\
+\code{exec.cycle} & Zyklische Abhängigkeit, z.\,B.\ ein Meta-Block sammelt in sich selbst. \\
+\bottomrule
+\end{referenz}
+
+Weitere typische Meldungen von \gui{Run workflow}:
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.42\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Meldung} & \textbf{Abhilfe} \\
+\midrule
+\endhead
+\code{No node workflow yet – …} & Erst einen Workflow anlegen
+  (Abschnitt~\ref{sec:workflow-entstehen}). \\
+\code{Nothing to show: attach a display block …} & Einen Anzeigeblock an eine Kamera, einen
+  Phasenschieber oder einen Lichtausgang hängen. \\
+\code{The workflow has errors – Check workflow marks them: …} & \gui{Check workflow} ausführen
+  und die rot markierten Stellen beheben. \\
+\code{This workflow holds no Raytatouille system data …} & Einmal \gui{Workflow from system}
+  im Raytracer. \\
+\code{The node workflow needs the Python package rtt\_fusion …} & Paket \code{rtt-fusion} in
+  die Plugin-Umgebung installieren (Abschnitt~\ref{sec:umgebung-pruefen}). \\
+\code{workflow: nothing computed – …} & Den genannten Grund beheben; weitere stehen im Log. \\
+\textit{Anzeige}\code{: dark – the light focuses into less than a pixel; …} & Wellenoptik
+  einschalten oder Verbindung auf H und kleines Bildfenster. \\
+\bottomrule
+\end{referenz}

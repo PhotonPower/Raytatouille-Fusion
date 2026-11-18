@@ -1,0 +1,248 @@
+\chapter{Referenz: Path-Tracer-Plugin}\label{kap:plugin-pathtracer}
+\index{Path Tracer!Referenz}
+
+Dieser Anhang listet alles auf, was das Plugin \plugin{Path Tracer} anbietet. Die Bedienung mit
+Beispielen beschreibt \autoref{kap:pathtracer}.
+
+\section{Steckbrief}\label{sec:ref-pt-steckbrief}
+
+\begin{referenz}{@{}l >{\raggedright\arraybackslash}X@{}}
+\toprule
+Eigenschaft & Wert \\
+\midrule\endhead
+Kennung (\param{id}) & \code{pathtracer} \\
+Name & Path Tracer \\
+Version & 0.1.0 \\
+Plugin-API & 1 \\
+Einstiegspunkt & \code{pathtracer\_plugin:PathTracerPlugin} \\
+Beschreibung & Light transport on the CAD model: objects as light sources, materials on the others; irradiance as textures on the faces and a camera image, by light tracing, path tracing or bidirectional path tracing. \\
+Python-Anforderungen & \code{numpy}; \code{pathtracer>=0.3} (C++-Kern; ohne ihn rechnet der NumPy-Kern) \\
+Module & \datei{pt\_nurbs} (NURBS-Auswertung), \datei{pt\_mesh} (Zerlegung in Dreiecke, Trimm-Masken, Flächeninhalte), \datei{pt\_bvh} (Schnittberechnung), \datei{pt\_bsdf} (Materialien), \datei{pt\_scene} (Quellen, Sensoren, Kamera), \datei{pt\_integrator} (Schätzer), \datei{pt\_photon} (Photon Mapping), \datei{pt\_photometry} (Leuchtendateien, $V(\lambda)$), \datei{pt\_colour} (Farbbild), \datei{pt\_native} (C++-Kern), \datei{pt\_parallel}, \datei{pt\_worker} (mehrere Prozesse), \datei{pt\_setup} (Modell und Panel $\to$ Szene) \\
+Beispiele & \datei{examples/pathtracer}: \datei{cornell-box.rttf}, \datei{caustics.rttf}, \datei{prism.rttf}, \datei{depth-of-field.rttf} \\
+\bottomrule
+\end{referenz}
+
+\section{Aktionen}\label{sec:ref-pt-aktionen}
+
+Alle Aktionen erscheinen als Knopf im Panel \gui{Plugin}, im Menü \menu{Plugins,Path Tracer} und
+in der Gruppe \gui{Path Tracer} der Werkzeugspalte (dort mit den ersten drei Buchstaben). Die
+Reihenfolge ist die der Anwendung. Jede Aktion ist ein Rückgängig-Schritt.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{4.0cm}@{}}
+\toprule
+Aktion & Wirkung & Statusmeldung bei Erfolg \\
+\midrule\endhead
+\gui{Camera image} & Strahldichte, die die Kamera sieht, mit dem gewählten Verfahren; Graustufenbild, wahlweise je Wellenlänge und in Farbe & \texttt{Camera image }\textit{b}\texttt{ }$\times$\texttt{ }\textit{h}\texttt{, … samples} \\
+\gui{Selection: no material, no source} & entfernt \param{pt.material} und \param{pt.source} von den ausgewählten Flächen, Körpern, Kurven und Punkten & \textit{n}\texttt{ object(s) cleared} \\
+\gui{Irradiance} & Bestrahlungsstärke als Textur auf den Flächen, mit Tabelle je Fläche & \texttt{Irradiance on }\textit{n}\texttt{ face(s), … samples} \\
+\gui{Selection: set material} & setzt \param{pt.material} der ausgewählten Flächen und Körper auf \gui{Material for the selection} & \textit{n}\texttt{ object(s): material …} \\
+\gui{Selection: make it a source} & setzt \param{pt.source} der ausgewählten Flächen, Körper, Kurven und Punkte auf \gui{Source for the selection} & \textit{n}\texttt{ object(s): source …} \\
+\gui{Show materials and sources} & Tabelle der teilnehmenden Objekte mit Art, Material und Quelle & \textit{n}\texttt{ objects, }\textit{k}\texttt{ of them sources} \\
+\gui{Show camera} & zeichnet die Sichtpyramide der Kamera bis zum Abstand von \gui{Looks at} & \texttt{Camera drawn} \\
+\gui{Show light paths} & zeichnet \gui{Light paths drawn} Pfade von den Quellen aus, gefärbt nach dem Abprallen & \textit{n}\texttt{ light paths} \\
+\bottomrule
+\end{referenz}
+
+Wurde eine Rechnung abgebrochen, endet die Meldung mit \texttt{(stopped at … samples)}.
+
+\section{Parameter}\label{sec:ref-pt-parameter}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{1.5cm} >{\raggedright\arraybackslash}p{1.8cm} >{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Schlüssel / Beschriftung & Typ & Standard & Bereich, Einheit & Bedeutung \\
+\midrule\endhead
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Materials}}} \\
+\param{materials}\newline\gui{Materials} & Tabelle & 11 Materialien (\autoref{sec:ref-pt-materialvorgaben}) & Spalten siehe \autoref{sec:ref-pt-materialtabelle} & die Materialien der Szene \\
+\param{default\_material}\newline\gui{Material of the other objects} & Text & \code{white} & Name aus der Tabelle & Material für Objekte ohne eigenes \\
+\param{assign\_material}\newline\gui{Material for the selection} & Text & \code{white} & Name aus der Tabelle & verwendet von \gui{Selection: set material} \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Sources}}} \\
+\param{sources}\newline\gui{Sources} & Tabelle & eine Quelle \code{lamp} & Spalten siehe \autoref{sec:ref-pt-quellentabelle} & die Quellen der Szene \\
+\param{assign\_source}\newline\gui{Source for the selection} & Text & \code{lamp} & Name aus der Tabelle & verwendet von \gui{Selection: make it a source} \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Computation}}} \\
+\param{method}\newline\gui{Method} & Auswahl & \code{light tracing} & \code{light tracing}, \code{path tracing}, \code{bidirectional}, \code{photon mapping} & Verfahren; Photon Mapping ist für die Bestrahlungsstärke dasselbe wie Light Tracing \\
+\param{kernel}\newline\gui{Kernel} & Auswahl & \code{automatic} & \code{automatic}, \code{C++}, \code{NumPy} & Rechenkern; automatic: C++, wenn installiert \\
+\param{samples}\newline\gui{Samples} & Ganzzahl & 500\,000 & 1\,000 \dots{} 2\,000\,000\,000 & Pfade (Paare aus Licht- und Augenpfad); das Rauschen fällt mit der Wurzel \\
+\param{depth}\newline\gui{Longest path} & Ganzzahl & 8 & 1 \dots{} 100 segments & Segmente von der Quelle zum Sensor; 1: nur direktes Licht \\
+\param{tolerance}\newline\gui{Mesh tolerance} & Zahl & 0{,}01 & $10^{-6}$ \dots{} 100~mm; 6 Nachkommastellen & größter Abstand der Dreiecke von den Flächen \\
+\param{exact\_normals}\newline\gui{Exact normals on curved faces} & Ja/Nein & an & -- & Normale der Fläche selbst am Treffpunkt statt über das Dreieck interpoliert \\
+\param{seed}\newline\gui{Random seed} & Ganzzahl & 1 & $\geq 0$ & Startwert der Zufallszahlen \\
+\param{adaptive}\newline\gui{Adaptive sampling} & Ja/Nein & an & -- & Path Tracing, bidirektional und Photon Mapping verschieben Samples zu unsicheren Texeln/Pixeln \\
+\param{processes}\newline\gui{Processes} & Ganzzahl & 0 & 0 \dots{} 256 & NumPy: Prozesse (0: halbe Kernzahl, höchstens 4); C++: Threads (0: alle Kerne) \\
+\param{export}\newline\gui{Also write to file} & Datei zum Spei\-chern & leer & Filter \enquote{NumPy archive (*.npz)} & \gui{Irradiance} und \gui{Camera image} schreiben zusätzlich \datei{\textit{Datei}-irradiance.npz} bzw. \datei{\textit{Datei}-camera.npz} \\
+\param{units}\newline\gui{Results in} & Auswahl & \code{radiometric (W)} & \code{radiometric (W)}, \code{photometric (lm)} & photometrisch: mit $V(\lambda)$ gewichtet -- lx, cd/m$^2$, lm \\
+\param{per\_wavelength}\newline\gui{Also per wavelength} & Ja/Nein & aus & -- & neben der Summe eine Textur bzw. ein Bild je Wellenlänge \\
+\param{photon\_radius}\newline\gui{Photon radius} & Zahl & 0 & $\geq 0$~mm; 4 Nachkommastellen & erster Suchradius des Photon Mappings; schrumpft von Durchgang zu Durchgang; 0: aus der Photonenzahl gewählt \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Irradiance}}} \\
+\param{irradiance\_on}\newline\gui{Irradiance on} & Objekte (mehrere) & leer & Flächen, getrimmte Flächen, Körper & Flächen der Bestrahlungsstärke (\gui{Use selection}); leer: alle Flächen \\
+\param{texels}\newline\gui{Texels (longer side)} & Ganzzahl & 64 & 1 \dots{} 1\,024 & Auflösung der Textur an der längeren Seite jeder Fläche \\
+\param{common\_scale}\newline\gui{One colour scale for all faces} & Ja/Nein & an & -- & eine Farbskala von 0 bis zum Höchstwert aller Flächen \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Camera}}} \\
+\param{camera\_position}\newline\gui{Position} & Punkt & (300, $-300$, 200) & mm; \gui{Pick} & Ort der Kamera \\
+\param{camera\_target}\newline\gui{Looks at} & Punkt & (0, 0, 0) & mm; \gui{Pick} & Blickziel \\
+\param{camera\_up}\newline\gui{Up} & Auswahl & \code{+Z} & \code{+Z}, \code{-Z}, \code{+Y}, \code{-Y}, \code{+X}, \code{-X} & Oben-Richtung des Bildes \\
+\param{camera\_fov}\newline\gui{Field of view (horizontal)} & Zahl & 40 & 0{,}1 \dots{} 170\si{\degree} & voller horizontaler Bildwinkel \\
+\param{camera\_width}\newline\gui{Width} & Ganzzahl & 320 & 8 \dots{} 4\,096 px & Bildbreite \\
+\param{camera\_height}\newline\gui{Height} & Ganzzahl & 240 & 8 \dots{} 4\,096 px & Bildhöhe \\
+\param{camera\_lens}\newline\gui{Lens radius} & Zahl & 0 & $\geq 0$~mm & 0: Lochkamera, alles scharf; darüber: Linse dieses Radius mit Schärfentiefe \\
+\param{camera\_focus}\newline\gui{Focus distance} & Zahl & 0 & $\geq 0$~mm & Abstand der Schärfe entlang der Blickrichtung; 0: Abstand von \gui{Looks at} \\
+\param{camera\_white}\newline\gui{White at percentile} & Zahl & 99{,}5 & 50 \dots{} 100~\% & hellster Wert der Graustufen und des Farbbilds: dieser Anteil der beleuchteten Pixel ist nicht heller (100: das hellste Pixel) \\
+\param{camera\_colour}\newline\gui{Colour image} & Ja/Nein & an & -- & bei mehreren Wellenlängen zusätzlich ein Farbbild (CIE 1931, sRGB; gleiche Leistung auf allen Wellenlängen ist Weiß) \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Preview}}} \\
+\param{preview\_paths}\newline\gui{Light paths drawn} & Ganzzahl & 200 & 1 \dots{} 20\,000 & Pfade für \gui{Show light paths} \\
+\bottomrule
+\end{referenz}
+
+\section{Spalten der Materialtabelle}\label{sec:ref-pt-materialtabelle}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{2.8cm} >{\raggedright\arraybackslash}p{1.4cm} >{\raggedright\arraybackslash}p{1.6cm} >{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Schlüssel / Kopf & Typ & Standard & Bereich & Verwendet von \\
+\midrule\endhead
+\param{name} / \gui{Name} & Text & leer & eindeutig, nicht leer & allen \\
+\param{kind} / \gui{Kind} & Auswahl & \code{diffuse} & \code{absorber}, \code{diffuse}, \code{mirror}, \code{glossy}, \code{glass}, \code{detector}, \code{metal}, \code{frosted} & -- \\
+\param{reflectance} / \gui{Reflectance} & Zahl & 0{,}8 & 0 \dots{} 1; 3 Stellen & diffuse, mirror, glossy, metal \\
+\param{transmittance} / \gui{Transmittance} & Zahl & 0{,}0 & 0 \dots{} 1; 3 Stellen; mit Reflectance höchstens 1 & diffuse \\
+\param{roughness} / \gui{Roughness} & Zahl & 0{,}2 & 0{,}001 \dots{} 1; 3 Stellen & glossy (Phong-Exponent $2/r^2 - 2$), metal, frosted (GGX-Breite $r^2$) \\
+\param{ior} / \gui{Index} & Zahl & 1{,}5 & 1 \dots{} 10; 4 Stellen & glass, frosted (mit Abbe-Zahl: $n_d$) \\
+\param{absorption} / \gui{Absorption} & Zahl & 0 & $\geq 0$, 1/mm; 5 Stellen & glass, frosted \\
+\param{abbe} / \gui{Abbe number} & Zahl & 0 & $\geq 0$; 2 Stellen & glass, frosted; 0: keine Dispersion \\
+\param{spectrum} / \gui{By wavelength} & Text & leer & \code{nm:Wert, nm:Wert, …} & ersetzt Reflectance (diffuse, mirror, glossy, metal) bzw. Absorption (glass, frosted); bei absorber, detector ignoriert \\
+\bottomrule
+\end{referenz}
+
+\section{Vorgegebene Materialien}\label{sec:ref-pt-materialvorgaben}
+
+Nicht genannte Spalten haben ihren Standardwert (Transmittance 0, Roughness 0{,}2, Index 1{,}5,
+Absorption 0, Abbe number 0, By wavelength leer).
+
+\begin{referenz}{@{}l l l >{\raggedright\arraybackslash}X@{}}
+\toprule
+Name & Kind & Reflectance & Weitere Werte \\
+\midrule\endhead
+\code{white} & diffuse & 0{,}8 & -- \\
+\code{black} & absorber & 0 & -- \\
+\code{mirror} & mirror & 0{,}95 & -- \\
+\code{metal} & glossy & 0{,}85 & -- \\
+\code{glass} & glass & 0 & -- \\
+\code{diffuser} & diffuse & 0{,}3 & Transmittance 0{,}6 \\
+\code{BK7} & glass & 0 & Index 1{,}5168, Abbe number 64{,}17 \\
+\code{brushed metal} & metal & 0{,}9 & Roughness 0{,}4 \\
+\code{frosted glass} & frosted & 0 & Roughness 0{,}4 \\
+\code{red paint} & diffuse & 0{,}5 & By wavelength \code{450:0.05, 550:0.1, 600:0.6, 650:0.8} \\
+\code{detector} & detector & 0 & -- \\
+\bottomrule
+\end{referenz}
+
+\section{Spalten der Quellentabelle}\label{sec:ref-pt-quellentabelle}
+
+Vorgabe: eine Zeile \code{lamp} mit den Standardwerten der Tabelle.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{1.3cm} >{\raggedright\arraybackslash}p{1.6cm} >{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Schlüssel / Kopf & Typ & Standard & Bereich & Bedeutung \\
+\midrule\endhead
+\param{name} / \gui{Name} & Text & leer (Vorgabe \code{lamp}) & eindeutig, nicht leer & Name, auf den \param{pt.source} verweist \\
+\param{flux} / \gui{Flux} & Zahl & 1{,}0 & $\geq 0$; 6 Stellen & Fluss der ganzen Quelle \\
+\param{unit} / \gui{in} & Auswahl & \code{W} & \code{W}, \code{lm} & Einheit des Flusses; lm über $V(\lambda)$ bei den Wellenlängen der Quelle \\
+\param{half\_angle} / \gui{Half-angle} & Zahl & 90 & 0{,}01 \dots{} 90\si{\degree} & Kegel um die Normale (Flächen); 90\si{\degree}: Lambert \\
+\param{side} / \gui{Side} & Auswahl & \code{front} & \code{front}, \code{back}, \code{both} & abstrahlende Seite von Flächen (front: Seite der Normalen, bei Körpern außen) \\
+\param{spectrum} / \gui{Wavelengths / nm} & Text & \code{550} & \code{nm} oder \code{nm:Anteil}, durch Kommas getrennt & Linien der Quelle; leer: 550~nm \\
+\param{distribution} / \gui{Luminaire file (.ies, .ldt)} & Text & leer & Pfad & IES (LM-63, Typ C) oder EULUMDAT; nur die Form zählt, der Fluss bleibt \\
+\param{axis} / \gui{Axis (points)} & Text & \code{0, 0, -1} & drei Zahlen & Richtung $\theta = 0$ der Leuchtendatei bei Punktquellen \\
+\bottomrule
+\end{referenz}
+
+\section{Attribute auf Objekten}\label{sec:ref-pt-attribute}
+
+\begin{referenz}{@{}l >{\raggedright\arraybackslash}p{3.8cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Attribut & an & Bedeutung \\
+\midrule\endhead
+\param{pt.material} & Flächen, getrimmten Flächen, Körpern & Name eines Materials der Tabelle; fehlt es, gilt \gui{Material of the other objects} \\
+\param{pt.source} & Flächen, getrimmten Flächen, Körpern, Kurven, Punkten & Name einer Quelle der Tabelle \\
+\param{sim.inactive} & beliebigen Objekten & \code{true}: das Objekt nimmt nicht teil \\
+\bottomrule
+\end{referenz}
+
+Die Attribute lassen sich auch im Dock \gui{Properties} setzen und ändern (\gui{Add attribute…},
+\code{pt.material = glass}).
+
+\section{Ergebnisse}\label{sec:ref-pt-ergebnisse}
+
+\textit{V} ist der Name des Verfahrens, \textit{E} ist \code{E} (radiometrisch) bzw. \code{Ev}
+(photometrisch), \textit{L} ist \code{Radiance} bzw. \code{Luminance}.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{2.2cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Aktion & Lauf (Dock \gui{Results}) & Art & Inhalt \\
+\midrule\endhead
+\gui{Irradiance} & \texttt{Irradiance – }\textit{V} & Feld auf Fläche & \textit{E} \textit{Objekt} (bei mehreren Flächen eines Objekts \texttt{\textperiodcentered{} face }\textit{k}); W/m$^2$ bzw. lx; Farbskala inferno \\
+ & & Feld auf Fläche & mit \gui{Also per wavelength}: \textit{E} \textit{Fläche} \texttt{\textperiodcentered{} }\textit{nm}\texttt{ nm} \\
+ & & Tabelle & \texttt{Irradiance per face}: \gui{Face}, \gui{Area / mm$^2$}, \gui{Flux / W} (lm), \gui{Mean E / W/m$^2$} (Ev, lx), \gui{Max E / W/m$^2$}, \gui{Noise of the flux / \%} \\
+\gui{Camera image} & \texttt{Camera image – }\textit{V} & Bild & \textit{L}\texttt{ – }\textit{V}: Graustufen, W/(m$^2$\,sr) bzw. cd/m$^2$, Achsen \enquote{x / pixel}, \enquote{y / pixel} \\
+ & & Bild & mit \gui{Also per wavelength}: \textit{L}\texttt{ }\textit{nm}\texttt{ nm – }\textit{V} \\
+ & & Bild (Farbe) & mit \gui{Colour image} und mehreren Wellenlängen: \texttt{Colour – }\textit{V} (zuletzt, wird angezeigt) \\
+\gui{Show materials and sources} & \texttt{Path tracer: objects} & Tabelle & \texttt{Materials and sources}: \gui{Object}, \gui{Kind}, \gui{Material}, \gui{Source} \\
+\gui{Show camera} & \texttt{Camera} & Linien & \texttt{Viewing pyramid} \\
+\gui{Show light paths} & \texttt{Light paths} & Linien & \texttt{Light paths}, Wert: Nummer des Abprallens (\code{bounce}), Farbskala plasma \\
+\bottomrule
+\end{referenz}
+
+Die Ergebnisse werden nicht im Dokument gespeichert.
+
+\section{Export als NumPy-Archiv}\label{sec:ref-pt-export}
+
+Mit einer Datei in \gui{Also write to file} schreiben die Rechnungen komprimierte
+NumPy-Archive. Aus dem Namen \datei{name.npz} (oder \datei{name}) werden die Dateien
+\datei{name-irradiance.npz} und \datei{name-camera.npz}. Die Werte sind immer radiometrisch.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Schlüssel & Inhalt \\
+\midrule\endhead
+\multicolumn{2}{@{}l}{\textbf{\datei{…-irradiance.npz}} (je Fläche: \textit{k} = \textit{Objekt-ID}\_\textit{Flächennummer})} \\
+\code{E\_}\textit{k} & Bestrahlungsstärke in W/m$^2$, [Zeile v, Spalte u]; leere Texel NaN \\
+\code{flux\_}\textit{k} & Fluss je Texel in W \\
+\code{error\_}\textit{k} & Standardfehler des Flusses je Texel \\
+\code{flux\_}\textit{k}\code{\_}\textit{nm}\code{nm} & Fluss je Texel und Wellenlänge (bei mehreren Wellenlängen) \\
+\code{wavelengths} & Wellenlängen in nm \\
+\code{info} & JSON-Text: Verfahren, Samples, längster Pfad, Seed, Fluss in W, Wellenlängen, Einheiten und je Fläche Schlüssel, Name, Objekt, Flächennummer, Fläche in mm$^2$, Fluss in W \\
+\midrule
+\multicolumn{2}{@{}l}{\textbf{\datei{…-camera.npz}}} \\
+\code{radiance} & Strahldichte in W/(m$^2$\,sr), [Zeile von unten, Spalte] \\
+\code{error} & Standardfehler der Strahldichte \\
+\code{radiance\_per\_wavelength} & [Wellenlänge, Zeile, Spalte] \\
+\code{wavelengths} & Wellenlängen in nm \\
+\code{info} & JSON-Text mit den Einstellungen des Laufs \\
+\bottomrule
+\end{referenz}
+
+\section{Formate der Texteingaben}\label{sec:ref-pt-formate}
+
+\begin{referenz}{@{}l >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Feld & Beispiel & Regeln \\
+\midrule\endhead
+\gui{Wavelengths / nm} & \code{550}; \code{486.1, 587.6, 656.3}; \code{450:1, 550:2, 650:1} & Wellenlängen $> 0$ in nm, Anteile $\geq 0$ nach \code{:}; Trenner Komma oder Semikolon; leer: 550 \\
+\gui{By wavelength} & \code{450:0.2, 550:0.8, 650:0.9} & Paare \code{nm:Wert}; linear interpoliert, außerhalb erster/letzter Wert \\
+\gui{Axis (points)} & \code{0, 0, -1} & drei Zahlen, nicht alle 0 \\
+\bottomrule
+\end{referenz}
+
+\section{Leuchtendateien}\label{sec:ref-pt-leuchten}
+
+\begin{itemize}
+  \item IES LM-63, Photometrie Typ C; \code{TILT=NONE} oder \code{TILT=INCLUDE} (die
+    Neigungsdaten werden übersprungen); andere TILT-Angaben werden abgelehnt.
+  \item EULUMDAT (\datei{.ldt}).
+  \item C-Ebenen bis 0 (rotationssymmetrisch), 90, 180 oder \SI{360}{\degree}; Viertel und
+    Hälften werden gespiegelt ergänzt.
+  \item Die Verteilung wird in Zellen von \SI{0.5}{\degree} in $\theta$ und \SI{2}{\degree} in
+    $\varphi$ tabelliert und auf das Integral 1 normiert; der Fluss kommt aus der Quellentabelle.
+  \item Eine geänderte Datei wird beim nächsten Rechnen neu gelesen.
+\end{itemize}

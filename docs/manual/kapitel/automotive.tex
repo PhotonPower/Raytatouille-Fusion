@@ -1,0 +1,1271 @@
+% Kapitel: Das Automotive-Lighting-Plugin (Scheinwerfer und Signalleuchten mit Glühlampen)
+% Quellen: python/plugins/automotive_lighting/ (al_*.py, plugin.json, README.md), CHANGELOG.md
+\chapter{Scheinwerfer und Leuchten: Automotive Lighting}\label{kap:automotive}
+\index{Automotive Lighting}\index{Scheinwerfer}
+
+Das Plugin \plugin{Automotive Lighting} entwirft Scheinwerfer und Signalleuchten für Fahrzeuge,
+deren Lichtquelle eine Glühlampe ist -- eine H7, eine H4, eine P21W und viele andere. Es erzeugt
+die optischen Flächen als exakte NURBS-Flächen im Modell, berechnet die Wendelbilder und die
+Lichtverteilung auf dem Messschirm, prüft sie gegen die Prüfpunkte der Regelungen UN/ECE R112
+(Abblendlicht) und UN R148 (Signalleuchten) und kontrolliert den Entwurf mit einem Raytracing, das
+die Lampe so nachbildet, wie sie ist: Wendel als Drahtwendel, Glaskolben, schwarze Kappe, der Schirm
+der H4.
+
+Das Plugin kennt zwei Bauarten (\gui{System} im Panel):
+
+\begin{description}
+  \item[Klarglasscheinwerfer mit facettiertem Reflektor] Der Spiegel selbst formt das Licht und
+    seine \textbf{Hell-Dunkel-Grenze}. Er ist in Zonen und Streifen (Facetten) geteilt; jede Facette
+    legt die Wendelbilder ihrer Punkte genau an die Hell-Dunkel-Grenze. Wände mit Entformungsschräge
+    und Verrundungen verbinden die Facetten zu einer Fläche, die sich spritzgießen lässt.
+  \item[Scheinwerfer mit Streuscheibe] Ein Paraboloidspiegel und davor eine Streuscheibe, deren
+    Innenseite ein Raster von Elementen trägt -- Prismen, Zylinderlinsen, Kissen --, die das Licht
+    lenken und verbreitern. Die Hell-Dunkel-Grenze kommt hier vom Schirm der Lampe (H4); das Plugin
+    kann die Elemente der Scheibe automatisch optimieren.
+\end{description}
+
+Dieses Kapitel führt durch alle Funktionen. Die vollständigen Parametertabellen, die Lampendaten,
+die Prüfpunkte und alle Ergebnisse stehen im Anhang, \autoref{kap:plugin-automotive}.
+
+\section{Überblick}\label{sec:al-ueberblick}
+
+\subsection{Voraussetzungen}\label{sec:al-voraussetzungen}
+
+Das Plugin (Kennung \code{al}, Name \plugin{Automotive Lighting}) wird mit der Anwendung
+installiert. Für Entwurf, Wendelbilder und Lichtverteilung braucht es nur \code{numpy} in der
+Python-Umgebung der Plugins. Das Raytracing (\gui{Light distribution (ray tracing)}, die Unschärfe
+bei \gui{Optimise lens}) verwendet den Rechenkern des Plugins \plugin{Path Tracer}
+(\autoref{kap:pathtracer}):
+
+\begin{itemize}
+  \item Ist das Paket \code{pathtracer} in Version 0.3.0 oder neuer installiert, rechnet der
+    C++-Kern -- etwa fünf Millionen Lichtwege durch Kolben und facettierten Reflektor in rund
+    zehn Sekunden.
+  \item Sonst rechnet der NumPy-Kern aus dem Ordner des Path-Tracer-Plugins, der neben diesem Plugin
+    liegen muss. Er braucht für einige hunderttausend Lichtwege Minuten.
+\end{itemize}
+
+\gui{Create environment…} in \menu{Plugins,Settings…} installiert beides (siehe
+\autoref{kap:installation} und \autoref{kap:plugins}).
+
+\subsection{Die Aktionen}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Aktion & Wirkung \\
+\midrule
+\endhead
+\gui{Generate reflector} & erzeugt Spiegel (Facetten und Verbindungsflächen bzw. Paraboloid),
+  Streuscheibe und Wendelzylinder als NURBS-Flächen im Modell \\
+\gui{Filament images} & zeigt die Umrisse der Wendelbilder vieler Spiegelpunkte auf dem Messschirm,
+  mit der Hell-Dunkel-Grenze \\
+\gui{Light distribution} & Lichtstärkeverteilung, Tabelle der Prüfpunkte, zwei Schnitte, Lichtströme
+  und Schärfe der Hell-Dunkel-Grenze \\
+\gui{Light distribution (ray tracing)} & dasselbe durch Raytracing mit der Lampe, wie sie ist \\
+\gui{Generate lamp} & legt die Lampe des Raytracings (Drahtwendel, Kolben, Kappe, H4-Schirm) als
+  NURBS-Flächen ins Modell \\
+\gui{Optimise lens} & wählt für jede Zelle der Streuscheibe ihr Element so, dass das Abblendlicht
+  die Prüfpunkte mit Reserve einhält \\
+\gui{Show strips} & zeigt die Startkurven und einige charakteristische Streifen jeder Facette als
+  Linien \\
+\gui{Default zones} & füllt die Zonentabelle für die gewählte Verkehrsseite \\
+\bottomrule
+\end{referenz}
+
+Alle Aktionen finden Sie unter \menu{Plugins,Automotive Lighting}, als Knöpfe unten im Dock
+\gui{Plugin} (nachdem Sie oben \gui{Automotive Lighting} gewählt haben) und in der Gruppe
+\gui{Automotive Lighting} der Werkzeugspalte. Eine laufende Aktion brechen Sie mit \gui{Cancel} in
+der Statusleiste ab. Alle Änderungen am Modell, die eine Aktion vornimmt, sind ein einziger
+Rückgängig-Schritt.
+
+\subsection{Wo die Ergebnisse erscheinen}
+
+\begin{itemize}
+  \item \textbf{Flächen} im Modell, in einer eigenen Gruppe des Modellbaums (Dock \gui{Model}):
+    \enquote{Reflector <Lampe>}, \enquote{Headlamp <Lampe>} oder \enquote{Lamp <Lampe>}.
+  \item \textbf{Bilder} (Lichtstärkeverteilung, Wendelbilder) im Fenster \gui{Image}, mit H und V in
+    Grad als Achsen.
+  \item \textbf{Tabellen} (Prüfpunkte) im Fenster \gui{Table}.
+  \item \textbf{Kurven} (Schnitte durch die Verteilung) im Fenster \gui{Plot}.
+  \item \textbf{Linien} (Streifen) als Ergebnis in den Ansichten.
+  \item \textbf{Protokoll} im Dock \gui{Plugin log}: Flächen, Lichtströme, Schärfe, Warnungen.
+  \item eine \textbf{Zusammenfassung} in der Statusleiste.
+\end{itemize}
+
+Jede Rechnung legt im Dock \gui{Results} einen Ergebnissatz an, etwa \enquote{Low beam H7} oder
+\enquote{Low beam H7 – ray tracing}; so können Sie verschiedene Stände nebeneinander vergleichen.
+
+\section{Koordinaten und Messschirm}\label{sec:al-koordinaten}
+\index{Messschirm}
+
+\paragraph{Im Modell.} Das Plugin rechnet in Millimetern mit
+\begin{itemize}
+  \item $+X$ in Fahrtrichtung (das Licht verlässt den Scheinwerfer in $+X$),
+  \item $+Y$ nach links,
+  \item $+Z$ nach oben.
+\end{itemize}
+Der Mittelpunkt der Wendel liegt im Punkt \gui{Filament centre} (Gruppe \gui{Lamp}, Standard
+Ursprung). Alle erzeugten Flächen werden relativ zu diesem Punkt gelegt.
+
+\paragraph{Auf dem Messschirm.} Die Lichtverteilung wird über zwei Winkel dargestellt: H
+(horizontal, positiv nach \textbf{rechts}) und V (vertikal, positiv nach \textbf{oben}), beide in
+Grad. Die Lichtstärke ist in Candela (cd) angegeben; 625 cd entsprechen einer Beleuchtungsstärke von
+1 lx in 25 m Abstand. Die Linie H = 0 ist die Fahrzeugachse, V = 0 der Horizont.
+
+\paragraph{Azimut.} Zonen und Sektoren werden über einen Azimut um die Lampenachse beschrieben, in
+Fahrtrichtung gesehen: \ang{0} = links, \ang{90} = oben, \ang{180} = rechts, \ang{270} = unten.
+
+\section{Das Panel}\label{sec:al-panel}
+
+Das Panel ist in Gruppen gegliedert, in dieser Reihenfolge:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Gruppe & Inhalt \\
+\midrule
+\endhead
+\gui{System} & Bauart: Klarglas mit facettiertem Reflektor oder Paraboloid mit Streuscheibe \\
+\gui{Lamp} & Lampentyp, eigene Lampendaten, Lage der Wendel \\
+\gui{Cut-off} & Verkehrsseite, Höhe, Anstieg und Knick der Hell-Dunkel-Grenze \\
+\gui{Frame} & Umriss des Spiegels (Kurven oder gerundetes Rechteck), Lampenloch \\
+\gui{Reflector} & Brennweite, Streifenbreite, Facettenlänge, Zonen, Knotenabstand \\
+\gui{Lens} & Lage, Form und Material der Streuscheibe, Zellen, Sektoren, Elemente, Einstellungen von
+  \gui{Optimise lens} (nur Streuscheibe) \\
+\gui{Connecting faces} & Verbindungsflächen an/aus, Entformungsschräge, Verrundungsradius \\
+\gui{Analysis} & Reflexionsgrade, Prüfpunkte, Schatten, Direktlicht, Abtastung, Zahl der
+  Wendelbilder \\
+\gui{Ray tracing} & Lichtwege, Weglänge, Wendel, Kolben, H4-Schirm, Rechenkern \\
+\bottomrule
+\end{referenz}
+
+Die Einstellungen werden mit dem Dokument gespeichert. \gui{Reset parameters} unten im Panel setzt
+alle auf die Standardwerte zurück -- auch die Zonen- und Elementtabellen.
+
+\begin{tipp}
+Das Plugin merkt sich den zuletzt berechneten Reflektor bzw. die zuletzt berechnete Streuscheibe.
+Rufen Sie nach \gui{Generate reflector} \gui{Light distribution} auf, ohne etwas an Lampe,
+Hell-Dunkel-Grenze, Rahmen, Reflektor, Streuscheibe oder Verbindungsflächen zu ändern, wird der
+Entwurf nicht neu gerechnet. Einstellungen der Gruppen \gui{Analysis} und \gui{Ray tracing}
+erzwingen keinen neuen Entwurf.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Die Lampe}\label{sec:al-lampe}
+\index{Glühlampe}\index{UN/ECE R37}\index{Wendel}
+
+\subsection{Lampentypen}
+
+Für den Entwurf ist die Wendel ein gleichmäßig leuchtender Zylinder mit Länge, Durchmesser und
+Lichtstrom. \gui{Lamp} bietet diese Typen an:
+
+\begin{center}
+\small
+\begin{tabular}{lrrrrl}
+\toprule
+Lampe & Länge & Durchmesser & Lichtstrom & Leistung & Wendel \\
+ & mm & mm & lm & W & \\
+\midrule
+H1 & 5,0 & 1,4 & 1550 & 55 & axial \\
+H4 (low beam) & 5,5 & 1,5 & 1000 & 55 & axial, über dem Schirm \\
+H7 & 4,1 & 1,3 & 1500 & 55 & axial \\
+H8 & 3,7 & 1,2 & 800 & 35 & axial \\
+H9 & 4,8 & 1,4 & 2100 & 65 & axial \\
+H11 & 4,5 & 1,3 & 1350 & 55 & axial \\
+HB3 & 5,1 & 1,4 & 1860 & 60 & axial \\
+HB4 & 5,1 & 1,4 & 1095 & 51 & axial \\
+H3 & 5,0 & 1,4 & 1450 & 55 & quer (Nebelscheinwerfer) \\
+P21W & 6,0 & 1,0 & 460 & 21 & quer \\
+PY21W & 6,0 & 1,0 & 280 & 21 & quer, gelb \\
+R10W & 4,0 & 0,8 & 125 & 10 & quer \\
+R5W & 4,0 & 0,7 & 50 & 5 & quer \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Lichtstrom und Wendellänge sind die Nennwerte nach UN/ECE R37 (Rev.~7) für 12-V-Lampen: der
+Lichtstrom als Sollwert bei der Prüfspannung (13,2 V, Signallampen 13,5 V), die Länge die Nennlänge
+des Lampenblatts (R5W, R10W: dort keine, typische Werte). Die Durchmesser gibt R37 nicht an -- es
+sind typische Werte. Standard ist die \textbf{H7}.
+
+\begin{warnung}
+Prüfen Sie die Wendelmaße gegen das Datenblatt Ihrer Lampe. Weichen sie ab, wählen Sie
+\gui{Custom} und tragen die eigenen Werte ein.
+\end{warnung}
+
+\paragraph{Axial oder quer.} Bei den meisten Scheinwerferlampen liegt die Wendel längs der
+Lampenachse (X). Bei H3, P21W, PY21W, R10W und R5W liegt sie quer dazu, waagerecht (entlang Y).
+
+\subsection{Eigene Lampe}
+
+Mit \gui{Lamp} = \gui{Custom} gelten die Felder
+\begin{itemize}
+  \item \gui{Custom: filament length} (Standard 4,1 mm),
+  \item \gui{Custom: filament diameter} (1,3 mm),
+  \item \gui{Custom: luminous flux} (1500 lm),
+  \item \gui{Custom: power} (55 W bei 12 V; nur für die Drahtwendel des Raytracings),
+  \item \gui{Custom: filament across the axis} (aus; an: Wendel quer, waagerecht).
+\end{itemize}
+
+\subsection{Lage der Wendel}
+
+\gui{Filament centre} ist der Mittelpunkt der Wendel im Modell. Mit \gui{Pick} wählen Sie ihn per
+Klick in einer Ansicht (mit Objektfang; \keys{Esc} bricht ab). Alle Flächen des Plugins werden
+relativ zu diesem Punkt erzeugt; die Lampenachse ist immer parallel zu $+X$.
+
+\subsection{Die H4: Schirm und Kappe}\label{sec:al-h4}
+\index{H4}
+
+Die H4 hat zwei Wendeln: die Abblendwendel über einem Schirm und dahinter die Fernlichtwendel. Der
+Schirm bestimmt die Hell-Dunkel-Grenze des Abblendlichts. Das Plugin bildet ihn nach den
+Lampenblättern H4/1 bis H4/5 von UN/ECE R37 nach:
+
+\begin{itemize}
+  \item Die Kanten des Schirms liegen auf der Ebene H und \ang{15} darunter; das Licht verlässt den
+    Schirm über diese Kanten in die oberen \ang{195}.
+  \item Die Oberkante der Wendel liegt 0,6 mm über der Ebene H.
+  \item Der Schirm ist eine Wanne um die Bezugsachse, von 1,2 mm hinter der Wendel (dort durch eine
+    Stirnwand geschlossen) bis 3,4 mm vor ihr (offen), Radius 4,3 mm (etwa 8,6 mm breit und 4,2 mm
+    tief).
+  \item Die schwarze Kappe auf der Kolbenspitze erscheint vom Achspunkt $p = \qty{28.95}{mm}$
+    unter \ang{40} gegen die Achse (der Grenzwert des Blatts), auf einem Kolben von 13 mm
+    Durchmesser.
+\end{itemize}
+
+Die Regelung legt Kanten, Wendellage und Kappenwinkel fest. Radius und Länge der Wanne stammen aus
+der Zeichnung des Blatts H4/3, die für den Schirm nicht verbindlich ist; der Kolbendurchmesser ist
+angenommen.
+
+\begin{tipp}
+In ihrem Scheinwerfer hat der Spiegel einer H4 seinen Brennpunkt an der Fernlichtwendel,
+\qty{6.7}{mm} hinter der Mitte der Abblendwendel. Für einen Streuscheiben-Scheinwerfer mit H4 setzen
+Sie deshalb \gui{Mirror focus behind the filament centre} = 6.7 (\autoref{sec:al-streuscheibe}).
+Dann bleibt auch das Licht, das der glänzende Schirm zurückwirft, unter der Hell-Dunkel-Grenze.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Die Hell-Dunkel-Grenze}\label{sec:al-cutoff}
+\index{Hell-Dunkel-Grenze}
+
+Das asymmetrische Abblendlicht hat eine Hell-Dunkel-Grenze aus zwei Ästen:
+
+\begin{itemize}
+  \item einem \textbf{waagerechten Ast} auf der Seite des Gegenverkehrs, in der Höhe
+    \gui{Horizontal part at V} (Standard $-\ang{0.57}$, das ist 1\,\% Neigung unter den Horizont),
+  \item einem \textbf{ansteigenden Ast} auf der eigenen Seite, der vom Knick bei \gui{Kink at H}
+    (Standard \ang{0}) unter dem Winkel \gui{Rise} (Standard \ang{15}) ansteigt.
+\end{itemize}
+
+\gui{Traffic} wählt die Verkehrsseite: bei \code{right-hand} (Rechtsverkehr, Standard) steigt die
+Grenze nach rechts an, bei \code{left-hand} nach links. Die Prüfpunkte werden für Linksverkehr an
+V-V gespiegelt.
+
+Jeder Ast ist auf dem Messschirm eine Gerade, im Raum also eine Ebene durch die Lampe. Die
+Facetten des Klarglasreflektors legen ihre Wendelbilder an einen der beiden Äste
+(\autoref{sec:al-zonen}).
+
+\begin{tipp}
+Für einen Nebelscheinwerfer mit waagerechter Grenze setzen Sie \gui{Rise} = 0.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Der Rahmen}\label{sec:al-rahmen}
+
+Der Rahmen ist der Umriss des Spiegels in der Vorderansicht (entlang X gesehen). Er begrenzt
+Reflektor und Streuscheibe.
+
+\begin{description}
+  \item[\gui{Frame (curves)}] Geschlossene Kurven, die Sie im CAD gezeichnet haben: wählen Sie sie
+    aus und drücken Sie \gui{Use selection}. Die Kurven werden Ende an Ende zu einem Umriss verbunden;
+    ihre Lage wird relativ zu \gui{Filament centre} in der Y-Z-Ebene ausgewertet (die X-Koordinate
+    spielt keine Rolle).
+  \item[gerundetes Rechteck] Ist \gui{Frame (curves)} leer, gilt ein Rechteck mit \gui{Width}
+    (Standard 170 mm), \gui{Height} (100 mm) und \gui{Corner radius} (20 mm), dessen Mitte um
+    \gui{Centre to the left of the lamp axis} und \gui{Centre above the lamp axis} (beide 0) von der
+    Lampenachse verschoben ist.
+  \item[\gui{Lamp hole radius}] Radius des Lochs für die Lampe in der Spiegelmitte (Standard 12 mm).
+\end{description}
+
+\begin{hinweis}
+Der Rahmen sollte konvex oder nahezu konvex sein. Kurven, die sich nicht zu einem Umriss schließen,
+weist das Plugin mit der Lücke in Millimetern ab (\enquote{the frame curves do not join to one outline
+(gap of … mm) – select curves that meet end to end}).
+\end{hinweis}
+
+% ---------------------------------------------------------------------------------------------
+\section{Der Klarglasreflektor}\label{sec:al-klarglas}
+\index{Klarglasreflektor}\index{facettierter Reflektor}
+
+Mit \gui{System} = \gui{clear lens: facetted reflector} (Standard) entwirft das Plugin einen
+facettierten Spiegel für einen Scheinwerfer mit klarer Abschlussscheibe. Der Spiegel allein erzeugt
+die Lichtverteilung \emph{und} die Hell-Dunkel-Grenze.
+
+\subsection{Das Prinzip: Wendelbilder an der Grenze}\label{sec:al-prinzip}
+\index{Wendelbild}
+
+Ein Spiegelpunkt $P$ mit der Normalen $n$ wirft das Licht jedes Wendelpunkts $Q$ in eine Richtung
+auf den Messschirm. Alle diese Richtungen zusammen sind das \textbf{Wendelbild} des Spiegelpunkts --
+ein kleiner, länglicher Fleck. Damit das Abblendlicht niemanden blendet, muss jedes Wendelbild
+\emph{unter} der Hell-Dunkel-Grenze liegen; damit die Grenze scharf ist, soll es sie
+\emph{berühren}.
+
+Das Plugin wählt die Spiegelfläche so, dass genau das gilt: An jedem Punkt einer Facette berührt das
+Wendelbild den ihr zugewiesenen Ast der Grenze. Mathematisch ist das eine partielle
+Differentialgleichung erster Ordnung für die Fläche. Ihre \textbf{charakteristischen Streifen} --
+Kurven auf dem Spiegel mit den Normalen längs der Kurve -- lassen sich als gewöhnliche
+Differentialgleichungen integrieren. Längs eines solchen Streifens darf der Spiegel um die Tangente
+kippen, ohne dass das Bild die Grenze verlässt; es gleitet nur an ihr entlang.
+
+\paragraph{Eine Facette} ist die Schar der charakteristischen Streifen durch eine Startkurve quer
+über den Streifen. Auf der Startkurve ist die Normale ganz vorgegeben: das Bild berührt die Grenze,
+und die Bildmitte liegt am \emph{Zielpunkt} (\emph{aim}). Die Mitte der Startkurve liegt auf dem
+Grundparaboloid. Auf der ganzen Facette berühren alle Wendelbilder die Grenze -- bis auf die
+Genauigkeit der B-Spline-Fläche, typisch unter \ang{0.05} (das Protokoll nennt den Wert). Der
+Zielpunkt gilt genau auf der Startkurve und wandert mit dem Abstand davon.
+
+\paragraph{Grundparaboloid.} Alle Facetten beginnen auf einem Paraboloid mit dem Brennpunkt in der
+Wendelmitte und der Brennweite \gui{Focal length} (Gruppe \gui{Reflector}, Standard 25 mm).
+
+\subsection{Streifen, Facetten und Reihen}\label{sec:al-streifen}
+
+Der Spiegel wird in \textbf{Zonen} geteilt (Sektoren um die Lampenachse, \autoref{sec:al-zonen}),
+jede Zone in \textbf{Streifen} der Breite \gui{Strip width} (Standard 10 mm). Jeder Streifen ist eine
+Facette.
+
+\begin{description}
+  \item[\gui{Facet length}] Standard 0: ganze Streifen. Ein langer Streifen mit großer Streuung
+    verliert zum Rand hin an Streuung, weil der Zielpunkt nur auf der Startkurve exakt gilt. Mit einer
+    Facettenlänge größer null wird jeder Streifen in \textbf{Reihen} dieser Länge zerschnitten (quer
+    zum Streifen; die Reihe 0 liegt um die Höhe der Lampenachse). Jede Reihe ist eine eigene Facette
+    mit eigenen Zielpunkten auf ihrer eigenen Startkurve; jede Reihe beginnt, wo die vorige endet, so
+    dass nur eine niedrige Stufe und ein Knick bleiben. Der Preis: mehr Verbindungsflächen.
+  \item[\gui{Surface knots every}] Knotenabstand der B-Spline-Flächen der Facetten (Standard
+    1,5 mm). Kleiner: näher an den berechneten Streifen, mehr Kontrollpunkte.
+\end{description}
+
+Die \textbf{Streifengrenzen} folgen den Charakteristiken einer Facette, die auf die Mitte der
+Zielpunkte ihrer Zone zielt: Schnitte des Grundparaboloids mit parallelen Ebenen -- in der
+Vorderansicht Geraden für eine geradeaus zielende Zone, sonst Kreise.
+
+Die Facetten heißen im Modell \enquote{Facet <Zone>.<Streifen>} (mit Reihen
+\enquote{Facet <Zone>.<Streifen>.<Reihe>}), die Zonen von 1 an gezählt.
+
+\subsection{Zonen}\label{sec:al-zonen}
+\index{Zone (Reflektor)}
+
+Die Tabelle \gui{Zones} (Gruppe \gui{Reflector}) teilt den Spiegel in Sektoren um die Lampenachse.
+Jede Zeile ist eine Zone mit den Spalten:
+
+\begin{description}
+  \item[\gui{from azimuth}] Beginn der Zone (Azimut in Grad, \autoref{sec:al-koordinaten}). Jede Zone
+    reicht bis zum Beginn der nächsten (nach Azimut sortiert), die letzte bis zur ersten.
+  \item[\gui{cut-off branch}] der Ast, an den die Zone ihre Wendelbilder legt: \code{horizontal}
+    oder \code{rising}.
+  \item[\gui{aim, right border}] und \gui{aim, left border} der Zielpunkt H (positiv nach rechts) des
+    Wendelbilds der Wendelmitte am rechten bzw. linken Rand jedes Streifens. Dazwischen läuft er
+    gleichmäßig -- das ist die \textbf{Streuung} des Streifens.
+  \item[\gui{below cut-off}] hält die Wendelbilder der Zone so viel unter der Grenze (Standard 0).
+\end{description}
+
+\paragraph{Die Standardzonen.} \gui{Default zones} füllt die Tabelle für die gewählte Verkehrsseite.
+Für Rechtsverkehr:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{rlrrr>{\raggedright\arraybackslash}X}
+\toprule
+Beginn (\gui{from azimuth}) & Ast & Ziel rechts & Ziel links & \gui{below} &
+  Rolle \\
+\midrule
+$-20$ & horizontal & 6 & $-1$ & 0 & linke Flanke: waagerechte Grenze und Hotspot \\
+20 & horizontal & 25 & $-25$ & 0 & oben: Breitenstreuung \\
+145 & rising & 7 & 1 & 0 & rechte Flanke: trägt den ansteigenden Ast \\
+185 & horizontal & 25 & $-25$ & 0 & unten: Breitenstreuung \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Die Flanke, deren Wendelbilder längs des ansteigenden Asts liegen, trägt ihn; die andere Flanke
+bildet die waagerechte Grenze und den Hotspot; oben und unten verbreitern das Licht. Für Linksverkehr
+werden die Zonen gespiegelt (der Anhang nennt die Werte, \autoref{sec:al-ref-zonen}).
+
+\begin{hinweis}
+Zwei Zonen dürfen nicht am selben Azimut beginnen, und die Tabelle darf nicht leer sein -- sonst
+meldet das Plugin \enquote{Two zones start at the same azimuth.} bzw. \enquote{The zone table is empty:
+add a zone (or press Default zones).}
+\end{hinweis}
+
+\paragraph{Wie weit eine Zone zielen kann.} Ein steiler Teil des Spiegels kann sein Licht nicht über
+seine eigene Wand werfen. Verlangt der Zielpunkt einer Zone das, wird er zurückgenommen; das
+Protokoll nennt die betroffenen Facetten (\enquote{aim held back in … facets}). Zielpunkte, die zu
+stark zusammenlaufen, lassen die Streifen einer Facette sich kreuzen -- das Plugin bricht dann mit
+einer Meldung ab (\autoref{sec:al-fehler}). Die Startkurve liegt am tiefsten Schnitt der Facette,
+damit Streifen mit auseinanderlaufenden Zielen (rechter Rand nach rechts) zum Rand hin auffächern.
+
+\subsection{Wendel quer zur Achse}
+
+Bei einer Querwendel (H3, Signallampen) liegt das Bild an einer waagerechten Grenze, wenn die
+Normale des Spiegels keinen Anteil längs der Wendel hat. Eine solche Linie läuft quer über die
+Streifen auf Höhe der Lampenachse (die Streifen wechseln dort das berührende Wendelende), eine zweite
+längs der Streifen, wo eine Facette seitlich geradeaus blickt. Deshalb liegt bei einer Querwendel eine
+Streifengrenze an der Lampenachse (nicht eine Streifenmitte), und jede Facette bleibt auf einer Seite
+dieser Linie; wo ihr Zielpunkt sie hinüberbringen würde, wird er verschoben (das Protokoll nennt
+diese Facetten).
+
+\begin{tipp}
+Für einen Nebelscheinwerfer mit H3: \gui{Rise} = 0 und eine Zone (oder eine obere und eine untere).
+Die asymmetrische Grenze mit ansteigender Zone funktioniert ebenfalls.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Verbindungsflächen}\label{sec:al-verbindung}
+\index{Verbindungsfläche}\index{Entformungsschräge}
+
+Benachbarte Facetten treffen mit einer Stufe aufeinander, die sich längs ihrer Grenze ändert. Damit
+der Spiegel eine Fläche wird, die sich spritzgießen lässt (Entformung entlang X), verbindet das Plugin
+die Facetten durch \textbf{Wände mit Entformungsschräge}, an Fuß und Kopf \textbf{verrundet}.
+
+\begin{description}
+  \item[\gui{Connecting faces}] an (Standard): eine zusammenhängende Spiegelfläche; aus: nur die
+    nackten Facetten mit Stufen.
+  \item[\gui{Draft angle}] Winkel zwischen den Wänden und der Entformungsrichtung X (Standard
+    \ang{5}, 0,5 bis \ang{45}).
+  \item[\gui{Fillet radius}] Radius der Verrundung an Fuß und Kopf jeder Wand (Standard 0,3 mm).
+\end{description}
+
+Quer zu einer Grenze legt das Plugin die Wand durch die Mitte der Stufe mit der gewählten Neigung und
+rollt dann eine Kugel mit dem Verrundungsradius über beide Seiten. Wo die Stufe verschwindet,
+verschwindet auch die Wand; nur der Knick wird verrundet. Die Profile längs einer Grenze ergeben ein
+\textbf{Band}, eine bikubische B-Spline-Fläche, die zu beiden Seiten in die Facetten ausläuft; die
+Facetten werden darauf zurückgeschnitten. Es gibt drei Ebenen: Bänder zwischen den Reihen eines
+Streifens, zwischen den Streifen einer Zone und entlang der Strahlen zwischen zwei Zonen. Alle Bänder
+zwischen Zonen haben dieselbe Breite.
+
+\paragraph{Was Sie erwarten können.}
+\begin{itemize}
+  \item Die Wände halten die Entformungsschräge ein -- etwas weniger nur, wo zwei Wände an einer
+    Kreuzung zusammentreffen. Das Protokoll nennt den kleinsten Winkel.
+  \item Bänder und Facetten schließen auf etwa 0,01 mm aneinander an.
+  \item Mit den Standardeinstellungen nehmen die Bänder 10 bis 15\,\% der Spiegelfläche ein. Ihr
+    Licht geht woandershin; in der Lichtverteilung erscheint es als Streulicht über der Grenze.
+\end{itemize}
+
+Niedrigere Stufen bedeuten schmalere Wände: schmalere Streifen, weniger Streuung je Streifen oder
+benachbarte Zonen mit ähnlichen Zielen.
+
+\begin{warnung}
+Die Bänder zwischen den Zonen treffen sich an der Lampenachse. Das Lampenloch muss groß genug für
+sie sein; sonst meldet das Plugin den nötigen Mindestradius (\enquote{the lamp hole (radius … mm) is
+too small for the connecting faces between the zones, which meet at the lamp axis: at least … mm}).
+Ebenso müssen die Streifen breiter sein als ihre Verbindungsflächen.
+\end{warnung}
+
+\subsection{Den Reflektor erzeugen}\label{sec:al-generate}
+
+\gui{Generate reflector} erzeugt
+\begin{itemize}
+  \item jede Facette als getrimmte NURBS-Fläche (bikubischer B-Spline, mit ihrer Zelle getrimmt),
+  \item jede Verbindungsfläche (\enquote{Connection …}),
+  \item die Wendel als Zylinder (\enquote{Filament <Lampe>}),
+\end{itemize}
+in der Gruppe \enquote{Reflector <Lampe>} des Modellbaums. Ein neuer Lauf ersetzt den vorigen Reflektor
+(alle Flächen mit dem Attribut \code{al.part}). Die Flächen tragen Attribute:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Attribut & Werte \\
+\midrule
+\code{al.part} & \code{facet}, \code{connection}, \code{filament} \\
+\code{al.zone}, \code{al.strip}, \code{al.row} & Zone (ab 1), Streifen, Reihe \\
+\code{al.branch} & \code{horizontal} oder \code{rising} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Das Protokoll nennt Zahl der Facetten und Zonen, Spiegelfläche (Vorderansicht, cm$^2$), Tiefe in X,
+wie nah die Wendelbilder an der Grenze liegen, die höchste Stufe, den Verrundungsradius, den
+kleinsten Entformungswinkel und den Flächenanteil der Verbindungsflächen. Die Statusleiste etwa:
+\enquote{<Anzahl> facets, <Anzahl> connecting faces, images within <Winkel>\si{\degree} of the cut-off}.
+
+Die Flächen sind einzelne getrimmte Flächen, nicht zu einer Schale vernäht.
+
+\subsection{Streifen anzeigen}
+
+\gui{Show strips} zeigt im Ergebnissatz \enquote{Strips <Lampe>} die \enquote{Start curves} und
+einige \enquote{Characteristic strips} jeder Facette als Linien in den Ansichten. So sehen Sie, wie die
+Facetten aufgebaut sind und wo Streifen auffächern oder sich drängen. Die Aktion gilt nur für den
+facettierten Reflektor.
+
+% ---------------------------------------------------------------------------------------------
+\section{Paraboloid und Streuscheibe}\label{sec:al-streuscheibe}
+\index{Streuscheibe}\index{Paraboloid}
+
+Mit \gui{System} = \gui{patterned lens: paraboloid and lens} besteht der Scheinwerfer aus einem
+Paraboloidspiegel und einer Streuscheibe davor. Es gelten die Gruppen \gui{Frame}, \gui{Lamp} und
+\gui{Lens}; aus \gui{Reflector} nur \gui{Focal length}.
+
+\subsection{Der Spiegel}
+
+Der Spiegel ist das Paraboloid mit \gui{Focal length} innerhalb des Rahmens, außerhalb des
+Lampenlochs. \gui{Mirror focus behind the filament centre} (Gruppe \gui{Lens}, Standard 0) verschiebt
+seinen Brennpunkt hinter die Wendelmitte. Bei der H4 sitzt die Abblendwendel vor dem Brennpunkt
+(im H4-Scheinwerfer liegt er an der Fernlichtwendel, 6,7 mm dahinter). Dann sendet die obere
+Spiegelhälfte -- die allein Licht am Schirm vorbei bekommt -- ihr Licht unter den Horizont.
+
+\subsection{Form der Scheibe}
+
+\begin{description}
+  \item[\gui{Lens in front of the filament}] Abstand der Grundebene der Innenseite vor der Wendel,
+    auf der Lampenachse (Standard 75 mm).
+  \item[\gui{Thickness}] Dicke der Scheibe, längs X gemessen (Standard 3 mm).
+  \item[\gui{Rake}] die Scheibe neigt sich zurück: ihr oberer Rand zum Spiegel hin (Standard
+    \ang{0}).
+  \item[\gui{Sweep}] die Scheibe läuft nach links zurück (negativ: nach rechts).
+  \item[\gui{Dome radius}] nach außen gewölbt als Kugel dieses Radius; 0: eben.
+  \item[\gui{Refractive index}] Brechzahl (Standard 1,49; PMMA 1,49, Polycarbonat 1,59, Glas etwa
+    1,52).
+  \item[\gui{Transmittance}] Transmissionsgrad der Scheibe (Standard 0,92) -- bei einer roten oder
+    gelben Scheibe einschließlich der Farbe.
+\end{description}
+
+Die Außenseite ist glatt und hat die gewählte Form; die Innenseite hat dieselbe Form, \gui{Thickness}
+dahinter, und trägt die Elemente.
+
+\subsection{Zellen und Elemente}\label{sec:al-elemente}
+\index{Prisma}\index{Zylinderlinse}\index{Kissen}
+
+Die Innenseite ist ein Raster aus Zellen der Größe \gui{Element width} $\times$ \gui{Element height}
+(Standard je 10 mm); eine Zelle liegt mittig auf der Lampenachse. Was jede Zelle tut, legt die
+Tabelle \gui{Elements} fest. Jede Zeile beschreibt einen Bereich (y nach links, z nach oben, um die
+Lampenachse, in mm) und was die Zellen tun, deren Mitte darin liegt; die erste passende Zeile gilt.
+
+\begin{description}
+  \item[\gui{y from}, \gui{y to}, \gui{z from}, \gui{z to}] der Bereich (Standard $\pm 500$ mm, also
+    alles).
+  \item[\gui{deflect H}, \gui{deflect V}] um wie viel die Zelle das Licht in ihrer Mitte ablenkt --
+    ein \textbf{Prisma}.
+  \item[\gui{spread $\pm$ H}, \gui{spread $\pm$ V}] um wie viel mehr an ihren Rändern, linear über
+    die Zelle (der linke Teil nach links, der obere nach oben; negativ: umgekehrt, die Strahlen
+    kreuzen sich) -- eine \textbf{Zylinderlinse} mit einer Streuung, ein \textbf{Kissen} mit beiden.
+  \item[\gui{spread turned by}] beide Streuungen auf dem Schirm um diesen Winkel gedreht (gegen den
+    Uhrzeigersinn, wie der Fahrer sieht). Eine Zylinderlinse (\gui{spread $\pm$ V} = 0), um
+    \ang{15} gedreht, streut das Licht längs einer Linie, die um \ang{15} ansteigt -- so wie die
+    Facetten eines Klarglasreflektors ihre Wendelbilder längs der Grenze legen. Die Streuung wird an
+    der Zellenecke erreicht, die in ihrer Richtung am weitesten außen liegt.
+  \item[\gui{sector}] der Sektor, für dessen Teil der Zelle die Zeile gilt (ihre Nummer nach Azimut,
+    ab 0); $-1$: jeder Teil.
+\end{description}
+
+Alle Werte 0: ebenes Glas. Die Standardzeile ist ein Kissen über die ganze Scheibe:
+\gui{deflect V} = $-1$, \gui{spread $\pm$ H} = 15, \gui{spread $\pm$ V} = 4.
+
+\paragraph{Wie ein Element entsteht.} Für einen Punkt der Zelle soll der Strahl, der von der Wendelmitte
+über den Spiegel kommt, die Scheibe um die gewählten Winkel gedreht verlassen. Aus der gewünschten
+Austrittsrichtung folgt mit der Brechung an der Außenseite die Richtung im Glas, daraus mit dem
+Snelliusschen Gesetz in Vektorform die Normale der Innenseite. Diese Neigungen werden über die Zelle
+integriert; die Fläche der Zelle ist das B\'ezier-Flächenstück vom Grad 5, das dem am nächsten kommt
+(das Protokoll nennt den größten Neigungsfehler). Eine Scheibe ohne Elemente lenkt nichts ab.
+
+\paragraph{Wände zwischen den Elementen.} Benachbarte Elemente treffen mit einer Stufe aufeinander.
+Sie wird durch eine Wand längs X geschlossen, als Regelfläche zwischen den Rändern der beiden
+Flächenstücke. Ein Strahl, der eine Wand trifft, wird dort einmal gespiegelt und geht als Streulicht
+weiter: aus der Luft vor den Elementen mit dem Reflexionsgrad des Glases unter diesem streifenden
+Winkel (was in die Wand eindringt, geht verloren), im Glas dahinter durch Totalreflexion.
+\gui{Light distribution} meldet, wie viel Licht die Wände trifft und wie viel davon weitergeht.
+
+\paragraph{Wände mit Schräge.} Mit \gui{Draft angle of the walls} größer null neigen sich die Wände
+um diesen Winkel gegen X und werden an Fuß und Kopf mit \gui{Fillet radius of the walls} verrundet --
+wie es Spritzgießen oder Pressen verlangen. Sie entstehen wie die Verbindungsflächen des
+Klarglasreflektors als Bänder, die in die Elemente auslaufen (zuerst zwischen den Elementen einer
+Reihe, dann zwischen den Reihen). Die Wände sind dann Teil der Innenfläche: ein Strahl wird an ihnen
+gebrochen wie überall sonst.
+
+\begin{warnung}
+Wände mit Schräge und Sektoren lassen sich noch nicht kombinieren. Setzen Sie die Schräge auf 0 oder
+lassen Sie die Sektortabelle leer.
+\end{warnung}
+
+\subsection{Sektoren}\label{sec:al-sektoren}
+\index{Sektor (Streuscheibe)}
+
+Die Tabelle \gui{Sectors} teilt die Scheibe in radiale Abschnitte um die Lampenachse -- wie die Zonen
+eines Klarglasreflektors. Jede Zeile beginnt bei \gui{from azimuth} (0 links, 90 oben) und reicht bis
+zum Beginn der nächsten; \gui{cut-off branch} nennt den Ast, an dem das Licht des Sektors endet.
+
+Mit zwei oder mehr Sektoren werden Zellen, die eine radiale Linie schneidet, entlang dieser Linie
+geteilt: jeder Teil ist ein eigenes Element (sein Flächenstück über die ganze Zelle entworfen, seine
+Ablenkung um die Mitte des Teils, seine Streuung über die Ausdehnung des Teils). Die Stufe zwischen
+zwei Teilen wird eine Wand entlang der radialen Linie. In der Elementtabelle wählt die Spalte
+\gui{sector} den Teil.
+
+\paragraph{Warum Sektoren?} Das Licht der H4, das den Schirm über seine schräge Kante verlässt,
+erreicht einen Keil aus der Mitte der Scheibe, dessen Ränder radiale Linien sind -- eine klassische
+H4-Scheibe hat dort ihre schrägen Riefen. Zellen eines quadratischen Rasters mischen es an beiden
+Rändern mit dem übrigen Licht: etwa 40\,\% dieses Lichts liegen in Zellen, die halb drin, halb draußen
+sind. Leer (Standard) gilt ein einziger Sektor; \gui{Optimise lens} mit \gui{Optimise: along the
+edges} füllt die Tabelle dann selbst (\autoref{sec:al-optimieren}).
+
+\subsection{Den Scheinwerfer erzeugen}
+
+\gui{Generate reflector} erzeugt bei dieser Bauart in der Gruppe \enquote{Headlamp <Lampe>}:
+\begin{itemize}
+  \item den Spiegel, exakt, mit Lampenloch (\enquote{Mirror (paraboloid)}, \code{al.part} =
+    \code{mirror}),
+  \item die Außenseite der Scheibe (\enquote{Lens outer side}, \code{lens}),
+  \item jedes Element (\enquote{Lens element i.j}, \code{element}) und jede Wand (\code{wall}),
+  \item den Wendelzylinder (\code{filament}).
+\end{itemize}
+
+Das Protokoll nennt Brennweite, Lage, Form, Dicke und Brechzahl der Scheibe, die Zahl der Elemente,
+die Tiefe ihrer Flächen und den Neigungsfehler; die Statusleiste \enquote{paraboloid and lens with …
+elements}.
+
+\begin{hinweis}
+Mögliche Abbrüche beim Aufbau der Scheibe: Die Scheibe liegt am Rand im Spiegel (weiter nach vorn
+oder weniger neigen), ihr Kugelradius ist kleiner als ihre Breite, ein Element kann das Licht nicht so
+weit lenken, die Elemente sind tiefer als die Scheibe dick ist (dickere Scheibe, kleinere Zellen,
+weniger Ablenkung), oder sie sind für Wände mit dieser Schräge zu klein. Die Meldungen stehen in
+\autoref{sec:al-fehler}.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------------------------
+\section{Wendelbilder}\label{sec:al-wendelbilder}
+
+\gui{Filament images} zeigt im Fenster \gui{Image} (Ergebnissatz \enquote{Filament images <Lampe>}) die
+Umrisse der Wendelbilder von Punkten über den ganzen Spiegel, zusammen mit der Hell-Dunkel-Grenze als
+heller Linie. Der Bereich ist H $= -45$ bis $45^\circ$, V $= -15$ bis $5^\circ$, 20 Bildpunkte je
+Grad; jeder Umriss zählt 1, überlappende Umrisse addieren sich.
+
+\gui{Filament images (number)} (Gruppe \gui{Analysis}, Standard 150) legt fest, wie viele Spiegelpunkte
+ungefähr genommen werden. Beim Klarglasreflektor sind es Punkte der Facetten, bei der Streuscheibe
+Punkte des Spiegels, deren Licht durch die Scheibe verfolgt wird.
+
+Damit prüfen Sie auf einen Blick:
+\begin{itemize}
+  \item ob alle Bilder unter der Grenze liegen und sie berühren,
+  \item wie die Zonen das Licht verteilen (Hotspot, Breite, ansteigender Ast),
+  \item ob eine Zone zu weit seitlich zielt (Bilder, die sich am Rand stauen).
+\end{itemize}
+
+% ---------------------------------------------------------------------------------------------
+\section{Lichtverteilung und Prüfpunkte}\label{sec:al-lichtverteilung}
+\index{Lichtverteilung}\index{UN/ECE R112}\index{Prüfpunkt}
+
+\gui{Light distribution} berechnet die Lichtstärke des Scheinwerfers auf dem Messschirm.
+
+\subsection{Das Modell}
+
+Die Wendel ist ein Zylinder, dessen Mantel in alle Richtungen gleich hell leuchtet (Lambertsch); jeder
+Spiegelpunkt -- auf den Facetten und den Verbindungsflächen -- reflektiert einmal, mit dem
+Reflexionsgrad aus der Gruppe \gui{Analysis}. Strahlen gehen von jedem Abtastpunkt des Wendelmantels zu
+jedem Spiegelpunkt eines Gitters in der Vorderansicht. Bei der Streuscheibe folgt die Brechung an
+beiden Seiten der Scheibe mit \gui{Transmittance}; ein Strahl, der die Scheibe verfehlt oder an ihrer
+Außenseite total reflektiert wird, ist verloren, einer, der eine Wand trifft, wird dort gespiegelt.
+
+Die Einstellungen der Gruppe \gui{Analysis}:
+
+\begin{description}
+  \item[\gui{Reflectance}] Reflexionsgrad des Spiegels (Standard 0,85).
+  \item[\gui{Reflectance of the connecting faces}] Reflexionsgrad der Verbindungsflächen (Standard
+    0,85); 0: ihr Licht zählt nicht (abgedeckte oder matte Wände).
+  \item[\gui{Test points}] welche Prüfpunkte die Tabelle zeigt: \gui{low beam (UN R112, class B)}
+    (Standard) oder eine Signalleuchte nach UN R148 (\autoref{sec:al-signal}).
+  \item[\gui{Shadows of the steps}] (Standard an) beim facettierten Reflektor mit Verbindungsflächen:
+    ein Strahl, den eine Stufe des Spiegels auf dem Weg von der Wendel aufhält, entfällt; einer, den
+    sie nach der Reflexion aufhält, wird dort ein zweites Mal reflektiert (mit dem Reflexionsgrad der
+    Verbindungsflächen) und zählt als Streulicht, wenn er den Spiegel danach frei verlässt. Kostet
+    Rechenzeit.
+  \item[\gui{Direct light of the lamp}] (Standard an) das Licht, das die Wendel nach vorn am Spiegel
+    vorbei verlässt -- über den Schirm einer H4 und um ihre Kappe herum, bei der Streuscheibe durch
+    die Scheibe.
+  \item[\gui{Mirror points every}] Gitterabstand der Spiegelpunkte (Standard 1 mm, 0,2 bis 10 mm).
+    Kleiner: genauer und langsamer.
+\end{description}
+
+\subsection{Die Ergebnisse}
+
+Im Ergebnissatz \enquote{Low beam <Lampe>} erscheinen
+
+\begin{description}
+  \item[Bild \enquote{Luminous intensity}] die Lichtstärke in cd über H und V (Fenster \gui{Image}).
+    Der Bereich ist H $= -40$ bis $40^\circ$, V $= -15$ bis $10^\circ$ in Zellen von \ang{0.25}
+    $\times$ \ang{0.1}; bei Signalleuchten H $= \pm 40^\circ$, V $= \pm 20^\circ$ in Zellen von
+    \ang{0.25} $\times$ \ang{0.25}.
+  \item[Tabelle der Prüfpunkte] (Fenster \gui{Table}, siehe unten).
+  \item[Kurve \enquote{Vertical cut at H = …}] ein senkrechter Schnitt durch die Grenze bei
+    H $= -2{,}5^\circ$ (Rechtsverkehr; Linksverkehr $+2{,}5^\circ$), gemittelt über $\pm 0{,}5^\circ$.
+  \item[Kurve \enquote{Horizontal cut at V = -0.86}] ein waagerechter Schnitt in der Höhe der
+    50-m-Linie, gemittelt über $\pm 0{,}25^\circ$. Bei Signalleuchten gehen beide Schnitte durch die
+    Achse.
+\end{description}
+
+Im Protokoll stehen
+\begin{itemize}
+  \item die Lichtströme: der Lampe, auf den Spiegel, im Bündel und davon aus den Verbindungsflächen
+    (Streulicht);
+  \item die höchste Lichtstärke;
+  \item die Lage der Grenze und ihre \textbf{Schärfe} $G$ (siehe unten);
+  \item die höchste Lichtstärke mehr als \ang{0.2} über der Grenze (Blendung);
+  \item mit \gui{Shadows of the steps} der Anteil, den Stufen aufhalten;
+  \item mit \gui{Direct light of the lamp} dessen Lichtstrom und Höchstwert (getrennt vom Bündel);
+  \item bei der Streuscheibe der Lichtstrom, der die Wände trifft, und wie viel davon als Streulicht
+    weitergeht.
+\end{itemize}
+
+Die Statusleiste fasst zusammen, etwa \enquote{… lm in the beam (… \%), maximum … cd, cut-off G =
+…}.
+
+\subsection{Die Prüfpunkte des Abblendlichts}
+
+Die Tabelle \enquote{R112 test points (class B, passing beam)} hat die Spalten \code{point},
+\code{H / }\si{\degree}, \code{V / }\si{\degree}, \code{I / cd}, \code{E at 25 m / lx},
+\code{required} und das Urteil (\code{ok} oder \code{not met}). Sie enthält die Punkte nach UN/ECE
+R112, Absatz 6.2.4 (Scheinwerfer der Klasse B, Abblendlicht, Rechtsverkehr; für Linksverkehr an
+V-V gespiegelt):
+
+\begin{center}
+\begin{tabular}{lrrl}
+\toprule
+Punkt & H / \si{\degree} & V / \si{\degree} & Anforderung \\
+\midrule
+B50L & $-3{,}43$ & 0,57 & $\leq 350$ cd \\
+BR & 2,5 & 1,0 & $\leq 1750$ cd \\
+75R & 1,15 & $-0{,}57$ & $\geq 10\,100$ cd \\
+75L & $-3{,}43$ & $-0{,}57$ & $\leq 10\,600$ cd \\
+50L & $-3{,}43$ & $-0{,}86$ & $\leq 13\,200$ cd \\
+50R & 1,72 & $-0{,}86$ & $\geq 10\,100$ cd \\
+50V & 0 & $-0{,}86$ & $\geq 5100$ cd \\
+25L & $-9$ & $-1{,}72$ & $\geq 1700$ cd \\
+25R & 9 & $-1{,}72$ & $\geq 1700$ cd \\
+Zone III & \multicolumn{2}{l}{Vieleck über der Grenze} & höchstens 625 cd \\
+Zone IV & \multicolumn{2}{l}{H $\pm 5{,}15$, V $-1{,}72$ bis $-0{,}86$} & überall $\geq 2500$ cd \\
+Zone I & \multicolumn{2}{l}{H $\pm 9$, V $-4$ bis $-1{,}72$} & höchstens $2 \times I(\text{50R})$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Ein Prüfpunkt ist der Mittelwert über das Fenster eines Photometers ($\pm \ang{0.25}$ in H,
+$\pm \ang{0.1}$ in V). Die Zonen III und I prüfen den höchsten, Zone IV den kleinsten solchen
+Mittelwert.
+
+\begin{warnung}
+Die Tabelle ist eine Entwurfshilfe. Maßgeblich ist die Regelung selbst, nicht diese Tabelle.
+\end{warnung}
+
+\paragraph{Schärfe der Grenze.} Wie R112 misst das Plugin die Schärfe auf der senkrechten Linie
+\ang{2.5} zur Seite des Gegenverkehrs:
+$G = \log I(V) - \log I(V + \ang{0.1})$, der größte Wert innerhalb \ang{2} der Nenngrenze, nur wo
+$I(V)$ mindestens 2\,\% des Linienmaximums ist. R112 verlangt 0,13 bis 0,40. Das Modell rechnet die
+Wendel als gleichmäßig leuchtenden Zylinder und kennt keine Streuung; eine echte Lampe ist weicher,
+$G$ fällt im Modell deshalb höher aus. Das Raytracing kommt der Wirklichkeit näher
+(\autoref{sec:al-raytracing}).
+
+\subsection{Signalleuchten}\label{sec:al-signal}
+\index{Signalleuchte}\index{UN R148}
+
+Mit \gui{Test points} auf einer Signalleuchte zeigt \gui{Light distribution} die Punkte ihrer
+Standard-Lichtverteilung nach UN R148 ($\pm \ang{20}$ horizontal, $\pm \ang{10}$ vertikal: der
+geforderte Prozentsatz der Mindestlichtstärke auf der Achse) und die höchste Lichtstärke in jeder
+Richtung -- für eine einzelne Leuchte:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+\gui{Test points} & Minimum auf der Achse & Maximum \\
+\midrule
+\code{front position lamp (A)} & 4 cd & 140 cd \\
+\code{rear position lamp (R1)} & 4 cd & 17 cd \\
+\code{stop lamp (S1)} & 60 cd & 260 cd \\
+\code{direction indicator, front (1)} & 175 cd & 1000 cd \\
+\code{direction indicator, rear (2a)} & 50 cd & 500 cd \\
+\code{daytime running lamp (RL)} & 400 cd & 1200 cd \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Die Tabelle heißt dann \enquote{R148 standard light distribution, …} mit den Spalten \code{point},
+\code{H / }\si{\degree}, \code{V / }\si{\degree}, \code{I / cd}, \code{required} und Urteil; ein Punkt
+ist der Mittelwert über $\pm \ang{0.5}$. Die Tagfahrleuchte hat ihr eigenes Punktraster. Die Farbe der
+Scheibe ist Teil von \gui{Transmittance}: eine rote oder gelbe Scheibe lässt nur einen Teil des
+Lichtstroms durch. Die Lampen P21W, PY21W, R10W und R5W haben eine Querwendel.
+
+\subsection{Direktlicht der Lampe}
+
+Mit \gui{Direct light of the lamp} geht das Licht, das die Wendel nach vorn am Spiegel vorbei
+verlässt, in Bild und Tabelle ein; sein Lichtstrom steht getrennt im Protokoll. Die Kappe einer H4
+hält es innerhalb von etwa \ang{40} um die Achse auf; eine Lampe ohne Kappe verteilt es über den
+ganzen Schirm -- bei einer H7 bis etwa 100 cd. Das Direktlicht wird auf einem Raster von \ang{1}
+genommen und, ob der Spiegel im Weg ist, von der Wendelmitte aus beurteilt.
+
+% ---------------------------------------------------------------------------------------------
+\section{Raytracing mit der Lampe, wie sie ist}\label{sec:al-raytracing}
+\index{Raytracing (Automotive)}\index{Path Tracer}
+
+\gui{Light distribution (ray tracing)} prüft den Entwurf ohne die Annahmen der Wendelbilder. Die
+Wendelbilder bleiben für Entwurf, \gui{Filament images} und \gui{Light distribution} unverändert;
+das Raytracing ist die Kontrolle.
+
+\subsection{Was das Raytracing nachbildet}
+
+\begin{description}
+  \item[Die Wendel als Helix.] Ein Wolframdraht füllt den Zylinder der Lampe (Länge, Durchmesser):
+    die Drahtmitte läuft auf einer Helix mit dem Radius (Durchmesser $-$ Draht)/2, je Vierteldrehung
+    eine NURBS-Fläche (ein Rohr um die Helix, auf \qty{0.2}{\micro\metre} genau). Die Oberfläche
+    strahlt Lambertsch; Licht, das eine andere Windung trifft, wird absorbiert. Der Lichtstrom ist so
+    gewählt, dass das, was aus der Wendel herauskommt, der Lichtstrom der Lampe ist -- bei einer H7
+    kommen etwa 56\,\% des Drahtlichts heraus.
+  \item[Drahtdurchmesser und Windungen.] Sie stehen nicht in R37. Ohne eigene Werte
+    (\gui{Coil: wire diameter} und \gui{Coil: turns} = 0) schätzt das Plugin sie aus der Leistung:
+    ein Draht bei \qty{3100}{K} bei 13,2 V, gewickelt mit einer Steigung von 1,5 Drahtdurchmessern.
+    Das ergibt bei der H7 \qty{0.161}{mm} und 16 Windungen, bei der H4 \qty{0.187}{mm} und 19.
+  \item[Kühlere Enden.] Die Zuleitungen ziehen Wärme von den Wendelenden ab. Aus der
+    Wärmebilanz längs des Drahts steigt die Temperatur von \gui{Coil: temperature at its ends}
+    (angenommen \qty{2400}{K}) zur Mitte (\qty{3100}{K}): nach 2 mm Draht etwa \qty{2900}{K}, nach
+    4 mm etwa \qty{3040}{K}. Jede Vierteldrehung leuchtet mit der Leuchtdichte ihrer Temperatur
+    (Plancksches Gesetz, mit $V(\lambda)$ gewichtet); die erste und letzte Windung einer H7 etwa mit
+    der Hälfte der Mitte. Mit \qty{3100}{K} leuchtet die Wendel gleichmäßig.
+  \item[Der Kolben.] Ein Glasrohr um die Bezugsachse mit einer Halbkugel als Spitze, ein Glaskörper
+    mit Fresnelscher Reflexion und Brechung (Quarz $n = 1{,}458$, Glas der Signallampen 1,52), hinten
+    offen. Seine schwarze Kuppe -- eine absorbierende Schicht außen auf dem Glas -- reicht so weit
+    zurück, wie R37 mindestens verlangt. Durchmesser, Wand und Lage der Spitze sind typische Werte
+    (H7 9 mm, H1 8,5 mm, H4 13 mm, Wand 1 mm; P21W 26,5 mm, R5W/R10W 19 mm). Ohne Glas
+    (\gui{Bulb glass} aus) ist die Kuppe eine Scheibe quer über den Kolben.
+  \item[Das Innere der H4.] Der Schirm (Wanne und Stirnwand) als Spiegel mit
+    \gui{H4 shield: reflectance} (Standard 0,5; 0: schwarz) und die zweite Wendel, dunkel, an ihrem
+    Platz (4,5 mm lang, 1,7 mm hinter der Abblendwendel, ihre Achse 0,8 mm unter der Ebene H).
+  \item[Spiegel und Scheibe.] Jede Facette und Verbindungsfläche (oder das Paraboloid) wie erzeugt,
+    mit den Reflexionsgraden des Panels; die Scheibe als ein Glaskörper mit Fresnelscher Reflexion und
+    Brechung bei der Brechzahl des Panels -- \gui{Transmittance} wird hier nicht verwendet, es gibt
+    keine Absorption im Glas.
+\end{description}
+
+\subsection{Lichtwege und Rechenkern}
+
+Lichtwege beginnen auf dem Draht und werden durch jede Reflexion und Brechung verfolgt, bis zu
+\gui{Longest path} Segmenten (Standard 20; allein durch den Kolben sind es zwei). Das austretende Licht
+wird nach seiner Richtung in die Zellen des Schirms sortiert. Licht, dessen erste Fläche nach der
+Lampe (Wendeln, Kolben, Schirm, Kuppe) der Spiegel ist, ist das Bündel; der Rest, der nach vorn
+austritt, ist das Direktlicht. Mit Streuscheibe zählt nur, was durch die Scheibe austritt; der Rest
+bleibt im Gehäuse.
+
+\begin{description}
+  \item[\gui{Light paths}] Zahl der Lichtwege (Standard 5 Millionen, 10\,000 bis 2 Milliarden). Das
+    Rauschen einer Schirmzelle fällt mit der Wurzel: bei 5 Millionen etwa 5\,\% dort, wo das Bündel
+    am hellsten ist; vierfach so viele Wege halbieren es.
+  \item[\gui{Kernel}] \code{automatic} (Standard: C++, wenn installiert, sonst NumPy), \code{C++} oder
+    \code{NumPy}. \code{C++} ohne installiertes Paket \code{pathtracer} meldet einen Fehler mit dem
+    Installationsbefehl.
+\end{description}
+
+\subsection{Die Ergebnisse}
+
+Der Ergebnissatz \enquote{Low beam <Lampe> – ray tracing} steht neben dem der Wendelbilder, mit
+demselben Bild, derselben Tabelle und denselben Schnitten. Das Protokoll nennt
+\begin{itemize}
+  \item den Rechenkern, die Zahl der Lichtwege, Strahlen und Dreiecke und die Zeit,
+  \item die Wendel: Draht, Windungen, Steigung, Drahtlänge (geschätzte Werte als solche markiert) und
+    wie viel des Drahtlichts aus der Wendel herauskommt,
+  \item die Leuchtdichte der kühleren Enden,
+  \item den Kolben (Glas, Durchmesser, Wand, Spitze, Beginn der Kuppe), den Schirm der H4,
+  \item die Lichtströme: im Bündel, davon über die Verbindungsflächen, direkt, nach hinten, ins
+    Gehäuse (mit Scheibe) und absorbiert,
+  \item das Rauschen (Standardfehler) dort, wo das Licht am hellsten ist.
+\end{itemize}
+
+\subsection{Fernlicht der H4}
+
+Mit \gui{H4: lit coil} = \gui{driving beam} leuchtet statt der Abblendwendel die Fernlichtwendel
+(1650 lm) -- das Fernlicht desselben Reflektors. Der Ergebnissatz heißt dann \enquote{Driving beam H4 –
+ray tracing}, die Tabelle \enquote{R112 test points (class B, driving beam)} mit:
+
+\begin{center}
+\begin{tabular}{lrrl}
+\toprule
+Punkt & H / \si{\degree} & V / \si{\degree} & Anforderung \\
+\midrule
+IM (Maximum) & & & 40\,500 bis 215\,000 cd \\
+HV & 0 & 0 & $\geq 80\,\%$ von IM \\
+H-5L & $-5$ & 0 & $\geq 5100$ cd \\
+H-2.5L & $-2{,}5$ & 0 & $\geq 20\,300$ cd \\
+H-2.5R & 2,5 & 0 & $\geq 20\,300$ cd \\
+H-5R & 5 & 0 & $\geq 5100$ cd \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Nur die H4 hat eine Fernlichtwendel; bei anderen Lampen meldet das Plugin \enquote{Only the H4 has a
+driving-beam coil (H4: lit coil).}
+
+\subsection{Die Lampe ins Modell legen: Generate lamp}
+
+\gui{Generate lamp} legt die Lampe so ins Modell, wie das Raytracing sie sieht -- zum Ansehen, was
+gerechnet wird. In der Gruppe \enquote{Lamp <Lampe>} am \gui{Filament centre} entstehen Untergruppen:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{ll>{\raggedright\arraybackslash}X}
+\toprule
+Gruppe & \code{al.lamp} & Flächen \\
+\midrule
+\enquote{Coil (lit)} & \code{coil} & der Draht in Vierteldrehungen, benannt \enquote{Coil 3.2}
+  (dritte Windung, zweites Viertel) \\
+\enquote{Other coil (dark)} & \code{other coil} & die zweite Wendel der H4 \\
+\enquote{Shield} & \code{shield} & Wanne und Stirnwand der H4 \\
+\enquote{Bulb glass} & \code{bulb} & der Kolben \\
+\enquote{Black top} & \code{cap} & die schwarze Kuppe bzw. Kappe \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Jede Fläche trägt \code{al.lamp} und \code{al.material}; die Drahtstücke zusätzlich
+\code{al.luminance}, ihre Leuchtdichte relativ zur Wendelmitte. Es gelten die Einstellungen der
+Gruppe \gui{Ray tracing} (Draht, Windungen, Kolben, leuchtende Wendel). Ein neuer Lauf ersetzt die
+vorige Lampe; \gui{Generate reflector} lässt sie stehen.
+
+\begin{tipp}
+Glas wird wie jede andere Fläche gezeichnet. Um die Wendel zu sehen, blenden Sie im Modellbaum die
+Gruppe \enquote{Bulb glass} aus -- und den Wendelzylinder von \gui{Generate reflector}, den der Draht
+von innen berührt. Das Protokoll erinnert daran.
+\end{tipp}
+
+Das Raytracing liest diese Flächen nicht; es baut die Lampe jedes Mal neu aus dem Panel.
+
+\subsection{Wendelbilder und Raytracing im Vergleich}
+
+Laut den Vergleichsrechnungen der Entwickler (H7, Testreflektor, 12 Millionen Wege) stimmen
+Lichtstrom im Bündel (508 gegen 500 lm), Direktlicht (736 gegen 740 lm) und Blendung über der Grenze
+(288 gegen 293 cd) überein; das Maximum ist im Raytracing etwa 15\,\% niedriger, weil der Draht quer
+zur Wendel weniger hell leuchtet als der Zylinder und mehr längs ihrer Achse.
+
+Was die echte Lampe ändert (Standardwerte, H7, 5 Millionen Wege, gegen die gleichmäßige Wendel ohne
+Glas): die kühleren Enden wenig; der Kolben am meisten -- seine Reflexionen senden Licht über die
+Grenze (Zone III 520 statt 200 cd, B50L 180 statt 15 cd, $G = 0{,}36$): Geisterbilder der Wendel, die
+R37 die Lampenhersteller über der Wendel zu halten bittet. Bei der H4 ähnlich ($G$ 0,25 statt 0,97,
+B50L 93 statt 20 cd).
+
+% ---------------------------------------------------------------------------------------------
+\section{Die Streuscheibe optimieren}\label{sec:al-optimieren}
+\index{Optimierung (Streuscheibe)}
+
+Ein Abblendlicht mit Streuscheibe bekommt seine Grenze von der Lampe -- dem Schirm der H4, mit dem
+Brennpunkt des Paraboloids hinter der Wendel. Die Scheibe muss das Licht unter der Grenze fein
+verteilen. \gui{Optimise lens} gibt dafür jeder Zelle ihr eigenes Prisma und ihre eigene
+Zylinderlinse -- Stärke und Richtung des Zylinders --, so dass eine Zelle ihr Licht längs der
+Grenze legen kann: waagerecht unter den waagerechten Ast, unter \ang{15} unter den Anstieg, steiler
+ins Vorfeld.
+
+\paragraph{Voraussetzungen.}
+\begin{itemize}
+  \item \gui{System} = \gui{patterned lens: paraboloid and lens} (sonst: \enquote{Optimise lens
+    belongs to the patterned lens (System: patterned lens).}),
+  \item \gui{Test points} = \gui{low beam (UN R112, class B)} (sonst: \enquote{Optimise lens aims at
+    the low beam's test points (Analysis: test points).}),
+  \item eine Lampe mit Schirm (H4). Ohne Schirm macht das Paraboloid keine Grenze; das Plugin warnt im
+    Protokoll, dass die Scheibe allein die Grenzwerte über der Grenze nicht einhalten kann,
+  \item für \gui{Optimise: the lamp's blur} = \gui{measured by ray tracing} ein verfügbarer Rechenkern
+    (\autoref{sec:al-raytracing}).
+\end{itemize}
+
+Kleine Zellen geben der Optimierung mehr Freiheit -- am besten einige Millimeter (\gui{Element width},
+\gui{Element height}).
+
+\subsection{Wie die Optimierung arbeitet}
+
+\begin{description}
+  \item[Das Licht der Zellen.] Strahlen von der Wendeloberfläche über die Spiegelpunkte erreichen die
+    Zellen einer ebenen Scheibe; das Licht jeder Zelle, auf ein Raster von $\ang{0.5} \times
+    \ang{0.1}$ sortiert, ist ihr \emph{Muster}. Ein Element verschiebt es um seine Ablenkung und
+    verschmiert es längs der Zylinderrichtung über $\pm$ seine Streuung. Das Bündel einer beliebigen
+    Wahl ist die Summe der verschobenen und verschmierten Muster plus dem Direktlicht -- ohne die
+    Wendelbilder neu zu nehmen.
+  \item[Die Auswahl.] Ablenkung $-16$ bis $16^\circ$ in Schritten von \ang{1} quer, $-3$ bis
+    $0{,}6^\circ$ in Schritten von \ang{0.2} auf und ab; ein Zylinder mit 0 bis \ang{12} Streuung,
+    gedreht um $-60$ bis $90^\circ$ (0, $\pm 5$, 10, 15, 20, 30, 45, 60, 90); $|$Ablenkung$|$ plus
+    der Queranteil der Streuung höchstens \ang{22}, ihr Höhenanteil höchstens \ang{4}; nur Elemente,
+    die in die Scheibendicke passen.
+  \item[Das Ziel.] Die Prüfpunkte von R112 (ihre Photometerfenster) und die Zonen III, IV und I mit
+    der Reserve \gui{Optimise: margin} (Standard 10\,\%), als quadrierte Unter- und
+    Überschreitungen; danach wird die kleinste Reserve so groß wie möglich. Zwei Forderungen über
+    R112 hinaus halten die Grenze, wo sie hingehört: ab \ang{0.3} über der Linie ($|H| \leq 10^\circ$)
+    höchstens die 625 cd von Zone III, und bei \ang{2.5} zur Seite des Gegenverkehrs ein Abfall um den
+    Faktor 10 von knapp unter zu knapp über der Linie. Wo nichts von einer Zelle abhängt, werden
+    kleine Elemente bevorzugt.
+  \item[Ein echtes Bündel.] Was R112 nicht verlangt, ein Scheinwerfer aber hat -- mit einem Fünftel
+    des Gewichts von R112, damit R112 vorgeht: am hellsten an der Grenze, nicht in einem Fleck darunter
+    (\gui{Optimise: under the cut-off}, Standard 6000 cd: mindestens das im Mittel 0,15 bis
+    $0{,}65^\circ$ unter beiden Ästen, $\pm \ang{10}$ um den Knick), und der Knick sichtbar mit
+    hellem, scharfem Anstieg (\gui{Optimise: under the rise}, Standard 3000 cd: mindestens das 0,15
+    bis $0{,}35^\circ$ unter dem ansteigenden Ast, 1 bis $5^\circ$ vom Knick, darüber höchstens ein
+    Zehntel). 0 lässt die jeweilige Forderung weg.
+  \item[Gleichmäßigkeit.] \gui{Optimise: evenness} (Standard 1, ein Gewicht; 0: nur R112): Unter der
+    Grenze (von \ang{0.4} unter der Linie bis $-5^\circ$, $|H| \leq 20^\circ$) soll das Bündel frei
+    von Flecken, Streifen und Hotspots sein. Auf einem Raster von \ang{1} quer und \ang{0.3} auf und ab
+    werden die zweiten Differenzen zwischen Nachbarn in der unscharfen Ansicht genommen; ihr
+    Effektivwert relativ zum Minimum von 50R (10\,100 cd) geht quadriert und gewichtet ins Ziel ein.
+    Das Protokoll nennt ihn als \enquote{bumps}.
+  \item[Die Suche.] Eine Zelle nach der anderen (die hellste zuerst): erst ihre Ablenkung über alle
+    Möglichkeiten bei festem Zylinder, dann ihr Zylinder (Stärke und Richtung) bei fester Ablenkung, in
+    Durchgängen über alle Zellen; nach dem ersten Durchgang nur noch Möglichkeiten nahe den
+    bisherigen.
+  \item[Entlang der Kanten.] \gui{Optimise: along the edges} (Standard an): wie die Riefen einer
+    klassischen Scheibe streut und lenkt jedes Element längs der Kante seines eigenen Lichts -- des
+    Asts seines Sektors. Ist die Sektortabelle leer, wird die Scheibe zuerst geschnitten: wo auf der
+    ebenen Scheibe (in Schritten von \ang{1} Azimut) mehr als die Hälfte des Lichts über dem
+    waagerechten Ast auf der Fahrerseite liegt, endet es am ansteigenden Ast -- der Keil vor dem
+    Spiegelsektor, den die schräge Schirmkante beleuchtet (H4: von \ang{316} bis \ang{4}); der Rest
+    endet am waagerechten Ast. Die Elemente des Keils bekommen um den Anstieg gedrehte Zylinder und
+    Ablenkungen längs des Anstiegs, die übrigen Zylinder quer und jede Ablenkung. Ohne diese Bindung
+    zieht die Suche das Licht des Keils zur Seite des Gegenverkehrs, wo R112 es zählt, und lässt den
+    Anstieg dunkel.
+  \item[Der Start.] \gui{Optimise: start with}: jede Zelle beginnt als Zylinderlinse mit \ang{6}
+    Streuung quer (\gui{cylinder lenses (6\si{\degree} across)}, Standard), als ebenes Glas
+    (\gui{plane glass}), oder beides wird versucht und das bessere behalten (\gui{both, the better
+    kept}, doppelte Zeit). Die Suche endet nahe ihrem Anfang: aus ebenem Glas wird fast jede Zelle ein
+    Prisma, aus Zylinderlinsen behalten viele ihre.
+  \item[Runden.] \gui{Optimise: rounds} (Standard 2): die Scheibe wird gebaut und ihre Wendelbilder
+    genommen; die halbe Differenz zur Summe der Muster wird zurückgeführt, die Zellen werden erneut
+    optimiert, die beste Runde wird behalten.
+  \item[Die Unschärfe der Lampe.] \gui{Optimise: the lamp's blur} = \gui{measured by ray tracing}
+    (Standard): die Lampe, wie sie ist (Helix, kühlere Enden, Kolben), macht das Bündel weicher als
+    die Wendelbilder -- bei der ebenen Scheibe einer H4 um $\sigma = \ang{0.5}$ quer und \ang{0.2}
+    auf und ab. Das Plugin misst das zu Beginn per Raytracing an der ebenen Scheibe und beurteilt das
+    Bündel danach in zwei Ansichten: jede Untergrenze in der dunkleren, jede Obergrenze in der
+    helleren. Die behaltene Scheibe wird anschließend mit mindestens 20 Millionen Lichtwegen
+    geraytract; was das Raytracing über die unscharfe Ansicht hinaus zeigt (ein schwacher Schleier),
+    wird zurückgeführt und die Zellen werden noch zweimal optimiert. Behalten wird die beste nach dem
+    Raytracing. \gui{none} schaltet das ab.
+\end{description}
+
+\subsection{Das Ergebnis}
+
+\gui{Optimise lens} schreibt
+\begin{itemize}
+  \item die Elementtabelle neu: eine Zeile je Zelle (je Teil einer Zelle, die Sektoren schneiden),
+  \item die Sektortabelle, wenn sie leer war (das Protokoll nennt die Sektoren),
+\end{itemize}
+und zeigt die Ergebnissätze \enquote{Low beam <Lampe> – optimised lens, filament images} und -- mit
+gemessener Unschärfe -- \enquote{…, ray tracing}, je mit Bild, Prüfpunkten und Schnitten. Das Protokoll
+nennt jede Runde (Werte der Ersatzrechnung und der Wendelbilder in cd, \enquote{bumps}), was behalten
+wurde, ob R112 erfüllt ist, Lage und Schärfe der Grenze, Zahl der Elemente und Laufzeit. Die
+Statusleiste: \enquote{lens optimised (… elements); filament images: R112 met; ray tracing: R112 met}.
+
+Danach erzeugt \gui{Generate reflector} die optimierte Scheibe als Flächen.
+
+\begin{hinweis}
+Die Entwickler geben für einen typischen Fall an (H4, Rahmen $170 \times 100$ mm, Zellen 4 mm --
+1063 Stück --, Brennpunkt 6,7 mm hinter der Wendel, Schirm mit 0,5, Unschärfe gemessen, 2 Runden,
+Gleichmäßigkeit 1, Start mit Zylinderlinsen): etwa 9 Minuten und \qty{0.75}{GB} Speicher; alle
+Anforderungen von R112 sowohl in den Wendelbildern als auch im Raytracing erfüllt. Mit Sektoren und
+\gui{along the edges} (Standard) entstehen 1110 Elemente statt 1063 Zellen.
+\end{hinweis}
+
+\paragraph{Was die Einstellungen bewirken} (nach den Vergleichsrechnungen in der README des Plugins; \enquote{Standard}: mit Sektoren, entlang der Kanten, Band und Anstieg; \enquote{Band}: Mittel unter der Grenze, H $2 \dots 6^\circ$ ist der Anstieg):
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+im Raytracing & Standard & frei, nur R112 \\
+\midrule
+Band, H $-10 \dots -2^\circ$ / $-2 \dots 0^\circ$ & 6700 / 14\,000 cd & 2500 / 7400 cd \\
+Band, H $0 \dots 2^\circ$ / $2 \dots 6^\circ$ & 12\,400 / 3300 cd & 11\,800 / 3700 cd \\
+75R / 50R / 50V & 12\,400 / 16\,900 / 13\,300 cd & 11\,000 / 19\,500 / 11\,900 cd \\
+25L / Zone III & 2200 / 582 cd & 2600 / 594 cd \\
+höchstens & 19\,000 cd & 20\,200 cd \\
+Grenze & $-0{,}70^\circ$, $G = 0{,}28$ & $-0{,}70^\circ$, $G = 0{,}46$ \\
+bumps (von 50R) & 3,8\,\% & 3,7\,\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Frei sammelt sich das Licht in einem Fleck 2 bis $3^\circ$ unter der Grenze; mit dem Band liegt es an der
+Grenze und fällt nach unten ab. Aus ebenem Glas wird das Bündel unruhiger, ohne Gleichmäßigkeit sind
+die Unebenheiten doppelt so hoch. Ohne Unschärfe erfüllen die Wendelbilder R112, das Raytracing findet
+aber Licht in Zone III am Knick. Mit dem Brennpunkt nahe der Wendel (3 mm) sendet der glänzende Schirm
+Licht über die Grenze, das keine Scheibe zurückholt (Zone III etwa 5500 cd).
+
+% ---------------------------------------------------------------------------------------------
+\section{Arbeitsabläufe Schritt für Schritt}\label{sec:al-ablaeufe}
+
+\subsection{Ein erster Klarglasreflektor (H7)}\label{sec:al-ablauf-h7}
+
+\begin{schritte}
+  \item Öffnen Sie ein neues Dokument, das Dock \gui{Plugin} und wählen Sie \gui{Automotive
+    Lighting}. Drücken Sie \gui{Reset parameters}: System Klarglas, Lampe H7, Rechtsverkehr,
+    Rahmen $170 \times 100$ mm, Brennweite 25 mm, Standardzonen.
+  \item Drücken Sie \gui{Generate reflector}. Nach einigen Sekunden bis Minuten (Fortschritt in der
+    Statusleiste) erscheint der Spiegel in der Gruppe \enquote{Reflector H7}. Lesen Sie im \gui{Plugin
+    log} Fläche, Tiefe, Abweichung der Wendelbilder von der Grenze, höchste Stufe und kleinsten
+    Entformungswinkel.
+  \item Drücken Sie \gui{Filament images}. Im Fenster \gui{Image} liegen alle Umrisse unter der
+    hellen Linie der Grenze.
+  \item Drücken Sie \gui{Light distribution}. Prüfen Sie im Fenster \gui{Table} die Spalte mit dem
+    Urteil: \code{ok} oder \code{not met}. Im \gui{Plot} sehen Sie den Schnitt durch die Grenze und den
+    Schnitt bei V $= -0{,}86^\circ$.
+  \item Drücken Sie \gui{Light distribution (ray tracing)} und vergleichen Sie die beiden
+    Ergebnissätze im Dock \gui{Results}.
+\end{schritte}
+
+\subsection{Den Reflektor an einen eigenen Rahmen anpassen}
+
+\begin{schritte}
+  \item Zeichnen Sie den Umriss des Spiegels in der Vorderansicht (Y-Z-Ebene) als geschlossene
+    Kurve(n) -- relativ zur Wendelmitte, die Lampenachse bei Y = Z = 0 (bzw. bei \gui{Filament
+    centre}).
+  \item Wählen Sie die Kurven aus und drücken Sie bei \gui{Frame (curves)} auf \gui{Use selection}.
+  \item Prüfen Sie \gui{Lamp hole radius} -- das Loch muss in den Rahmen passen und groß genug für
+    die Verbindungsflächen sein.
+  \item Drücken Sie \gui{Generate reflector}. Meldet das Plugin, dass die Kurven sich nicht schließen,
+    verbinden Sie die Enden (Objektfang) und wählen sie neu.
+  \item Ändern Sie danach eine Kurve, wählen Sie sie erneut mit \gui{Use selection}; eine gelöschte
+    Kurve meldet \enquote{Frame: a chosen curve no longer exists – choose the frame again.}
+\end{schritte}
+
+\subsection{Zonen abstimmen}
+
+\begin{schritte}
+  \item Beginnen Sie mit \gui{Default zones}.
+  \item Fehlt Licht am Hotspot (50R, 75R), verengen Sie die Streuung der Flanke mit dem waagerechten
+    Ast (\gui{aim, right border} / \gui{aim, left border} näher zusammen) oder richten Sie sie weiter
+    nach rechts.
+  \item Ist das Vorfeld zu hell oder Zone I überschritten, setzen Sie bei den streuenden Zonen ein
+    kleines \gui{below cut-off} nur, wo es gewollt ist, oder verringern Sie ihre Streuung.
+  \item Meldet das Plugin \enquote{aim held back}, zielt eine Zone zu weit seitlich für ihren Platz
+    am Spiegel: verringern Sie die Ziele oder verschieben Sie die Zonengrenzen.
+  \item Prüfen Sie nach jeder Änderung mit \gui{Filament images} und \gui{Light distribution}.
+  \item Für gleichmäßigere Streuung über lange Streifen setzen Sie \gui{Facet length} (etwa 20 bis
+    30 mm) -- es entstehen mehr Verbindungsflächen.
+\end{schritte}
+
+\subsection{Ein H4-Scheinwerfer mit Streuscheibe}\label{sec:al-ablauf-h4}
+
+\begin{schritte}
+  \item Setzen Sie \gui{System} = \gui{patterned lens: paraboloid and lens}, \gui{Lamp} =
+    \gui{H4 (low beam)}.
+  \item Setzen Sie \gui{Mirror focus behind the filament centre} = 6.7 (Brennpunkt an der
+    Fernlichtwendel) und z.\,B. \gui{Element width} = \gui{Element height} = 4.
+  \item Prüfen Sie Lage und Dicke der Scheibe (\gui{Lens in front of the filament}, \gui{Thickness}).
+  \item Drücken Sie \gui{Generate reflector}, dann \gui{Light distribution}: mit der Standardzeile
+    der Elementtabelle (ein Kissen über die ganze Scheibe) sehen Sie die Grundverteilung.
+  \item Drücken Sie \gui{Optimise lens}. Mit gemessener Unschärfe dauert das einige Minuten;
+    \gui{Cancel} in der Statusleiste bricht ab.
+  \item Sehen Sie sich die Ergebnissätze \enquote{… – optimised lens, filament images} und \enquote{…,
+    ray tracing} an. Die Element- und Sektortabelle sind neu gefüllt.
+  \item Drücken Sie \gui{Generate reflector}, um die optimierte Scheibe als Flächen zu erzeugen.
+\end{schritte}
+
+\begin{tipp}
+Wollen Sie eine Optimierung mit anderer Einstellung wiederholen, leeren Sie die Sektortabelle, wenn
+sie neu geschnitten werden soll -- \gui{Optimise lens} füllt sie nur, wenn sie leer ist.
+\end{tipp}
+
+\subsection{Eine Schlussleuchte prüfen (P21W)}
+
+\begin{schritte}
+  \item \gui{System} = \gui{patterned lens: paraboloid and lens}, \gui{Lamp} = \gui{P21W}
+    (Querwendel).
+  \item \gui{Test points} = \gui{stop lamp (S1)}.
+  \item Setzen Sie \gui{Transmittance} auf den Wert der roten Scheibe.
+  \item Stellen Sie die Elemente so ein, dass das Licht etwa $\pm 20^\circ$ horizontal und
+    $\pm 10^\circ$ vertikal verteilt wird (z.\,B. ein Kissen mit großer Streuung).
+  \item Drücken Sie \gui{Generate reflector} und \gui{Light distribution}. Die Tabelle \enquote{R148
+    standard light distribution, stop lamp (S1)} zeigt jeden Punkt in Prozent des Minimums auf der
+    Achse und das Maximum.
+\end{schritte}
+
+\subsection{Die Lampe ansehen und das Fernlicht der H4 prüfen}
+
+\begin{schritte}
+  \item Wählen Sie die H4 und drücken Sie \gui{Generate lamp}.
+  \item Blenden Sie im Modellbaum \enquote{Bulb glass} und den Wendelzylinder aus; zoomen Sie auf die
+    Wendel. Die Attribute \code{al.luminance} der Drahtstücke zeigen die kühleren Enden.
+  \item Setzen Sie \gui{H4: lit coil} = \gui{driving beam} und drücken Sie \gui{Light distribution
+    (ray tracing)}: Ergebnissatz \enquote{Driving beam H4 – ray tracing} mit den Fernlichtpunkten.
+  \item Setzen Sie \gui{H4: lit coil} wieder auf \gui{passing beam}.
+\end{schritte}
+
+\subsection{Ein Nebelscheinwerfer (H3)}
+
+\begin{schritte}
+  \item \gui{Lamp} = \gui{H3}, \gui{Rise} = 0.
+  \item Ersetzen Sie die Zonentabelle durch eine Zone (\gui{from azimuth} 0, \code{horizontal},
+    Ziele z.\,B. 20 und $-20$) oder eine obere und eine untere.
+  \item \gui{Generate reflector}, \gui{Filament images}, \gui{Light distribution}.
+\end{schritte}
+
+% ---------------------------------------------------------------------------------------------
+\section{Typische Fehler und Meldungen}\label{sec:al-fehler}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{6.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Meldung (gekürzt) & Abhilfe \\
+\midrule
+\endhead
+\code{The zone table is empty …} & Zone anlegen oder \gui{Default zones}. \\
+\code{Two zones start at the same azimuth.} & Azimute der Zonen unterschiedlich wählen. \\
+\code{the frame curves do not join to one outline (gap of … mm)} & Kurvenenden verbinden. \\
+\code{the frame is not closed …} / \code{the frame has no area} & geschlossenen Umriss wählen. \\
+\code{no reflector area: the zones do not cover the frame outside the lamp hole} & Zonen und Rahmen
+  prüfen. \\
+\code{a cell of the reflector would have a round hole …} & schmalere Streifen als das Lampenloch oder
+  weniger seitliche Ziele. \\
+\code{a strip border does not reach this section …} & Zone schmaler machen oder ihr Ziel verringern. \\
+\code{this part of the mirror cannot throw its light where the zone is aimed …} & Zone weniger weit
+  seitlich zielen lassen. \\
+\code{the strips of this zone run along its start section …} & Ziel passt nicht zur Lage der Zone. \\
+\code{a facet becomes too steep or folds …} & Streuung, Streifenbreite oder Zonenausdehnung
+  verringern. \\
+\code{the strips of a facet cross …} & Ziele der Zone andersherum laufen lassen oder Streuung
+  verringern. \\
+\code{a facet for a lamp with its filament across the axis cannot keep to one side …} & schmalere
+  Streifen oder weniger weite Ziele. \\
+\code{the strips are too narrow (… mm) for a connecting face over a step of … mm} & breitere
+  Streifen, kleinere Schräge oder kleinerer Verrundungsradius. \\
+\code{the connecting faces need more room than the facets can give …} & Schräge oder
+  Verrundungsradius verringern. \\
+\code{the lamp hole (radius … mm) is too small …: at least … mm} & \gui{Lamp hole radius}
+  vergrößern. \\
+\code{the lens (at x = … mm on the axis) lies inside the mirror …} & Scheibe weiter nach vorn oder
+  weniger neigen. \\
+\code{the lens' radius (… mm) is smaller than the lens is wide} & \gui{Dome radius} vergrößern. \\
+\code{the lens element at y = …, z = … mm cannot bend the light that far …} & Ablenkung oder
+  Streuung verringern. \\
+\code{the lens elements are … mm deep, more than the lens is thick …} & dickere Scheibe, kleinere
+  Zellen, weniger Ablenkung. \\
+\code{walls with a draft angle and lens sectors together are not supported yet …} & Schräge 0 oder
+  Sektoren leeren. \\
+\code{the lens elements are too small for walls with this draft angle and fillet radius …} & größere
+  Zellen, kleinere Schräge oder Verrundung. \\
+\code{the lens is too thin for …} (\gui{Optimise lens}) & dickere Scheibe. \\
+\code{Strips belong to the facetted reflector …} & \gui{Show strips} nur beim Klarglasreflektor. \\
+\code{the C++ kernel (package pathtracer 0.3.0 or later) is not installed …} & \gui{Kernel} auf
+  \code{automatic} oder \code{pathtracer} installieren. \\
+\code{the ray tracing needs the Path Tracer plugin next to this one …} & Path-Tracer-Plugin
+  installieren (NumPy-Kern). \\
+\code{the coil (or shield) does not fit into a bulb of … mm …} & \gui{Bulb: outer diameter} oder
+  \gui{Bulb: wall} anpassen (0: typisch). \\
+\code{the bulb's wall … must be thinner than a quarter of its diameter} & dünnere Wand. \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Grenzen}\label{sec:al-grenzen}
+
+\begin{itemize}
+  \item \textbf{Photometrie} (\gui{Filament images}, \gui{Light distribution}): die Wendel als
+    gleichmäßig leuchtender Zylinder, eine Reflexion an Facetten und Verbindungsflächen, kein
+    Kolbenglas, keine Abschlussscheibe, kein Gehäuse; von den inneren Teilen der Lampe nur Schirm und
+    Kappe der H4 (nicht die Fernlichtwendel und Halter, nicht das Licht, das die Schirminnenseite
+    reflektiert). Das Direktlicht auf einem Raster von \ang{1}, von der Wendelmitte aus. Die Grenze ist
+    schärfer als bei einer echten Lampe. Mit \gui{Shadows of the steps} wird keine dritte Reflexion
+    verfolgt; der Spiegel wird als Höhenkarte von 0,25 mm verglichen.
+  \item \textbf{Raytracing}: typische Kolben, hinten offen (kein Quetschfuß), keine Halter oder
+    Zuleitungen der Wendel; Endtemperatur angenommen, die Windungen wärmen sich nicht gegenseitig; die
+    Drähte absorbieren, was sie trifft (Wolfram reflektiert etwa die Hälfte); der Schirm ist ein idealer
+    Spiegel; die Scheibe hat keinen Rand.
+  \item \textbf{Streuscheibe}: ein an einer Wand gespiegelter Strahl trifft keine zweite Wand (sonst
+    verloren); Reflexionen an den beiden Scheibenseiten fehlen in der Photometrie. Die Kuppel ist eine
+    Kugel um einen Punkt der Lampenachse; die Elemente stehen in X-Richtung auf der Scheibenform.
+  \item Das Lampenloch muss groß genug für die Bänder zwischen den Zonen sein; die Streifen müssen
+    breiter sein als ihre Verbindungsflächen.
+  \item Der Rahmen sollte konvex oder nahezu konvex sein; die Lampenachse ist $+X$; die Flächen sind
+    einzelne getrimmte Flächen, nicht zu einer Schale vernäht.
+\end{itemize}

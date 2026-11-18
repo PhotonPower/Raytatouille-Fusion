@@ -1,0 +1,353 @@
+\chapter{Modelle organisieren}\label{kap:organisieren}
+\index{Organisieren}
+
+Ein optisches Modell besteht schnell aus Dutzenden oder Hunderten von Objekten: Linsenflächen,
+Fassungen, Blenden, Hilfskurven, eingelesene Baugruppen. Dieses Kapitel zeigt die Werkzeuge,
+mit denen Sie Ordnung halten -- Ebenen, Gruppen und den Modellbaum --, das Dock
+\gui{Properties} mit den Eigenschaften und freien Attributen eines Objekts und schließlich das
+Rückgängigmachen.
+
+Ebenen und Gruppen ergänzen sich:
+
+\begin{itemize}
+  \item \textbf{Ebenen} sind \emph{flach} und ordnen nach \emph{Art}: Hilfsgeometrie,
+    Gehäuse, Optik, Strahlen als Kurven. Jedes Objekt liegt auf genau einer Ebene; die Ebene
+    bestimmt seine Farbe.
+  \item \textbf{Gruppen} sind \emph{verschachtelt} und ordnen nach \emph{Zugehörigkeit}: ein
+    Objektiv mit seinen Linsen, eine Baugruppe aus einer STEP-Datei. Jedes Objekt liegt in
+    höchstens einer Gruppe.
+\end{itemize}
+
+Beide haben einen eigenen Sichtbarkeitsschalter; ein Objekt ist nur zu sehen, wenn es selbst,
+seine Ebene und alle seine Gruppen eingeschaltet sind (\autoref{sec:ausblenden}).
+
+\section{Ebenen}\label{sec:ebenen}
+\index{Ebene}\index{Layer}
+
+Die Ebenen verwaltet das Dock \gui{Layers} (\menu{View,Layers}). Es zeigt eine Liste mit den
+Spalten \gui{Layer} (Kontrollkästchen und Name) und \gui{Colour} (Farbfeld) und darunter zwei
+Knöpfe.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.2cm}X}
+\toprule
+\textbf{Bedienung} & \textbf{Wirkung} \\
+\midrule
+\endhead
+Kontrollkästchen & Ebene ein- oder ausblenden. Objekte einer ausgeblendeten Ebene sind
+  unsichtbar und lassen sich weder auswählen noch fangen. \\
+\maus{Doppelklick} auf den Namen & Name bearbeiten; mit \keys{Enter} bestätigen. \\
+\maus{Doppelklick} auf das Farbfeld & öffnet den Dialog \gui{Layer colour}. Die neue Farbe
+  gilt sofort für alle Objekte der Ebene, die keine eigene Farbe haben. \\
+\gui{New layer} & legt eine neue Ebene \enquote{Layer \textit{n}} an, mit einer
+  automatisch gewählten Farbe, die sich von den bisherigen unterscheidet. \\
+Klick auf eine Ebene, dann \gui{Move selection here} & verschiebt die ausgewählten Objekte auf
+  die markierte Ebene (ein Rückgängig-Schritt \enquote{Change layer}). \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Die Ebene Default.} Jedes Dokument hat die Ebene \gui{Default} (hellgrau).
+Neu gezeichnete, modellierte und eingelesene Objekte landen auf dieser Ebene. Eine
+\enquote{aktuelle Ebene}, auf der neue Objekte entstehen, gibt es nicht; ordnen Sie neue
+Objekte anschließend mit \gui{Move selection here} zu. Kopien (\cmd{Copy}, Anordnungen)
+behalten dagegen die Ebene ihres Originals, und das Ergebnis einer booleschen Operation
+übernimmt Name, Ebene und Farbe des ersten ausgewählten Körpers.
+
+\paragraph{Farben.} Ein Objekt wird in der Farbe seiner Ebene gezeichnet, es sei denn, es hat
+eine eigene Farbe. Eigene Farben setzen Plugins oder sie stammen aus einer Datei; in der
+Oberfläche lassen sie sich nicht ändern. Ausgewählte Objekte erscheinen unabhängig davon gelb.
+
+\paragraph{Was es nicht gibt.} Ebenen lassen sich nicht löschen und nicht sperren, und ihre
+Reihenfolge ist fest. Eine nicht mehr benötigte Ebene können Sie leeren und ausblenden.
+
+\paragraph{Beispiel: Hilfsgeometrie auf eine eigene Ebene.}
+\begin{schritte}
+  \item Klicken Sie im Dock \gui{Layers} auf \gui{New layer}. Es erscheint \enquote{Layer 1}.
+  \item Doppelklicken Sie auf den Namen und tippen Sie \code{Hilfslinien}, dann \keys{Enter}.
+  \item Doppelklicken Sie auf das Farbfeld und wählen Sie ein dunkles Grau.
+  \item Wählen Sie in den Ansichten die Hilfskurven aus (z.\,B.\ mit einem Kreuzen-Rechteck
+    und \keys{Strg}+Klick auf das, was nicht dazugehört).
+  \item Klicken Sie im Dock auf die Zeile \enquote{Hilfslinien} und dann auf \gui{Move selection
+    here}.
+  \item Mit dem Kontrollkästchen vor \enquote{Hilfslinien} blenden Sie die Hilfskurven nun nach
+    Bedarf aus und ein.
+\end{schritte}
+
+\begin{hinweis}
+\gui{Move selection here} verschiebt immer ganze Objekte. Ist nur eine Fläche oder Kante einer
+Hülle ausgewählt, wandert die ganze Hülle auf die Ebene.
+\end{hinweis}
+
+\begin{warnung}
+Anlegen, Umbenennen, Umfärben und Ein-/Ausblenden von Ebenen sind keine
+Bearbeitungsschritte: Sie lassen sich nicht rückgängig machen, und das Dokument gilt dadurch
+nicht als geändert -- beim Schließen fragt das Programm also nicht nach dem Speichern, wenn Sie
+\emph{nur} Ebenen bearbeitet haben. Speichern Sie in diesem Fall selbst mit \keys{Strg+S}.
+Das Verschieben von Objekten auf eine Ebene ist dagegen ein normaler, rückgängig zu machender
+Schritt.
+\end{warnung}
+
+\section{Gruppen}\label{sec:gruppen}
+\index{Gruppe}
+
+Gruppen fassen Objekte zu einem Knoten im Modellbaum zusammen. Gruppen können andere Gruppen
+enthalten. Sie entstehen auf drei Wegen:
+
+\begin{itemize}
+  \item von Hand mit \menu{Edit,Group...} (\keys{Strg+G}) oder \gui{Group selection...} im
+    Kontextmenü des Modellbaums,
+  \item beim Einlesen einer STEP-Datei: Alle Körper der Datei bilden eine Gruppe mit dem
+    Dateinamen ohne Endung (\autoref{sec:step-import}),
+  \item durch Plugins: Der Raytracer etwa bildet die Struktur des optischen Systems als
+    Gruppen nach (\autoref{kap:raytracer}).
+\end{itemize}
+
+\subsection{Gruppe bilden}
+
+\begin{schritte}
+  \item Wählen Sie die Objekte aus, die zusammengehören -- in den Ansichten oder im
+    Modellbaum.
+  \item Drücken Sie \keys{Strg+G} (oder \menu{Edit,Group...}).
+  \item Der Dialog \gui{Group} fragt nach dem \gui{Name of the new group:}. Vorgeschlagen ist
+    \enquote{Group \textit{n}}. Geben Sie einen Namen ein und bestätigen Sie mit \gui{OK};
+    \gui{Cancel} bricht ab. Ein leerer Name ergibt \enquote{Group}.
+\end{schritte}
+
+Die Objekte verlassen dabei ihre bisherige Gruppe und kommen in die neue. Lagen \emph{alle}
+ausgewählten Objekte vorher in derselben Gruppe, wird die neue Gruppe eine Untergruppe davon;
+sonst entsteht sie auf oberster Ebene des Modellbaums. Das Bilden einer Gruppe ist ein
+Rückgängig-Schritt (\enquote{Group}).
+
+\begin{tipp}
+So bauen Sie eine Hierarchie von außen nach innen auf: erst alle Teile des Objektivs zu
+\enquote{Objektiv} gruppieren, dann die beiden Linsen des Kittglieds -- die jetzt beide in
+\enquote{Objektiv} liegen -- zu \enquote{Kittglied}. \enquote{Kittglied} wird automatisch
+Untergruppe von \enquote{Objektiv}.
+\end{tipp}
+
+\subsection{Gruppe auflösen}
+
+\begin{schritte}
+  \item Klicken Sie im Modellbaum auf die Zeile der Gruppe. Dabei werden alle ihre Objekte
+    ausgewählt.
+  \item Klicken Sie mit der rechten Maustaste auf dieselbe Gruppenzeile und wählen Sie
+    \gui{Ungroup} -- oder drücken Sie \keys{Strg+Shift+G}.
+\end{schritte}
+
+Die Gruppe verschwindet; ihre Objekte und Untergruppen rücken eine Stufe nach oben in die
+Gruppe, in der sie lag (oder auf die oberste Ebene). Die Objekte selbst bleiben unverändert.
+Auch das ist ein Rückgängig-Schritt (\enquote{Ungroup}). Sind mehrere Gruppenzeilen markiert,
+werden alle aufgelöst.
+
+\begin{hinweis}
+\gui{Ungroup} wirkt auf die im Modellbaum \emph{markierten Gruppenzeilen}, nicht auf die
+Auswahl in den Ansichten. Geschieht nichts, ist keine Gruppenzeile markiert: Klicken Sie die
+Gruppenzeile noch einmal an und wiederholen Sie den Befehl.
+\end{hinweis}
+
+\subsection{Umbenennen und Sichtbarkeit}
+
+\begin{itemize}
+  \item \textbf{Umbenennen:} Doppelklick auf den Gruppennamen im Modellbaum, neuen Namen
+    tippen, \keys{Enter}. Das Umbenennen ist nicht rückgängig zu machen.
+  \item \textbf{Ein- und ausblenden:} Kontrollkästchen vor der Gruppe. Eine ausgeblendete
+    Gruppe blendet alle Objekte und Untergruppen darin aus, ohne deren eigene Kästchen zu
+    ändern; eingeschaltet erscheint alles wieder so, wie es vorher war. \gui{Show all} und
+    \gui{Isolate} schalten alle Gruppen ein (\autoref{sec:ausblenden}).
+\end{itemize}
+
+Objekte selbst lassen sich im Programm nicht umbenennen; ihre Namen stammen aus STEP-Dateien
+oder von Plugins.
+
+\section{Der Modellbaum}\label{sec:modellbaum}
+\index{Modellbaum}
+
+Das Dock \gui{Model} (\menu{View,Model}) zeigt das Dokument als Baum mit zwei Spalten:
+
+\begin{description}
+  \item[Model] -- der Name. Gruppen haben ein Ordnersymbol, Objekte ohne eigenen Namen
+    heißen nach Art und Nummer, z.\,B.\ \enquote{Curve 17}. Vor jedem Eintrag steht ein
+    Kontrollkästchen für die Sichtbarkeit.
+  \item[Type] -- \gui{Group} oder die Art des Objekts: \gui{Point}, \gui{Curve},
+    \gui{Surface}, \gui{Trimmed surface}, \gui{Shell}.
+\end{description}
+
+Gruppen auf oberster Ebene sind aufgeklappt, tiefere zugeklappt; der Pfeil vor einer Gruppe
+klappt sie auf und zu. Objekte mit dem Attribut \code{sim.inactive} erscheinen ausgegraut; ihr
+Tooltip lautet \enquote{excluded from computations (sim.inactive)} (\autoref{sec:attribute}).
+
+\paragraph{Auswahl in beide Richtungen.} Ein Klick auf ein Objekt im Baum wählt es in den
+Ansichten aus; ein Klick auf eine Gruppe wählt alle Objekte darin aus, auch die in
+Untergruppen. Mit \keys{Shift}+Klick markieren Sie einen Bereich von Zeilen, mit
+\keys{Strg}+Klick einzelne Zeilen dazu. Umgekehrt markiert der Baum die Zeilen der Objekte,
+die Sie in den Ansichten auswählen. Das ist der schnellste Weg, ein Objekt in einer großen
+Baugruppe zu finden: Anklicken im Baum, dann \keys{Z}, \keys{S} (\gui{Zoom selected}).
+
+\paragraph{Kontextmenü.} Ein Rechtsklick in den Baum öffnet:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Group selection...} & wie \menu{Edit,Group...}: die ausgewählten Objekte zu einer neuen
+  Gruppe. \\
+\gui{Ungroup} & löst die markierten Gruppen auf. \\
+\gui{Hide} & blendet die ausgewählten Objekte aus (wie \keys{H}). \\
+\gui{Isolate} & zeigt nur die ausgewählten Objekte (wie \menu{Edit,Isolate selected}). \\
+\gui{Unhide} & zeigt die einzeln ausgeblendeten Objekte wieder (wie \keys{Shift+H}). \\
+\gui{Show all} & schaltet alle Objekte, Gruppen und Ebenen ein. \\
+\bottomrule
+\end{referenz}
+
+\begin{hinweis}
+Das Kontrollkästchen eines \emph{Objekts} im Baum und \gui{Hide}/\gui{Unhide} schalten
+dieselbe Eigenschaft. Ein Objekt, dessen Kästchen gesetzt ist, kann trotzdem unsichtbar sein,
+wenn seine Gruppe oder seine Ebene ausgeschaltet ist.
+\end{hinweis}
+
+\section{Das Dock Properties}\label{sec:eigenschaften}
+\index{Eigenschaften}
+
+Das Dock \gui{Properties} (\menu{View,Properties}) zeigt die Eigenschaften der Auswahl. Oben
+steht eine Überschrift, darunter eine Tabelle mit den Spalten \gui{Property} und \gui{Value}
+und ganz unten der Knopf \gui{Add attribute...}.
+
+\begin{description}
+  \item[Nichts ausgewählt:] \enquote{Nothing selected}.
+  \item[Ein Objekt oder Teilobjekt:] Die Überschrift nennt den Namen (oder \enquote{Entity
+    \textit{Id}}), bei einem Teilobjekt mit Zusatz, z.\,B.\ \enquote{part\_0\_1 $\cdot$ face 3}.
+    Die Tabelle beginnt immer mit \gui{Layer} (Name der Ebene) und \gui{Id} (die eindeutige
+    Nummer des Objekts), gefolgt von den geometrischen Eigenschaften (siehe unten) und, bei
+    ganzen Objekten, den Attributen.
+  \item[Mehrere:] Die Überschrift lautet \enquote{\textit{n} items selected}; die Tabelle
+    zählt, wie viele Objekte bzw.\ Teilobjekte welcher Art ausgewählt sind, z.\,B.\
+    \enquote{Shell 3}, \enquote{face 2}.
+\end{description}
+
+Lange Werte werden in der Mitte gekürzt (\dots); der Tooltip zeigt den vollständigen Wert.
+Zahlen erscheinen mit bis zu acht gültigen Stellen, Längen in Millimetern, Flächen in
+\si{\milli\metre\squared}, Volumina in \si{\milli\metre\cubed}.
+
+\subsection{Geometrische Eigenschaften}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.4cm}X}
+\toprule
+\textbf{Art (\gui{Type})} & \textbf{Angezeigte Eigenschaften} \\
+\midrule
+\endhead
+\gui{Point} & \gui{Position} ($x, y, z$). \\
+\gui{NURBS curve} & \gui{Degree}, \gui{Control points} (Anzahl), \gui{Rational}
+  (\code{yes}, wenn nicht alle Gewichte 1 sind), \gui{Knots}, \gui{Domain} (Parameterbereich),
+  \gui{Start}, \gui{End}, \gui{Closed}, \gui{Length} (Bogenlänge). \\
+\gui{NURBS surface} & \gui{Degree (u, v)}, \gui{Control net} ($n_u \times n_v$),
+  \gui{Rational}, \gui{Knots u}, \gui{Knots v}, \gui{Area}. \\
+\gui{Trimmed surface} & wie die Fläche, dazu \gui{Trimmed} (\code{yes}, wenn die Fläche
+  beschnitten ist), \gui{Holes} (Zahl der Löcher), gegebenenfalls \gui{Label} und
+  \gui{Area} (Inhalt der beschnittenen Fläche). \\
+\gui{Shell (B-rep)} & \gui{Faces}, \gui{Edges}, \gui{Vertices} (Anzahlen), \gui{Closed}
+  (\code{yes} bei einem geschlossenen Körper), \gui{Area} (Oberfläche) und, nur bei
+  geschlossenen Hüllen, \gui{Volume}. \\
+\gui{Face \textit{n} of a shell} & wie \gui{Trimmed surface}. \\
+\gui{Edge \textit{n} of a shell} & \gui{Used by faces} (an wie vielen Flächen die Kante
+  anliegt: 2 bei einer inneren Kante, 1 an einem offenen Rand) und die Daten der Kantenkurve
+  wie bei \gui{NURBS curve}. \\
+\gui{Vertex \textit{n} of a shell} & \gui{Position}. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Knotenvektoren} werden kompakt angezeigt: jeder verschiedene Knotenwert einmal,
+mehrfache Knoten mit ihrer Vielfachheit, z.\,B.\ \enquote{0 (\texttimes4), 0.5, 1
+(\texttimes4)} für einen kubischen Spline mit einem inneren Knoten. Bei mehr als zwölf
+verschiedenen Werten stehen nur die ersten und letzten fünf, dazwischen \enquote{\dots}.
+
+\paragraph{Nicht berechenbare Werte} (etwa die Länge einer entarteten Kurve) erscheinen als
+\enquote{n/a} mit dem Grund in Klammern.
+
+\begin{tipp}
+Die Werte im Dock \gui{Properties} sind exakt aus der NURBS-Geometrie berechnet, nicht aus
+der Darstellung. Für Abstände und Winkel zwischen Punkten gibt es die Befehle \cmd{Distance}
+und \cmd{Angle}, für Flächeninhalt, Volumen und Masseneigenschaften die Befehle der Gruppe
+\gui{Analyze} (\autoref{kap:modellieren}).
+\end{tipp}
+
+\section{Freie Attribute}\label{sec:attribute}
+\index{Attribut}
+
+Attribute sind Schlüssel-Wert-Paare, die Sie an ein Objekt hängen und die mit dem Dokument
+gespeichert werden. Sie haben für das CAD-Programm keine Bedeutung, wohl aber für Plugins: Ein
+Plugin kann Objekte an Attributen erkennen, sie überspringen oder seine eigenen Daten daran
+speichern. Plugins verwenden dafür Schlüssel mit einem Präfix, etwa \code{rtt.} (Raytracer),
+\code{pt.} (Path Tracer), \code{al.} (Automotive Lighting) oder \code{fg.} (FourierGrating).
+
+\paragraph{Anzeigen.} Hat ein ausgewähltes Objekt Attribute, stehen sie im Dock
+\gui{Properties} unter der fett gesetzten Zeile \gui{Attributes}, je Zeile Schlüssel und
+Wert.
+
+\paragraph{Anlegen.}
+\begin{schritte}
+  \item Wählen Sie genau \emph{ein} ganzes Objekt aus (kein Teilobjekt). Nur dann ist
+    \gui{Add attribute...} anklickbar.
+  \item Klicken Sie auf \gui{Add attribute...}. Der Dialog \gui{Add attribute} fragt nach
+    \gui{key = value}; vorbelegt ist \code{sim.inactive = true}.
+  \item Geben Sie Schlüssel und Wert mit Gleichheitszeichen ein, z.\,B.\
+    \code{rtt.role = mirror}, und bestätigen Sie mit \gui{OK}.
+\end{schritte}
+
+Der Wert wird nach seiner Form gespeichert: \code{true} oder \code{false} (Groß-/Kleinschreibung
+egal) als Wahrheitswert, eine Zahl als Zahl, alles andere als Text. Ohne Gleichheitszeichen
+wird der eingegebene Text zum Schlüssel mit dem Wert \code{true}. Ein vorhandener Schlüssel
+wird überschrieben.
+
+\paragraph{Ändern und löschen.} Doppelklicken Sie in der Attributzeile auf den Wert, ändern Sie
+ihn und bestätigen Sie mit \keys{Enter}. Ein \emph{leerer} Wert löscht das Attribut. Anlegen,
+Ändern und Löschen sind Rückgängig-Schritte (\enquote{Change attribute}).
+
+\paragraph{Das Attribut sim.inactive.}\index{sim.inactive} Mit \code{sim.inactive = true}
+schließen Sie ein Objekt von Berechnungen aus, ohne es zu löschen oder auszublenden -- etwa
+eine Halterung, die im Modell bleiben, aber kein Licht abschatten soll. Das Objekt erscheint im
+Modellbaum ausgegraut. Ob und wie ein Plugin das Attribut auswertet, steht in seinem Kapitel:
+Der Path Tracer etwa lässt solche Objekte ganz aus der Szene (\autoref{kap:pathtracer}).
+Entfernen Sie das Attribut (leerer Wert), nimmt das Objekt wieder teil.
+
+\begin{warnung}
+Ändern Sie Attribute, die ein Plugin selbst geschrieben hat (z.\,B.\ \code{rtt.revision}),
+nur, wenn das Kapitel des Plugins es beschreibt. Das Plugin verlässt sich auf ihren Inhalt.
+\end{warnung}
+
+\section{Rückgängig machen und Wiederherstellen}\label{sec:undo}
+\index{Rückgängig}\index{Undo}
+
+\menu{Edit,Undo} (\keys{Strg+Z}) macht den letzten Bearbeitungsschritt rückgängig,
+\menu{Edit,Redo} (\keys{Strg+Shift+Z}, unter Windows auch \keys{Strg+Y}) stellt ihn wieder
+her. Die Menüeinträge nennen den Schritt, z.\,B.\ \enquote{Undo Move} oder \enquote{Redo
+Import STEP}. Die Zahl der Schritte ist nicht begrenzt.
+
+\paragraph{Was ein Schritt ist.}
+\begin{itemize}
+  \item Jeder Befehl ergibt einen Schritt, auch wenn er mehrere Objekte erzeugt (eine
+    Anordnung, eine Polylinie, \dots).
+  \item \gui{Delete}, \gui{Group}, \gui{Ungroup}, \gui{Move selection here} (\enquote{Change
+    layer}), das Bearbeiten von Attributen (\enquote{Change attribute}).
+  \item \menu{File,Import STEP...} -- das Einlesen mitsamt der neuen Gruppe ist ein Schritt.
+  \item \gui{Convert to CAD curves...} im Dock \gui{Results} (\enquote{Rays to curves}).
+  \item Alles, was \emph{eine} Plugin-Aktion am Modell ändert -- neue, geänderte und gelöschte
+    Objekte, Gruppen und Attribute, und auch eine Änderung des Workflows durch das Plugin --,
+    ist zusammen ein Schritt. Ein \gui{Undo} nach \enquote{Load system} entfernt also das ganze
+    geladene System.
+\end{itemize}
+
+\paragraph{Was kein Schritt ist} und daher nicht rückgängig gemacht werden kann:
+\begin{itemize}
+  \item Ansicht und Zoom, Darstellungsmodus, Auswahl,
+  \item Ein- und Ausblenden von Objekten, Gruppen und Ebenen,
+  \item Anlegen, Umbenennen und Umfärben von Ebenen, Umbenennen von Gruppen,
+  \item Parameter im Dock \gui{Plugin} (sie werden aber mit dem Dokument gespeichert),
+  \item Bearbeitungen im Node-Editor, die Sie von Hand vornehmen,
+  \item Ergebnisse im Dock \gui{Results} (Ein-/Ausblenden, \gui{Delete run}).
+\end{itemize}
+
+\paragraph{Grenzen.} \menu{File,New} und \menu{File,Open...} leeren die Liste der Schritte;
+nach dem Öffnen kann man also nichts \enquote{vor} das Öffnen zurücknehmen. Speichern leert
+sie nicht: Sie können auch nach dem Speichern zurückgehen. Das Dokument gilt dann wieder als
+geändert, und der Fenstertitel zeigt das Sternchen.
+

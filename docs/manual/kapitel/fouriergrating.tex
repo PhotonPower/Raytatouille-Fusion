@@ -1,0 +1,1206 @@
+% Kapitel: Das FourierGrating-Plugin (Beugungsgitter, RCWA / Fourier-Modal-Methode)
+% Quellen: python/plugins/fouriergrating/ (fg_*.py, plugin.json, README.md), CHANGELOG.md,
+% docs/adr/0010-multi-plugin-workflow.md
+\chapter{Beugungsgitter mit FourierGrating}\label{kap:fouriergrating}
+\index{FourierGrating}\index{Beugungsgitter}\index{RCWA}
+
+Das Plugin \plugin{FourierGrating} berechnet die Beugung von Licht an periodischen Strukturen:
+Liniengitter, Kreuzgitter, Schichtstapel mit Lamellen, Profilen oder beliebig geformten
+Einschlüssen. Es verbindet \produkt{} mit dem Rechenkern \emph{FourierGrating}, einer
+Implementierung der rigorosen Kopplungswellenanalyse (RCWA, auch Fourier-Modal-Methode genannt)
+und der differentiellen Methode. Alles, was Sie für ein Gitter einstellen -- Struktur,
+Materialien, Schichten, Beleuchtung --, steht im Panel \gui{Plugin}; die Ergebnisse erscheinen als
+Tabellen, Balken, Kurven und Bilder in den Ergebnisfenstern der Anwendung.
+
+Das Kapitel beschreibt das Plugin aus Anwendersicht: zuerst das Gittermodell mit seinen
+Koordinaten, dann Materialien, Schichten und Beleuchtung, anschließend die Rechnungen (Einzelrechnung,
+Scan, Aufwandsschätzung, Optimierung), das Nahfeld, Schichten aus CAD-Körpern und das Gitter als Block
+im Node-Workflow. Den Abschluss bilden Arbeitsabläufe Schritt für Schritt, typische Fehler und die
+Grenzen des Plugins. Die vollständige Liste aller Parameter mit Standardwerten und Wertebereichen
+steht im Anhang, \autoref{kap:plugin-fouriergrating}.
+
+\section{Überblick}\label{sec:fg-ueberblick}
+
+\subsection{Was das Plugin kann}
+
+\begin{itemize}
+  \item \textbf{Einzelrechnung} (\gui{Solve}): die Beugungseffizienz jeder reflektierten und
+    transmittierten Ordnung, die Summen $\Sigma R$ und $\Sigma T$, die Absorption und die
+    Energiebilanz.
+  \item \textbf{Scan} (\gui{Scan}): dieselben Größen über Listen oder Bereiche der Wellenlänge,
+    der Einfallswinkel, der Polarisation und über einen beliebigen Zahlenwert der Konfiguration
+    (Sweep), als Kurven.
+  \item \textbf{Aufwandsschätzung} (\gui{Estimate}): Zahl der Rechnungen, Matrixgröße und grober
+    Speicherbedarf, bevor Sie eine große Rechnung starten.
+  \item \textbf{Optimierung} (\gui{Optimise}): Schichtdicken, Lamellenkanten, Perioden oder andere
+    Zahlen der Konfiguration so wählen, dass eine gewichtete Summe von Effizienzen maximal oder
+    minimal wird -- mit den exakten Gradienten von FourierGrating.
+  \item \textbf{Littrow-Winkel} (\gui{Set Littrow angle}): den Einfallswinkel, unter dem eine
+    reflektierte Ordnung in die Einfallsrichtung zurückläuft.
+  \item \textbf{Nahfeld} (\gui{Near field}): das elektromagnetische Feld im und am Gitter als
+    Bilder und Kurven.
+  \item \textbf{Schichten aus CAD-Körpern} (\gui{Layer from CAD bodies}, \gui{Check CAD layers}):
+    eine im CAD gezeichnete Elementarzelle als Gitterschicht.
+  \item \textbf{Konfigurationsdateien} (\gui{Load configuration}, \gui{Save configuration}): das
+    JSON-Format von FourierGrating lesen und schreiben, verlustfrei.
+  \item \textbf{Blöcke für den Node-Workflow}: das Gitter \block{fg.grating} und den Schichtstapel
+    \block{fg.stack}, die Strahlen und Felder im optischen Aufbau beugen bzw. filtern.
+\end{itemize}
+
+\subsection{Voraussetzungen}\label{sec:fg-voraussetzungen}
+\index{fouriergrating (Python-Paket)}
+
+Das Plugin wird mit der Anwendung installiert (Plugin-Kennung \code{fg}, Name
+\plugin{FourierGrating}). Es braucht in der Python-Umgebung der Plugins die Pakete
+\code{numpy}, \code{scipy} und \code{fouriergrating} in Version 0.18 oder neuer. Der Knopf
+\gui{Create environment…} in \menu{Plugins,Settings…} installiert sie (siehe
+\autoref{kap:installation} und \autoref{kap:plugins}). Fehlt das Paket \code{fouriergrating}, meldet
+jede rechnende Aktion:
+
+\begin{lstlisting}
+The FourierGrating plugin needs the Python package fouriergrating in the plugin environment
+(pip install fouriergrating, or the wheel of the FourierGrating repo).
+\end{lstlisting}
+
+Laden und Speichern von Konfigurationen, das Bearbeiten im Panel, \gui{Estimate} und
+\gui{Set Littrow angle} funktionieren auch ohne das Paket. Zwei Funktionen haben weitere
+Voraussetzungen:
+
+\begin{itemize}
+  \item \gui{Layer from CAD bodies} und \gui{Check CAD layers} brauchen ein \code{fouriergrating}
+    mit CAD-Slicer (ein Build mit \code{FG\_ENABLE\_NURBFORGE}, siehe die Datei \datei{docs/cad.md}
+    von FourierGrating). Ohne ihn wird die Schicht zwar angelegt, aber nicht geprüft.
+  \item Die Workflow-Blöcke \block{fg.grating} und \block{fg.stack} stellt das Plugin nur bereit,
+    wenn das Paket \code{rtt-fusion} mit Fernblöcken installiert ist (Modul
+    \code{rtt\_fusion.graph.remote}).
+\end{itemize}
+
+\subsection{Wo Sie das Plugin finden}
+
+\begin{itemize}
+  \item Im Menü \menu{Plugins,FourierGrating} stehen alle Aktionen (alphabetisch nach ihrem
+    internen Namen geordnet).
+  \item In der Werkzeugspalte bildet das Plugin eine eigene Gruppe \gui{FourierGrating} mit einem
+    Knopf je Aktion.
+  \item Im Dock \gui{Plugin} wählen Sie oben \gui{FourierGrating}; darunter stehen die Parameter,
+    unten die Knöpfe der Aktionen und \gui{Reset parameters} (setzt alle Parameter auf ihre
+    Standardwerte zurück).
+  \item Zwei Aktionen gelten einem einzelnen Block des Node-Workflows. Sie stehen nicht im Menü,
+    sondern im Kontextmenü eines Gitter- oder Stapelblocks im Node-Editor
+    (\autoref{sec:fg-block}).
+\end{itemize}
+
+Die Parameter werden mit dem Dokument gespeichert (pro Plugin). Ein geänderter Parameter markiert
+das Dokument als geändert, ist aber kein Rückgängig-Schritt.
+
+\subsection{Aufbau des Panels}\label{sec:fg-panel}
+
+Das Panel ist in Gruppen gegliedert. Ganz oben stehen ohne eigenen Rahmen die beiden Listen
+\gui{Materials} und \gui{Layers (bottom to top)}, darunter die Gruppenkästen in dieser
+Reihenfolge:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Gruppe & Inhalt \\
+\midrule
+\endhead
+(ohne Gruppe) & \gui{Materials} (Liste der Materialien), \gui{Layers (bottom to top)} (Schichtstapel) \\
+\gui{File} & \gui{Configuration} (Datei zum Laden), \gui{Save as} (Datei zum Speichern) \\
+\gui{Structure} & \gui{Dimension}, \gui{Solver}, \gui{Orders Nx}, \gui{Orders Nz}, \gui{Period x},
+  \gui{Period z}, \gui{Superstrate}, \gui{Substrate}, \gui{Solve: also write CSV} \\
+\gui{Incidence} & \gui{$\lambda$ / \si{\micro\metre}}, \gui{$\varphi$ / deg}, \gui{$\psi$ / deg},
+  \gui{$\delta$ / deg}, \gui{Littrow order} \\
+\gui{Scan} & \gui{x axis}, \gui{Orders from efficiency}, \gui{At most curves}, \gui{Also write CSV} \\
+\gui{Near field} & \gui{Show}, \gui{y from}, \gui{y to}, \gui{Horizontal cut at y},
+  \gui{Vertical cut at z (2D)}, \gui{Points x}, \gui{Points y}, \gui{Points z (2D)}, \gui{Periods},
+  \gui{Also write .npz} \\
+\gui{Optimisation} & \gui{Goal}, \gui{Objective L = $\Sigma$ weight $\cdot$ efficiency},
+  \gui{Parameters}, \gui{Iterations}, \gui{Apply the optimum to the panel} \\
+\gui{CAD layer} & \gui{Bodies}, \gui{Bodies drawn in}, \gui{STEP file}, \gui{Around the bodies},
+  \gui{RCWA slices per band}, \gui{Preview at height}, \gui{Preview SVG} \\
+\gui{Advanced} & \gui{Further settings (JSON)}: alle übrigen Schlüssel der Konfiguration \\
+\bottomrule
+\end{referenz}
+
+Fahren Sie mit der Maus über ein Feld, zeigt ein Tooltip seine Kurzbeschreibung. Ungültige
+Eingaben (etwa fehlerhaftes JSON oder eine falsche Tabellenzelle) werden rot markiert und sperren
+die Aktionen, bis sie behoben sind.
+
+\subsection{Wo die Ergebnisse erscheinen}
+
+Jede rechnende Aktion legt im Dock \gui{Results} einen neuen Ergebnissatz an (etwa
+\enquote{FourierGrating $\lambda$ = 0.6328 \si{\micro\metre}}). Ergebnissätze lassen sich
+ein- und ausblenden, vergleichen und löschen; sie werden mit dem Dokument gespeichert. Die
+einzelnen Ergebnisse landen je nach Art in
+
+\begin{itemize}
+  \item dem Fenster \gui{Table} (Ordnungstabelle, Parameter der Optimierung, Bänder und Befunde der
+    CAD-Prüfung),
+  \item dem Fenster \gui{Plot} (Balken der Effizienzen, Kurven des Scans und der Optimierung,
+    horizontaler Nahfeldschnitt eines 1D-Gitters),
+  \item dem Fenster \gui{Image} (Nahfeldschnitte als Farbbilder),
+  \item dem Dock \gui{Plugin log} (Summen, Energiebilanz, Warnungen, Schritte der Optimierung) und
+  \item der Statusleiste (eine Zusammenfassung nach dem Ende der Aktion).
+\end{itemize}
+
+Ein Fehler, den Sie selbst beheben können -- eine fehlende Datei, ein unbekanntes Material --,
+erscheint als Meldungsfenster mit dem Text des Plugins. Alle anderen Fehler stehen mit
+Einzelheiten im \gui{Plugin log}. Eine laufende Aktion brechen Sie mit dem Knopf \gui{Cancel} in der
+Statusleiste ab.
+
+\begin{hinweis}
+Eine einzelne Rechnung von FourierGrating, die bereits läuft, lässt sich nicht mittendrin
+unterbrechen. \gui{Optimise} prüft den Abbruch zwischen zwei Auswertungen; bei \gui{Solve},
+\gui{Scan} und \gui{Near field} wirkt \gui{Cancel} erst, wenn die Rechnung zurückkehrt -- oder die
+Anwendung beendet den Plugin-Prozess nach einigen Sekunden. Schätzen Sie große Rechnungen deshalb
+vorher mit \gui{Estimate} ab (\autoref{sec:fg-estimate}).
+\end{hinweis}
+
+% ---------------------------------------------------------------------------------------------
+\section{Das Gittermodell}\label{sec:fg-modell}
+\index{Gittermodell}
+
+\subsection{Koordinaten und Schichtung}\label{sec:fg-koordinaten}
+
+FourierGrating beschreibt ein Gitter als Stapel von Schichten zwischen zwei Halbräumen:
+
+\begin{itemize}
+  \item Die \textbf{y-Achse} ist die Stapelrichtung. Unten liegt das \textbf{Substrat}
+    ($y < 0$), oben das \textbf{Superstrat}. Die Schichten liegen dazwischen, die unterste beginnt
+    bei $y = 0$.
+  \item Das Licht fällt \textbf{von oben}, aus dem Superstrat, ein. Reflektierte Ordnungen laufen
+    zurück ins Superstrat (Seite \code{R}), transmittierte ins Substrat (Seite \code{T}).
+  \item Die Struktur ist periodisch in \textbf{x} mit der Periode $\Lambda_x$ (\gui{Period x}),
+    bei einem Kreuzgitter (2D) zusätzlich in \textbf{z} mit $\Lambda_z$ (\gui{Period z}).
+  \item Alle Längen sind in Mikrometern (\si{\micro\metre}), alle Winkel in Grad.
+\end{itemize}
+
+Diese Konvention gilt im ganzen Plugin: im Panel, in den Konfigurationsdateien, beim Nahfeld
+(\gui{y from}/\gui{y to} zählen ab der Unterkante des Stapels) und bei den CAD-Schichten (dort
+wird die CAD-Achse $+Z$ zur Stapelrichtung $y$, siehe \autoref{sec:fg-cad}).
+
+\subsection{Dimension: Liniengitter und Kreuzgitter}
+
+\gui{Dimension} wählt zwischen
+\begin{description}
+  \item[\code{1D}] einem Liniengitter: periodisch nur in x, unendlich ausgedehnt und konstant in z.
+    Die Ordnungen tragen einen Index $n$.
+  \item[\code{2D}] einem Kreuzgitter: periodisch in x und z. Die Ordnungen tragen zwei Indizes
+    $(n, m)$; \gui{Period z} muss dann größer als null sein.
+\end{description}
+
+Lamellen- und isotrope Profilschichten eines Liniengitters sind auch in einem 2D-Stapel erlaubt;
+sie sind dann in z konstant.
+
+\subsection{Fourier-Ordnungen und Matrixgröße}\label{sec:fg-ordnungen}
+\index{Fourier-Ordnungen}\index{Abbruch (Truncation)}
+
+Die Methode entwickelt Feld und Material in Fourier-Reihen. \gui{Orders Nx} und \gui{Orders Nz}
+legen fest, wie viele Glieder mitgenommen werden: von $-N_x$ bis $+N_x$ in x und von $-N_z$ bis
+$+N_z$ in z. Die Zahl der Fourier-Glieder ist
+\[
+  n_f = 2N_x + 1 \quad\text{(1D)}, \qquad n_f = (2N_x + 1)(2N_z + 1) \quad\text{(2D)},
+\]
+und die Matrix des Eigenwertproblems hat die Größe $n = 4 n_f$. Rechenzeit und Speicher wachsen
+mit $n^3$ bzw. $n^2$ -- ein 2D-Gitter mit $N_x = N_z = 10$ hat $n = 1764$, ein 1D-Gitter mit
+$N_x = 10$ nur $n = 84$.
+
+\begin{tipp}
+Prüfen Sie die Konvergenz: rechnen Sie mit $N_x$, dann mit einem deutlich größeren Wert (etwa dem
+Doppelten). Ändern sich die Effizienzen, die Sie interessieren, nicht mehr in den benötigten
+Stellen, reicht der kleinere Wert. Metallische Lamellen in TM-Polarisation konvergieren langsam und
+brauchen viele Ordnungen.
+\end{tipp}
+
+Die Standardwerte sind $N_x = 10$ und $N_z = 0$, der erlaubte Bereich 0 bis 200.
+
+\subsection{Rechenverfahren}\label{sec:fg-solver}
+\index{differentielle Methode}
+
+\gui{Solver} wählt das Verfahren:
+\begin{description}
+  \item[\code{rcwa}] die RCWA (Fourier-Modal-Methode): jede Schicht wird in y in Scheiben
+    konstanter Struktur zerlegt, in jeder Scheibe wird ein Eigenwertproblem gelöst. Für
+    Lamellen- und homogene Schichten ist das exakt; Profile werden durch Scheiben angenähert.
+    Die Scheibenzahl regelt der Schlüssel \code{rcwa} unter \gui{Advanced}
+    (\code{\{\textquotedbl{}rcwa\textquotedbl{}: \{\textquotedbl{}slices\textquotedbl{}: 60\}\}}) bzw. \code{slices} der einzelnen Profilschicht.
+  \item[\code{rk}] die differentielle Methode: das Feld wird mit einem impliziten
+    Runge-Kutta-Verfahren durch die Schicht integriert. Sie eignet sich für stetig veränderliche
+    Profile. Einstellungen (Tableau, Toleranz) stehen ebenfalls unter \gui{Advanced}
+    (Schlüssel \code{rk}).
+\end{description}
+
+\subsection{Superstrat und Substrat}
+
+\gui{Superstrate} und \gui{Substrate} nennen die Materialien der beiden Halbräume -- über ihren
+Namen in der Materialliste (Standard: \code{air} und \code{glass}). Ein Name, der in der Liste
+fehlt, führt beim Rechnen zu einer Meldung von FourierGrating.
+
+\begin{warnung}
+Das Superstrat muss verlustfrei sein (reelle Brechzahl), denn aus ihm fällt das Licht ein.
+FourierGrating prüft das beim Laden der Konfiguration.
+\end{warnung}
+
+\subsection{Gittergleichung und Ordnungen}\label{sec:fg-gittergleichung}
+\index{Gittergleichung}
+
+Für eine ebene Welle aus dem Superstrat mit der Brechzahl $\nu$ unter dem Polarwinkel $\varphi$
+(gemessen gegen die y-Achse, also gegen die Flächennormale) und dem Azimut $\psi$ (gemessen gegen
+x) lautet die x-Komponente des normierten Wellenvektors der Ordnung $n$
+\[
+  \alpha_n = \nu \sin\varphi \cos\psi + n\,\frac{\lambda}{\Lambda_x},
+\]
+in 2D zusätzlich $\gamma_m = \nu \sin\varphi \sin\psi + m\,\lambda/\Lambda_z$. Eine Ordnung
+breitet sich in einem Medium mit der Brechzahl $n_\text{M}$ nur aus, wenn
+$\alpha_n^2 + \gamma_m^2 < n_\text{M}^2$; sonst ist sie evaneszent und trägt keine Leistung fort.
+Deshalb hängt die Zahl der Zeilen in der Ordnungstabelle von $\lambda$, $\Lambda$ und den Winkeln
+ab, und im Scan kann eine Ordnung an manchen Punkten fehlen.
+
+% ---------------------------------------------------------------------------------------------
+\section{Materialien}\label{sec:fg-materialien}
+\index{Material (FourierGrating)}\index{Brechzahl}
+
+Die Liste \gui{Materials} enthält alle Materialien, auf die sich Superstrat, Substrat und Schichten
+beziehen. Standardmäßig stehen dort \code{air} ($n = 1$) und \code{glass} ($n = 1{,}5$).
+
+\subsection{Materialien bearbeiten}
+
+Die Liste hat die Knöpfe \gui{Add} (neuer Eintrag), \gui{Edit…} (öffnet den Eintrag in einem
+Dialog \gui{Edit entry}), \gui{Remove}, $\uparrow$ und $\downarrow$ (Reihenfolge ändern). Ein
+Eintrag hat diese Felder:
+
+\begin{description}
+  \item[\gui{Name}] der Name, unter dem Schichten, Superstrat und Substrat das Material nennen.
+    Groß- und Kleinschreibung zählt.
+  \item[\gui{Given as}] \code{n} -- die komplexe Brechzahl $n + \mathrm{i}k$ aus den Feldern
+    \gui{n} und \gui{k}; \code{json} -- jede andere Form, die FourierGrating kennt, als JSON im
+    Feld \gui{Material as JSON (json)}.
+  \item[\gui{n}, \gui{k}] Real- und Imaginärteil der Brechzahl. $k > 0$ bedeutet Absorption.
+    Ist $k = 0$, wird das Material als reelle Zahl gespeichert, sonst als Paar \code{[n, k]}.
+\end{description}
+
+\subsection{Weitere Materialformen (JSON)}
+
+Mit \gui{Given as} = \code{json} geben Sie das Material so ein, wie es in der Konfigurationsdatei
+unter seinem Namen stünde. FourierGrating kennt unter anderem (Format nach seiner Dokumentation
+\datei{docs/config\_format.md}):
+
+\begin{itemize}
+  \item einen vollständigen Permittivitätstensor (\code{eps\_tensor}) für anisotrope Materialien,
+  \item Hauptachsenwerte mit Euler-Winkeln (\code{eps\_principal}, \code{euler\_deg}),
+  \item dispersive Modelle, die an jeder Wellenlänge eines Scans ausgewertet werden: Sellmeier,
+    Cauchy, Drude-Lorentz und Tabellen.
+\end{itemize}
+
+Ein Beispiel: Quarzglas nach Sellmeier.
+
+\begin{lstlisting}
+{ "n": { "sellmeier": { "A": 1.0, "B": [0.6961663, 0.4079426, 0.8974794],
+                        "C_um2": [0.00467914826, 0.0135120631, 97.9340025] } } }
+\end{lstlisting}
+
+Materialien, die Sie als JSON eingeben, reicht das Plugin unverändert an FourierGrating weiter; beim
+Laden einer Datei landen alle Materialien, die keine einfache Brechzahl sind, automatisch in dieser
+Form im Panel.
+
+\begin{hinweis}
+\gui{Set Littrow angle} braucht die Brechzahl des Superstrats als Zahl. Ist das Superstrat als JSON
+gegeben, meldet die Aktion \enquote{the superstrate … needs a refractive index n (not JSON)}.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------------------------
+\section{Der Schichtstapel}\label{sec:fg-schichten}
+\index{Schichtstapel}\index{Lamellengitter}
+
+Die Liste \gui{Layers (bottom to top)} beschreibt die Schichten zwischen Substrat und Superstrat --
+\textbf{von unten nach oben}: der erste Eintrag liegt direkt auf dem Substrat, der letzte grenzt an
+das Superstrat. Das ist auch die Zählung der JSON-Zeiger: \code{/layers/0} ist die unterste
+Schicht. Mit $\uparrow$ und $\downarrow$ verschieben Sie eine Schicht im Stapel. Ein leerer Stapel
+ist erlaubt: dann rechnet FourierGrating die ebene Grenzfläche zwischen Superstrat und Substrat.
+
+Jeder Eintrag hat einen \gui{Type}; die übrigen Felder gelten je nach Typ.
+
+\subsection{Homogene Schicht}
+
+\gui{Type} = \code{homogeneous}: eine ebene Schicht der Dicke \gui{Thickness} (in
+\si{\micro\metre}) aus dem Material \gui{Material (homogeneous)}. Damit bauen Sie Beschichtungen,
+Zwischenschichten und Deckschichten.
+
+\subsection{Lamellenschicht}\label{sec:fg-lamellen}
+
+\gui{Type} = \code{lamellar1d}: eine Schicht der Dicke \gui{Thickness}, die in x aus Lamellen
+verschiedener Materialien besteht -- das klassische binäre Gitter. Die Lamellen stehen in der
+Tabelle \gui{Lamellae (lamellar1d)} mit den Spalten \gui{from x} (Beginn der Lamelle in
+\si{\micro\metre}) und \gui{material}. Jede Lamelle reicht von ihrem \gui{from x} bis zum
+\gui{from x} der nächsten Zeile, die letzte bis \gui{End (lamellar1d)}. Zeilen fügen Sie mit
+\gui{Add row} an und löschen sie mit \gui{Remove row}.
+
+Ein Gitter mit Periode \qty{1}{\micro\metre}, dessen erste Hälfte Glas und zweite Hälfte Luft ist:
+
+\begin{center}
+\begin{tabular}{rl}
+\toprule
+\gui{from x} & \gui{material} \\
+\midrule
+0.0 & glass \\
+0.5 & air \\
+\bottomrule
+\end{tabular}
+\qquad \gui{End (lamellar1d)} = 1.0
+\end{center}
+
+In der Konfigurationsdatei wird daraus \code{\textquotedbl{}breakpoints\_um\textquotedbl{}: [0.0, 0.5, 1.0]} und
+\code{\textquotedbl{}materials\textquotedbl{}: [\textquotedbl{}glass\textquotedbl{}, \textquotedbl{}air\textquotedbl{}]}.
+
+\begin{warnung}
+Die Kanten müssen bei 0 beginnen und genau bei der Periode $\Lambda_x$ enden: die erste Zeile hat
+\gui{from x} = 0, \gui{End} ist gleich \gui{Period x}. FourierGrating prüft das
+\textbf{nicht}. Ändern Sie die Periode, ohne \gui{End} anzupassen, ist das Ergebnis ohne Meldung
+falsch.
+\end{warnung}
+
+\subsection{Profile und weitere Schichttypen (JSON)}\label{sec:fg-profile}
+\index{Profilgitter}
+
+\gui{Type} = \code{json}: jede andere Schicht von FourierGrating, eingegeben im Feld
+\gui{Layer as JSON (type json)} genau so, wie sie in der Konfigurationsdatei unter
+\code{layers} stünde. Laut der Formatbeschreibung von FourierGrating gibt es unter anderem:
+
+\begin{description}
+  \item[\code{profile1d}] ein stetiges Oberflächenprofil eines Liniengitters zwischen zwei
+    Materialien (\code{below}, \code{above}) mit der Tiefe \code{depth\_um}. Formen:
+    \code{sinus}, \code{triangle} (Dreieck mit der Spitze bei \code{apex\_x\_um}) und
+    \code{points} (Stützstellen \code{x\_um}, \code{y\_um}, stückweise linear).
+  \item[\code{profile2d}] ein Profil eines Kreuzgitters (\code{egg\_crate}, \code{sinus\_x}).
+  \item[\code{polygon2d}] eine Schicht eines Kreuzgitters mit polygonalen oder rechteckigen
+    Einschlüssen in einem Hintergrundmaterial.
+  \item[\code{contour2d}] Einschlüsse mit gekrümmten Rändern: Kreise, Ellipsen, Polygone,
+    NURBS-Konturen, auch mit Löchern.
+  \item[\code{cad}] Körper aus einer STEP-Datei, die FourierGrating in Bänder zerlegt -- diese
+    Schicht legt das Plugin für Sie an (\autoref{sec:fg-cad}).
+\end{description}
+
+Ein sinusförmiges Reliefgitter in Aluminium unter Luft, \qty{0.2}{\micro\metre} tief:
+
+\begin{lstlisting}
+{ "type": "profile1d", "shape": "sinus", "depth_um": 0.2,
+  "below": "al", "above": "air", "slices": 0, "factorization": "auto" }
+\end{lstlisting}
+
+Das Plugin prüft den Inhalt eines JSON-Eintrags nicht selbst; Fehler meldet FourierGrating beim
+Rechnen (\enquote{FourierGrating: …}). Ungültiges JSON markiert das Feld rot.
+
+\begin{tipp}
+Wenn Sie eine Konfigurationsdatei mit solchen Schichten laden, zeigt das Panel sie als Einträge vom
+Typ \code{json}; nur homogene und Lamellenschichten in genau der einfachen Form erscheinen als
+Felder. Beim Speichern wird jede Schicht wieder so geschrieben, wie sie war.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Beleuchtung und Polarisation}\label{sec:fg-beleuchtung}
+\index{Polarisation}\index{Einfallswinkel}
+
+Die Gruppe \gui{Incidence} beschreibt die einfallende ebene Welle:
+
+\begin{description}
+  \item[\gui{$\lambda$ / \si{\micro\metre}}] die Vakuumwellenlänge in Mikrometern
+    (Standard 0.6328, die Linie des HeNe-Lasers).
+  \item[\gui{$\varphi$ / deg}] der Polarwinkel des Einfalls gegen die Flächennormale (die
+    y-Achse). $\varphi = 0$ ist senkrechter Einfall.
+  \item[\gui{$\psi$ / deg}] der Azimut der Einfallsebene gegen die x-Achse. $\psi = 0$: die
+    Einfallsebene steht senkrecht auf den Gitterlinien eines Liniengitters (klassische
+    Anordnung); $\psi \neq 0$: konischer Einfall.
+  \item[\gui{$\delta$ / deg}] der Polarisationswinkel: \code{0} ist s-Polarisation (TE),
+    \code{90} p-Polarisation (TM).
+\end{description}
+
+\subsection{Zahl, Liste oder Bereich}\label{sec:fg-scan-syntax}
+
+Jedes der vier Felder nimmt eine von drei Formen an:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{ll>{\raggedright\arraybackslash}X}
+\toprule
+Form & Eingabe & Bedeutung \\
+\midrule
+Zahl & \code{0.6328} & ein Wert \\
+Liste & \code{0.5, 0.6, 0.7} & die genannten Werte \\
+Bereich & \code{0.5:0.7:21} & von 0,5 bis 0,7 in 21 gleichen Schritten (beide Enden eingeschlossen) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Schreiben Sie Dezimalzahlen in diesen Feldern immer mit Punkt. Eine Liste trennen Sie mit
+Kommas, einen Bereich mit Doppelpunkten in der Reihenfolge \code{von:bis:Schritte}.
+
+Mehrere Listen und Bereiche ergeben einen Scan über das \textbf{kartesische Produkt}: drei
+Wellenlängen und zwei Polarisationen sind sechs Rechenpunkte. \gui{Scan} rechnet alle Punkte;
+\gui{Solve}, \gui{Near field} und \gui{Optimise} rechnen nur den \textbf{ersten} Punkt (die erste
+Wellenlänge, den ersten Winkel, die erste Polarisation).
+
+\begin{hinweis}
+Ein leeres Feld lässt den Schlüssel in der Konfiguration weg. FourierGrating setzt dann seinen
+eigenen Standard ein. Die Wellenlänge sollten Sie immer angeben.
+\end{hinweis}
+
+\section{Littrow-Anordnung}\label{sec:fg-littrow}
+\index{Littrow-Anordnung}
+
+In der Littrow-Anordnung läuft eine reflektierte Beugungsordnung genau in die Einfallsrichtung
+zurück -- typisch für Gitter in Laserresonatoren und Spektrometern. Für die Ordnung $n$ gilt dann
+$\alpha_n = -\alpha_0$, also
+\[
+  \sin\varphi = -\frac{n\,\lambda}{2\,\Lambda_x\,\nu\,\cos\psi}.
+\]
+Dabei ist $\nu$ die Brechzahl des Superstrats, $\lambda$ die erste Wellenlänge und $\psi$ der erste
+Azimut des Panels.
+
+\begin{schritte}
+  \item Tragen Sie in der Gruppe \gui{Incidence} unter \gui{Littrow order} die gewünschte Ordnung
+    ein (Standard $-1$, erlaubt $-50$ bis $50$).
+  \item Wählen Sie \menu{Plugins,FourierGrating,Set Littrow angle} oder den gleichnamigen Knopf.
+  \item Das Plugin schreibt den Winkel in das Feld \gui{$\varphi$ / deg} (mit zehn gültigen
+    Stellen) und meldet ihn in der Statusleiste, etwa \enquote{$\varphi$ = 18.4454\si{\degree} (Littrow, order -1)}.
+\end{schritte}
+
+Beispiel: $\lambda = \qty{0.6328}{\micro\metre}$, $\Lambda_x = \qty{1}{\micro\metre}$, Luft
+($\nu = 1$), $\psi = 0$, Ordnung $-1$: $\sin\varphi = 0{,}3164$, also
+$\varphi \approx \ang{18.45}$.
+
+Die Aktion meldet einen Fehler, wenn \gui{Period x} nicht größer als null ist, wenn das Superstrat
+nicht als Brechzahl gegeben ist, oder wenn die Ordnung keinen Littrow-Winkel hat (Ordnung 0 oder
+$|\sin\varphi| > 1$, die Meldung nennt den Wert).
+
+\begin{tipp}
+\gui{Set Littrow angle} überschreibt das Feld \gui{$\varphi$ / deg} mit einer einzelnen Zahl; ein
+vorher eingetragener Bereich ist danach weg.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Rechnen}\label{sec:fg-rechnen}
+
+\subsection{Einzelrechnung: Solve}\label{sec:fg-solve}
+\index{Beugungseffizienz}
+
+\gui{Solve} rechnet die Konfiguration des Panels für den ersten Punkt der Beleuchtung und zeigt die
+Effizienzen aller Ordnungen, die sich im Superstrat oder Substrat ausbreiten.
+
+\begin{schritte}
+  \item Stellen Sie Struktur, Materialien, Schichten und Beleuchtung ein.
+  \item Wählen Sie \menu{Plugins,FourierGrating,Solve} oder den Knopf \gui{Solve} im Panel.
+  \item Die Statusleiste zeigt \enquote{solving …}, nach dem Ende eine Zusammenfassung der Form (die Zahlen hier nur als Beispiel)
+    \enquote{FourierGrating: $\Sigma$R 0.0400, $\Sigma$T 0.9600, A 0.0000 (8 orders)}.
+\end{schritte}
+
+Das Ergebnis besteht aus
+
+\begin{description}
+  \item[Tabelle \enquote{Orders}] im Fenster \gui{Table}, eine Zeile je Ordnung mit den Spalten
+    \code{side} (\code{R} reflektiert, \code{T} transmittiert), \code{n}, \code{m} (in 1D immer 0),
+    \code{efficiency}, \code{s part} und \code{p part}. Die Effizienz ist der Anteil der einfallenden
+    Leistung, den die Ordnung fortträgt; \code{s part} und \code{p part} teilen ihn auf die beiden
+    Polarisationen der gebeugten Welle auf (in isotropen Medien).
+  \item[Balken \enquote{Efficiency per order}] im Fenster \gui{Plot}: je Ordnung ein Balken,
+    beschriftet \code{R 0}, \code{R -1}, \code{T 1} usw. (in 2D \code{R 1,0}).
+  \item[Protokollzeile] im \gui{Plugin log}: $\Sigma R$, $\Sigma T$, die Absorption $A$ und,
+    wenn FourierGrating sie liefert, die Energiebilanz; davor jede Warnung von FourierGrating
+    (\enquote{warning: …}).
+\end{description}
+
+Der Ergebnissatz heißt nach der Wellenlänge, etwa \enquote{FourierGrating $\lambda$ = 0.6328
+\si{\micro\metre}}; bei einer Liste steht die ganze Liste im Namen, gerechnet wird trotzdem nur
+der erste Punkt.
+
+\paragraph{Energiebilanz.} Für ein verlustfreies Gitter (alle $k = 0$) muss
+$\Sigma R + \Sigma T = 1$ sein, $A = 0$. Weicht die Summe merklich ab, ist die Rechnung nicht
+konvergiert oder falsch eingestellt (zu wenige Ordnungen, zu wenige Scheiben, falsche
+Lamellenkanten). Mit absorbierenden Materialien ist $A = 1 - \Sigma R - \Sigma T > 0$.
+
+\paragraph{Als CSV schreiben.} Steht in \gui{Solve: also write CSV} (Gruppe \gui{Structure}) eine
+Datei, schreibt \gui{Solve} die Ordnungstabelle zusätzlich dorthin -- mit den Spalten
+\code{side, n, m, efficiency, eff\_s, eff\_p}. Das Protokoll meldet \enquote{\dots{} orders written to
+\dots}. Lassen Sie das Feld leer, wenn Sie keine Datei wollen.
+
+\subsection{Parameterscan: Scan}\label{sec:fg-scan}
+\index{Scan (FourierGrating)}\index{Sweep}
+
+\gui{Scan} rechnet \emph{alle} Punkte der Listen und Bereiche in der Gruppe \gui{Incidence} und
+eines Sweeps -- parallel, in FourierGrating -- und zeigt die Effizienzen als Kurven.
+
+\paragraph{Was gescannt wird.}
+\begin{itemize}
+  \item Die vier Felder der Beleuchtung: jede Liste oder jeder Bereich (\autoref{sec:fg-scan-syntax}).
+    Mehrere variierende Größen ergeben das kartesische Produkt.
+  \item Ein \textbf{Sweep} über eine beliebige Zahl der Konfiguration, etwa eine Schichtdicke.
+    Ihn tragen Sie unter \gui{Advanced} in \gui{Further settings (JSON)} ein:
+\begin{lstlisting}
+{ "sweep": { "parameter": "/layers/0/thickness_um",
+             "values": { "from": 0.1, "to": 0.3, "steps": 11 } } }
+\end{lstlisting}
+    \code{parameter} ist ein JSON-Zeiger in die Konfiguration (\autoref{sec:fg-zeiger}),
+    \code{values} eine Zahl, eine Liste oder ein Bereich. Die Sweep-Werte laufen nacheinander, die
+    Punkte jedes Werts parallel.
+\end{itemize}
+
+Gibt es nur einen einzigen Punkt, meldet \gui{Scan}: \enquote{the scan has a single point – give a
+list or a range for $\lambda$, an angle or a sweep}.
+
+\paragraph{Die Kurven.} Im Fenster \gui{Plot} erscheinen
+\begin{itemize}
+  \item $\Sigma R$ und $\Sigma T$ über der x-Achse,
+  \item jede Ordnung, deren Effizienz irgendwo den Wert \gui{Orders from efficiency} erreicht
+    (Standard 0,01), als eigene Kurve, benannt \code{R 0}, \code{T -1} (in 2D \code{R 1,0}).
+\end{itemize}
+
+Die x-Achse wählt \gui{x axis}: \code{auto} nimmt die Größe mit den meisten Werten (bei Gleichstand
+zuerst $\lambda$); \code{lambda\_um}, \code{phi\_deg}, \code{psi\_deg}, \code{delta\_deg} oder
+\code{sweep\_value} erzwingen eine bestimmte. Variiert die gewählte Größe nicht, meldet das Plugin,
+welche Größen variieren. Jede \emph{weitere} variierende Größe erzeugt eigene Kurven; ihr Wert
+steht im Kurvennamen, etwa \code{R 0 ($\delta$ = 90)} oder \code{$\Sigma$T ($\varphi$ = 10, sweep =
+0.2)} -- beim Sweep steht dort der Name des Sweep-Parameters.
+
+Eine Ordnung, die an manchen Punkten evaneszent ist (\autoref{sec:fg-gittergleichung}), hat dort
+keine Punkte; ihre Kurve hat eine Lücke oder beginnt später.
+
+\paragraph{Zu viele Kurven.} Mehr als \gui{At most curves} (Standard 24) Kurven zeigt das Plugin
+nicht; es nimmt die ersten und schreibt eine Warnung ins Protokoll (\enquote{raise 'Orders from
+efficiency' or 'At most curves'}). Erhöhen Sie \gui{Orders from efficiency}, um schwache Ordnungen
+auszublenden, oder \gui{At most curves}.
+
+\paragraph{Als CSV schreiben.} \gui{Also write CSV} in der Gruppe \gui{Scan} schreibt jede Ordnung an
+jedem Punkt als Zeile -- im Format der Datei \datei{efficiencies.csv} von FourierGrating, komplexe
+Spalten (Amplituden) aufgeteilt in \code{\_re} und \code{\_im}. Die Statusleiste nennt die Zahl der
+Zeilen.
+
+Die Zusammenfassung in der Statusleiste lautet etwa \enquote{21 points, 6 curves over $\lambda$ /
+\si{\micro\metre}}.
+
+\begin{tipp}
+Für einen Vergleich von s- und p-Polarisation tragen Sie bei \gui{$\delta$ / deg} die Liste
+\code{0, 90} ein und scannen über $\lambda$: Sie erhalten jede Kurve zweimal, mit
+\code{($\delta$ = 0)} und \code{($\delta$ = 90)} im Namen.
+\end{tipp}
+
+\subsection{Aufwand abschätzen: Estimate}\label{sec:fg-estimate}
+\index{Speicherbedarf}
+
+\gui{Estimate} rechnet nichts, sondern schätzt aus der Konfiguration, wie groß eine Rechnung wird.
+Die Statusleiste zeigt etwa
+
+\begin{center}
+\code{21 solve(s) $\cdot$ matrix size n = 84 $\cdot$ memory roughly 1.3 MiB (rule of thumb)}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{Rechnungen}: Zahl der Scanpunkte (Produkt der Längen der vier Beleuchtungsfelder) mal
+    Zahl der Sweep-Werte.
+  \item \textbf{Matrixgröße} $n = 4 n_f$ (\autoref{sec:fg-ordnungen}).
+  \item \textbf{Speicher} nach einer Faustregel aus GUI-FourierGrating: gleichzeitig gerechnete
+    Punkte $\times\, 12\, n^2 \times 16$ Byte. Gleichzeitig laufen höchstens so viele Punkte, wie
+    der Rechner Kerne hat.
+\end{itemize}
+
+Übersteigt die Schätzung 70\,\% des Arbeitsspeichers, steht im Protokoll eine Warnung: \enquote{the
+estimated memory is \dots{} of the RAM – fewer orders (Nx, Nz) or fewer parallel scan points
+(threads.scan under Advanced)}. \gui{Scan} und \gui{Optimise} prüfen das vor dem Start ebenfalls und
+warnen im Protokoll; sie rechnen trotzdem.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Beispiel & $n_f$ & $n$ & Speicher je Punkt \\
+\midrule
+1D, $N_x = 10$ & 21 & 84 & \qty{1.3}{MiB} \\
+1D, $N_x = 20$ & 41 & 164 & \qty{4.9}{MiB} \\
+2D, $N_x = N_z = 10$ & 441 & 1764 & \qty{570}{MiB} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Ein 2D-Scan mit $N_x = N_z = 10$ auf acht Kernen braucht nach dieser Regel also rund
+\qty{4.5}{GiB}.
+
+\begin{hinweis}
+Die Schätzung ist eine Warnung, keine Vorhersage. Mit dem Runge-Kutta-Verfahren, vielen Scheiben
+oder der GPU kann der wirkliche Bedarf stark abweichen. Die Zahl der parallelen Scanpunkte begrenzen
+Sie unter \gui{Advanced} mit \code{\{\textquotedbl{}threads\textquotedbl{}: \{\textquotedbl{}scan\textquotedbl{}: 2\}\}}.
+\end{hinweis}
+
+\subsection{Optimieren: Optimise}\label{sec:fg-optimieren}
+\index{Optimierung (Gitter)}\index{L-BFGS-B}
+
+\gui{Optimise} sucht Werte für ausgewählte Zahlen der Konfiguration -- Schichtdicken,
+Lamellenkanten, Perioden --, die eine Zielfunktion maximieren oder minimieren. Das Verfahren ist
+L-BFGS-B (aus \code{scipy}) mit den exakten Gradienten, die FourierGrating über die adjungierte
+Methode liefert: ein Optimierungsschritt kostet etwa 1,3 bis 2,5 Rechnungen, unabhängig von der Zahl
+der Parameter. Gerechnet wird am ersten Punkt der Beleuchtung.
+
+\paragraph{Die Zielfunktion.} Die Tabelle \gui{Objective L = $\Sigma$ weight $\cdot$ efficiency}
+legt fest, welche Effizienzen zählen:
+\[
+  L = \sum_\text{Zeilen} w \cdot \eta(\text{side}, n, m).
+\]
+Jede Zeile hat die Spalten \gui{side} (\code{R} oder \code{T}), \gui{n}, \gui{m} (in 1D 0) und
+\gui{weight} ($w$, Standard 1). Zeilen mit derselben Ordnung werden zusammengezählt. \gui{Goal} wählt
+\code{maximise} (Standard) oder \code{minimise}.
+
+Beispiele:
+\begin{itemize}
+  \item Maximale Effizienz der $-1$. reflektierten Ordnung: eine Zeile \code{R, -1, 0, 1}.
+  \item Möglichst wenig Rückreflex: eine Zeile \code{R, 0, 0, 1}, \gui{Goal} = \code{minimise}.
+  \item Eine Ordnung stärken und eine andere schwächen: \code{R, -1, 0, 1} und \code{R, 0, 0, -1},
+    \gui{Goal} = \code{maximise}.
+\end{itemize}
+
+\paragraph{Die Parameter.}\label{sec:fg-zeiger}
+\index{JSON-Zeiger}
+Die Tabelle \gui{Parameters} nennt die Zahlen, die verändert werden dürfen, je mit Unter- und
+Obergrenze. Die Spalte \gui{JSON pointer} adressiert die Zahl in der Konfiguration (Schreibweise nach
+RFC 6901: mit \code{/} beginnend, Listenelemente über ihre Nummer ab 0):
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Zeiger & Bedeutung \\
+\midrule
+\code{/layers/0/thickness\_um} & Dicke der untersten Schicht \\
+\code{/layers/1/breakpoints\_um/1} & zweite Lamellenkante der zweiten Schicht \\
+\code{/period\_um/x} & Periode in x \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Bei einer Lamellenschicht ist \code{breakpoints\_um/0} die Kante bei 0 und die letzte Kante die
+Periode; optimieren Sie die Kanten dazwischen. Das Plugin prüft vor dem Start, dass jeder Zeiger in
+der Konfiguration steht, dort eine Zahl ist und dass der Startwert zwischen \gui{lower} und
+\gui{upper} liegt; sonst meldet es den Grund (etwa \enquote{/layers/0/thickness\_um = 0.1 lies outside
+its bounds [0.2, 0.5]}).
+
+\paragraph{Weitere Einstellungen.} \gui{Iterations} (Standard 50) begrenzt die Iterationen von
+L-BFGS-B. \gui{Apply the optimum to the panel} (Standard an) schreibt das Optimum nach dem Ende ins
+Panel.
+
+\paragraph{Ablauf und Ergebnisse.}
+\begin{itemize}
+  \item Im Fenster \gui{Plot} wächst die Kurve \enquote{objective L} über der Zahl der Auswertungen,
+    live während der Rechnung. Die Statusleiste zeigt den aktuellen Wert \enquote{L = …}.
+  \item \gui{Cancel} beendet die Suche nach der laufenden Auswertung; das Ergebnis ist der beste
+    bis dahin gefundene Punkt.
+  \item Am Ende zeigt das Fenster \gui{Table} die Tabelle \enquote{Parameters} mit den Spalten
+    \code{parameter}, \code{start}, \code{optimum}, \code{lower}, \code{upper}.
+  \item Das Protokoll nennt $L$ am Start und am Optimum, die Zahl der Auswertungen und die Meldung
+    des Optimierers; die Statusleiste etwa \enquote{L 0.3121 $\to$ 0.6842, applied to the panel}
+    (mit \enquote{(stopped)}, wenn Sie abgebrochen haben).
+\end{itemize}
+
+\begin{tipp}
+Ein Gradientenverfahren findet ein \emph{lokales} Optimum in der Nähe des Starts. Probieren Sie
+verschiedene Startwerte, oder verschaffen Sie sich zuerst mit einem Sweep (\gui{Scan}) einen
+Überblick über die Zielfunktion. Enge Grenzen halten die Struktur herstellbar.
+\end{tipp}
+
+\begin{hinweis}
+Das Optimum wird als neue Konfiguration ins Panel geschrieben, so als hätten Sie sie geladen. Das
+gilt auch für einen abgebrochenen Lauf (sofern mindestens eine Auswertung stattfand). Wollen Sie den
+Ausgangszustand behalten, speichern Sie die Konfiguration vorher mit \gui{Save configuration} oder
+schalten \gui{Apply the optimum to the panel} aus.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------------------------
+\section{Nahfeld}\label{sec:fg-nahfeld}
+\index{Nahfeld}
+
+\gui{Near field} berechnet das elektromagnetische Feld im Gitter und in seiner Umgebung am ersten
+Punkt der Beleuchtung und zeigt zwei Schnitte:
+
+\begin{description}
+  \item[Vertikaler Schnitt] in der x-y-Ebene, über \gui{Periods} Perioden in x und von \gui{y from}
+    bis \gui{y to} in y -- als Bild im Fenster \gui{Image}. Bei einem 2D-Gitter liegt er bei
+    $z$ = \gui{Vertical cut at z (2D)}.
+  \item[Horizontaler Schnitt] in der Höhe \gui{Horizontal cut at y}: bei einem 1D-Gitter eine
+    Kurve über x im Fenster \gui{Plot}, bei einem 2D-Gitter ein Bild in der x-z-Ebene.
+\end{description}
+
+Die Höhe $y = 0$ ist die Unterkante des Stapels (Grenze zum Substrat); negative Werte liegen im
+Substrat, Werte oberhalb der Stapeldicke im Superstrat.
+
+\subsection{Die Einstellungen}
+
+\begin{description}
+  \item[\gui{Show}] die dargestellte Größe:
+    \begin{itemize}
+      \item \code{|E|$^2$}, \code{|H|$^2$}: Betragsquadrat des elektrischen bzw. magnetischen
+        Feldes,
+      \item \code{Sy (power flow)}: der Energiefluss in y (Poynting-Vektor),
+      \item \code{|Ex|} bis \code{|Hz|}: der Betrag einer Komponente,
+      \item \code{Re Ex} bis \code{Re Hz}: der Realteil einer Komponente (Momentaufnahme der Welle),
+      \item \code{material}: die Materialverteilung -- zur Kontrolle der Geometrie.
+    \end{itemize}
+    Beträge erscheinen mit der Farbskala \code{inferno}, Realteile und \code{Sy} mit
+    \code{coolwarm} und einer um null symmetrischen Skala, das Material mit \code{viridis}.
+  \item[\gui{y from}, \gui{y to}] Bereich des vertikalen Schnitts in y (Standard $-0{,}2$ bis
+    $0{,}5$ \si{\micro\metre}).
+  \item[\gui{Horizontal cut at y}] Höhe des horizontalen Schnitts (Standard 0,1 \si{\micro\metre}).
+  \item[\gui{Vertical cut at z (2D)}] Lage des vertikalen Schnitts eines Kreuzgitters (Standard 0).
+  \item[\gui{Points x}, \gui{Points y}, \gui{Points z (2D)}] Auflösung (Standard 400, 300, 200).
+  \item[\gui{Periods}] wie viele Perioden in x (und z) gezeigt werden (Standard 2).
+  \item[\gui{Also write .npz}] schreibt alle Größen beider Schnitte mit ihren Achsen in eine
+    NumPy-Datei (\autoref{sec:fg-dateien}).
+\end{description}
+
+Die Normierung ist die von FourierGrating: die einfallende Welle hat $|E_\text{inc}| = 1$, das
+Magnetfeld wird als $Z_0 H$ angegeben. Die Bildbeschreibung im Fenster \gui{Image} nennt sie.
+
+\begin{hinweis}
+Die Werte der Gruppe \gui{Near field} gelangen nur dann in die Konfigurationsdatei, wenn die geladene
+Datei einen Block \code{nearfield} hatte oder Sie einen Wert vom Standard abweichend eingestellt
+haben. Weitere Schlüssel des Blocks (\code{quantities}, \code{reconstruction}, \code{field}) stehen
+unter \gui{Advanced}.
+\end{hinweis}
+
+Fehlt eine Größe im Ergebnis von FourierGrating, meldet das Plugin \enquote{the near field has no
+\dots{} (add it to nearfield.quantities under Advanced)}.
+
+\begin{tipp}
+Schauen Sie sich vor einer langen Rechnung mit \gui{Show} = \code{material} den vertikalen Schnitt
+an: Er zeigt sofort, ob Lamellen, Profile oder CAD-Körper so liegen, wie Sie es erwarten.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Schichten aus CAD-Körpern}\label{sec:fg-cad}
+\index{CAD-Schicht}\index{STEP}
+
+Komplizierte Elementarzellen -- schräge Flanken, Hinterschneidungen, mehrere Materialien --
+zeichnen Sie am bequemsten im CAD. Das Plugin schreibt die Körper als STEP-Datei und legt eine
+Schicht vom Typ \code{cad} an, die FourierGrating beim Rechnen in Bänder zerlegt.
+
+\subsection{Die Körper zeichnen}
+
+\begin{itemize}
+  \item Zeichnen Sie die Körper \textbf{einer} Elementarzelle als geschlossene Körper (Schalen,
+    siehe \autoref{kap:modellieren}).
+  \item Die CAD-Achse $+Z$ ist die Stapelrichtung (y von FourierGrating), $+X$ die Gitterrichtung
+    x. Bei einem 2D-Gitter ist die zweite Periode entsprechend die dritte Achse.
+  \item Die Einheit wählen Sie mit \gui{Bodies drawn in}: \si{\micro\metre} oder \code{mm}
+    (Standard Mikrometer).
+  \item Jeder Körper braucht ein Material: das Attribut \code{material} des Körpers (siehe
+    \autoref{kap:organisieren}) oder, wenn es fehlt, sein Name -- sofern er einem Material der
+    Materialliste entspricht. Ein Körper ohne passendes Material wird mit einer Meldung abgewiesen,
+    die die verfügbaren Materialien nennt.
+\end{itemize}
+
+\subsection{Die Schicht anlegen}
+
+\begin{schritte}
+  \item Wählen Sie die Körper im Ansichtsfenster aus und drücken Sie in der Gruppe \gui{CAD layer}
+    bei \gui{Bodies} auf \gui{Use selection}. Das Feld zeigt die Namen der Körper.
+  \item Wählen Sie unter \gui{STEP file} die Datei, in die die Körper geschrieben werden. Die Schicht
+    verweist mit ihrem absoluten Pfad auf diese Datei.
+  \item Wählen Sie \gui{Around the bodies}: das Material zwischen den Körpern, \code{superstrate}
+    (Standard) oder \code{substrate}.
+  \item Stellen Sie bei \gui{RCWA slices per band} ein, in wie viele Scheiben jedes Band der
+    RCWA zerlegt wird (Standard 30).
+  \item Wählen Sie \menu{Plugins,FourierGrating,Layer from CAD bodies}.
+\end{schritte}
+
+Das Plugin schreibt die Körper (in der gewählten Reihenfolge) als STEP, hängt eine Schicht vom Typ
+\code{json} mit dem Eintrag \code{\textquotedbl{}type\textquotedbl{}: \textquotedbl{}cad\textquotedbl{}} \textbf{oben} an den Stapel an und prüft sie
+sofort (wie \gui{Check CAD layers}). Die Statusleiste meldet etwa \enquote{3 bodies in
+zelle.step, cad layer 2 added (top); 4 bands, 0 errors, 0 warnings}. Mit $\uparrow$/$\downarrow$
+schieben Sie die Schicht an ihren Platz im Stapel.
+
+Hat das installierte \code{fouriergrating} keinen CAD-Slicer, wird die Schicht trotzdem angelegt;
+das Protokoll meldet \enquote{not checked: this fouriergrating has no CAD slicer …}.
+
+\subsection{Prüfen: Check CAD layers}
+
+\gui{Check CAD layers} führt die Geometrieprüfung von FourierGrating für jede \code{cad}-Schicht des
+Stapels aus und zeigt im Fenster \gui{Table}
+
+\begin{description}
+  \item[\enquote{Bands}] die Zerlegung in Bänder: Schicht, \code{y from / }\si{\micro\metre}, \code{y to / }\si{\micro\metre},
+    Art des Bandes (homogen, Extrusion, geschnitten) und die Flächenanteile je Material;
+  \item[\enquote{Findings}] (nur wenn es welche gibt) die Befunde: Schicht, Schwere (\code{error}
+    oder \code{warning}), Code, Meldung und Ort in \si{\micro\metre}.
+\end{description}
+
+Die Statusleiste fasst zusammen: \enquote{N bands, E errors, W warnings}, mit dem Zusatz
+\enquote{– not usable}, wenn die Schicht so nicht gerechnet werden kann.
+
+Steht unter \gui{Preview SVG} eine Datei, schreibt die Prüfung dorthin zusätzlich den Schnitt der
+ersten \code{cad}-Schicht in der Höhe \gui{Preview at height} -- ein Bild, das Sie in jedem Browser
+öffnen können.
+
+% ---------------------------------------------------------------------------------------------
+\section{Konfigurationsdateien}\label{sec:fg-dateien}
+\index{Konfigurationsdatei (FourierGrating)}
+
+\subsection{Laden und Speichern}
+
+FourierGrating speichert ein Gitter als JSON-Datei. Das Plugin liest und schreibt dieses Format so,
+dass Laden und erneutes Speichern dieselbe Datei ergibt: auch die Reihenfolge der Schlüssel bleibt
+erhalten.
+
+\begin{description}
+  \item[\gui{Load configuration}] liest die Datei aus \gui{Configuration} (Gruppe \gui{File}) ins
+    Panel. Struktur, Beleuchtung, Materialien, Schichten und Nahfeldeinstellungen werden ersetzt;
+    die Einstellungen von Scan, Optimierung und CAD-Schicht bleiben. Die Statusleiste nennt die
+    Zahl der Materialien und Schichten (\enquote{(some as JSON)}, wenn Schichten als JSON
+    erscheinen).
+  \item[\gui{Save configuration}] schreibt die Konfiguration des Panels in die Datei aus
+    \gui{Save as} -- oder, wenn dieses Feld leer ist, in die Datei aus \gui{Configuration}.
+\end{description}
+
+\begin{warnung}
+Ist \gui{Save as} leer, überschreibt \gui{Save configuration} die geladene Datei ohne Rückfrage.
+Wählen Sie unter \gui{Save as} eine neue Datei, wenn Sie das Original behalten wollen.
+\end{warnung}
+
+\subsection{Weitere Einstellungen (Advanced)}\label{sec:fg-advanced}
+
+Das Panel zeigt nur die Teile einer Konfiguration als Felder, die man am häufigsten bearbeitet.
+Alles andere -- Solver-Optionen (\code{rcwa}, \code{rk}, \code{backend}, \code{precision},
+\code{threads}, \dots), ein \code{sweep}, die Ausgabe (\code{output}), weitere Schlüssel von
+\code{incidence}, \code{truncation} und \code{nearfield} -- steht unverändert als JSON-Objekt in
+\gui{Further settings (JSON)} der Gruppe \gui{Advanced}. Beim Speichern wird es wieder in die
+Konfiguration eingefügt. Die Bedeutung dieser Schlüssel beschreibt die Formatdokumentation von
+FourierGrating (\datei{docs/config\_format.md} dort).
+
+Ein Beispiel mit mehr RCWA-Scheiben und höchstens vier parallelen Scanpunkten:
+
+\begin{lstlisting}
+{ "rcwa": { "slices": 60 }, "threads": { "scan": 4 } }
+\end{lstlisting}
+
+\begin{hinweis}
+Schlüssel wie \code{dimension}, \code{solver}, \code{truncation.Nx} oder \code{period\_um.z}, die die
+geladene Datei nicht hatte, schreibt das Plugin nur, wenn Sie sie vom Standardwert abweichend
+eingestellt haben. So bleibt eine Datei, die Sie nur laden und wieder speichern, unverändert.
+\end{hinweis}
+
+\subsection{Exportierte Dateien}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Feld & Aktion & Inhalt \\
+\midrule
+\endhead
+\gui{Save as} & \gui{Save configuration} & Konfiguration von FourierGrating (JSON, eingerückt) \\
+\gui{Solve: also write CSV} & \gui{Solve} & Ordnungstabelle: \code{side, n, m, efficiency, eff\_s, eff\_p} \\
+\gui{Also write CSV} (\gui{Scan}) & \gui{Scan} & jede Ordnung an jedem Punkt wie \datei{efficiencies.csv} \\
+\gui{Also write .npz} & \gui{Near field} & alle Größen beider Schnitte mit Achsen und Metadaten \\
+\gui{STEP file} & \gui{Layer from CAD bodies} & die gewählten Körper als STEP \\
+\gui{Preview SVG} & \gui{Check CAD layers} & Schnitt der ersten \code{cad}-Schicht \\
+\bottomrule
+\end{referenz}
+
+Die genauen Spalten und Feldnamen stehen im Anhang (\autoref{kap:plugin-fouriergrating}).
+
+% ---------------------------------------------------------------------------------------------
+\section{Das Gitter als Block im Workflow}\label{sec:fg-block}
+\index{Gitterblock}\index{Jones-Tabelle}
+
+Im Node-Workflow (\autoref{kap:workflow}) beschreiben Blöcke einen optischen Aufbau -- Quellen,
+Linsen, Spiegel, Kameras. Das FourierGrating-Plugin liefert zwei Blocktypen, mit denen ein
+rigoros gerechnetes Gitter oder ein Schichtstapel Teil eines solchen Aufbaus wird:
+
+\begin{description}
+  \item[\block{fg.grating}] eine periodische Probe, die jede gewünschte Beugungsordnung als eigenen
+    Kanal weitergibt -- ein Strahlteiler, dessen Ausgänge die Ordnungen sind. Er hat einen Eingang
+    \code{in} und einen Ausgang \code{out} (\enquote{orders}) und nimmt den Platz eines Spiegels
+    oder einer Platte ein. In älteren Dokumenten hieß der Typ \block{fusion.grating}; solche Dokumente
+    werden weiterhin geladen.
+  \item[\block{fg.stack}] ein lateral unendlich ausgedehnter Stapel homogener Schichten zwischen zwei
+    Medien -- Beschichtung, Filter, Spiegelschichten --, exakt für jede Strahlrichtung gerechnet
+    (FourierGrating mit $N = 0$), mit Licht von beiden Seiten (Ein- und Ausgänge \code{front\_in},
+    \code{front\_out}, \code{back\_in}, \code{back\_out}).
+\end{description}
+
+Die Workflow-Engine schickt die Auswertung dieser Blöcke an den Prozess des Plugins
+FourierGrating.
+Ports, Parameter und ihre Bedeutung stehen im Anhang (\autoref{sec:fg-ref-bloecke}) und in
+\autoref{kap:workflow-bloecke}.
+
+\subsection{Jones-Tabelle oder Konfiguration}
+
+Ein Gitterblock kennt zwei Arten, die Wirkung des Gitters zu beschreiben:
+
+\begin{itemize}
+  \item eine \textbf{Jones-Tabelle}: für jede Ordnung die leistungsnormierten Jones-Matrizen über
+    Wellenlänge und Einfallsrichtung, vorab berechnet (Parameter \param{table}); der Block braucht
+    dann keinen FourierGrating-Rechenkern;
+  \item eine \textbf{FourierGrating-Konfiguration}: der Block baut die Tabelle selbst, passend zu
+    den einfallenden Strahlen -- um deren Wellenlänge und den Bereich ihrer Richtungskosinus
+    $\sigma$, mit einem Rand und Stützstellen im Abstand \gui{$\sigma$ step of the table} (Gruppe
+    \gui{Ray path}). Für ein Feld (Darstellung H) rechnet er jede ebene Welle des Spektrums.
+\end{itemize}
+
+Hält ein Block eine Jones-Tabelle, wird diese verwendet und nicht die Konfiguration.
+
+\subsection{Die Konfiguration liegt im Dokument}
+
+Seit RTT-Fusion W75 hält ein Gitter- oder Stapelblock seine Konfiguration selbst
+(Parameter \param{config}). Ein \datei{.rttf}-Dokument rechnet damit auf jedem Rechner, ohne weitere
+Dateien. Ältere Blöcke, die noch auf eine Datei verweisen (Parameter \param{fouriergrating}),
+bekommen deren Inhalt, sobald \gui{Check workflow} oder \gui{Run workflow} die Datei lesen kann; der
+Pfad wird dann geleert.
+
+Zwischen Panel und Block wechseln Sie mit zwei Aktionen im \textbf{Kontextmenü des Blocks} im
+Node-Editor (\maus{Rechtsklick} auf den Block):
+
+\begin{description}
+  \item[\gui{Store panel configuration in block}] Die Konfiguration des Panels wird die des Blocks.
+    Der Block verweist danach auf keine Datei mehr; eine Jones-Tabelle eines Gitterblocks wird
+    verworfen (sie würde sonst statt der Konfiguration verwendet). Die Statusleiste meldet die Zahl
+    der Materialien und Schichten und, falls zutreffend, \enquote{its Jones table is dropped}.
+  \item[\gui{Load block configuration into panel}] zeigt die Konfiguration des Blocks im Panel. Dort
+    können Sie sie bearbeiten, mit \gui{Solve}, \gui{Scan} und \gui{Optimise} untersuchen und mit
+    \gui{Store panel configuration in block} zurückschreiben. Das Feld \gui{Configuration} wird
+    dabei geleert, damit \gui{Save configuration} nicht versehentlich eine fremde Datei überschreibt.
+\end{description}
+
+Ein Block, der nur eine Jones-Tabelle hat, besitzt keine Konfiguration; \gui{Load block
+configuration into panel} meldet dann \enquote{… holds no FourierGrating configuration}. Beide
+Aktionen funktionieren auch für Blöcke in Gruppen (in der aktiven Variante).
+
+\subsection{Der Dialog des Blocks}
+
+Ein \maus{Doppelklick} auf den Block öffnet seinen Dialog. Hat der Block eine Konfiguration, zeigt
+der Dialog deren wichtigste Zahlen als Felder, die Sie direkt ändern können:
+
+\begin{description}
+  \item[\gui{Grating}] \gui{Period x} (in 2D auch \gui{Period z}) und
+    \gui{Fourier orders Nx ($-$N … N)} (in 2D auch \gui{Nz});
+  \item[\gui{Layers}] je Schicht \gui{Layer $i$ (Typ): thickness} und bei Lamellen
+    \gui{Layer $i$ (Typ): lamella edges} -- die Schichten von 1 an gezählt;
+  \item[\gui{Materials}] je Material \gui{Name: n} oder \gui{Name: n, k}.
+\end{description}
+
+Daneben stehen die Einstellungen des Blocks selbst: Lage (\param{point}, \param{normal}, \param{grating\_\allowbreak vector}), die weitergegebene Seite (\param{side}: \code{reflected} oder
+\code{transmitted}), die Auswahl der Ordnungen (\param{orders}, leer: alle), die Tabellenauflösung
+(\gui{Ray path}) und die Einstellungen des Feldpfads (\gui{Field path}).
+
+\begin{tipp}
+Für einen Stapelblock speichern Sie im Panel eine Konfiguration mit ausschließlich homogenen
+Schichten, von unten (Substrat, Rückseite des Blocks) nach oben (Superstrat, Vorderseite, in
+Richtung \param{normal}). Eine Lamellen- oder Profilschicht weist der Stapelblock ab: sie gehört in
+einen \block{fg.grating}.
+\end{tipp}
+
+% ---------------------------------------------------------------------------------------------
+\section{Arbeitsabläufe Schritt für Schritt}\label{sec:fg-ablaeufe}
+
+\subsection{Die erste Rechnung: eine Glasoberfläche}\label{sec:fg-ablauf-erste}
+
+Diese Rechnung prüft, ob das Plugin und seine Umgebung funktionieren, und hat ein bekanntes
+Ergebnis: die Fresnel-Reflexion von Glas.
+
+\begin{schritte}
+  \item Öffnen Sie das Dock \gui{Plugin} und wählen Sie oben \gui{FourierGrating}.
+  \item Drücken Sie \gui{Reset parameters}. Das Panel enthält jetzt die Standardwerte: Luft über
+    Glas ($n = 1{,}5$), keine Schichten, $\lambda = 0{,}6328$ \si{\micro\metre}, senkrechter Einfall.
+  \item Drücken Sie \gui{Solve}.
+  \item Im Fenster \gui{Table} steht die Ordnungstabelle. Die Ordnung \code{R 0} hat die Effizienz
+    $((1{,}5-1)/(1{,}5+1))^2 = 0{,}04$, \code{T 0} den Rest $0{,}96$; die übrigen Ordnungen sind
+    ohne Gitter null.
+  \item Im \gui{Plugin log} stehen $\Sigma R = 0{,}04$, $\Sigma T = 0{,}96$ und eine Absorption $A$ von (nahezu) null.
+\end{schritte}
+
+Erscheint stattdessen die Meldung über das fehlende Paket \code{fouriergrating}, richten Sie die
+Umgebung ein (\autoref{sec:fg-voraussetzungen}).
+
+\subsection{Ein binäres Reflexionsgitter}\label{sec:fg-ablauf-lamellen}
+
+Ein Lamellengitter aus Glas auf Glas, \qty{0.3}{\micro\metre} tief, Periode
+\qty{1}{\micro\metre}, Tastverhältnis 0,5.
+
+\begin{schritte}
+  \item Setzen Sie in \gui{Structure} \gui{Period x} = 1 und lassen Sie \gui{Orders Nx} = 10.
+  \item Fügen Sie unter \gui{Layers (bottom to top)} mit \gui{Add} eine Schicht hinzu und öffnen Sie
+    sie mit \gui{Edit…}.
+  \item Wählen Sie \gui{Type} = \code{lamellar1d}, \gui{Thickness} = 0.3.
+  \item Tragen Sie in \gui{Lamellae (lamellar1d)} zwei Zeilen ein: \code{0.0 glass} und
+    \code{0.5 air}. Setzen Sie \gui{End (lamellar1d)} = 1.0. Schließen Sie den Dialog.
+  \item Drücken Sie \gui{Solve}. Die Tabelle zeigt jetzt Effizienzen in den Ordnungen $\pm 1$ und
+    höher; $\Sigma R + \Sigma T = 1$ (verlustfrei).
+  \item Prüfen Sie die Konvergenz: setzen Sie \gui{Orders Nx} = 20 und rechnen Sie erneut. Die
+    Effizienzen sollten sich nur noch in den hinteren Stellen ändern.
+\end{schritte}
+
+\subsection{Spektrum einer Ordnung in beiden Polarisationen}
+
+\begin{schritte}
+  \item Ausgehend vom Gitter des vorigen Abschnitts: tragen Sie bei \gui{$\lambda$ /
+    \si{\micro\metre}} den Bereich \code{0.4:0.8:41} ein und bei \gui{$\delta$ / deg} die Liste
+    \code{0, 90}.
+  \item Drücken Sie \gui{Estimate}: 82 Rechnungen, Matrixgröße 84.
+  \item Lassen Sie \gui{x axis} auf \code{auto} (die Wellenlänge hat die meisten Werte) und drücken
+    Sie \gui{Scan}.
+  \item Das Fenster \gui{Plot} zeigt $\Sigma R$, $\Sigma T$ und alle Ordnungen über 1\,\% -- jede
+    zweimal, mit \code{($\delta$ = 0)} und \code{($\delta$ = 90)}.
+  \item Wollen Sie die Zahlen weiterverarbeiten, wählen Sie unter \gui{Also write CSV} eine Datei
+    und scannen erneut.
+\end{schritte}
+
+Die Ordnungen $\pm 1$ verschwinden im Superstrat, sobald $\lambda > \Lambda_x$ (bei senkrechtem
+Einfall in Luft): ihre Kurven enden dort.
+
+\subsection{Ein Littrow-Gitter optimieren}\label{sec:fg-ablauf-optimieren}
+
+Ziel: möglichst viel Licht in die $-1$. reflektierte Ordnung unter Littrow-Einfall, durch Wahl von
+Tiefe und Lamellenbreite.
+
+\begin{schritte}
+  \item Bauen Sie das Lamellengitter aus \autoref{sec:fg-ablauf-lamellen} auf, eine Wellenlänge
+    (\code{0.6328}), \gui{$\delta$} = \code{90}.
+  \item Setzen Sie \gui{Littrow order} = $-1$ und wählen Sie \gui{Set Littrow angle}. $\varphi$
+    wird \ang{18.4454}.
+  \item Rechnen Sie einmal \gui{Solve} und notieren Sie die Effizienz von \code{R -1}.
+  \item Tragen Sie in \gui{Objective L = $\Sigma$ weight $\cdot$ efficiency} eine Zeile ein:
+    \gui{side} \code{R}, \gui{n} \code{-1}, \gui{m} \code{0}, \gui{weight} \code{1}. \gui{Goal}
+    bleibt \code{maximise}.
+  \item Tragen Sie in \gui{Parameters} zwei Zeilen ein:
+    \code{/layers/0/thickness\_um} mit den Grenzen 0.05 und 0.8, und
+    \code{/layers/0/breakpoints\_um/1} mit den Grenzen 0.2 und 0.8.
+  \item Drücken Sie \gui{Optimise}. Verfolgen Sie im \gui{Plot} die Kurve \enquote{objective L}.
+  \item Nach dem Ende stehen die optimierten Werte in der Tabelle \enquote{Parameters} und -- mit
+    \gui{Apply the optimum to the panel} -- im Panel. \gui{Solve} bestätigt das Ergebnis.
+\end{schritte}
+
+\begin{hinweis}
+Ändern Sie mit der Optimierung eine Lamellenkante, bleibt das Ende (\gui{End}) bei der Periode.
+Optimieren Sie die Periode selbst (\code{/period\_um/x}), passt das Plugin die Lamellenkanten
+\emph{nicht} an -- die letzte Kante wäre danach falsch (\autoref{sec:fg-lamellen}). Optimieren Sie
+die Periode nur bei Schichten ohne Lamellen oder nehmen Sie die letzte Kante als weiteren Parameter
+mit gleichen Grenzen auf.
+\end{hinweis}
+
+\subsection{Eine Schichtdicke durchfahren (Sweep)}
+
+\begin{schritte}
+  \item Setzen Sie alle Beleuchtungsfelder auf einzelne Zahlen.
+  \item Tragen Sie unter \gui{Advanced} ein:
+
+\begin{lstlisting}
+{ "sweep": { "parameter": "/layers/0/thickness_um",
+             "values": { "from": 0.05, "to": 0.5, "steps": 46 } } }
+\end{lstlisting}
+  \item Wählen Sie \gui{x axis} = \code{sweep\_value} (oder \code{auto}) und drücken Sie \gui{Scan}.
+  \item Die Kurven zeigen die Effizienzen über der Schichtdicke; die x-Achse trägt den Namen des
+    Parameters.
+\end{schritte}
+
+Entfernen Sie den Sweep danach wieder aus \gui{Advanced}, sonst rechnet jeder weitere Scan ihn mit.
+
+\subsection{Das Nahfeld eines Gitters ansehen}
+
+\begin{schritte}
+  \item Stellen Sie das Gitter ein und prüfen Sie die Effizienzen mit \gui{Solve}.
+  \item Wählen Sie in der Gruppe \gui{Near field} \gui{Show} = \code{material} und drücken Sie
+    \gui{Near field}. Das Bild zeigt die Geometrie über zwei Perioden.
+  \item Passen Sie \gui{y from}/\gui{y to} so an, dass der Stapel und etwas Superstrat und Substrat
+    sichtbar sind -- bei \qty{0.3}{\micro\metre} Tiefe etwa $-0{,}2$ bis $0{,}6$.
+  \item Wählen Sie \gui{Show} = \code{|E|$^2$} und rechnen Sie erneut. Für eine Momentaufnahme der
+    Welle nehmen Sie \code{Re Ez} (s-Polarisation in 1D) oder \code{Re Hz} (p-Polarisation).
+  \item Für die Auswertung in Python wählen Sie unter \gui{Also write .npz} eine Datei.
+\end{schritte}
+
+\subsection{Eine Elementarzelle aus dem CAD rechnen}
+
+\begin{schritte}
+  \item Legen Sie im Panel die Materialien an, z.\,B. \code{si} mit $n = 3{,}88$, $k = 0{,}02$.
+  \item Zeichnen Sie die Körper einer Elementarzelle (Einheit Mikrometer, Stapelrichtung $+Z$,
+    Gitterrichtung $+X$), z.\,B. einen Quader von $x = 0$ bis $0{,}4$ und $z = 0$ bis $0{,}3$.
+  \item Geben Sie jedem Körper das Attribut \code{material} mit dem Materialnamen -- oder benennen
+    Sie den Körper wie das Material.
+  \item Wählen Sie die Körper aus, drücken Sie bei \gui{Bodies} auf \gui{Use selection} und wählen
+    Sie eine \gui{STEP file}.
+  \item Drücken Sie \gui{Layer from CAD bodies}. Die Tabelle \enquote{Bands} zeigt die Zerlegung;
+    eine Tabelle \enquote{Findings} erscheint nur bei Problemen.
+  \item Setzen Sie die Periode passend zur gezeichneten Zelle und rechnen Sie mit \gui{Solve}.
+\end{schritte}
+
+\subsection{Eine Konfiguration in einen Gitterblock übernehmen}
+
+So bringen Sie ein Gitter, das Sie in GUI-FourierGrating oder im Panel aufgebaut haben, in den
+Node-Workflow:
+
+\begin{schritte}
+  \item Laden Sie die Konfiguration: Datei unter \gui{Configuration} wählen, \gui{Load configuration}
+    -- oder bauen Sie sie im Panel auf.
+  \item Legen Sie im Node-Editor einen Block \block{fg.grating} an (oder ersetzen Sie einen Spiegel
+    mit \gui{Replace with}), siehe \autoref{kap:workflow}.
+  \item \maus{Rechtsklick} auf den Block, \gui{Store panel configuration in block}.
+  \item Stellen Sie im Dialog des Blocks (\maus{Doppelklick}) Lage, Gittervektor, Seite und Ordnungen
+    ein.
+  \item Prüfen und rechnen Sie den Workflow mit \gui{Check workflow} und \gui{Run workflow}.
+\end{schritte}
+
+Später ändern: \maus{Rechtsklick}, \gui{Load block configuration into panel}, bearbeiten, wieder
+\gui{Store panel configuration in block}.
+
+% ---------------------------------------------------------------------------------------------
+\section{Typische Fehler und Meldungen}\label{sec:fg-fehler}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{6.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Meldung & Ursache und Abhilfe \\
+\midrule
+\endhead
+\code{The FourierGrating plugin needs the Python package fouriergrating …} & Paket fehlt in der
+  Plugin-Umgebung: \gui{Create environment…} oder \code{pip install fouriergrating}. \\
+\code{Choose the configuration first: File $\to$ Configuration.} & \gui{Load configuration} ohne Datei:
+  unter \gui{Configuration} eine Datei wählen. \\
+\code{Choose where to save: File $\to$ Save as.} & \gui{Save configuration} ohne Ziel. \\
+\code{The panel does not give a valid configuration: …} & Ein Feld der Beleuchtung lässt sich nicht
+  lesen (z.\,B. Komma statt Punkt, \code{0,5:0,7:21}), oder eine Tabelle ist unvollständig. \\
+\code{FourierGrating: …} & Meldung des Rechenkerns, etwa ein unbekannter Materialname, ein
+  verlustbehaftetes Superstrat oder eine fehlerhafte JSON-Schicht. Der Text nennt meist den
+  JSON-Zeiger. \\
+\code{the scan has a single point …} & \gui{Scan} ohne Liste, Bereich oder Sweep. \\
+\code{… does not vary in this scan (varying: …)} & Die gewählte \gui{x axis} variiert nicht. \\
+\code{no objective terms – add a row (side, n, m, weight)} & Tabelle der Zielfunktion leer. \\
+\code{no parameters – add a row (JSON pointer, lower, upper)} & Parametertabelle leer. \\
+\code{… is not in the configuration} & JSON-Zeiger falsch, z.\,B. Schicht nicht vorhanden oder
+  Tippfehler im Schlüssel. \\
+\code{… lies outside its bounds […]} & Startwert außerhalb der Grenzen: Grenzen erweitern oder Wert
+  im Panel ändern. \\
+\code{Littrow needs a period x > 0} & \gui{Period x} ist 0. \\
+\code{order … has no Littrow angle here …} & Ordnung 0 oder $|\sin\varphi| > 1$: andere Ordnung oder
+  kürzere Wellenlänge. \\
+\code{Choose the bodies first: …} & \gui{Layer from CAD bodies} ohne Körper. \\
+\code{body … has no material …} & Körper ohne Attribut \code{material} und ohne passenden Namen. \\
+\code{No cad layer – add one with Layer from CAD bodies (or as JSON).} & \gui{Check CAD layers}
+  ohne \code{cad}-Schicht. \\
+\code{this fouriergrating has no CAD slicer …} & \code{fouriergrating} ohne
+  \code{FG\_ENABLE\_NURBFORGE}. \\
+\code{The document has no node workflow.} / \code{The block … is gone …} & Blockaktion, während der
+  Workflow fehlt oder der Block gelöscht wurde. \\
+\bottomrule
+\end{referenz}
+
+\begin{warnung}
+Die häufigste stille Fehlerquelle sind Lamellenkanten, die nicht bei der Periode enden
+(\autoref{sec:fg-lamellen}). Prüfen Sie nach jeder Änderung der Periode das Feld \gui{End} -- oder
+sehen Sie sich mit \gui{Near field} und \gui{Show} = \code{material} die Geometrie an.
+\end{warnung}
+
+% ---------------------------------------------------------------------------------------------
+\section{Grenzen}\label{sec:fg-grenzen}
+
+\begin{itemize}
+  \item \gui{Solve}, \gui{Near field} und \gui{Optimise} rechnen nur den ersten Punkt einer
+    Beleuchtungsliste; das Nahfeld eines Sweeps gilt für dessen ersten Wert.
+  \item Eine laufende Rechnung von FourierGrating lässt sich nicht unterbrechen
+    (\autoref{sec:fg-ueberblick}); große Rechnungen vorher abschätzen.
+  \item Die Speicherschätzung ist eine Faustregel und kann deutlich danebenliegen.
+  \item Das Panel zeigt nur homogene und Lamellenschichten sowie Materialien mit Brechzahl als
+    Felder; alles andere bearbeiten Sie als JSON. Das Plugin prüft JSON-Einträge nicht selbst.
+  \item Lamellenkanten werden nicht gegen die Periode geprüft.
+  \item Die Optimierung findet lokale Optima; die Parameter müssen Zahlen der Konfiguration sein.
+  \item CAD-Schichten brauchen ein \code{fouriergrating} mit CAD-Slicer. Die Schicht verweist auf die
+    STEP-Datei über ihren absoluten Pfad.
+  \item Die Workflow-Blöcke gibt es nur mit einem installierten \code{rtt-fusion}, das Fernblöcke
+    unterstützt; ohne das Plugin rechnet die Workflow-Engine einen Gitterblock selbst, mit demselben
+    Ergebnis.
+\end{itemize}

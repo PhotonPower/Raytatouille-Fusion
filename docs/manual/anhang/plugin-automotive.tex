@@ -1,0 +1,709 @@
+% Anhang: Referenz des Automotive-Lighting-Plugins
+% Quellen: python/plugins/automotive_lighting/al_plugin.py (Parameter, Aktionen), al_optics.py
+% (Lampen), al_coil.py (Kolben, Wendel), al_photometry.py (Prüfpunkte), al_optimise.py,
+% al_trace.py, al_reflector.py, al_lens.py, plugin.json, README.md
+\chapter{Referenz: Automotive-Lighting-Plugin}\label{kap:plugin-automotive}
+\index{Automotive Lighting}
+
+Dieser Anhang listet alle Aktionen, Parameter, Daten und Ergebnisse des Plugins \plugin{Automotive
+Lighting}. Die Bedienung erklärt \autoref{kap:automotive}.
+
+\section{Steckbrief}\label{sec:al-ref-steckbrief}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Eigenschaft & Wert \\
+\midrule
+\endhead
+Name & \plugin{Automotive Lighting} \\
+Kennung (\param{id}) & \code{al} \\
+Version & 0.22.0 \\
+Plugin-API & 1 \\
+Einstiegspunkt & \code{al\_plugin:AutomotiveLighting} \\
+Python-Pakete (\param{requires}) & \code{numpy}, \code{pathtracer>=0.3} \\
+Ordner & \datei{python/plugins/automotive\_lighting} (wird mit der Anwendung installiert) \\
+\bottomrule
+\end{referenz}
+
+\section{Python-Anforderungen}\label{sec:al-ref-python}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Paket / Voraussetzung & Wofür \\
+\midrule
+\endhead
+\code{numpy} & alle Aktionen \\
+\code{pathtracer} $\geq$ 0.3.0 & C++-Kern des Raytracings (\gui{Light distribution (ray tracing)},
+  \gui{Optimise lens} mit gemessener Unschärfe); \gui{Kernel} = \code{C++} verlangt es \\
+Plugin \plugin{Path Tracer} im Nachbarordner \datei{pathtracer} & NumPy-Kern des Raytracings, wenn
+  \code{pathtracer} fehlt oder \gui{Kernel} = \code{NumPy} \\
+\bottomrule
+\end{referenz}
+
+Entwurf, \gui{Filament images}, \gui{Light distribution}, \gui{Generate lamp}, \gui{Show strips} und
+\gui{Default zones} brauchen nur \code{numpy}.
+
+% ---------------------------------------------------------------------------------------------
+\section{Aktionen}\label{sec:al-ref-aktionen}
+
+In dieser Reihenfolge im Menü \menu{Plugins,Automotive Lighting}, im Panel und in der
+Werkzeugspalte:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.8cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{4.0cm}}
+\toprule
+Aktion & Wirkung & Ergebnis \\
+\midrule
+\endhead
+\gui{Filament images} & Umrisse der Wendelbilder von Punkten über den ganzen Spiegel auf dem
+  Messschirm, mit der Hell-Dunkel-Grenze & Bild \enquote{Filament images} im Satz \enquote{Filament
+  images <Lampe>} \\
+\gui{Generate reflector} & Spiegel als getrimmte NURBS-Flächen (Facetten und Verbindungsflächen
+  bzw. Paraboloid), Streuscheibe (Außenseite, Elemente, Wände) und Wendelzylinder & Gruppe
+  \enquote{Reflector <Lampe>} bzw. \enquote{Headlamp <Lampe>}; ersetzt den vorigen Lauf \\
+\gui{Generate lamp} & die Lampe des Raytracings als NURBS-Flächen: Draht der Wendel, Kolben, Kuppe,
+  Schirm und zweite Wendel der H4 & Gruppe \enquote{Lamp <Lampe>} mit Untergruppen; ersetzt die
+  vorige Lampe \\
+\gui{Light distribution} & Lichtstärke des Abblendlichts (oder der Signalleuchte), Prüfpunkte, Schärfe
+  der Grenze & Satz \enquote{Low beam <Lampe>}: Bild, Tabelle, zwei Schnitte \\
+\gui{Light distribution (ray tracing)} & dasselbe durch Raytracing mit Drahtwendel, Kolben, Schirm,
+  Kappe, Spiegel und Scheibe als Flächen (Kern des Path Tracers) & Satz \enquote{Low beam <Lampe> –
+  ray tracing} bzw. \enquote{Driving beam H4 – ray tracing} \\
+\gui{Optimise lens} & wählt das Element jeder Zelle (Prisma und Zylinderlinse) für R112 mit Reserve
+  (Streuscheibe, Lampe mit Schirm) & Parameter \param{elements} (und \param{lens\_sectors}); Sätze
+  \enquote{… – optimised lens, filament images} und \enquote{…, ray tracing} \\
+\gui{Default zones} & setzt die Zonentabelle für die gewählte Verkehrsseite & Parameter \param{zones} \\
+\gui{Show strips} & Startkurve und einige charakteristische Streifen jeder Facette als Linien
+  (nur Klarglas) & Satz \enquote{Strips <Lampe>}: Linien \enquote{Start curves},
+  \enquote{Characteristic strips} \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Parameter}\label{sec:al-ref-parameter}
+
+Spalten wie in \autoref{sec:fg-ref-parameter}: Schlüssel und Beschriftung, Typ und Standard, Einheit
+und Bereich (\enquote{frei}: ohne Grenze), Bedeutung. Die Gruppen stehen in der Reihenfolge des Panels.
+
+\subsection{Gruppe System}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{system}\newline\gui{System} & Auswahl; \code{clear lens: facetted reflector} & \code{clear
+  lens: facetted reflector}, \code{patterned lens: paraboloid and lens} & Klarglas: die Facetten formen
+  Bündel und Grenze; Streuscheibe: Paraboloid, die Elemente der Scheibe lenken und streuen (Gruppen
+  \gui{Frame}, \gui{Lamp}, \gui{Lens}) \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Lamp}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{lamp}\newline\gui{Lamp} & Auswahl; \code{H7} & H1, H4 (low beam), H7, H8, H9, H11, HB3, HB4,
+  H3, P21W, PY21W, R10W, R5W, Custom & Lampentyp (Daten in \autoref{sec:al-ref-lampen}); Custom: die
+  Felder darunter \\
+\param{custom\_length}\newline\gui{Custom: filament length} & Zahl (2 Stellen); 4.1 & mm; 0,1 bis 30 &
+  Wendellänge \\
+\param{custom\_diameter}\newline\gui{Custom: filament diameter} & Zahl (2 Stellen); 1.3 & mm; 0,05
+  bis 10 & Wendeldurchmesser \\
+\param{custom\_flux}\newline\gui{Custom: luminous flux} & Zahl (0 Stellen); 1500 & lm; 1 bis 100\,000 &
+  Lichtstrom \\
+\param{custom\_watts}\newline\gui{Custom: power} & Zahl (1 Stelle); 55 & W; 0,1 bis 1000 & Leistung bei
+  12 V; für die Drahtwendel des Raytracings \\
+\param{custom\_across}\newline\gui{Custom: filament across the axis} & Schalter; aus & -- & Wendel
+  waagerecht quer zur Lampenachse (wie H3, Signallampen) \\
+\param{position}\newline\gui{Filament centre} & Punkt (\gui{Pick}); (0, 0, 0) & mm & Mittelpunkt der
+  Wendel; das Licht verlässt den Scheinwerfer in $+X$, $+Z$ ist oben \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Cut-off}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{traffic}\newline\gui{Traffic} & Auswahl; \code{right-hand} & \code{right-hand},
+  \code{left-hand} & Rechtsverkehr: die Grenze steigt nach rechts an \\
+\param{cutoff\_v}\newline\gui{Horizontal part at V} & Zahl (2 Stellen); $-0.57$ & \si{\degree}; $-10$
+  bis 5 & Höhe des waagerechten Asts; $-\ang{0.57}$ = 1\,\% unter dem Horizont \\
+\param{cutoff\_rise}\newline\gui{Rise} & Zahl (1 Stelle); 15 & \si{\degree}; 0 bis 60 & Anstieg des
+  ansteigenden Asts \\
+\param{cutoff\_kink}\newline\gui{Kink at H} & Zahl (2 Stellen); 0 & \si{\degree}; $-10$ bis 10 & Lage
+  des Knicks \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Frame}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{frame\_curves}\newline\gui{Frame (curves)} & Objekte (mehrere, \gui{Use selection}); leer & Art
+  \code{curve} & geschlossener Umriss des Spiegels, entlang X gesehen; leer: das gerundete Rechteck \\
+\param{frame\_width}\newline\gui{Width} & Zahl (1 Stelle); 170 & mm; 10 bis 1000 & Breite des
+  Rechtecks \\
+\param{frame\_height}\newline\gui{Height} & Zahl (1 Stelle); 100 & mm; 10 bis 1000 & Höhe des
+  Rechtecks \\
+\param{frame\_radius}\newline\gui{Corner radius} & Zahl (1 Stelle); 20 & mm; 0 bis 500 & Eckenradius \\
+\param{frame\_y}\newline\gui{Centre to the left of the lamp axis} & Zahl (1 Stelle); 0 & mm; frei &
+  Verschiebung der Rechteckmitte nach links \\
+\param{frame\_z}\newline\gui{Centre above the lamp axis} & Zahl (1 Stelle); 0 & mm; frei & Verschiebung
+  nach oben \\
+\param{hole\_radius}\newline\gui{Lamp hole radius} & Zahl (1 Stelle); 12 & mm; 0 bis 200 & Radius des
+  Lampenlochs \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Reflector}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{focal}\newline\gui{Focal length} & Zahl (2 Stellen); 25 & mm; 5 bis 200 & Brennweite des
+  Grundparaboloids (Klarglas) bzw. des Spiegels (Streuscheibe); Brennpunkt in der Wendelmitte \\
+\param{strip\_width}\newline\gui{Strip width} & Zahl (1 Stelle); 10 & mm; 1 bis 200 & Breite der
+  Streifen \\
+\param{facet\_length}\newline\gui{Facet length} & Zahl (1 Stelle); 0 & mm; 0 bis 500 & schneidet jeden
+  Streifen in Facetten dieser Länge (0: ganze Streifen); jede beginnt neu mit ihren Zielen \\
+\param{zones}\newline\gui{Zones} & Tabelle; Standardzonen (\autoref{sec:al-ref-zonen}) & Spalten
+  siehe unten & Sektoren um die Lampenachse mit Ast und Zielen \\
+\param{knot\_spacing}\newline\gui{Surface knots every} & Zahl (2 Stellen); 1.5 & mm; 0,3 bis 10 &
+  Knotenabstand der B-Splines der Facetten \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Spalten der Tabelle \gui{Zones}:}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Kopf & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{from}\newline\gui{from azimuth} & Zahl (1 Stelle); 0 & \si{\degree}; $-360$ bis 360 & Beginn der
+  Zone (0 links, 90 oben, 180 rechts, in Fahrtrichtung gesehen); bis zum Beginn der nächsten \\
+\param{branch}\newline\gui{cut-off branch} & Auswahl; \code{horizontal} & \code{horizontal},
+  \code{rising} & Ast, an den die Wendelbilder gelegt werden \\
+\param{aim\_right}\newline\gui{aim, right border} & Zahl (2 Stellen); 0 & \si{\degree}; $-60$ bis 60 &
+  Ziel H des Bilds der Wendelmitte am rechten Streifenrand \\
+\param{aim\_left}\newline\gui{aim, left border} & Zahl (2 Stellen); 0 & \si{\degree}; $-60$ bis 60 &
+  Ziel H am linken Streifenrand \\
+\param{below}\newline\gui{below cut-off} & Zahl (2 Stellen); 0 & \si{\degree}; 0 bis 10 & Abstand der
+  Bilder unter der Grenze \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Lens}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{lens\_x}\newline\gui{Lens in front of the filament} & Zahl (1 Stelle); 75 & mm; 1 bis 1000 &
+  Grundebene der Innenseite, auf der Achse \\
+\param{lens\_thickness}\newline\gui{Thickness} & Zahl (2 Stellen); 3 & mm; 0,5 bis 50 & Dicke (längs
+  X) \\
+\param{lens\_rake}\newline\gui{Rake} & Zahl (1 Stelle); 0 & \si{\degree}; $-60$ bis 60 & Neigung zurück:
+  oberer Rand zum Spiegel \\
+\param{lens\_sweep}\newline\gui{Sweep} & Zahl (1 Stelle); 0 & \si{\degree}; $-60$ bis 60 & läuft nach
+  links zurück (negativ: rechts) \\
+\param{lens\_radius}\newline\gui{Dome radius} & Zahl (1 Stelle); 0 & mm; 0 bis 100\,000 & nach außen
+  gewölbt als Kugel; 0: eben \\
+\param{wall\_draft}\newline\gui{Draft angle of the walls} & Zahl (1 Stelle); 0 & \si{\degree}; 0 bis
+  45 & Winkel der Wände zwischen den Elementen gegen X; 0: Wände längs X; mit Schräge glatt
+  anschließende Flächen \\
+\param{wall\_fillet}\newline\gui{Fillet radius of the walls} & Zahl (2 Stellen); 0 & mm; 0 bis 5 &
+  Verrundung an Fuß und Kopf jeder Wand (mit Schräge) \\
+\param{lens\_index}\newline\gui{Refractive index} & Zahl (3 Stellen); 1.49 & 1,01 bis 3 & PMMA 1,49,
+  Polycarbonat 1,59, Glas etwa 1,52 \\
+\param{lens\_\allowbreak transmittance}\newline\gui{Transmittance} & Zahl (2 Stellen); 0.92 & 0 bis 1 &
+  Transmissionsgrad (Photometrie; nicht im Raytracing) \\
+\param{cell\_width}\newline\gui{Element width} & Zahl (2 Stellen); 10 & mm; 0,5 bis 500 & Zellbreite \\
+\param{cell\_height}\newline\gui{Element height} & Zahl (2 Stellen); 10 & mm; 0,5 bis 500 & Zellhöhe \\
+\param{focus\_behind}\newline\gui{Mirror focus behind the filament centre} & Zahl (2 Stellen); 0 & mm;
+  $-50$ bis 50 & 0: Wendel im Brennpunkt; H4: 6,7 \\
+\param{lens\_sectors}\newline\gui{Sectors} & Tabelle; leer & Spalten siehe unten & radiale Abschnitte
+  der Scheibe; leer: einer \\
+\param{elements}\newline\gui{Elements} & Tabelle; eine Zeile (siehe unten) & Spalten siehe unten & was
+  die Zellen tun, nach der Lage ihrer Mitte (erste passende Zeile) \\
+\param{optimise\_margin}\newline\gui{Optimise: margin} & Zahl (1 Stelle); 10 & \%; 0 bis 50 & Reserve
+  innerhalb der Grenzwerte von R112 \\
+\param{optimise\_blur}\newline\gui{Optimise: the lamp's blur} & Auswahl; \code{measured by ray
+  tracing} & \code{measured by ray tracing}, \code{none} & Unschärfe der echten Lampe messen und
+  berücksichtigen; Ergebnis per Raytracing prüfen \\
+\param{optimise\_rounds}\newline\gui{Optimise: rounds} & Ganzzahl; 2 & 0 bis 10 & wie oft die Scheibe
+  gebaut, geprüft und erneut optimiert wird \\
+\param{optimise\_\allowbreak uniformity}\newline\gui{Optimise: evenness} & Zahl (2 Stellen); 1 & 0 bis 100 &
+  Gewicht der Gleichmäßigkeit unter der Grenze; 0: nur R112 \\
+\param{optimise\_edges}\newline\gui{Optimise: along the edges} & Schalter; an & -- & Elemente streuen
+  und lenken längs der Kante ihres Lichts (Zylinder quer bzw. um den Anstieg gedreht) \\
+\param{optimise\_band}\newline\gui{Optimise: under the cut-off} & Zahl (0 Stellen); 6000 & cd; 0 bis
+  50\,000 & mindestens das im Mittel 0,15 bis $0{,}65^\circ$ unter der Grenze, $\pm\ang{10}$ um den
+  Knick; 0: nicht gefordert \\
+\param{optimise\_rise}\newline\gui{Optimise: under the rise} & Zahl (0 Stellen); 3000 & cd; 0 bis
+  50\,000 & mindestens das 0,15 bis $0{,}35^\circ$ unter dem Anstieg, 1 bis $5^\circ$ vom Knick,
+  darüber höchstens ein Zehntel; 0: nicht gefordert \\
+\param{optimise\_start}\newline\gui{Optimise: start with} & Auswahl; \code{cylinder lenses
+  (6\si{\degree} across)} & \code{cylinder lenses (6\si{\degree} across)}, \code{plane glass},
+  \code{both, the better kept} & womit jede Zelle beginnt \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Spalten der Tabelle \gui{Sectors}:}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Kopf & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{from}\newline\gui{from azimuth} & Zahl (1 Stelle); 0 & \si{\degree}; $-360$ bis 360 & Beginn des
+  Sektors; bis zum Beginn des nächsten \\
+\param{branch}\newline\gui{cut-off branch} & Auswahl; \code{horizontal} & \code{horizontal},
+  \code{rising} & Ast, an dem das Licht des Sektors endet \\
+\bottomrule
+\end{referenz}
+
+Die Sektoren werden nach Azimut ab 0 nummeriert; diese Nummer nennt die Spalte \gui{sector} der
+Elementtabelle.
+
+\paragraph{Spalten der Tabelle \gui{Elements}:}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Kopf & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{y\_from}, \param{y\_to}\newline\gui{y from}, \gui{y to} & Zahl (1 Stelle); $-500$, 500 & mm;
+  frei & Bereich in y (nach links) um die Lampenachse \\
+\param{z\_from}, \param{z\_to}\newline\gui{z from}, \gui{z to} & Zahl (1 Stelle); $-500$, 500 & mm;
+  frei & Bereich in z (nach oben) \\
+\param{deflect\_h}\newline\gui{deflect H} & Zahl (2 Stellen); 0 & \si{\degree}; $-60$ bis 60 &
+  Ablenkung in der Zellmitte, waagerecht (Prisma) \\
+\param{deflect\_v}\newline\gui{deflect V} & Zahl (2 Stellen); 0 & \si{\degree}; $-60$ bis 60 &
+  Ablenkung senkrecht \\
+\param{spread\_h}\newline\gui{spread $\pm$ H} & Zahl (2 Stellen); 0 & \si{\degree}; $-60$ bis 60 &
+  zusätzliche Ablenkung an den Rändern, waagerecht (Zylinderlinse); negativ: kreuzende Strahlen \\
+\param{spread\_v}\newline\gui{spread $\pm$ V} & Zahl (2 Stellen); 0 & \si{\degree}; $-60$ bis 60 &
+  dasselbe senkrecht (mit beiden: Kissen) \\
+\param{spread\_angle}\newline\gui{spread turned by} & Zahl (1 Stelle); 0 & \si{\degree}; $-180$ bis 180
+  & Drehung beider Streuungen auf dem Schirm, gegen den Uhrzeigersinn \\
+\param{sector}\newline\gui{sector} & Ganzzahl; $-1$ & $-1$ bis 99 & Sektor, für dessen Teil der Zelle
+  die Zeile gilt; $-1$: jeder Teil \\
+\bottomrule
+\end{referenz}
+
+Die Standardtabelle hat eine Zeile: $y$ und $z$ von $-500$ bis 500 mm, \gui{deflect H} 0,
+\gui{deflect V} $-1$, \gui{spread $\pm$ H} 15, \gui{spread $\pm$ V} 4, \gui{spread turned by} 0 (ohne
+\gui{sector}, also $-1$).
+
+\subsection{Gruppe Connecting faces}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{connect}\newline\gui{Connecting faces} & Schalter; an & -- & Wände mit Schräge und Verrundung
+  zwischen den Facetten; aus: nackte Facetten mit Stufen \\
+\param{draft}\newline\gui{Draft angle} & Zahl (1 Stelle); 5 & \si{\degree}; 0,5 bis 45 & Winkel
+  zwischen den Wänden und der Entformungsrichtung X \\
+\param{fillet}\newline\gui{Fillet radius} & Zahl (2 Stellen); 0.3 & mm; 0 bis 5 & Verrundung an Fuß
+  und Kopf jeder Wand \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Analysis}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{reflectance}\newline\gui{Reflectance} & Zahl (2 Stellen); 0.85 & 0 bis 1 & Reflexionsgrad des
+  Spiegels \\
+\param{reflectance\_\allowbreak connections}\newline\gui{Reflectance of the connecting faces} & Zahl (2 Stellen);
+  0.85 & 0 bis 1 & 0: ihr Licht zählt nicht (abgedeckte oder matte Wände) \\
+\param{test\_points}\newline\gui{Test points} & Auswahl; \code{low beam (UN R112, class B)} & siehe
+  \autoref{sec:al-ref-r148} & Prüfpunkte der Tabelle: Abblendlicht oder eine Signalleuchte nach
+  UN R148 \\
+\param{shadows}\newline\gui{Shadows of the steps} & Schalter; an & -- & Stufen des facettierten
+  Reflektors halten Strahlen auf bzw. reflektieren sie ein zweites Mal (langsamer) \\
+\param{direct}\newline\gui{Direct light of the lamp} & Schalter; an & -- & Licht, das die Wendel nach
+  vorn am Spiegel vorbei verlässt; bei Streuscheibe durch die Scheibe \\
+\param{sampling}\newline\gui{Mirror points every} & Zahl (2 Stellen); 1 & mm; 0,2 bis 10 & Gitter der
+  Spiegelpunkte der Lichtverteilung \\
+\param{image\_points}\newline\gui{Filament images (number)} & Ganzzahl; 150 & 1 bis 5000 & Zahl der
+  Wendelbilder \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Ray tracing}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{trace\_rays}\newline\gui{Light paths} & Ganzzahl; 5\,000\,000 & 10\,000 bis 2\,000\,000\,000 &
+  Lichtwege vom Draht; Rauschen fällt mit der Wurzel (5 Mio.: etwa 5\,\% am hellsten Punkt) \\
+\param{trace\_depth}\newline\gui{Longest path} & Ganzzahl; 20 & segments; 1 bis 100 & Reflexionen und
+  Brechungen je Lichtweg (allein durch den Kolben: zwei) \\
+\param{trace\_filament}\newline\gui{H4: lit coil} & Auswahl; \code{passing beam} & \code{passing
+  beam}, \code{driving beam} & \code{driving beam}: Fernlichtwendel der H4 leuchtet, mit den
+  Fernlichtpunkten von R112 \\
+\param{coil\_\allowbreak end\_temperature}\newline\gui{Coil: temperature at its ends} & Zahl (0 Stellen); 2400 &
+  K; 1000 bis 3100 & Temperatur der Wendelenden (Mitte \qty{3100}{K}); 3100: gleichmäßig \\
+\param{bulb}\newline\gui{Bulb glass} & Schalter; an & -- & Kolben als Glas (Fresnel) mit Kuppe; aus:
+  kein Glas, Kuppe als Scheibe \\
+\param{bulb\_diameter}\newline\gui{Bulb: outer diameter} & Zahl (2 Stellen); 0 & mm; 0 bis 60 & 0:
+  typisch (\autoref{sec:al-ref-kolben}) \\
+\param{bulb\_wall}\newline\gui{Bulb: wall} & Zahl (2 Stellen); 0 & mm; 0 bis 5 & 0: typisch (Quarz 1 mm,
+  Signallampen 0,6 bis 0,7 mm) \\
+\param{shield\_\allowbreak reflectance}\newline\gui{H4 shield: reflectance} & Zahl (2 Stellen); 0.5 & 0 bis 1 &
+  Schirm als Spiegel; 0: schwarz \\
+\param{coil\_wire}\newline\gui{Coil: wire diameter} & Zahl (3 Stellen); 0 & mm; 0 bis 2 & 0: aus der
+  Leistung geschätzt (Wolfram bei \qty{3100}{K}, 13,2 V) \\
+\param{coil\_turns}\newline\gui{Coil: turns} & Ganzzahl; 0 & 0 bis 1000 & 0: Steigung 1,5
+  Drahtdurchmesser \\
+\param{trace\_kernel}\newline\gui{Kernel} & Auswahl; \code{automatic} & \code{automatic}, \code{C++},
+  \code{NumPy} & Rechenkern des Path Tracers; \code{automatic}: C++, wenn \code{pathtracer} $\geq$
+  0.3.0 installiert ist \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Standardzonen}\label{sec:al-ref-zonen}
+
+\gui{Default zones} und der Standardwert von \param{zones}; jede Zone reicht bis zum Beginn der
+nächsten. \gui{below cut-off} ist überall 0.
+
+\begin{center}
+\begin{tabular}{lrlrr}
+\toprule
+Verkehr & \gui{from azimuth} & \gui{cut-off branch} & \gui{aim, right border} & \gui{aim, left border} \\
+\midrule
+right-hand & $-20$ & horizontal & 6 & $-1$ \\
+ & 20 & horizontal & 25 & $-25$ \\
+ & 145 & rising & 7 & 1 \\
+ & 185 & horizontal & 25 & $-25$ \\
+\midrule
+left-hand & $-160$ & horizontal & 25 & $-25$ \\
+ & $-5$ & rising & $-1$ & $-7$ \\
+ & 35 & horizontal & 25 & $-25$ \\
+ & 160 & horizontal & 1 & $-6$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ---------------------------------------------------------------------------------------------
+\section{Lampen}\label{sec:al-ref-lampen}
+\index{Lampentyp}
+
+\subsection{Lampendaten}
+
+Nach UN/ECE R37 (Rev.~7), 12-V-Lampen: Lichtstrom = Sollwert bei der Prüfspannung (13,2 V,
+Signallampen 13,5 V), Länge = Nennlänge des Lampenblatts (R5W, R10W: typisch); Durchmesser typisch
+(R37 nennt höchstens einen Höchstwert: H7 1,3, H8 1,2, H9 1,4, H11 1,4 mm). Die Leistung dient nur der
+Schätzung des Drahts.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.3cm}rrrr>{\raggedright\arraybackslash}X}
+\toprule
+Lampe & Länge / mm & Durchm. / mm & $\Phi$ / lm & P / W & Bemerkung \\
+\midrule
+\endhead
+H1 & 5,0 & 1,4 & 1550 & 55 & axiale Wendel \\
+H4 (low beam) & 5,5 & 1,5 & 1000 & 55 & Abblendwendel über ihrem Schirm (R37 Blatt H4/3): Licht über
+  die Kanten in die oberen \ang{195}, Wanne mit Radius 4,3 mm, hinten geschlossen; schwarze Kappe
+  $\leq \ang{40}$; Spiegelbrennpunkt an der Fernlichtwendel (6,7 mm dahinter) \\
+H7 & 4,1 & 1,3 & 1500 & 55 & axiale Wendel \\
+H8 & 3,7 & 1,2 & 800 & 35 & axiale Wendel \\
+H9 & 4,8 & 1,4 & 2100 & 65 & axiale Wendel \\
+H11 & 4,5 & 1,3 & 1350 & 55 & axiale Wendel \\
+HB3 & 5,1 & 1,4 & 1860 & 60 & axiale Wendel \\
+HB4 & 5,1 & 1,4 & 1095 & 51 & axiale Wendel \\
+H3 & 5,0 & 1,4 & 1450 & 55 & Querwendel (Nebelscheinwerfer) \\
+P21W & 6,0 & 1,0 & 460 & 21 & Querwendel \\
+PY21W & 6,0 & 1,0 & 280 & 21 & Querwendel, gelb \\
+R10W & 4,0 & 0,8 & 125 & 10 & Querwendel \\
+R5W & 4,0 & 0,7 & 50 & 5 & Querwendel \\
+Custom & \multicolumn{4}{l}{aus den Feldern \gui{Custom: …}} & \\
+\bottomrule
+\end{referenz}
+
+\subsection{Schirm und Fernlichtwendel der H4}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Größe & Wert (R37 Blätter H4/1 bis H4/5) \\
+\midrule
+\endhead
+Beginn der Abblendwendel ab Bezugsebene & $e = \qty{28.5}{mm}$ \\
+Oberkante der Wendel über der Ebene H & $c = \qty{0.6}{mm}$ \\
+Schirmkanten & auf der Ebene H und \ang{15} darunter: Fenster von $-\ang{15}$ bis \ang{180} um die
+  Bezugsachse \\
+Wanne & Radius 4,3 mm (aus der Zeichnung H4/3, nicht verbindlich), von 1,2 mm hinter bis 3,4 mm vor
+  der Wendel, hinten Stirnwand \\
+Kappe & vom Achspunkt $p = \qty{28.95}{mm}$ unter höchstens $\alpha = \ang{40}$ gesehen \\
+Kolbendurchmesser & 13 mm (angenommen) \\
+Fernlichtwendel & 4,5 mm lang, endet 1,7 mm vor der Abblendwendel, Achse 0,8 mm unter der Ebene H,
+  1650 lm, 60 W, Durchmesser wie die Abblendwendel \\
+\bottomrule
+\end{referenz}
+
+\subsection{Typische Kolben}\label{sec:al-ref-kolben}
+
+Gilt für \gui{Bulb: outer diameter} und \gui{Bulb: wall} = 0. Maße in mm, ab der Wendelmitte; Kuppe:
+Winkel $\gamma_3$ der schwarzen Kuppe nach R37 (von dem der Bezugsebene nächsten Wendelende, bei HB4
+von der Wendelmitte), bei der H4 die Kappe des Schirms.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.3cm}rrrrll}
+\toprule
+Lampe & Durchm. & Wand & Spitze & hinten bis & Kuppe & Glas ($n$) \\
+\midrule
+\endhead
+H1 & 8,5 & 1,0 & 14,0 & $-20$ & keine & Quarz (1,458) \\
+H4 (low beam) & 13,0 & 1,0 & 15,0 & $-25$ & Kappe ($\alpha \leq \ang{40}$) & Quarz \\
+H7 & 9,0 & 1,0 & 14,8 & $-21$ & \ang{30} & Quarz \\
+H8 & 9,0 & 1,0 & 14,0 & $-21$ & \ang{30} & Quarz \\
+H9 & 9,0 & 1,0 & 14,0 & $-21$ & keine & Quarz \\
+H11 & 9,0 & 1,0 & 14,0 & $-21$ & \ang{30} & Quarz \\
+HB3 & 10,0 & 1,0 & 14,0 & $-21$ & keine & Quarz \\
+HB4 & 10,0 & 1,0 & 14,0 & $-21$ & \ang{45} & Quarz \\
+H3 & 10,0 & 1,0 & 12,0 & $-15$ & keine & Quarz \\
+P21W, PY21W & 26,5 & 0,7 & 13,2 & $-14$ & keine & Glas (1,52) \\
+R10W, R5W & 19,0 & 0,6 & 11,0 & $-8$ & keine & Glas (1,52) \\
+Custom & 10,0 & 1,0 & 14,0 & $-20$ & keine & Quarz \\
+\bottomrule
+\end{referenz}
+
+Die Wand muss dünner als ein Viertel des Durchmessers sein, und Wendel(n) und Schirm müssen in den
+Kolben passen; sonst bricht das Raytracing mit einer Meldung ab.
+
+\subsection{Drahtwendel des Raytracings}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Größe & Wert \\
+\midrule
+\endhead
+Temperatur der Wendelmitte & \qty{3100}{K} \\
+Temperatur der Enden (Standard) & \qty{2400}{K} \\
+Spezifischer Widerstand (Wolfram, \qty{3100}{K}) & \qty{95.6}{\micro\ohm\centi\metre} \\
+Prüfspannung & 13,2 V; Leistung steigt mit $(U/\qty{12}{V})^{1.6}$ \\
+Steigung ohne eigene Angabe & 1,5 Drahtdurchmesser \\
+Wärmeleitfähigkeit, Emissionsgrad & \qty{0.095}{W/(mm.K)}, 0,34 \\
+Stücke je Windung & 4 (Vierteldrehungen, je eine eigene Quelle) \\
+Beispiele (geschätzt) & H7: \qty{0.161}{mm}, 16 Windungen; H4: \qty{0.187}{mm}, 19 Windungen \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Prüfpunkte}\label{sec:al-ref-pruefpunkte}
+\index{Prüfpunkt}
+
+Die Tabellen sind Entwurfshilfen; maßgeblich ist die jeweilige Regelung.
+
+\subsection{Abblendlicht nach UN/ECE R112 (Klasse B)}
+
+Absatz 6.2.4, Rechtsverkehr (Linksverkehr: H gespiegelt). Messfenster eines Punkts:
+$\pm\ang{0.25}$ in H, $\pm\ang{0.1}$ in V.
+
+\begin{referenz}{lrrl>{\raggedright\arraybackslash}X}
+\toprule
+Punkt & H / \si{\degree} & V / \si{\degree} & Anforderung & Bemerkung \\
+\midrule
+\endhead
+B50L & $-3{,}43$ & 0,57 & $\leq 350$ cd & Blendung des Gegenverkehrs \\
+BR & 2,5 & 1,0 & $\leq 1750$ cd & \\
+75R & 1,15 & $-0{,}57$ & $\geq 10\,100$ cd & \\
+75L & $-3{,}43$ & $-0{,}57$ & $\leq 10\,600$ cd & \\
+50L & $-3{,}43$ & $-0{,}86$ & $\leq 13\,200$ cd & \\
+50R & 1,72 & $-0{,}86$ & $\geq 10\,100$ cd & \\
+50V & 0 & $-0{,}86$ & $\geq 5100$ cd & \\
+25L & $-9$ & $-1{,}72$ & $\geq 1700$ cd & \\
+25R & 9 & $-1{,}72$ & $\geq 1700$ cd & \\
+Zone III & & & $\leq 625$ cd & Vieleck mit den Ecken ($-8$, 1), ($-8$, 4), (8, 4), (8, 2), (6, 1,5),
+  (1,5, 1,5), (0, 0), ($-4$, 0) in (H, V); höchster Fenstermittelwert \\
+Zone IV & & & $\geq 2500$ cd & H $-5{,}15$ bis 5,15, V $-1{,}72$ bis $-0{,}86$; kleinster
+  Fenstermittelwert \\
+Zone I & & & $\leq 2 \times I(\text{50R})$ & H $-9$ bis 9, V $-4$ bis $-1{,}72$ (Vorfeld) \\
+\bottomrule
+\end{referenz}
+
+Spalten der Ergebnistabelle: \code{point}, \code{H / }\si{\degree}, \code{V / }\si{\degree}, \code{I /
+cd}, \code{E at 25 m / lx} ($I/625$), \code{required}, Urteil (\code{ok}, \code{not met}).
+
+Weitere Kennwerte im Protokoll: Schärfe $G = \log I(V) - \log I(V + \ang{0.1})$ auf der Linie
+\ang{2.5} zur Seite des Gegenverkehrs (größter Wert innerhalb \ang{2} der Nenngrenze, wo $I \geq
+2\,\%$ des Linienmaximums; R112: 0,13 bis 0,40); Blendung = höchster Fenstermittelwert mehr als
+\ang{0.2} über der Grenze.
+
+\subsection{Fernlicht nach UN/ECE R112 (Klasse B)}
+
+Absatz 6.3.3, gemessen mit der Ausrichtung des Abblendlichts (nur mit \gui{H4: lit coil} =
+\code{driving beam} im Raytracing).
+
+\begin{referenz}{lrrl}
+\toprule
+Punkt & H / \si{\degree} & V / \si{\degree} & Anforderung \\
+\midrule
+\endhead
+IM & (Maximum) & & 40\,500 bis 215\,000 cd \\
+HV & 0 & 0 & $\geq 0{,}8 \times$ IM \\
+H-5L & $-5$ & 0 & $\geq 5100$ cd \\
+H-2.5L & $-2{,}5$ & 0 & $\geq 20\,300$ cd \\
+H-2.5R & 2,5 & 0 & $\geq 20\,300$ cd \\
+H-5R & 5 & 0 & $\geq 5100$ cd \\
+\bottomrule
+\end{referenz}
+
+\subsection{Signalleuchten nach UN R148}\label{sec:al-ref-r148}
+
+Mindestlichtstärke auf der Achse und Höchstwert in jeder Richtung für eine einzelne Leuchte (Tabellen
+3, 4, 6, 7, 8 der Regelung). Messfenster $\pm\ang{0.5}$.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{6.0cm}rrl}
+\toprule
+\gui{Test points} & Minimum & Maximum & Raster \\
+\midrule
+\endhead
+\code{front position lamp (A)} & 4 cd & 140 cd & Standard \\
+\code{rear position lamp (R1)} & 4 cd & 17 cd & Standard \\
+\code{stop lamp (S1)} & 60 cd & 260 cd & Standard \\
+\code{direction indicator, front (1)} & 175 cd & 1000 cd & Standard \\
+\code{direction indicator, rear (2a)} & 50 cd & 500 cd & Standard \\
+\code{daytime running lamp (RL)} & 400 cd & 1200 cd & Tagfahrleuchte \\
+\bottomrule
+\end{referenz}
+
+Geforderter Anteil des Minimums an den Punkten (H, V in Grad; Punkte heißen z.\,B. \code{5\si{\degree}L
+10\si{\degree}U}):
+
+\begin{referenz}{l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+V & Standard-Raster & Tagfahrleuchte \\
+\midrule
+\endhead
+$+10$ & H $= \pm 5$: 20\,\% & H $= -5$, 0, 5: 20\,\% \\
+$+5$, $-5$ & H $= \pm 20$: 10\,\%; $\pm 10$: 20\,\%; 0: 70\,\% & ebenso \\
+0 & H $= \pm 10$: 35\,\%; $\pm 5$: 90\,\%; 0: 100\,\% & H $= \pm 20$: 25\,\%; $\pm 10$: 70\,\%;
+  $\pm 5$: 90\,\%; 0: 100\,\% \\
+$-10$ & H $= \pm 5$: 20\,\% & -- \\
+\bottomrule
+\end{referenz}
+
+Zusätzlich die Zeile \code{maximum}: höchster Fenstermittelwert $\leq$ Maximum. Spalten der
+Ergebnistabelle: \code{point}, \code{H / }\si{\degree}, \code{V / }\si{\degree}, \code{I / cd},
+\code{required}, Urteil.
+
+% ---------------------------------------------------------------------------------------------
+\section{Messschirm und Schnitte}\label{sec:al-ref-schirm}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}X}
+\toprule
+Ergebnis & Bereich und Auflösung \\
+\midrule
+\endhead
+Lichtstärke, Abblendlicht & H $-40$ bis $40^\circ$, V $-15$ bis $10^\circ$; Zellen $\ang{0.25}
+  \times \ang{0.1}$ \\
+Lichtstärke, Signalleuchte & H $-40$ bis $40^\circ$, V $-20$ bis $20^\circ$; Zellen $\ang{0.25}
+  \times \ang{0.25}$ \\
+Wendelbilder & H $-45$ bis $45^\circ$, V $-15$ bis $5^\circ$; 20 Bildpunkte je Grad \\
+Senkrechter Schnitt & bei H $= -2{,}5^\circ$ (Rechtsverkehr) bzw. $+2{,}5^\circ$, gemittelt über
+  $\pm\ang{0.5}$; Signalleuchte: H = 0 \\
+Waagerechter Schnitt & bei V $= -0{,}86^\circ$, gemittelt über $\pm\ang{0.25}$; Signalleuchte: V = 0 \\
+Lichtstärke und Beleuchtungsstärke & 625 cd = 1 lx in 25 m \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Erzeugte Flächen und Attribute}\label{sec:al-ref-flaechen}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}X}
+\toprule
+Gruppe & Flächenname & Attribute \\
+\midrule
+\endhead
+\enquote{Reflector <Lampe>} & \enquote{Facet <z>.<s>} bzw. \enquote{Facet <z>.<s>.<r>} & \code{al.part}
+  = \code{facet}; \code{al.zone}, \code{al.strip}, \code{al.row}, \code{al.branch} \\
+ & \enquote{Connection <z>.<s>.<r-1>|<r>} (zwischen Reihen), \enquote{Connection <z>.<s-1>|<s>}
+  (zwischen Streifen), \enquote{Connection zone <a>|<b>} (zwischen Zonen) & \code{al.part} =
+  \code{connection} \\
+ & \enquote{Filament <Lampe>} & \code{al.part} = \code{filament} \\
+\enquote{Headlamp <Lampe>} & \enquote{Mirror (paraboloid)} & \code{al.part} = \code{mirror} \\
+ & \enquote{Lens outer side} & \code{lens} \\
+ & \enquote{Lens element <i>.<j>} (mit Sektoren \enquote{…/<k>}) & \code{element} \\
+ & \enquote{Lens wall …}, \enquote{Lens walls between the rows …} & \code{wall} \\
+ & \enquote{Filament <Lampe>} & \code{filament} \\
+\enquote{Lamp <Lampe>} / \enquote{Coil (lit)} & \enquote{Coil <Windung>.<Viertel>} & \code{al.lamp} =
+  \code{coil}, \code{al.material}, \code{al.luminance} \\
+\enquote{Lamp <Lampe>} / \enquote{Other coil (dark)} & \enquote{Other coil …} & \code{other coil} \\
+\enquote{Lamp <Lampe>} / \enquote{Shield} & \enquote{Shield …} & \code{shield} \\
+\enquote{Lamp <Lampe>} / \enquote{Bulb glass} & \enquote{Bulb glass …} & \code{bulb} \\
+\enquote{Lamp <Lampe>} / \enquote{Black top} & \enquote{Black top …} & \code{cap} \\
+\bottomrule
+\end{referenz}
+
+\gui{Generate reflector} entfernt vorher alle Flächen mit \code{al.part}; \gui{Generate lamp} alle mit
+\code{al.lamp} (und deren nun leere Gruppen). Die Flächen werden relativ zu \gui{Filament centre}
+gelegt.
+
+% ---------------------------------------------------------------------------------------------
+\section{Auswahl bei Optimise lens}\label{sec:al-ref-optimieren}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Größe & Werte \\
+\midrule
+\endhead
+Ablenkung quer & $-16$ bis $16^\circ$ in Schritten von \ang{1} \\
+Ablenkung auf und ab & $-3$ bis $0{,}6^\circ$ in Schritten von \ang{0.2} \\
+Zylinder: Streuung & 0 bis \ang{12} \\
+Zylinder: Drehung & 0, $\pm 5$, 10, 15, 20, 30, 45, 60, 90 Grad (also $-60$ bis 90) \\
+Grenzen & $|$Ablenkung quer$|$ + Queranteil der Streuung $\leq \ang{22}$; Höhenanteil $\leq \ang{4}$;
+  Element passt in die Dicke \\
+Muster der Zellen & Raster $\ang{0.5} \times \ang{0.1}$ \\
+Gleichmäßigkeit & von \ang{0.4} unter der Linie bis $-5^\circ$, $|H| \leq 20^\circ$; Raster $\ang{1}
+  \times \ang{0.3}$; bezogen auf 10\,100 cd (Minimum 50R) \\
+Band unter der Grenze & 0,15 bis $0{,}65^\circ$ unter der Linie, $\pm\ang{10}$ um den Knick \\
+Anstieg & 0,15 bis $0{,}35^\circ$ unter dem Anstieg, 1 bis $5^\circ$ vom Knick \\
+Prüf-Raytracing & mindestens 20 Millionen Lichtwege \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Ergebnissätze}\label{sec:al-ref-ergebnisse}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.0cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Aktion & Ergebnissatz & Inhalt \\
+\midrule
+\endhead
+\gui{Filament images} & \enquote{Filament images <Lampe>} & Bild \enquote{Filament images} (Einheit
+  \code{images}, Farbskala \code{viridis}) \\
+\gui{Light distribution} & \enquote{Low beam <Lampe>} & Bild \enquote{Luminous intensity} (cd), Tabelle
+  der Prüfpunkte, Kurven \enquote{Vertical cut at H = …}, \enquote{Horizontal cut at V = …} \\
+\gui{Light distribution (ray tracing)} & \enquote{Low beam <Lampe> – ray tracing}, \enquote{Driving beam
+  H4 – ray tracing} & wie oben \\
+\gui{Optimise lens} & \enquote{Low beam <Lampe> – optimised lens, filament images}, \enquote{… –
+  optimised lens, ray tracing} & wie oben \\
+\gui{Show strips} & \enquote{Strips <Lampe>} & Linien \enquote{Start curves}, \enquote{Characteristic
+  strips} \\
+\bottomrule
+\end{referenz}
+
+Der Name eines Satzes enthält den Lampennamen, etwa \enquote{Low beam H4 (low beam)}. Die Tabellen
+heißen \enquote{R112 test points (class B, passing beam)}, \enquote{R112 test points (class B, driving
+beam)} bzw. \enquote{R148 standard light distribution, <Leuchte>}.

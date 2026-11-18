@@ -1,0 +1,710 @@
+\chapter{Befehlsreferenz}\label{kap:befehle}
+\sloppy % lange Befehls-Aufforderungen in Schreibmaschinenschrift umbrechen
+\index{Befehlsreferenz}
+
+Dieser Anhang beschreibt jeden Befehl der Befehlszeile in alphabetischer Reihenfolge seines
+Namens. Er ergänzt Kapitel~\ref{kap:modellieren}, das die Befehle mit Hintergrund und Beispielen
+erklärt, um eine kompakte Nachschlagetabelle. Alle Aufforderungen (Prompts) und Meldungen sind
+so wiedergegeben, wie sie im Programm erscheinen; Werte in Klammern wie \code{(6 sides)} zeigen
+die Voreinstellung und ändern sich mit Ihrer Eingabe.
+
+% ============================================================================
+\section{Eingabesyntax der Befehlszeile}\label{sec:eingabesyntax}
+\index{Eingabesyntax}
+
+Was Sie in die Befehlszeile tippen und mit \keys{Enter} bestätigen, wird nach folgenden Regeln
+gedeutet. Leerzeichen werden vorher entfernt, Groß- und Kleinschreibung spielt keine Rolle.
+Tippen in einer Ansicht schreibt automatisch in die Befehlszeile.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.25\linewidth}X}
+\toprule
+Eingabe & Bedeutung \\
+\midrule\endhead
+(leer) & laufenden Befehl beenden (wie \maus{Rechtsklick}); läuft keiner, den zuletzt gestarteten
+  Befehl wiederholen. \\
+\code{line}, \code{l} \ldots & Beginnt die Eingabe mit einem Buchstaben, ist sie ein
+  Befehlsname oder Alias. Ein laufender Befehl wird abgebrochen und der neue gestartet. \\
+\code{12.5}, \code{-3}, \code{1e-3} & eine Zahl (siehe unten). \\
+\code{x,y,z} & Punkt in absoluten Weltkoordinaten. \\
+\code{x,y} & Punkt in der Konstruktionsebene der Ansicht, über der die Maus zuletzt war:
+  $\text{Ursprung} + x \cdot u + y \cdot v$. \\
+\code{@dx,dy,dz} & Punkt relativ zum Bezugspunkt des Befehls, Versatz in Weltkoordinaten. \\
+\code{@dx,dy} & Punkt relativ zum Bezugspunkt, Versatz in der Konstruktionsebene. \\
+\code{d<a} & Polarkoordinaten in der Konstruktionsebene: Abstand $d$ vom Ursprung, Winkel $a$
+  in Grad von der Achse $u$ zur Achse $v$. \\
+\code{@d<a} & Polarkoordinaten relativ zum Bezugspunkt. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Zahlenformat.} Dezimaltrennzeichen ist der Punkt (\code{2.5}, nicht \code{2,5}),
+Koordinaten werden durch Kommas getrennt. Vorzeichen und Exponentenschreibweise
+(\code{-1.5e2}) sind erlaubt. Ein Komma in einer einzelnen Zahl macht daraus eine
+Koordinateneingabe.
+
+\paragraph{Achsen der Konstruktionsebenen.}
+\begin{referenz}{lllll}
+\toprule
+Ansicht & $u$ & $v$ & Normale $n$ & \code{3,4} ergibt \\
+\midrule\endhead
+Top, Perspective & $+x$ & $+y$ & $+z$ & $(3,4,0)$ \\
+Front & $+x$ & $+z$ & $-y$ & $(3,0,4)$ \\
+Left & $-y$ & $+z$ & $-x$ & $(0,-3,4)$ \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Zahlen.} Eine Zahl wird verwendet für das, wonach die Aufforderung fragt (Radius,
+Höhe, Anzahl, Winkel, Faktor, Abstand). Kann der aktuelle Schritt keine Zahl verwenden, aber
+einen Punkt, so ist die Zahl eine \emph{Länge}: Der Punkt entsteht in diesem Abstand vom
+Bezugspunkt in Richtung des Cursors (bei eingeschaltetem Ortho in der korrigierten Richtung).
+Die Länge muss positiv sein.
+
+\paragraph{Bezugspunkt.} Relative Eingaben, Längen und Ortho beziehen sich auf den Bezugspunkt;
+welcher Punkt das ist, steht bei jedem Befehl unten. Ohne Bezugspunkt wird \code{@\ldots} mit
+\code{relative input needs a previous point} abgelehnt.
+
+\paragraph{Weitere Eingaben während eines Befehls.}
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.25\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\maus{Linksklick} & Punkt setzen (mit Objektfang). \\
+\maus{Rechtsklick} ohne Ziehen, \keys{Enter} & Befehl beenden. \\
+\keys{Esc} & Befehl abbrechen. \\
+\keys{F8} & Ortho ein/aus. \\
+\keys{F3} & Objektfang ein/aus. \\
+\keys{Tab}, \keys{Shift+Tab} & nächster/vorheriger Fangkandidat. \\
+\keys{Alt} & Fang unterdrücken; \keys{Alt}+\maus{Klick}: freier Punkt. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Meldungen der Befehlszeile.}
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Meldung & Bedeutung \\
+\midrule\endhead
+\code{Unknown command '<name>'} & kein Befehl und kein Alias dieses Namens. \\
+\code{Input not accepted -- <prompt>} & Eingabe in diesem Schritt ungültig; der Befehl wartet
+  weiter. \\
+\code{No command is waiting for a point} & Koordinaten ohne laufenden Befehl. \\
+\code{A number is not expected here} & Zahl, die weder als Wert noch als Länge verwendbar
+  ist. \\
+\code{relative input needs a previous point} & \code{@} ohne Bezugspunkt. \\
+\code{polar input: distance<angle} & fehlerhafte Polar-Eingabe. \\
+\code{expected x,y or x,y,z} & falsche Anzahl von Koordinaten. \\
+\code{'<text>' is not a number} & ein Koordinatenwert ist keine Zahl. \\
+\code{<Titel> cancelled} & Befehl ohne Ergebnis beendet oder abgebrochen. \\
+\code{<Titel>: select objects first} & Auswahlbefehl ohne Auswahl gestartet. \\
+\code{<Titel> failed: <Grund>} & der Geometriekern konnte das Ergebnis nicht bilden. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Auswahlbefehle.} Befehle mit dem Eintrag \enquote{Auswahl} in der Übersicht arbeiten
+auf den \emph{vor} dem Start ausgewählten ganzen Objekten, in Auswahlreihenfolge; einzeln
+gewählte Flächen, Kanten und Ecken werden übergangen, ebenso Objekte unpassenden Typs.
+\enquote{Sofort} bedeutet: Der Befehl braucht keine weitere Eingabe und ist mit dem Start
+fertig.
+
+\paragraph{Rückgängig.} Jedes Ergebnis ist ein Rückgängig-Schritt mit dem Titel des Befehls;
+bei Point und Copy ist jeder Punkt bzw.\ jede Kopie ein eigener Schritt.
+
+% ============================================================================
+\section{Übersicht}\label{sec:befehle-uebersicht}
+
+\begin{referenz}{ll>{\raggedright\arraybackslash}Xl>{\raggedright\arraybackslash}p{0.13\linewidth}}
+\toprule
+Name & Aliasse & Werkzeug (Gruppe, Knopf) & Kürzel & Eingabe \\
+\midrule\endhead
+\code{angle} & \code{ang} & Analyze, Angle (Ang) & & Punkte \\
+\code{arc} & \code{a} & Curves, Arc (Arc) & & Punkte \\
+\code{area} & & Analyze, Area (Are) & & Auswahl, sofort \\
+\code{array\_grid} & & Transform, Grid array (ArG) & & Auswahl \\
+\code{array\_linear} & \code{array} & Transform, Linear array (ArL) & & Auswahl \\
+\code{array\_polar} & \code{arraypolar} & Transform, Polar array (ArP) & & Auswahl \\
+\code{box} & \code{b} & Solids, Box (Box) & & Punkte \\
+\code{cap} & & Surfaces, Cap planar holes (Cap) & & Auswahl, sofort \\
+\code{circle} & \code{c}, \code{ci} & Curves, Circle (centre, radius) (Ci) & \keys{C} & Punkte \\
+\code{circle3p} & \code{c3} & Curves, Circle (3 points) (C3) & & Punkte \\
+\code{cone} & & Solids, Cone (Con) & & Punkte \\
+\code{coons} & & Surfaces, Coons patch (Cns) & & Auswahl, sofort \\
+\code{copy} & \code{co}, \code{cp} & Transform, Copy (Cp) & & Auswahl \\
+\code{curvature} & \code{curv} & Analyze, Curvature (Crv) & & Auswahl \\
+\code{cylinder} & \code{cyl} & Solids, Cylinder (Cyl) & & Punkte \\
+\code{difference} & \code{bd} & Solids, Boolean difference ($-$) & & Auswahl, sofort \\
+\code{distance} & \code{dist}, \code{di} & Analyze, Distance (Dst) & & Punkte \\
+\code{explode} & \code{x} & Edit, Explode (Exp) & & Auswahl, sofort \\
+\code{extrude} & \code{ext} & Surfaces, Extrude (Ext) & & Auswahl \\
+\code{fillet\_curve} & \code{fillet} & Curves, Fillet curves (Fil) & & Auswahl \\
+\code{fillet\_surface} & \code{filletsrf} & Surfaces, Fillet surfaces (FiS) & & Auswahl \\
+\code{gordon} & \code{network} & Surfaces, Gordon surface (Gor) & & Auswahl, sofort \\
+\code{helix} & \code{h}, \code{he} & Curves, Helix (Hx) & & Punkte \\
+\code{intersection} & \code{bi} & Solids, Boolean intersection ($\cap$) & & Auswahl, sofort \\
+\code{intersection\_check} & \code{intersect} & Analyze, Intersection check (Chk) & & Auswahl,
+  sofort \\
+\code{join} & \code{j} & Edit, Join (Jn) & & Auswahl, sofort \\
+\code{line} & \code{l}, \code{li} & Draw, Line (Ln) & \keys{L} & Punkte \\
+\code{loft} & & Surfaces, Loft (Lft) & & Auswahl, sofort \\
+\code{mass\_properties} & \code{volume} & Analyze, Volume / mass properties (Vol) & & Auswahl,
+  sofort \\
+\code{mirror} & \code{mi} & Transform, Mirror (Mir) & & Auswahl \\
+\code{move} & \code{m} & Transform, Move (Mv) & \keys{M} & Auswahl \\
+\code{offset\_curve} & \code{offset} & Curves, Offset curve (Off) & & Auswahl \\
+\code{offset\_surface} & \code{offsetsrf} & Surfaces, Offset surface (OfS) & & Auswahl \\
+\code{plane} & & Surfaces, Plane (Pln) & & Punkte \\
+\code{point} & \code{pt}, \code{po} & Draw, Point (Pt) & & Punkte \\
+\code{polygon} & \code{pol} & Draw, Polygon (Pol) & & Punkte \\
+\code{polyline} & \code{pl} & Draw, Polyline (PL) & & Punkte \\
+\code{rectangle} & \code{rec}, \code{rect} & Draw, Rectangle (Rec) & & Punkte \\
+\code{revolve} & \code{rev} & Surfaces, Revolve (Rev) & & Auswahl \\
+\code{rotate} & \code{ro} & Transform, Rotate (Rot) & & Auswahl \\
+\code{scale} & \code{sc} & Transform, Scale (Scl) & & Auswahl \\
+\code{sphere} & \code{sph} & Solids, Sphere (Sph) & & Punkte \\
+\code{spline} & \code{sp} & Curves, Interpolated spline (Sp) & & Punkte \\
+\code{split} & & Edit, Split (Spl) & & Auswahl \\
+\code{sweep1} & & Surfaces, Sweep 1 rail (Sw1) & & Auswahl, sofort \\
+\code{sweep2} & & Surfaces, Sweep 2 rails (Sw2) & & Auswahl, sofort \\
+\code{torus} & \code{tor} & Solids, Torus (Tor) & & Punkte \\
+\code{trim} & \code{tr} & Edit, Trim (Trm) & & Auswahl \\
+\code{union} & \code{bu} & Solids, Boolean union ($\cup$) & & Auswahl, sofort \\
+\midrule
+-- & & Edit, Delete (Del) & \keys{Entf} & Auswahl, sofort \\
+\bottomrule
+\end{referenz}
+
+In Klammern steht die Kurzbeschriftung des Knopfs in der Werkzeugspalte. Das Werkzeug
+\gui{Delete} ist kein Befehl der Befehlszeile; es entspricht \menu{Edit,Delete}. Die
+Tastenkürzel \keys{L}, \keys{C} und \keys{M} schreiben den Alias in die Befehlszeile, den Sie
+mit \keys{Enter} ausführen.
+
+% ============================================================================
+\section{Befehle von A bis Z}\label{sec:befehle-az}
+
+% Darstellung eines Eintrags
+\newcommand{\befehlseintrag}[1]{\par\begingroup\setlength{\parfillskip}{0pt}\noindent\begin{tabularx}{\linewidth}{@{}>{\bfseries}p{0.2\linewidth}X@{}}#1\end{tabularx}\par\endgroup}
+
+\subsection{angle -- Angle}\label{sec:befehl-angle}
+\befehlseintrag{%
+Name & \cmd{angle}; Alias \code{ang} \\
+Werkzeug & Analyze, \gui{Angle} \\
+Eingabe & 1.~\code{Angle: vertex}\newline
+  2.~\code{Angle: point on the first leg}\newline
+  3.~\code{Angle: point on the second leg} \\
+Bezugspunkt & der Scheitel \\
+Ergebnis & Meldung \code{Angle <w>}\si{\degree} -- räumlicher Winkel zwischen den Schenkeln, 0 bis
+  \SI{180}{\degree}. Es wird nichts erzeugt. \\
+Hinweise & Ein Schenkelpunkt, der mit dem Scheitel zusammenfällt, wird abgelehnt. \\}
+
+\subsection{arc -- Arc}\label{sec:befehl-arc}
+\befehlseintrag{%
+Name & \cmd{arc}; Alias \code{a} \\
+Werkzeug & Curves, \gui{Arc} \\
+Eingabe & 1.~\code{Arc: start point}\newline
+  2.~\code{Arc: end point}\newline
+  3.~\code{Arc: point on the arc} \\
+Bezugspunkt & der zuletzt gesetzte Punkt \\
+Ergebnis & Kreisbogen vom Start- über den dritten zum Endpunkt, in beliebiger Raumlage. \\
+Hinweise & Doppelte Punkte und drei Punkte auf einer Geraden werden abgelehnt. \\}
+
+\subsection{area -- Area / length}\label{sec:befehl-area}
+\befehlseintrag{%
+Name & \cmd{area} \\
+Werkzeug & Analyze, \gui{Area} \\
+Auswahl & Kurven, Flächen, Körper; sofort \\
+Ergebnis & Meldung \code{Area <A>   Length <L>}: Summe der Flächeninhalte aller Flächen
+  (bei Körpern aller Teilflächen) und Summe der Kurvenlängen; nur vorhandene Teile werden
+  angezeigt. \\
+Fehler & \code{Area / length failed: no curves or surfaces selected} \\}
+
+\subsection{array\_grid -- Grid array}\label{sec:befehl-array-grid}
+\befehlseintrag{%
+Name & \cmd{array\_grid} \\
+Werkzeug & Transform, \gui{Grid array} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Grid array (3 $\times$ 3): base point (type two numbers to change the
+  counts)}\newline
+  2.~\code{Grid array (3 $\times$ 3): step in the first direction}\newline
+  3.~\code{Grid array (3 $\times$ 3): step in the second direction} \\
+Zahlen & vor dem Basispunkt: abwechselnd Anzahl in Richtung~1 und Richtung~2 (ganze Zahlen
+  $\geq 1$, einschließlich Original) \\
+Bezugspunkt & der Basispunkt \\
+Ergebnis & $n_1 \times n_2 - 1$ Kopien im Raster; Kopien übernehmen Name, Layer und Farbe. \\}
+
+\subsection{array\_linear -- Linear array}\label{sec:befehl-array-linear}
+\befehlseintrag{%
+Name & \cmd{array\_linear}; Alias \code{array} \\
+Werkzeug & Transform, \gui{Linear array} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Linear array (3 items): base point (type a number to change the count)}\newline
+  2.~\code{Linear array (3 items): step to the next item} \\
+Zahlen & vor dem Basispunkt: Gesamtzahl (ganze Zahl $\geq 2$, einschließlich Original) \\
+Bezugspunkt & der Basispunkt \\
+Ergebnis & $n-1$ Kopien, jeweils um den Schritt weiter verschoben. \\}
+
+\subsection{array\_polar -- Polar array}\label{sec:befehl-array-polar}
+\befehlseintrag{%
+Name & \cmd{array\_polar}; Alias \code{arraypolar} \\
+Werkzeug & Transform, \gui{Polar array} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Polar array (6 items): centre (type a number to change the count; axis:
+  construction-plane normal)}\newline
+  2.~\code{Polar array (6 items): total angle in degrees (Enter: 360)} \\
+Zahlen & vor dem Zentrum: Gesamtzahl (ganze Zahl $\geq 2$); danach: Gesamtwinkel in Grad
+  ($\neq 0$, Betrag $\leq 360$) \\
+Bezugspunkt & das Zentrum \\
+Ergebnis & $n-1$ Kopien, gleichmäßig über den Gesamtwinkel um die Achse durch das Zentrum
+  parallel zur Normalen der Konstruktionsebene verteilt. Beim Vollkreis (\keys{Enter}) fällt
+  keine Kopie auf das Original. \\}
+
+\subsection{box -- Box}\label{sec:befehl-box}
+\befehlseintrag{%
+Name & \cmd{box}; Alias \code{b} \\
+Werkzeug & Solids, \gui{Box} \\
+Eingabe & 1.~\code{Box: first corner of the base}\newline
+  2.~\code{Box: opposite corner of the base}\newline
+  3.~\code{Box: height (point or number)} \\
+Zahlen & im 3.~Schritt: Höhe mit Vorzeichen (positiv entlang der Normalen der
+  Konstruktionsebene) \\
+Bezugspunkt & der zuletzt gesetzte Punkt \\
+Ergebnis & Quader als geschlossener Körper, Kanten parallel zu den Weltachsen. \\
+Hinweise & Die Grundfläche muss in beiden Ebenenrichtungen eine Ausdehnung haben; Höhe 0 wird
+  abgelehnt. \\}
+
+\subsection{cap -- Cap planar holes}\label{sec:befehl-cap}
+\befehlseintrag{%
+Name & \cmd{cap} \\
+Werkzeug & Surfaces, \gui{Cap planar holes} \\
+Auswahl & Flächen, Körper; sofort \\
+Ergebnis & Alle ebenen offenen Randschleifen werden mit ebenen Deckeln geschlossen und alles zu
+  einer Hülle vernäht. Das Ergebnis ersetzt das zuerst gewählte Objekt, die übrigen werden
+  entfernt. Meldung \code{Capped: closed solid, volume <V>} oder \code{Capped (still open)}. \\
+Fehler & \code{Cap planar holes failed: no planar open loop to cap}, \code{\ldots: there are
+  no open edges}, \code{\ldots: select surfaces} \\}
+
+\subsection{circle -- Circle (centre, radius)}\label{sec:befehl-circle}
+\befehlseintrag{%
+Name & \cmd{circle}; Aliasse \code{c}, \code{ci} \\
+Werkzeug & Curves, \gui{Circle (centre, radius)}; Kürzel \keys{C} \\
+Eingabe & 1.~\code{Circle: centre}\newline
+  2.~\code{Circle: radius (point or number)} \\
+Zahlen & im 2.~Schritt: Radius \\
+Bezugspunkt & der Mittelpunkt \\
+Ergebnis & Vollkreis in der Ebene durch den Mittelpunkt parallel zur Konstruktionsebene. Ein
+  Punkt bestimmt den Radius als Abstand in dieser Ebene. \\}
+
+\subsection{circle3p -- Circle (3 points)}\label{sec:befehl-circle3p}
+\befehlseintrag{%
+Name & \cmd{circle3p}; Alias \code{c3} \\
+Werkzeug & Curves, \gui{Circle (3 points)} \\
+Eingabe & \code{Circle: point 1 of 3}, \code{Circle: point 2 of 3},
+  \code{Circle: point 3 of 3} \\
+Bezugspunkt & der zuletzt gesetzte Punkt \\
+Ergebnis & Kreis durch die drei Punkte, in deren Ebene. \\
+Hinweise & Doppelte oder kollineare Punkte werden abgelehnt. \\}
+
+\subsection{cone -- Cone}\label{sec:befehl-cone}
+\befehlseintrag{%
+Name & \cmd{cone} \\
+Werkzeug & Solids, \gui{Cone} \\
+Eingabe & 1.~\code{Cone: centre of the base}\newline
+  2.~\code{Cone: radius (point or number)}\newline
+  3.~\code{Cone: height (point or number)} \\
+Zahlen & Radius; Höhe mit Vorzeichen \\
+Bezugspunkt & der Mittelpunkt der Grundfläche \\
+Ergebnis & spitzer Kreiskegel, Achse entlang der Normalen der Konstruktionsebene. \\}
+
+\subsection{coons -- Coons patch}\label{sec:befehl-coons}
+\befehlseintrag{%
+Name & \cmd{coons} \\
+Werkzeug & Surfaces, \gui{Coons patch} \\
+Auswahl & genau vier Kurven: zwei gegenüberliegende, dann die beiden anderen; sofort \\
+Ergebnis & Fläche, die von den vier Kurven begrenzt wird (Laufrichtungen werden angeglichen). \\
+Fehler & \code{Coons patch: select four boundary curves: two opposite, then the other two} \\}
+
+\subsection{copy -- Copy}\label{sec:befehl-copy}
+\befehlseintrag{%
+Name & \cmd{copy}; Aliasse \code{co}, \code{cp} \\
+Werkzeug & Transform, \gui{Copy} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Copy: point to move from}\newline
+  2.~\code{Copy: point to copy to (Enter: done)} -- beliebig oft \\
+Bezugspunkt & der erste Punkt \\
+Ergebnis & je Zielpunkt eine verschobene Kopie (jeweils ein Rückgängig-Schritt). \\}
+
+\subsection{curvature -- Curvature}\label{sec:befehl-curvature}
+\befehlseintrag{%
+Name & \cmd{curvature}; Alias \code{curv} \\
+Werkzeug & Analyze, \gui{Curvature} \\
+Auswahl & genau eine Kurve, Fläche oder ein Körper \\
+Eingabe & \code{Curvature: point on the selected curve or surface} \\
+Ergebnis & Kurve: \code{Curvature <k>   radius <1/k>} bzw.\ \code{Curvature 0 (straight)}.
+  Fläche: \code{k1 <..>   k2 <..>   Gaussian <..>   mean <..>} am nächstgelegenen Punkt; bei
+  Körpern auf der nächstgelegenen Teilfläche. \\
+Fehler & \code{Curvature: select one curve or surface} \\}
+
+\subsection{cylinder -- Cylinder}\label{sec:befehl-cylinder}
+\befehlseintrag{%
+Name & \cmd{cylinder}; Alias \code{cyl} \\
+Werkzeug & Solids, \gui{Cylinder} \\
+Eingabe & 1.~\code{Cylinder: centre of the base}\newline
+  2.~\code{Cylinder: radius (point or number)}\newline
+  3.~\code{Cylinder: height (point or number)} \\
+Zahlen & Radius; Höhe mit Vorzeichen \\
+Bezugspunkt & der Mittelpunkt der Grundfläche \\
+Ergebnis & Kreiszylinder als geschlossener Körper, Achse entlang der Normalen der
+  Konstruktionsebene. \\}
+
+\subsection{difference -- Boolean difference}\label{sec:befehl-difference}
+\befehlseintrag{%
+Name & \cmd{difference}; Alias \code{bd} \\
+Werkzeug & Solids, \gui{Boolean difference} \\
+Auswahl & mindestens zwei geschlossene Körper; der \emph{zuerst} gewählte ist der Grundkörper;
+  sofort \\
+Ergebnis & Grundkörper minus alle anderen. Ersetzt die Eingangskörper; übernimmt Name, Layer,
+  Farbe des Grundkörpers. \\
+Fehler & \code{Select the solid to cut first, then the solids to subtract};
+  \code{Boolean difference failed: Booleans need closed solids};
+  \code{\ldots: the result is empty} \\}
+
+\subsection{distance -- Distance}\label{sec:befehl-distance}
+\befehlseintrag{%
+Name & \cmd{distance}; Aliasse \code{dist}, \code{di} \\
+Werkzeug & Analyze, \gui{Distance} \\
+Eingabe & 1.~\code{Distance: first point}\newline 2.~\code{Distance: second point} \\
+Bezugspunkt & der erste Punkt \\
+Ergebnis & Meldung \code{Distance <d>   (dx <..>, dy <..>, dz <..>)}; bleibt in der
+  Statusleiste stehen. \\}
+
+\subsection{explode -- Explode}\label{sec:befehl-explode}
+\befehlseintrag{%
+Name & \cmd{explode}; Alias \code{x} \\
+Werkzeug & Edit, \gui{Explode} \\
+Auswahl & Körper/Hüllen, Kurven; sofort \\
+Ergebnis & Hüllen zerfallen in ihre Flächen, Kurven an ihren Knicken in Teilkurven
+  (Polylinien in Strecken; Kreise und Bögen über \SI{90}{\degree} in ihre Teilbögen). Meldung
+  mit der Anzahl der Teile. \\
+Fehler & \code{Explode failed: nothing to explode} \\}
+
+\subsection{extrude -- Extrude}\label{sec:befehl-extrude}
+\befehlseintrag{%
+Name & \cmd{extrude}; Alias \code{ext} \\
+Werkzeug & Surfaces, \gui{Extrude} \\
+Auswahl & eine oder mehrere Kurven \\
+Eingabe & 1.~\code{Extrude: distance along the construction-plane normal, or start of the
+  direction}\newline
+  2.~(nach einem Punkt) \code{Extrude: end of the direction} \\
+Zahlen & im 1.~Schritt: Distanz; sie wirkt in dieser Version entlang der Welt-$z$-Achse \\
+Bezugspunkt & der Anfangspunkt der Richtung \\
+Ergebnis & je Kurve eine Extrusionsfläche (offen; mit \cmd{cap} schließen). \\
+Fehler & \code{Extrude: select one or more curves} \\}
+
+\subsection{fillet\_curve -- Fillet curves}\label{sec:befehl-fillet-curve}
+\befehlseintrag{%
+Name & \cmd{fillet\_curve}; Alias \code{fillet} \\
+Werkzeug & Curves, \gui{Fillet curves} \\
+Auswahl & eine oder zwei ebene Kurven \\
+Eingabe & \code{Fillet: radius (two curves: fillet between them; one curve: all its corners)}
+  -- nur Zahl \\
+Ergebnis & Zwei Kurven: neuer Verrundungsbogen, beide Kurven gekürzt. Eine Kurve: alle Ecken
+  verrundet, die Kurve wird ersetzt. \\
+Fehler & \code{Fillet curves: select one or two planar curves}; zu großer Radius:
+  \code{Input not accepted} \\}
+
+\subsection{fillet\_surface -- Fillet surfaces}\label{sec:befehl-fillet-surface}
+\befehlseintrag{%
+Name & \cmd{fillet\_surface}; Alias \code{filletsrf} \\
+Werkzeug & Surfaces, \gui{Fillet surfaces} \\
+Auswahl & genau zwei unbeschnittene Flächen \\
+Eingabe & \code{Fillet surfaces: radius} -- nur Zahl ($\neq 0$; das Vorzeichen wird
+  ignoriert) \\
+Ergebnis & Rundungsfläche zwischen beiden Flächen; die Seite wird automatisch bestimmt. Die
+  Flächen selbst bleiben unverändert. \\
+Fehler & \code{Fillet surfaces: select two (untrimmed) surfaces} \\}
+
+\subsection{gordon -- Gordon surface}\label{sec:befehl-gordon}
+\befehlseintrag{%
+Name & \cmd{gordon}; Alias \code{network} \\
+Werkzeug & Surfaces, \gui{Gordon surface} \\
+Auswahl & ein Kurvennetz aus mindestens $2 \times 2$ sich kreuzenden Kurven, beliebige
+  Reihenfolge; sofort \\
+Ergebnis & Fläche durch das Netz. Die Scharen werden automatisch gebildet (Kurven, die die
+  zuerst gewählte schneiden, und die übrigen) und sortiert. \\
+Fehler & \code{Gordon surface: select a curve network (at least 2 $\times$ 2 crossing
+  curves)}; \code{Gordon surface failed: the curves do not form a network} \\}
+
+\subsection{helix -- Helix}\label{sec:befehl-helix}
+\befehlseintrag{%
+Name & \cmd{helix}; Aliasse \code{h}, \code{he} \\
+Werkzeug & Curves, \gui{Helix} \\
+Eingabe & 1.~\code{Helix (5 turns): axis start (type a number to change the turns)}\newline
+  2.~\code{Helix (5 turns): axis end}\newline
+  3.~\code{Helix (5 turns): radius (point or number)} \\
+Zahlen & in Schritt 1 und 2: Windungszahl ($>0$); in Schritt 3: Radius \\
+Bezugspunkt & der zuletzt gesetzte Punkt \\
+Ergebnis & Schraubenlinie; Höhe = Achslänge, Steigung = Höhe / Windungen. Ein Radiuspunkt
+  legt auch den Startpunkt fest. \\
+Hinweise & In einer Ansicht ist \keys{H} das Kürzel für Hide; tippen Sie \code{h} in der
+  Befehlszeile. \\}
+
+\subsection{intersection -- Boolean intersection}\label{sec:befehl-intersection}
+\befehlseintrag{%
+Name & \cmd{intersection}; Alias \code{bi} \\
+Werkzeug & Solids, \gui{Boolean intersection} \\
+Auswahl & mindestens zwei geschlossene Körper; sofort \\
+Ergebnis & gemeinsamer Bereich aller Körper; ersetzt die Eingangskörper. \\
+Fehler & \code{Select at least two solids}; \code{Boolean intersection failed: \ldots} \\
+Hinweise & Nicht verwechseln mit \cmd{intersection\_check} (Schnittkurven). \\}
+
+\subsection{intersection\_check -- Intersect}\label{sec:befehl-intersection-check}
+\befehlseintrag{%
+Name & \cmd{intersection\_check}; Alias \code{intersect} \\
+Werkzeug & Analyze, \gui{Intersection check} \\
+Auswahl & mindestens zwei Kurven/Flächen/Körper; sofort \\
+Ergebnis & Schnittpunkte (Kurve--Kurve, Kurve--Fläche) als Punktobjekte, Schnittkurven
+  (Fläche--Fläche) als Kurven. Meldung \code{Intersections: <n> curve(s), <m> point(s)}.
+  Flächen desselben Körpers werden nicht geschnitten. \\
+Fehler & \code{Intersect failed: select at least two objects} \\}
+
+\subsection{join -- Join}\label{sec:befehl-join}
+\befehlseintrag{%
+Name & \cmd{join}; Alias \code{j} \\
+Werkzeug & Edit, \gui{Join} \\
+Auswahl & mindestens zwei Kurven \emph{oder} mindestens zwei Flächen/Körper; sofort \\
+Ergebnis & Kurven: eine verkettete Kurve (beliebige Reihenfolge und Richtung). Flächen: eine
+  vernähte Hülle, Meldung \code{Joined <n> faces, closed solid} bzw.\ \code{\ldots, open}.
+  Ersetzt das zuerst gewählte Objekt. \\
+Fehler & \code{Join failed: select either curves or surfaces}; \code{\ldots: select at least
+  two objects}; \code{\ldots: the curves do not form one chain} \\}
+
+\subsection{line -- Line}\label{sec:befehl-line}
+\befehlseintrag{%
+Name & \cmd{line}; Aliasse \code{l}, \code{li} \\
+Werkzeug & Draw, \gui{Line}; Kürzel \keys{L} \\
+Eingabe & 1.~\code{Line: start point}\newline 2.~\code{Line: end point (or length)} \\
+Zahlen & im 2.~Schritt: Länge in Richtung des Cursors \\
+Bezugspunkt & der Startpunkt \\
+Ergebnis & eine Strecke. \\}
+
+\subsection{loft -- Loft}\label{sec:befehl-loft}
+\befehlseintrag{%
+Name & \cmd{loft} \\
+Werkzeug & Surfaces, \gui{Loft} \\
+Auswahl & zwei oder mehr Querschnittskurven in Auswahlreihenfolge; sofort \\
+Ergebnis & glatte Fläche durch alle Querschnitte. \\
+Fehler & \code{Loft: select two or more section curves (in order)}; \code{Loft failed: \ldots} \\}
+
+\subsection{mass\_properties -- Volume / mass properties}\label{sec:befehl-mass-properties}
+\befehlseintrag{%
+Name & \cmd{mass\_properties}; Alias \code{volume} \\
+Werkzeug & Analyze, \gui{Volume / mass properties} \\
+Auswahl & geschlossene Körper (andere Objekte werden übergangen); sofort \\
+Ergebnis & Meldung \code{Volume <V>   centroid (<x>, <y>, <z>)}: Gesamtvolumen und
+  gemeinsamer Schwerpunkt. \\
+Fehler & \code{Volume / mass properties failed: select closed solids} \\}
+
+\subsection{mirror -- Mirror}\label{sec:befehl-mirror}
+\befehlseintrag{%
+Name & \cmd{mirror}; Alias \code{mi} \\
+Werkzeug & Transform, \gui{Mirror} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Mirror: start of the mirror line (copies, plane through the line and the
+  construction-plane normal)}\newline
+  2.~\code{Mirror: end of the mirror line} \\
+Bezugspunkt & der Anfang der Spiegellinie \\
+Ergebnis & gespiegelte Kopien; Spiegelebene durch die Linie und die Normale der
+  Konstruktionsebene. \\}
+
+\subsection{move -- Move}\label{sec:befehl-move}
+\befehlseintrag{%
+Name & \cmd{move}; Alias \code{m} \\
+Werkzeug & Transform, \gui{Move}; Kürzel \keys{M} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Move: point to move from}\newline 2.~\code{Move: point to move to} \\
+Bezugspunkt & der erste Punkt \\
+Ergebnis & die Objekte selbst werden verschoben. \\}
+
+\subsection{offset\_curve -- Offset curve}\label{sec:befehl-offset-curve}
+\befehlseintrag{%
+Name & \cmd{offset\_curve}; Alias \code{offset} \\
+Werkzeug & Curves, \gui{Offset curve} \\
+Auswahl & eine oder mehrere Kurven \\
+Eingabe & \code{Offset curve (distance 1): click the side (type a number to change the
+  distance)} \\
+Zahlen & Abstand ($>0$), beliebig oft vor dem Klick \\
+Ergebnis & je Kurve eine Parallelkurve auf der angeklickten Seite, in der Konstruktionsebene
+  der Ansicht, in der geklickt wurde. \\
+Fehler & \code{Offset curve: select one or more curves} \\}
+
+\subsection{offset\_surface -- Offset surface}\label{sec:befehl-offset-surface}
+\befehlseintrag{%
+Name & \cmd{offset\_surface}; Alias \code{offsetsrf} \\
+Werkzeug & Surfaces, \gui{Offset surface} \\
+Auswahl & eine oder mehrere unbeschnittene Flächen \\
+Eingabe & \code{Offset surface: distance along the normal (negative: other side)} -- nur
+  Zahl ($\neq 0$) \\
+Ergebnis & je Fläche eine Parallelfläche. \\
+Fehler & \code{Offset surface: select (untrimmed) surfaces} \\}
+
+\subsection{plane -- Plane}\label{sec:befehl-plane}
+\befehlseintrag{%
+Name & \cmd{plane} \\
+Werkzeug & Surfaces, \gui{Plane} \\
+Eingabe & 1.~\code{Plane: first corner}\newline 2.~\code{Plane: opposite corner} \\
+Bezugspunkt & die erste Ecke \\
+Ergebnis & rechteckige ebene Fläche, Kanten parallel zu den Achsen der Konstruktionsebene. \\}
+
+\subsection{point -- Point}\label{sec:befehl-point}
+\befehlseintrag{%
+Name & \cmd{point}; Aliasse \code{pt}, \code{po} \\
+Werkzeug & Draw, \gui{Point} \\
+Eingabe & \code{Point: location (Enter / right-click: done)} -- beliebig oft \\
+Bezugspunkt & der zuletzt gesetzte Punkt \\
+Ergebnis & je Eingabe ein Punktobjekt (jeweils ein Rückgängig-Schritt). \\}
+
+\subsection{polygon -- Polygon}\label{sec:befehl-polygon}
+\befehlseintrag{%
+Name & \cmd{polygon}; Alias \code{pol} \\
+Werkzeug & Draw, \gui{Polygon} \\
+Eingabe & 1.~\code{Polygon (6 sides): centre (type a number to change the sides)}\newline
+  2.~\code{Polygon (6 sides): corner point or radius} \\
+Zahlen & vor dem Mittelpunkt: Eckenzahl (ganze Zahl 3 bis 1000); danach: Umkreisradius (erste
+  Ecke in $u$-Richtung) \\
+Bezugspunkt & der Mittelpunkt \\
+Ergebnis & regelmäßiges geschlossenes Vieleck in der Konstruktionsebene. \\}
+
+\subsection{polyline -- Polyline}\label{sec:befehl-polyline}
+\befehlseintrag{%
+Name & \cmd{polyline}; Alias \code{pl} \\
+Werkzeug & Draw, \gui{Polyline} \\
+Eingabe & 1.~\code{Polyline: start point}\newline
+  2.~\code{Polyline: next point (Enter: done, first point: close)} -- beliebig oft \\
+Bezugspunkt & der letzte Punkt \\
+Ergebnis & \keys{Enter}/Rechtsklick: offene Polylinie (ab 2 Punkten). Erneut der Startpunkt (ab
+  3 vorhandenen Punkten): geschlossene Polylinie. \\}
+
+\subsection{rectangle -- Rectangle}\label{sec:befehl-rectangle}
+\befehlseintrag{%
+Name & \cmd{rectangle}; Aliasse \code{rec}, \code{rect} \\
+Werkzeug & Draw, \gui{Rectangle} \\
+Eingabe & 1.~\code{Rectangle: first corner}\newline 2.~\code{Rectangle: opposite corner} \\
+Bezugspunkt & die erste Ecke \\
+Ergebnis & geschlossenes Rechteck (eine Kurve), Kanten parallel zu den Achsen der
+  Konstruktionsebene. \\}
+
+\subsection{revolve -- Revolve}\label{sec:befehl-revolve}
+\befehlseintrag{%
+Name & \cmd{revolve}; Alias \code{rev} \\
+Werkzeug & Surfaces, \gui{Revolve} \\
+Auswahl & eine oder mehrere Kurven (Profil) \\
+Eingabe & 1.~\code{Revolve: start of the axis}\newline
+  2.~\code{Revolve: end of the axis}\newline
+  3.~\code{Revolve: angle in degrees (Enter: 360)} \\
+Zahlen & im 3.~Schritt: Winkel ($\neq 0$, Betrag $\leq 360$); positiv gegen den
+  Uhrzeigersinn um die Achsrichtung \\
+Bezugspunkt & der zuletzt gesetzte Achspunkt \\
+Ergebnis & je Profilkurve eine Rotationsfläche. \\
+Fehler & \code{Revolve: select one or more curves} \\}
+
+\subsection{rotate -- Rotate}\label{sec:befehl-rotate}
+\befehlseintrag{%
+Name & \cmd{rotate}; Alias \code{ro} \\
+Werkzeug & Transform, \gui{Rotate} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Rotate: centre (axis: normal of the construction plane)}\newline
+  2.~\code{Rotate: angle in degrees or first reference point}\newline
+  3.~(nach einem Bezugspunkt) \code{Rotate: second reference point} \\
+Zahlen & im 2.~Schritt: Winkel in Grad \\
+Bezugspunkt & das Zentrum \\
+Ergebnis & die Objekte werden um die Achse durch das Zentrum parallel zur Normalen der
+  Konstruktionsebene gedreht. \\}
+
+\subsection{scale -- Scale}\label{sec:befehl-scale}
+\befehlseintrag{%
+Name & \cmd{scale}; Alias \code{sc} \\
+Werkzeug & Transform, \gui{Scale} \\
+Auswahl & beliebige Objekte \\
+Eingabe & 1.~\code{Scale: base point}\newline
+  2.~\code{Scale: factor or first reference point}\newline
+  3.~(nach einem Bezugspunkt) \code{Scale: second reference point} \\
+Zahlen & im 2.~Schritt: Faktor ($>0$) \\
+Bezugspunkt & der Basispunkt \\
+Ergebnis & gleichmäßige Skalierung um den Basispunkt; mit Bezugspunkten ist der Faktor das
+  Abstandsverhältnis (Punkt~2 zu Punkt~1). \\}
+
+\subsection{sphere -- Sphere}\label{sec:befehl-sphere}
+\befehlseintrag{%
+Name & \cmd{sphere}; Alias \code{sph} \\
+Werkzeug & Solids, \gui{Sphere} \\
+Eingabe & 1.~\code{Sphere: centre}\newline 2.~\code{Sphere: radius (point or number)} \\
+Bezugspunkt & der Mittelpunkt \\
+Ergebnis & Kugel als geschlossener Körper. \\}
+
+\subsection{spline -- Interpolated spline}\label{sec:befehl-spline}
+\befehlseintrag{%
+Name & \cmd{spline}; Alias \code{sp} \\
+Werkzeug & Curves, \gui{Interpolated spline} \\
+Eingabe & 1.~\code{Spline: first point}\newline
+  2.~\code{Spline: next point (Enter: done)} -- beliebig oft \\
+Bezugspunkt & der letzte Punkt \\
+Ergebnis & mit \keys{Enter}: kubische Spline-Kurve durch alle Punkte (ab 2 Punkten; bei 2 bzw.\
+  3 Punkten Grad 1 bzw.\ 2). \\}
+
+\subsection{split -- Split}\label{sec:befehl-split}
+\befehlseintrag{%
+Name & \cmd{split} \\
+Werkzeug & Edit, \gui{Split} \\
+Auswahl & (a) genau eine Kurve, oder (b) zuerst eine Fläche, dann eine Schnittfläche \\
+Eingabe & (a) \code{Split: click the point on the curve}; (b) sofort \\
+Ergebnis & (a) zwei Kurven; (b) die Teilflächen. Das Original wird ersetzt. \\
+Fehler & \code{Split: select one curve, or a surface and then a cutting surface};
+  \code{Split failed: the surfaces do not intersect}; Punkt am Kurvenende: \code{Input not
+  accepted} \\}
+
+\subsection{sweep1 -- Sweep 1 rail}\label{sec:befehl-sweep1}
+\befehlseintrag{%
+Name & \cmd{sweep1} \\
+Werkzeug & Surfaces, \gui{Sweep 1 rail} \\
+Auswahl & genau zwei Kurven: Profil, dann Leitkurve; sofort \\
+Ergebnis & Fläche: Profil entlang der Leitkurve geführt. \\
+Fehler & \code{Sweep 1 rail: select the profile, then the rail} \\}
+
+\subsection{sweep2 -- Sweep 2 rails}\label{sec:befehl-sweep2}
+\befehlseintrag{%
+Name & \cmd{sweep2} \\
+Werkzeug & Surfaces, \gui{Sweep 2 rails} \\
+Auswahl & genau drei Kurven: Profil, Leitkurve~1, Leitkurve~2; sofort \\
+Ergebnis & Fläche: Profil entlang zweier Leitkurven geführt. \\
+Fehler & \code{Sweep 2 rails: select the profile, then rail 1 and rail 2} \\}
+
+\subsection{torus -- Torus}\label{sec:befehl-torus}
+\befehlseintrag{%
+Name & \cmd{torus}; Alias \code{tor} \\
+Werkzeug & Solids, \gui{Torus} \\
+Eingabe & 1.~\code{Torus: centre}\newline
+  2.~\code{Torus: major radius (point or number)}\newline
+  3.~\code{Torus: tube radius (point or number)} \\
+Bezugspunkt & der Mittelpunkt \\
+Ergebnis & Torus mit Mittelebene parallel zur Konstruktionsebene. \\
+Hinweise & Der Rohrradius muss kleiner als der große Radius sein; ein Punkt bestimmt ihn als
+  Abstand vom Mittelkreis. \\}
+
+\subsection{trim -- Trim}\label{sec:befehl-trim}
+\befehlseintrag{%
+Name & \cmd{trim}; Alias \code{tr} \\
+Werkzeug & Edit, \gui{Trim} \\
+Auswahl & zuerst das zu stutzende Objekt (Kurve oder einzelne Fläche), dann die Schneidobjekte
+  (Kurven/Flächen bzw.\ eine Schnittfläche) \\
+Eingabe & \code{Trim: click the part of the first selected object to remove} \\
+Ergebnis & Das Objekt wird an den Schnitten geteilt, das angeklickte Stück entfernt, die übrigen
+  bleiben. \\
+Fehler & \code{Trim: select the object to trim first, then the cutting objects}; kein Schnitt
+  oder Klick neben dem Objekt: \code{Input not accepted} \\}
+
+\subsection{union -- Boolean union}\label{sec:befehl-union}
+\befehlseintrag{%
+Name & \cmd{union}; Alias \code{bu} \\
+Werkzeug & Solids, \gui{Boolean union} \\
+Auswahl & mindestens zwei geschlossene Körper; sofort \\
+Ergebnis & Vereinigung aller Körper; ersetzt die Eingangskörper, übernimmt Name, Layer und
+  Farbe des zuerst gewählten. \\
+Fehler & \code{Select at least two solids}; \code{Boolean union failed: \ldots} \\}
+
+\fussy

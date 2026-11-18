@@ -1,0 +1,393 @@
+\chapter{Dateien}\label{kap:dateien}
+\index{Datei}
+
+\produkt{} speichert seine Arbeit in Dokumenten mit der Endung \datei{.rttf}. Daneben liest und
+schreibt es STEP und schreibt STL. Dieses Kapitel beschreibt, was in einem Dokument steht, wie
+Sie Dateien öffnen, speichern, importieren und exportieren und welche Beispielmodelle es gibt.
+Den genauen Aufbau des Dateiformats beschreibt \autoref{kap:dateiformat}.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.8cm}>{\centering\arraybackslash}p{1.2cm}>{\centering\arraybackslash}p{1.4cm}X}
+\toprule
+\textbf{Format} & \textbf{Lesen} & \textbf{Schreiben} & \textbf{Hinweise} \\
+\midrule
+\endhead
+\datei{.rttf} (Raytatouille Fusion file) & \checkmark & \checkmark & das Dokument mit allem,
+  was dazugehört (\autoref{sec:rttf}) \\
+\datei{.nfcad} & \checkmark & (\checkmark) & dasselbe Format aus der Zeit vor Version 1.0;
+  wird geöffnet, \gui{Save As...} schlägt \datei{.rttf} vor \\
+STEP (\datei{.step}, \datei{.stp}) & \checkmark & \checkmark & exakte Geometrie; Öffnen
+  ersetzt, Importieren ergänzt das Dokument; Export als AP214
+  (\autoref{sec:step-import}, \autoref{sec:step-export}) \\
+STL (\datei{.stl}) & -- & \checkmark & binär, aus den Dreiecksnetzen der Darstellung
+  (\autoref{sec:stl-export}) \\
+\datei{.nfplugin} & \checkmark & -- & Plugin-Paket; Öffnen installiert das Plugin
+  (\autoref{kap:plugin-verwaltung}) \\
+\bottomrule
+\end{referenz}
+
+Optische Systeme im Format von Raytatouille (\datei{.rtt.json}) und Glaskataloge
+(\datei{.agf}) liest nicht das CAD-Programm, sondern das Plugin \plugin{Raytracer}
+(\autoref{kap:raytracer}).
+
+\section{Das Dokument (.rttf)}\label{sec:rttf}
+\index{rttf}\index{Dokument}
+
+Ein Dokument ist eine einzige Datei. Sie enthält alles, was nötig ist, um die Arbeit auf einem
+anderen Rechner fortzusetzen -- auch die Daten, die Plugins für ihre Rechnungen brauchen. Die
+Endung \datei{.rttf} steht für \enquote{Raytatouille Fusion file}.
+
+\subsection{Was im Dokument steht}\label{sec:rttf-inhalt}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}X}
+\toprule
+\textbf{Inhalt} & \textbf{Einzelheiten} \\
+\midrule
+\endhead
+Geometrie & jedes Objekt \emph{exakt}: Grad, Knotenvektor, Kontrollpunkte und Gewichte der
+  NURBS, bei getrimmten Flächen die Randkurven im Parameterraum, bei Hüllen die Liste ihrer
+  Flächen. Keine Dreiecksnetze -- die Darstellung wird beim Öffnen neu berechnet. Die
+  Topologie der Hüllen (welche Flächen an welcher Kante zusammenstoßen) wird beim Öffnen durch
+  Zusammennähen wiederhergestellt. Einheit: Millimeter. \\
+Objektdaten & Id, Name, Ebene, Sichtbarkeit, gegebenenfalls eigene Farbe, Gruppe und freie
+  Attribute (\autoref{kap:organisieren}). \\
+Ebenen & Name, Farbe, Sichtbarkeit (\autoref{sec:ebenen}). \\
+Gruppen & Name, übergeordnete Gruppe, Sichtbarkeit -- also der ganze Modellbaum
+  (\autoref{sec:gruppen}). \\
+Plugin-Parameter & die Werte im Dock \gui{Plugin}, für jedes Plugin getrennt. Werte eines
+  Plugins, das auf dem aktuellen Rechner nicht installiert ist, bleiben beim Speichern
+  unverändert erhalten. \\
+Workflow & der Knoten-Workflow mit Blöcken, Verbindungen, Zweigen, Gruppen und Varianten,
+  einschließlich der Daten, die Blöcke aus Dateien übernommen haben
+  (\autoref{sec:glaskataloge}). \\
+Gespeicherte Ergebnisse & das neueste Ergebnis jedes Anzeigefensters des Workflows: Bilder,
+  Kurven, Tabellen, Balken -- jeweils mit einem Fingerabdruck dessen, woraus es berechnet
+  wurde (\autoref{sec:gespeicherte-ergebnisse}). \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Nicht im Dokument} stehen: der Zoom und die Blickrichtung der Ansichten, die
+Darstellungsmodi, die Auswahl, die Liste der Rückgängig-Schritte, die Fensteranordnung (sie
+gehört zu den Programmeinstellungen, \autoref{sec:einstellungen}) und die übrigen Ergebnisse
+im Dock \gui{Results}, etwa Strahlen und Felder auf Flächen. Diese werden beim nächsten Rechnen
+neu erzeugt.
+
+\paragraph{Technisches.} Das Dokument ist eine UTF-8-Textdatei im JSON-Format. Sie wird
+\emph{atomar} geschrieben: Das Programm schreibt zuerst eine temporäre Datei und ersetzt die
+alte erst, wenn alles geschrieben ist. Bricht das Speichern ab (volle Festplatte, Absturz),
+bleibt die vorige Fassung unversehrt. Das Format trägt eine Versionsnummer; ältere Fassungen
+werden gelesen, eine neuere als die vom Programm unterstützte wird mit der Meldung
+\enquote{document version \dots{} is newer than this program supports} abgelehnt.
+
+\begin{hinweis}
+Dokumente mit gespeicherten Bildern können groß werden, weil die Bildwerte mitgespeichert
+werden (je Pixel vier Byte, in der Datei als Base64-Text). Bei sehr großen Kamerabildern
+lohnt es sich, nicht mehr benötigte Anzeigeblöcke aus dem Workflow zu entfernen.
+\end{hinweis}
+
+\subsection{Ältere Dokumente (.nfcad)}\label{sec:nfcad}
+
+Dateien mit der Endung \datei{.nfcad} stammen aus der Zeit vor Version~1.0, als das Programm
+noch Nurbforge CAD hieß. Ihr Inhalt hat dasselbe Format; \produkt{} öffnet sie ohne
+Umwandlung. \menu{File,Save} schreibt ein geöffnetes \datei{.nfcad}-Dokument unter seinem
+bisherigen Namen zurück. \menu{File,Save As...} schlägt denselben Namen mit der Endung
+\datei{.rttf} vor -- so stellen Sie ein Dokument auf die neue Endung um.
+
+\section{Öffnen, Speichern, Neu}\label{sec:oeffnen-speichern}
+\index{Öffnen}\index{Speichern}
+
+\subsection{Öffnen}
+
+\begin{schritte}
+  \item \menu{File,Open...} (\keys{Strg+O}).
+  \item Hat das aktuelle Dokument ungespeicherte Änderungen, fragt das Programm zuerst
+    \enquote{The document has been modified. Save the changes?} -- \gui{Save} speichert,
+    \gui{Discard} verwirft die Änderungen, \gui{Cancel} bricht das Öffnen ab.
+  \item Der Dateidialog beginnt im Ordner des aktuellen Dokuments. Die Dateitypliste bietet
+    \gui{All supported}, \gui{Raytatouille Fusion documents (*.rttf *.nfcad)} und \gui{STEP
+    files}. Wählen Sie die Datei.
+\end{schritte}
+
+Das geöffnete Dokument ersetzt das bisherige vollständig; die Liste der Rückgängig-Schritte
+und das Dock \gui{Results} werden geleert. Gespeicherte Ergebnisse kehren als Lauf
+\enquote{Saved results} zurück, die Parameter der Plugins erscheinen in ihrem Dock, und ein
+Workflow öffnet das Fenster \gui{Node workflow}. Sobald die Darstellung berechnet ist, zeigen
+alle Ansichten das ganze Modell (\gui{Zoom extents}), und die Statusleiste meldet die Zahl der
+Objekte und Dreiecke und die benötigte Zeit.
+
+Lässt sich eine Datei nicht lesen, meldet ein Fenster \enquote{Cannot open \dots} mit dem
+Grund, etwa \enquote{not a Raytatouille Fusion document} oder \enquote{invalid geometry:
+\dots}. Das bisherige Dokument bleibt dann unverändert.
+
+\begin{hinweis}
+Eine Liste der zuletzt geöffneten Dateien bietet das Programm nicht. Ein Dokument öffnen Sie
+über \menu{File,Open...}, unter Windows auch per Doppelklick im Explorer
+(\autoref{sec:kommandozeile}).
+\end{hinweis}
+
+\subsection{Speichern}
+
+\begin{itemize}
+  \item \menu{File,Save} (\keys{Strg+S}) speichert unter dem bisherigen Namen. Hat das
+    Dokument noch keinen (neues Dokument, geöffnete STEP-Datei), wirkt es wie \gui{Save As...}.
+  \item \menu{File,Save As...} fragt nach einem Namen; gespeichert wird immer im Format
+    \datei{.rttf}. Geben Sie keine Endung an, hängt das Programm \datei{.rttf} an.
+\end{itemize}
+
+Nach dem Speichern meldet die Statusleiste \enquote{Saved \textit{Dateiname}}, und das
+Sternchen im Fenstertitel verschwindet. Scheitert das Speichern (Schreibschutz, voller
+Datenträger), erscheint \enquote{Cannot save \dots} mit dem Grund.
+
+\paragraph{Wann gilt ein Dokument als geändert?} Wenn es einen Bearbeitungsschritt gab
+(\autoref{sec:undo}), wenn Plugin-Parameter geändert wurden, wenn sich der Workflow geändert
+hat oder wenn eine Rechnung neue Ergebnisse für die Anzeigefenster des Workflows geliefert
+hat. Nur dann fragt das Programm beim Schließen, beim Öffnen und bei \gui{New} nach dem
+Speichern.
+
+\begin{warnung}
+Ein- und Ausblenden sowie Änderungen an Ebenen (neue Ebene, Name, Farbe) und Gruppennamen
+gelten \emph{nicht} als Änderung. Sie werden zwar beim Speichern mitgeschrieben, lösen aber
+keine Rückfrage aus. Haben Sie nur solche Dinge geändert, speichern Sie selbst.
+\end{warnung}
+
+\subsection{Neu}
+
+\menu{File,New} (\keys{Strg+N}) beginnt ein leeres Dokument \enquote{Untitled} mit der Ebene
+\gui{Default}, ohne Plugin-Parameter und ohne Workflow -- nach Rückfrage, falls das bisherige
+ungespeicherte Änderungen hat.
+
+\section{STEP importieren und öffnen}\label{sec:step-import}
+\index{STEP}\index{Import}
+
+STEP (ISO 10303) ist das übliche Austauschformat für exakte CAD-Geometrie. \produkt{} liest
+STEP-Dateien der Anwendungsprotokolle AP203 und AP214 mit B-Spline- und analytischen Flächen
+(Ebenen, Zylinder, Kegel, Kugeln, Tori \dots) und wandelt sie in NURBS-Hüllen um, in
+Millimetern. Jeder Körper der Datei wird ein Objekt vom Typ \gui{Shell}; sein Name kommt aus
+der STEP-Datei, oder er heißt nach der Datei mit einer laufenden Nummer.
+
+Es gibt zwei Wege, eine STEP-Datei zu lesen:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.8cm}X}
+\toprule
+\textbf{Weg} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\menu{File,Open...} (\keys{Strg+O}) & \emph{ersetzt} das Dokument durch den Inhalt der
+  STEP-Datei (vorher Rückfrage bei Änderungen). Das neue Dokument hat noch keinen Namen;
+  \gui{Save} fragt nach einem \datei{.rttf}-Namen, die STEP-Datei wird nicht überschrieben. \\
+\menu{File,Import STEP...} (\keys{Strg+I}) & \emph{ergänzt} das aktuelle Dokument um den
+  Inhalt der STEP-Datei. Das Einlesen ist ein Rückgängig-Schritt (\enquote{Import STEP}). \\
+\bottomrule
+\end{referenz}
+
+In beiden Fällen bilden alle Körper der Datei eine Gruppe im Modellbaum, die den Dateinamen
+ohne Endung trägt -- aus \datei{demo-parts.step} wird die Gruppe \enquote{demo-parts}.
+
+\paragraph{Ablauf.} Das Lesen geschieht im Hintergrund; die Statusleiste zeigt
+\enquote{Reading \textit{Datei} \dots}, danach \enquote{Tessellating \dots}, solange die
+Darstellung berechnet wird, und schließlich die Zahl der Objekte und Dreiecke mit der
+benötigten Zeit. Beim Öffnen und Importieren zeigt das Programm danach in allen Ansichten das
+ganze Modell.
+
+\paragraph{Warnungen und Fehler.} Elemente, die das Programm nicht umsetzen kann, werden
+übersprungen. Ein Fenster nennt dann \enquote{\textit{n} warning(s) while reading:} mit den
+ersten zwanzig Warnungen. Lässt sich die Datei gar nicht lesen, erscheint \enquote{Cannot read
+\dots} mit dem Grund. Prüfen Sie nach Warnungen, ob alle Teile vollständig sind -- etwa im
+Modellbaum und an den Eigenschaften der Hüllen (\gui{Closed} bei Volumenkörpern).
+
+\begin{tipp}
+Um mehrere Baugruppen in ein Dokument zu holen, öffnen Sie die erste mit \gui{Open...} und
+holen Sie die weiteren mit \gui{Import STEP...} dazu. Jede Datei wird eine eigene Gruppe, die
+Sie im Modellbaum einzeln ein- und ausblenden können.
+\end{tipp}
+
+\section{STEP exportieren}\label{sec:step-export}
+\index{STEP!Export}\index{Export}
+
+\menu{File,Export STEP...} schreibt Geometrie als STEP-Datei nach AP214, in Millimetern.
+
+\begin{schritte}
+  \item Wählen Sie die Objekte aus, die exportiert werden sollen. Ohne Auswahl exportiert das
+    Programm alle \emph{sichtbaren} Objekte; ausgeblendete und solche auf ausgeblendeten
+    Ebenen oder in ausgeblendeten Gruppen bleiben dann außen vor.
+  \item \menu{File,Export STEP...}, Dateiname eingeben. Ohne Endung hängt das Programm
+    \datei{.step} an.
+  \item Die Statusleiste meldet \enquote{Exported \textit{n} object(s) to \textit{Datei}}.
+\end{schritte}
+
+Exportiert werden Hüllen (Volumenkörper und offene Flächenverbände), getrimmte und untrimmte
+Flächen -- jede Fläche als eigene Hülle --, und zwar exakt, ohne Annäherung. Jedes Objekt
+behält seinen Namen (ohne Namen \enquote{shell\_\textit{Id}}). \emph{Nicht} exportiert werden
+Punkte und Kurven sowie Ebenen, Gruppen, Farben und Attribute. Enthält die Auswahl nichts
+Exportierbares, meldet die Statusleiste \enquote{Nothing to export (STEP: solids and surfaces,
+STL: objects with faces)}.
+
+\begin{hinweis}
+Teilobjekte (einzelne Flächen einer Hülle) werden nicht einzeln exportiert. Um nur eine Fläche
+einer Hülle weiterzugeben, zerlegen Sie die Hülle zuerst mit \cmd{Explode}
+(\autoref{kap:modellieren}).
+\end{hinweis}
+
+\section{STL exportieren}\label{sec:stl-export}
+\index{STL}
+
+\menu{File,Export STL...} schreibt die Dreiecksnetze der ausgewählten (ohne Auswahl: aller
+sichtbaren) Objekte mit Flächen in \emph{eine} binäre STL-Datei, in Millimetern. Ohne Endung
+hängt das Programm \datei{.stl} an. Punkte und Kurven haben keine Dreiecke und fehlen.
+
+Die Dreiecke sind die der Bildschirmdarstellung: Das STL ist so genau wie die Darstellung in
+den Ansichten, nicht wie die exakte Geometrie. Für 3D-Druck, Visualisierung und
+Netzwerkzeuge ist das meist ausreichend; für die Fertigung oder für andere CAD-Programme
+verwenden Sie STEP.
+
+\section{Öffnen per Doppelklick und Kommandozeile}\label{sec:kommandozeile}
+\index{Kommandozeile}\index{Doppelklick}
+
+\paragraph{Doppelklick.} Unter Windows verknüpft das Installationsprogramm die Endungen
+\datei{.rttf} und \datei{.nfcad} mit \produkt{}; ein Doppelklick im Explorer startet das
+Programm mit dem Dokument. Unter Linux meldet der Anwendungseintrag das Programm für
+STEP-Dateien an, sodass es im Dateimanager unter \enquote{Öffnen mit} erscheint. Unter macOS
+ist das Programm mit keiner Endung verknüpft; öffnen Sie Dokumente dort über
+\menu{File,Open...} oder aus dem Terminal.
+
+\paragraph{Kommandozeile.} Das Programm nimmt eine Datei als Argument:
+
+\begin{lstlisting}
+RaytatouilleFusion [Optionen] [Datei]
+\end{lstlisting}
+
+Der Programmaufruf lautet je nach System:
+\begin{lstlisting}
+macOS:   /Applications/RaytatouilleFusion.app/Contents/MacOS/RaytatouilleFusion
+Windows: "C:\Program Files\Raytatouille Fusion\bin\RaytatouilleFusion.exe"
+Linux:   RaytatouilleFusion
+\end{lstlisting}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.4cm}X}
+\toprule
+\textbf{Argument} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\textit{Datei} & ein Dokument (\datei{.rttf}, \datei{.nfcad}) oder eine STEP-Datei, die geöffnet
+  wird, oder ein Plugin-Paket (\datei{.nfplugin}), das installiert wird. \\
+\code{-{}-display-mode} \textit{Modus} & Darstellungsmodus aller Ansichten beim Start:
+  \code{wireframe}, \code{surfaces} oder \code{shaded}. \\
+\code{-{}-benchmark} \textit{Bilder} & Messlauf: öffnet die Datei, dreht die perspektivische
+  Ansicht über die angegebene Zahl von Bildern, gibt die Zeiten aus und beendet das Programm. \\
+\code{-{}-help}, \code{-h} & listet die Optionen auf. \\
+\code{-{}-version}, \code{-v} & gibt die Versionsnummer aus. \\
+\bottomrule
+\end{referenz}
+
+Beispiel (macOS):
+\begin{lstlisting}
+/Applications/RaytatouilleFusion.app/Contents/MacOS/RaytatouilleFusion --display-mode wireframe ~/Modelle/objektiv.rttf
+\end{lstlisting}
+
+Lässt sich ein beim Start angegebenes Dokument nicht öffnen, zeigt das Programm die
+Fehlermeldung und beendet sich danach.
+
+\section{Beispielmodelle}\label{sec:beispiele}
+\index{Beispiele}
+
+Zum Ausprobieren gibt es Beispiele. Die Beispiele im Ordner \datei{examples} gehören nicht zur
+Installation; Sie finden sie im Quelltext-Archiv des Projekts auf GitHub
+(\url{https://github.com/PhotonPower/Raytatouille-Fusion}, Ordner \datei{examples}).
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.6cm}X}
+\toprule
+\textbf{Datei} & \textbf{Inhalt} \\
+\midrule
+\endhead
+\datei{examples/demo-parts.step} & zwölf Volumenkörper -- Platten mit Löchern (boolesche
+  Differenzen), Kugeln, Tori, Kegel, Zylinder -- in einem Raster. Gut zum Üben von Navigation,
+  Auswahl, Teilobjekten und Darstellungsmodi (\autoref{fig:hauptfenster}). \\
+\datei{examples/pathtracer/\allowbreak cornell-box.rttf} & Cornell-Box mit roter und grüner Wand, Lampe
+  in der Decke, einem Block und einer Glaskugel; bereit für \gui{Camera image} des Path
+  Tracers (\autoref{kap:pathtracer}). \\
+\datei{examples/pathtracer/\allowbreak caustics.rttf} & Kaustiken: eine stark dispergierende Glaskugel,
+  ein blauer Glasring und ein Band aus poliertem Gold unter einem Spot. \\
+\datei{examples/pathtracer/\allowbreak prism.rttf} & ein Prisma aus Schwerflint fächert weißes Licht in
+  31 Wellenlängen auf. \\
+\datei{examples/pathtracer/\allowbreak depth-of-field.rttf} & fünf Kugeln aus verschiedenen Materialien,
+  aufgenommen mit Schärfentiefe. \\
+\datei{singlet\_optim.rtt.json} (im Raytracer-Plugin, Ordner \datei{examples}) & ein Raytatouille-System: eine
+  Einzellinse zum Optimieren, mit konstanter Brechzahl (kein Glaskatalog nötig). Wird nicht
+  mit \gui{Open...} geöffnet, sondern im Plugin \plugin{Raytracer} über \gui{System file} und
+  \gui{Load system} (\autoref{kap:raytracer}). \\
+\bottomrule
+\end{referenz}
+
+Das Raytracer-Beispiel wird mit dem Programm installiert, im Plugin-Ordner:
+\begin{lstlisting}
+macOS:   /Applications/RaytatouilleFusion.app/Contents/Resources/python/plugins/raytracer/examples
+Windows: C:\Program Files\Raytatouille Fusion\python\plugins\raytracer\examples
+Linux:   /usr/share/raytatouille-fusion/python/plugins/raytracer/examples
+\end{lstlisting}
+
+Weitere optische Systeme liegen dem Rechenkern Raytatouille bei; Systeme mit realen Gläsern
+brauchen dessen Glaskataloge (\datei{.agf}) im Raytracer-Panel unter \gui{Glass catalogues}.
+
+\section{Eingebettete Daten: Glaskataloge und andere Dateien}\label{sec:glaskataloge}
+\index{Glaskatalog}
+
+Ein Dokument soll auf jedem Rechner rechnen, auch dort, wo die Dateien fehlen, aus denen es
+entstanden ist. Deshalb übernimmt der Workflow Daten aus Dateien in das Dokument:
+
+\begin{itemize}
+  \item \textbf{Glaskataloge.} Die Glaskataloge eines optischen Systems werden an einer Stelle
+    verwaltet: in der Liste \gui{Glass catalogues} im Dock \gui{Plugin} beim
+    \plugin{Raytracer}. Dazu kommen alle \datei{.agf}-Dateien neben der Systemdatei und in deren
+    Unterordner \datei{catalogs}. Beim nächsten \gui{Check workflow} oder \gui{Run workflow}
+    speichert der Workflow diese Kataloge im Dokument (in der Quelle des Systems). Danach
+    rechnet die \datei{.rttf}-Datei auch ohne die \datei{.agf}-Dateien -- im Workflow ebenso
+    wie im Raytracer-Panel, das die gespeicherten Kataloge benutzt, wenn eine Datei fehlt.
+  \item \textbf{Dateien von Blöcken.} Dateien, die Blöcke des Workflows nennen -- die
+    Konfiguration oder Jones-Tabelle eines Gitters, die Konfiguration eines Schichtstapels --,
+    speichert \gui{Check workflow} (und \gui{Run workflow}) ebenfalls in den Blöcken und löscht
+    die Pfade. Eine genannte Datei, die sich nicht lesen lässt, ergibt eine Warnung.
+  \item \textbf{Ausnahme:} STEP-Dateien von CAD-Schichten in einer Konfiguration von
+    FourierGrating
+    bleiben außerhalb des Dokuments; der Check meldet sie als externe Dateien
+    (\autoref{kap:fouriergrating}).
+\end{itemize}
+
+Fehlen beim Rechnen Gläser, nennen das Protokoll und die Statuszeile den Katalog, die
+fehlenden Gläser und die Abhilfe. Einzelheiten in \autoref{kap:raytracer} und
+\autoref{kap:workflow}.
+
+\begin{tipp}
+Bevor Sie ein Dokument weitergeben, führen Sie einmal \gui{Check workflow} aus und speichern
+danach. Dann stecken Glaskataloge und Blockdateien im Dokument, und der Empfänger braucht nur
+die \datei{.rttf}-Datei.
+\end{tipp}
+
+\section{Gespeicherte Ergebnisse}\label{sec:gespeicherte-ergebnisse}
+\index{Ergebnis!gespeichert}\index{Fingerabdruck}
+
+Rechnungen im Knoten-Workflow können Minuten bis Stunden dauern. Damit ihre Ergebnisse nicht
+verloren gehen, speichert das Programm mit dem Dokument das \emph{neueste Ergebnis jedes
+Anzeigefensters} des Workflows: Kamerabilder, Pupillenbilder, Kurven von Parameterstudien,
+Tabellen und Balkendiagramme.
+
+\paragraph{Fingerabdruck.} Zu jedem gespeicherten Ergebnis gehört ein Fingerabdruck dessen,
+woraus es berechnet wurde -- Workflow und Einstellungen. Nach dem Öffnen stehen die
+Ergebnisse im Dock \gui{Results} als Lauf \enquote{Saved results} (Typ \enquote{document}),
+und ihre Anzeigefenster zeigen sie wieder an. Die Workflow-Maschine vergleicht den
+Fingerabdruck mit dem, was sie jetzt berechnen würde:
+
+\begin{itemize}
+  \item Sind Workflow und Einstellungen unverändert, gilt das Ergebnis als aktuell: Der Block
+    trägt ein grünes Häkchen, und \gui{Run workflow} rechnet ihn nicht noch einmal (in der
+    Statuszeile \enquote{(unchanged)}).
+  \item Ändern Sie etwas, auf dem das Ergebnis beruht, wird es beim nächsten Lauf neu
+    berechnet.
+\end{itemize}
+
+\paragraph{Was nicht gespeichert wird.} Zwischenergebnisse -- Strahlenbündel, Felder --
+werden nicht im Dokument gespeichert, ebenso wenig die Ergebnisse von Plugin-Aktionen außerhalb
+der Anzeigefenster des Workflows (z.\,B.\ \gui{Trace rays} des Raytracers). Bildwerte werden
+mit einfacher Genauigkeit (32 Bit) gespeichert, Kurven und Balken mit doppelter.
+
+\paragraph{Geändert durch Rechnen.} Liefert ein Lauf neue Ergebnisse für die Anzeigefenster,
+gilt das Dokument als geändert, auch wenn Sie sonst nichts angefasst haben -- das Programm
+fragt beim Schließen also nach dem Speichern, damit die Rechenzeit nicht verloren geht.

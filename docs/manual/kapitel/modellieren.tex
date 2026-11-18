@@ -1,0 +1,1436 @@
+\chapter{Zeichnen und Modellieren}\label{kap:modellieren}
+\sloppy % lange Befehls-Aufforderungen in Schreibmaschinenschrift umbrechen
+
+In diesem Kapitel lernen Sie, wie Sie in \produkt{} Geometrie erzeugen und verändern: Punkte,
+Kurven, Flächen und Volumenkörper. Alle Geometrie wird exakt als NURBS (nicht als Dreiecksnetz)
+im Geometriekern \emph{Nurbforge} gespeichert; die Darstellung in den Ansichten ist nur eine
+Näherung für den Bildschirm. Dadurch bleiben Radien, Kegelschnitte und Freiformflächen auch nach
+Transformationen und Booleschen Operationen exakt -- eine wichtige Voraussetzung für die
+optischen Berechnungen der Plugins.
+
+Das Kapitel ist in zwei Teile gegliedert. Der erste Teil
+(Abschnitte~\ref{sec:befehle-starten} bis~\ref{sec:objektfang}) erklärt die Bedienung, die für
+alle Befehle gleich ist: Befehle starten, Punkte und Zahlen eingeben, Befehle abschließen, die
+Konstruktionsebene, der Ortho-Modus und der Objektfang. Der zweite Teil
+(Abschnitte~\ref{sec:gruppe-draw} bis~\ref{sec:mod-beispiele}) beschreibt jeden Befehl der
+Werkzeugspalte, Gruppe für Gruppe, und zeigt an vollständigen Beispielen, wie Sie typische
+optische Bauteile -- Linsen, Spiegel, Blenden -- modellieren. Eine knappe alphabetische
+Übersicht aller Befehle mit ihren Aufforderungen finden Sie in Anhang~\ref{kap:befehle}, alle
+Tastenkürzel in Anhang~\ref{kap:tastenkuerzel}.
+
+\begin{hinweis}
+Längen haben in \produkt{} keine eigene Einheit; sie werden in Modelleinheiten eingegeben und
+angezeigt. Beim Export nach STEP werden sie als Millimeter geschrieben (siehe
+Kapitel~\ref{kap:dateien}). Es empfiehlt sich daher, durchgehend in Millimetern zu modellieren.
+Winkel geben Sie immer in Grad ein.
+\end{hinweis}
+
+% ============================================================================
+\section{Befehle starten}\label{sec:befehle-starten}
+\index{Befehl!starten}
+
+Jeder Modellierschritt ist ein \emph{Befehl}: ein kleiner Ablauf, der Sie nacheinander nach
+Punkten, Zahlen oder einer Auswahl fragt und am Ende ein Ergebnis erzeugt. Sie können einen
+Befehl auf drei Arten starten.
+
+\subsection{Über die Werkzeugspalte}\index{Werkzeugspalte}
+
+Die Werkzeugspalte (Dock \gui{Tools}, standardmäßig links im Hauptfenster) enthält alle Befehle
+als Knöpfe, geordnet in Gruppen:
+
+\begin{referenz}{llX}
+\toprule
+Gruppe & Standard & Befehle \\
+\midrule\endhead
+\gui{Draw} & aufgeklappt & Point, Line, Polyline, Rectangle, Polygon \\
+\gui{Curves} & aufgeklappt & Circle (centre, radius), Circle (3 points), Arc, Helix,
+  Interpolated spline, Offset curve, Fillet curves \\
+\gui{Surfaces} & zugeklappt & Plane, Extrude, Revolve, Loft, Sweep 1 rail, Sweep 2 rails,
+  Coons patch, Gordon surface, Offset surface, Fillet surfaces, Cap planar holes \\
+\gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Boolean union,
+  Boolean difference, Boolean intersection \\
+\gui{Transform} & zugeklappt & Move, Copy, Rotate, Scale, Mirror, Linear array, Grid array,
+  Polar array \\
+\gui{Edit} & zugeklappt & Trim, Split, Join, Explode, Delete \\
+\gui{Analyze} & zugeklappt & Distance, Angle, Curvature, Area, Volume / mass properties,
+  Intersection check \\
+\bottomrule
+\end{referenz}
+
+Ein Klick auf die Kopfzeile einer Gruppe (Dreieck und Name) klappt sie auf oder zu; mehrere
+Gruppen können gleichzeitig offen sein. Welche Gruppen offen sind, merkt sich das Programm für
+den nächsten Start. Unter den sieben festen Gruppen erscheint für jedes geladene Plugin eine
+eigene Gruppe mit dessen Aktionen (siehe Kapitel~\ref{kap:plugins}).
+
+Die Knöpfe zeigen eine Kurzbeschriftung (etwa \gui{Ln} für Line oder \gui{Ext} für Extrude),
+solange für den Befehl kein Symbol hinterlegt ist. Wenn Sie die Maus über einen Knopf halten,
+nennt ein Tooltip den vollen Namen und gegebenenfalls das Tastenkürzel, zum Beispiel
+\enquote{Line (L)}; die Statusleiste zeigt den Namen ebenfalls. Die Anzahl der Knopfspalten
+richtet sich nach der Breite der Werkzeugspalte -- ziehen Sie den Rand des Docks breiter, um
+mehr Knöpfe nebeneinander zu sehen. Die Kurzbeschriftungen aller Knöpfe stehen in der Tabelle
+in Anhang~\ref{kap:befehle}.
+
+\subsection{Durch Eintippen des Namens}\index{Befehlszeile}\index{Alias}
+
+Jeder Befehl hat einen Namen und meist einen oder mehrere kurze \emph{Aliasse}. Tippen Sie den
+Namen oder Alias in die Befehlszeile am unteren Fensterrand und drücken Sie \keys{Enter}. Groß-
+und Kleinschreibung spielt keine Rolle: \code{line}, \code{Line}, \code{LI} und \code{l}
+starten alle den Befehl Line.
+
+Sie müssen die Befehlszeile dafür nicht anklicken: Sobald Sie in einer Ansicht tippen, gehen
+die Zeichen automatisch in die Befehlszeile, und die Befehlszeile erhält den Tastaturfokus.
+Ein typischer Ablauf ist also: Maus in die Ansicht, \code{c} tippen, \keys{Enter} -- und der
+Kreisbefehl läuft.
+
+Die wichtigsten Aliasse:
+
+\begin{referenz}{lll@{\hspace{2em}}lll}
+\toprule
+Alias & Befehl & & Alias & Befehl & \\
+\midrule\endhead
+\code{pt} & Point & & \code{b} & Box & \\
+\code{l} & Line & & \code{sph} & Sphere & \\
+\code{pl} & Polyline & & \code{cyl} & Cylinder & \\
+\code{rec} & Rectangle & & \code{cone} & Cone & \\
+\code{pol} & Polygon & & \code{tor} & Torus & \\
+\code{c} & Circle & & \code{bu}, \code{bd}, \code{bi} & Booleans & \\
+\code{c3} & Circle (3 points) & & \code{m} & Move & \\
+\code{a} & Arc & & \code{co} & Copy & \\
+\code{h} & Helix & & \code{ro} & Rotate & \\
+\code{sp} & Spline & & \code{sc} & Scale & \\
+\code{offset} & Offset curve & & \code{mi} & Mirror & \\
+\code{fillet} & Fillet curves & & \code{array} & Linear array & \\
+\code{ext} & Extrude & & \code{arraypolar} & Polar array & \\
+\code{rev} & Revolve & & \code{j} & Join & \\
+\code{offsetsrf} & Offset surface & & \code{x} & Explode & \\
+\code{filletsrf} & Fillet surfaces & & \code{tr} & Trim & \\
+\code{network} & Gordon surface & & \code{dist} & Distance & \\
+\code{volume} & Volume & & \code{ang} & Angle & \\
+\code{intersect} & Intersect & & \code{curv} & Curvature & \\
+\bottomrule
+\end{referenz}
+
+Die vollständige Liste mit allen Namen und Aliassen enthält Anhang~\ref{kap:befehle}.
+
+\begin{warnung}
+Verwechseln Sie nicht \code{intersection} und \code{intersect}: \code{intersection} (Alias
+\code{bi}) ist die \emph{Boolesche Schnittmenge} von Volumenkörpern, \code{intersect} (Name
+\code{intersection\_check}) berechnet die \emph{Schnittpunkte und Schnittkurven} von Kurven und
+Flächen (Werkzeug \gui{Intersection check} in der Gruppe Analyze).
+\end{warnung}
+
+\subsection{Mit Tastenkürzeln}\index{Tastenkürzel!Befehle}
+
+Drei Werkzeuge nennen im Tooltip ein Tastenkürzel: \gui{Line} (\keys{L}), \gui{Circle (centre,
+radius)} (\keys{C}) und \gui{Move} (\keys{M}). Diese Buchstaben sind zugleich die Aliasse
+\code{l}, \code{c} und \code{m}: Drücken Sie in einer Ansicht \keys{L} und dann \keys{Enter},
+so startet Line. Das Werkzeug \gui{Delete} löscht die Auswahl; dasselbe erreichen Sie mit
+\keys{Entf} (siehe Abschnitt~\ref{sec:gruppe-edit}).
+
+\begin{hinweis}
+Einige Buchstaben sind in den Ansichten mit anderen Funktionen belegt und gelangen dann nicht in
+die Befehlszeile: \keys{H} blendet die Auswahl aus (\gui{Hide}), \keys{Z} leitet die
+Tastenfolgen \keys{Z}, \keys{E} (Zoom extents) und \keys{Z}, \keys{S} (Zoom selected) ein, und
+die \keys{Leertaste} maximiert die aktive Ansicht. Um zum Beispiel die Helix mit \code{h} zu
+starten, klicken Sie zuerst in die Befehlszeile und tippen dort -- in der Befehlszeile werden
+alle Zeichen ganz normal eingegeben.
+\end{hinweis}
+
+\subsection{Den letzten Befehl wiederholen}\index{Befehl!wiederholen}
+
+Drücken Sie \keys{Enter}, während kein Befehl läuft und die Befehlszeile leer ist, so wird der
+zuletzt gestartete Befehl erneut gestartet. Das ist praktisch, wenn Sie mehrere Linien,
+Kreise oder Verschiebungen nacheinander ausführen. Wiederholt wird der Befehl mit seinem
+Ausgangszustand (etwa wieder mit 6 Ecken beim Polygon); auswahlbasierte Befehle verwenden die
+\emph{dann aktuelle} Auswahl.
+
+\subsection{Einen Befehl während eines anderen starten}
+
+Tippen Sie den Namen eines Befehls ein, während ein anderer noch läuft, so wird der laufende
+Befehl abgebrochen und der neue gestartet. Bereits erzeugte Zwischenergebnisse (etwa die schon
+gesetzten Punkte des Befehls Point) bleiben erhalten. Ist der Name unbekannt, erscheint in der
+Statusleiste \code{Unknown command '...'}, und der laufende Befehl bleibt unverändert aktiv.
+
+% ============================================================================
+\section{Die Befehlszeile und ihre Meldungen}\label{sec:mod-befehlszeile}
+
+Die Befehlszeile ist das Eingabefeld am unteren Rand des Hauptfensters. Solange kein Befehl
+läuft, steht darin grau der Platzhalter \code{Command:}. Läuft ein Befehl, zeigt sie stattdessen
+dessen \emph{Aufforderung} (Prompt), die genau sagt, welche Eingabe als Nächstes erwartet wird,
+zum Beispiel:
+
+\begin{lstlisting}
+Line: start point
+Line: end point (or length)
+Polygon (6 sides): centre (type a number to change the sides)
+\end{lstlisting}
+
+Ist der Ortho-Modus eingeschaltet, wird an die Aufforderung \code{[Ortho]} angehängt. Lesen Sie
+die Aufforderung im Zweifel immer zuerst -- sie verrät auch, ob eine Zahl erlaubt ist (\enquote{point
+or number}), ob \keys{Enter} eine Bedeutung hat (\enquote{Enter: done}, \enquote{Enter: 360})
+und welche Voreinstellung gerade gilt (\enquote{6 sides}, \enquote{5 turns}).
+
+Während Sie die Maus bewegen, zeigt eine orange \emph{Gummiband-Vorschau}\index{Gummiband} in
+allen Ansichten, wie das Ergebnis aussehen würde: die Linie bis zum Cursor, den Kreis mit dem
+aktuellen Radius, die verschobenen Objekte und so weiter.
+
+Ergebnisse und Fehler meldet das Programm in der Statusleiste links unten:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Meldung & Bedeutung \\
+\midrule\endhead
+\code{Input not accepted -- <Aufforderung>} & Die Eingabe passt nicht zum aktuellen Schritt,
+  zum Beispiel ein Endpunkt, der mit dem Startpunkt zusammenfällt, ein Radius 0 oder drei Punkte
+  auf einer Geraden beim Kreis durch drei Punkte. Der Befehl bleibt im selben Schritt; geben Sie
+  einen anderen Wert ein. \\
+\code{Unknown command '...'} & Der eingetippte Name ist weder Befehl noch Alias. \\
+\code{No command is waiting for a point} & Sie haben Koordinaten eingegeben, ohne dass ein
+  Befehl läuft. \\
+\code{A number is not expected here} & Eine Zahl wurde eingegeben, der aktuelle Schritt kann
+  aber weder eine Zahl noch eine Länge verwenden. \\
+\code{relative input needs a previous point} & Eine Eingabe mit \code{@} ist erst möglich,
+  wenn es einen Bezugspunkt gibt (Abschnitt~\ref{sec:punkteingabe}). \\
+\code{polar input: distance<angle} & Die Polar-Eingabe ist nicht in der Form
+  \code{Abstand<Winkel}. \\
+\code{expected x,y or x,y,z} & Eine Koordinateneingabe hat nicht zwei oder drei Werte. \\
+\code{'...' is not a number} & Ein Teil einer Koordinateneingabe ist keine Zahl. \\
+\code{<Befehl> cancelled} & Der Befehl wurde abgebrochen, ohne etwas zu erzeugen. \\
+\code{<Befehl>: select objects first} & Ein auswahlbasierter Befehl wurde ohne Auswahl
+  gestartet (Abschnitt~\ref{sec:auswahlbefehle}). \\
+\code{<Befehl> failed: ...} & Der Geometriekern konnte das Ergebnis nicht berechnen; der Text
+  nach dem Doppelpunkt nennt den Grund. \\
+\bottomrule
+\end{referenz}
+
+Messergebnisse (Distance, Angle, Area, Volume, Curvature) erscheinen ebenfalls in der
+Statusleiste. Das Ergebnis von Distance bleibt dort stehen, bis eine neue Meldung kommt; die
+übrigen Meldungen verschwinden nach einigen Sekunden.
+
+% ============================================================================
+\section{Punkte eingeben}\label{sec:punkteingabe}
+\index{Punkteingabe}\index{Koordinaten}
+
+Fast jeder Befehl fragt nach Punkten. Sie können jeden Punkt wahlweise mit der Maus setzen oder
+als Koordinaten eintippen; beides lässt sich innerhalb eines Befehls beliebig mischen.
+
+\subsection{Mit der Maus}
+
+Während ein Befehl einen Punkt erwartet, wird der Cursor in den Ansichten zum Fadenkreuz.
+\maus{Klicken} Sie mit der linken Maustaste, um den Punkt zu setzen. Welcher Punkt genau
+entsteht, hängt davon ab, ob der Objektfang greift:
+
+\begin{itemize}
+\item \textbf{Mit Fang:} Liegt ein Fangpunkt in der Nähe des Cursors -- etwa ein Kurvenende oder
+  ein Kreismittelpunkt --, zeigt ein grünes Symbol mit Beschriftung diesen Punkt an, und der
+  Klick übernimmt seine exakten 3D-Koordinaten (Abschnitt~\ref{sec:objektfang}).
+\item \textbf{Ohne Fang:} Sonst entsteht der Punkt dort, wo der Sehstrahl unter dem Cursor die
+  \emph{Konstruktionsebene} der Ansicht trifft (Abschnitt~\ref{sec:mod-konstruktionsebene}). In der
+  Ansicht Top ist das die XY-Ebene bei $z=0$, in Front die XZ-Ebene bei $y=0$ usw.
+\end{itemize}
+
+Die Statusleiste zeigt laufend die Koordinaten des Punktes, der bei einem Klick entstehen würde
+(\code{X ...   Y ...   Z ...} mit drei Nachkommastellen) -- beim Fangen die Koordinaten des
+Fangpunkts.
+
+Während der Punkteingabe bleibt die Navigation in den Ansichten möglich: Mausrad zum Zoomen,
+mittlere Maustaste zum Verschieben, \maus{rechts ziehen} zum Drehen bzw.\ Verschieben (siehe
+Kapitel~\ref{kap:navigation}). Ein \maus{Rechtsklick ohne Ziehen} beendet dagegen den Befehl wie
+\keys{Enter} (Abschnitt~\ref{sec:abschliessen}). Ein Ziehen mit gedrückter linker Taste zieht
+während eines Befehls \emph{kein} Auswahlrechteck auf; der Punkt entsteht dort, wo Sie die Taste
+loslassen.
+
+\subsection{Über die Tastatur}\label{sec:koordinateneingabe}
+
+Tippen Sie Koordinaten ein und bestätigen Sie mit \keys{Enter}. Dezimaltrennzeichen ist immer
+der \emph{Punkt}, die Koordinaten werden durch \emph{Kommas} getrennt; Leerzeichen sind erlaubt
+und werden ignoriert. Wissenschaftliche Schreibweise wie \code{1.5e-3} ist zulässig.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.22\linewidth}X}
+\toprule
+Eingabe & Bedeutung \\
+\midrule\endhead
+\code{x,y,z} & absolute Weltkoordinaten, z.\,B.\ \code{10,0,-5} \\
+\code{x,y} & Koordinaten in der Konstruktionsebene der Ansicht (siehe unten), gemessen vom
+  Weltursprung \\
+\code{@dx,dy,dz} & relativ zum Bezugspunkt, Versatz in Weltkoordinaten \\
+\code{@dx,dy} & relativ zum Bezugspunkt, Versatz in der Konstruktionsebene \\
+\code{d<a} & polar in der Konstruktionsebene: Abstand $d$ vom Ursprung unter dem Winkel $a$ (in
+  Grad, gemessen von der ersten Ebenenachse $u$ zur zweiten Achse $v$) \\
+\code{@d<a} & polar relativ zum Bezugspunkt \\
+\bottomrule
+\end{referenz}
+
+Was \enquote{x} und \enquote{y} bei der Eingabe mit zwei Werten bedeuten, hängt von der Ansicht
+ab, in der sich die Maus zuletzt befand:
+
+\begin{referenz}{lllX}
+\toprule
+Ansicht & 1.\ Wert ($u$) & 2.\ Wert ($v$) & Beispiel \code{3,4} ergibt \\
+\midrule\endhead
+Top (XY) & $x$ & $y$ & $(3,\,4,\,0)$ \\
+Perspective & $x$ & $y$ & $(3,\,4,\,0)$ \\
+Front (XZ) & $x$ & $z$ & $(3,\,0,\,4)$ \\
+Left (YZ) & $-y$ & $z$ & $(0,\,-3,\,4)$ \\
+\bottomrule
+\end{referenz}
+
+\begin{tipp}
+Bewegen Sie die Maus kurz über die gewünschte Ansicht, \emph{bevor} Sie Koordinaten oder Zahlen
+eintippen. Die Konstruktionsebene, auf die sich \code{x,y}, \code{@dx,dy}, \code{d<a} und viele
+Befehle (Rechteck, Kreis, Zylinder, Rotation \ldots) beziehen, ist immer die der Ansicht, über
+der die Maus zuletzt war. Mit drei Werten (\code{x,y,z}) sind Sie dagegen unabhängig von der
+Ansicht.
+\end{tipp}
+
+\paragraph{Der Bezugspunkt.}\index{Bezugspunkt}
+Relative Eingaben (\code{@\ldots}), eingetippte Längen und der Ortho-Modus beziehen sich auf den
+\emph{Bezugspunkt} des laufenden Befehls. In der Regel ist das der zuletzt eingegebene Punkt
+(bei Line der Startpunkt, bei Polyline der letzte Eckpunkt). Einige Befehle verwenden einen
+festen Bezugspunkt: Circle, Polygon, Sphere, Cylinder, Cone und Torus den Mittelpunkt, Rotate
+und Polar array das Zentrum, Scale den Basispunkt, Angle den Scheitel und Grid array den
+Basispunkt. Bevor der erste Punkt eines Befehls gesetzt ist, gibt es keinen Bezugspunkt; eine
+Eingabe mit \code{@} wird dann mit der Meldung \code{relative input needs a previous point}
+abgelehnt.
+
+\paragraph{Beispiele.}
+Ein Quadrat mit 20 Einheiten Kantenlänge als Polylinie in der Ansicht Top:
+\begin{lstlisting}
+pl            (Enter)  Polyline: start point
+0,0           (Enter)  Polyline: next point (Enter: done, first point: close)
+@20,0         (Enter)
+@0,20         (Enter)
+@-20,0        (Enter)
+0,0           (Enter)  -> der Startpunkt schliesst die Polylinie
+\end{lstlisting}
+Eine Linie der Länge 50 unter \SI{30}{\degree} vom Punkt $(10,10)$ aus:
+\begin{lstlisting}
+l             (Enter)  Line: start point
+10,10         (Enter)  Line: end point (or length)
+@50<30        (Enter)
+\end{lstlisting}
+
+\subsection{Zahlen eingeben}\label{sec:zahleneingabe}\index{Zahleneingabe}
+
+Viele Schritte erlauben statt eines Punkts eine Zahl -- die Aufforderung sagt das mit
+\enquote{(point or number)}, \enquote{or radius}, \enquote{or length} oder \enquote{type a
+number}. Eine eingetippte Zahl wird so verwendet:
+
+\begin{enumerate}
+\item Erwartet der aktuelle Schritt ausdrücklich eine Zahl (Radius, Höhe, Anzahl der Ecken,
+  Windungen, Winkel, Faktor, Abstand \ldots), wird sie genau dafür verwendet.
+\item Andernfalls wird die Zahl als \emph{Länge} interpretiert: Der Punkt entsteht im Abstand
+  dieser Länge vom Bezugspunkt, in Richtung des Mauszeigers. So zeichnen Sie eine Linie der
+  Länge 25, indem Sie den Startpunkt setzen, die Maus in die gewünschte Richtung bewegen und
+  \code{25} eintippen. Zusammen mit dem Ortho-Modus (\keys{F8}) ergibt das schnell achsparallele
+  Strecken genau bekannter Länge. Die Länge muss positiv sein.
+\item Ist beides nicht möglich (kein Bezugspunkt, Maus außerhalb der Ansichten), erscheint
+  \code{A number is not expected here}.
+\end{enumerate}
+
+Einige Befehle verwenden Zahlen am Anfang als \emph{Option}: Bevor Sie den ersten Punkt setzen,
+ändert eine Zahl beim Polygon die Eckenzahl, bei der Helix die Windungszahl und bei den Reihen
+(Arrays) die Anzahl der Kopien. Die Aufforderung zeigt den jeweils gültigen Wert in Klammern an
+und kündigt die Option mit \enquote{type a number to change \ldots} an. Weitere Optionen in
+Form von Schlüsselwörtern gibt es nicht.
+
+% ============================================================================
+\section{Befehle abschließen und abbrechen}\label{sec:abschliessen}
+\index{Befehl!abschließen}\index{Befehl!abbrechen}\index{Rückgängig}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\keys{Enter} (leere Befehlszeile) oder \maus{Rechtsklick} in einer Ansicht &
+  beendet den laufenden Befehl. Befehle mit offener Punktanzahl (Point, Polyline, Spline, Copy)
+  erzeugen dabei ihr Ergebnis; Revolve und Polar array verwenden \SI{360}{\degree}. Läuft kein
+  Befehl, wiederholt \keys{Enter} den letzten Befehl. \\
+\keys{Esc} & bricht den laufenden Befehl ab (\code{<Befehl> cancelled}); was der Befehl noch
+  nicht erzeugt hat, wird verworfen. Läuft kein Befehl, bricht \keys{Esc} einen laufenden
+  Plugin-Auftrag ab, und erst wenn auch der nicht läuft, hebt es die Auswahl auf (Menü
+  \menu{Edit,Select None / Cancel}). \\
+\keys{Strg+Z} & macht das letzte Ergebnis rückgängig (\menu{Edit,Undo}). \\
+\bottomrule
+\end{referenz}
+
+Jedes Ergebnis eines Befehls ist \emph{ein} Rückgängig-Schritt, der im Menü \menu{Edit} mit dem
+Namen des Befehls erscheint (etwa \enquote{Undo Line}). Das gilt auch für Befehle, die
+Eingangsobjekte entfernen oder ersetzen, etwa Boolesche Operationen oder Join: Ein
+\keys{Strg+Z} stellt den Zustand vor dem Befehl vollständig wieder her. Bei Point und Copy, die
+mehrere Ergebnisse nacheinander erzeugen, ist jeder gesetzte Punkt bzw.\ jede Kopie ein eigener
+Schritt.
+
+Erzeugt ein Befehl beim Beenden mit \keys{Enter} nichts (etwa eine Polylinie mit nur einem
+Punkt), endet er wie bei \keys{Esc} mit der Meldung \code{<Befehl> cancelled}. Bei Befehlen mit
+fester Anzahl von Eingaben (etwa Line, Circle, Box) bricht \keys{Enter} vor der letzten Eingabe
+den Befehl also ab.
+
+% ============================================================================
+\section{Befehle auf der Auswahl}\label{sec:auswahlbefehle}
+\index{Auswahl!Reihenfolge}
+
+Viele Befehle arbeiten nicht mit neu eingegebenen Punkten, sondern mit vorhandenen Objekten:
+Transformationen, Boolesche Operationen, Flächen aus Kurven, Join, Trim, die Messungen und
+weitere. Für diese Befehle gilt:
+
+\begin{itemize}
+\item \textbf{Erst auswählen, dann den Befehl starten.} Der Befehl übernimmt beim Start die
+  aktuelle Auswahl. Während der Befehl läuft, setzt ein Klick in die Ansicht Punkte und wählt
+  keine Objekte. Ist nichts (Passendes) ausgewählt, meldet die Statusleiste, was fehlt -- etwa
+  \code{Move: select objects first} oder \code{Loft: select two or more section curves (in
+  order)} --, und der Befehl startet nicht.
+\item \textbf{Ganze Objekte.} Es zählen nur ganz ausgewählte Objekte. Einzeln ausgewählte
+  Flächen, Kanten oder Ecken eines Körpers (Auswahl mit \keys{Strg+Shift}+Klick) werden von den
+  Befehlen ignoriert.
+\item \textbf{Die Reihenfolge zählt.} Die Objekte werden in der Reihenfolge übergeben, in der
+  Sie sie ausgewählt haben. Bei Boolean difference ist das zuerst gewählte Objekt der Körper,
+  von dem abgezogen wird; bei Trim und Split das zu schneidende Objekt; bei Loft die Reihenfolge
+  der Querschnitte; bei Sweep das Profil vor der Leitkurve. Wählen Sie solche Objekte
+  nacheinander mit \maus{Klick} und \keys{Shift}+\maus{Klick} aus, nicht mit einem
+  Auswahlrechteck.
+\item \textbf{Passende Typen.} Objekte, die für den Befehl nicht passen (etwa Punkte bei Loft),
+  werden stillschweigend übergangen.
+\end{itemize}
+
+Wie Sie Objekte auswählen, beschreibt Kapitel~\ref{kap:navigation}.
+
+% ============================================================================
+\section{Die Konstruktionsebene}\label{sec:mod-konstruktionsebene}
+\index{Konstruktionsebene}
+
+Jede der vier Ansichten hat eine \emph{Konstruktionsebene} mit zwei Achsen $u$ und $v$ und der
+Normalen $n = u \times v$. Das Raster der Ansicht liegt in dieser Ebene. Sie bestimmt,
+
+\begin{itemize}
+\item wo ein Mausklick ohne Fang landet (auf der Ebene),
+\item wie zweiwertige Koordinaten \code{x,y}, \code{@dx,dy} und Polarkoordinaten gemeint sind,
+\item in welcher Ebene Rechteck, Polygon, Kreis, Plane und die Grundflächen von Box, Zylinder,
+  Kegel und Torus liegen,
+\item die Richtung der Höhe bei Box, Cylinder und Cone (positive Werte entlang $n$),
+\item die Drehachse bei Rotate und Polar array und die Spiegelebene bei Mirror,
+\item die Achsen des Ortho-Modus.
+\end{itemize}
+
+\begin{referenz}{llllX}
+\toprule
+Ansicht & Ebene & $u$ & $v$ & Normale $n$ \\
+\midrule\endhead
+Top (XY) & $z=0$ & $+x$ & $+y$ & $+z$ (zum Betrachter) \\
+Perspective & $z=0$ & $+x$ & $+y$ & $+z$ \\
+Front (XZ) & $y=0$ & $+x$ & $+z$ & $-y$ (zum Betrachter) \\
+Left (YZ) & $x=0$ & $-y$ & $+z$ & $-x$ (zum Betrachter) \\
+\bottomrule
+\end{referenz}
+
+Alle Konstruktionsebenen gehen durch den Weltursprung. Stellen Sie eine Ansicht über ihr
+Ansichtsmenü (Klick auf den Titel der Ansicht) auf eine andere Standardansicht um, übernimmt sie
+auch deren Konstruktionsebene. Eigene, frei verschobene oder gedrehte Konstruktionsebenen gibt
+es in dieser Version nicht.
+
+\begin{tipp}
+Um in einer anderen Höhe zu zeichnen, geben Sie den ersten Punkt mit drei Koordinaten ein: Ein
+Kreis mit dem Mittelpunkt \code{0,0,20}, gezeichnet über der Ansicht Top, liegt in der Ebene
+$z=20$ -- der Kreis wird in der Ebene durch seinen Mittelpunkt parallel zur Konstruktionsebene
+erzeugt. Dasselbe gilt für Polygon, Rechteck (erster Eckpunkt) und die Grundfläche der
+Volumenkörper. Alternativ fangen Sie den ersten Punkt an vorhandener Geometrie.
+\end{tipp}
+
+% ============================================================================
+\section{Ortho-Modus}\label{sec:ortho}
+\index{Ortho}
+
+Der Ortho-Modus hilft, Punkte genau achsparallel zum Bezugspunkt zu setzen. Sie schalten ihn mit
+\keys{F8} oder mit dem Knopf \gui{Ortho} rechts in der Statusleiste ein und aus; im
+eingeschalteten Zustand ist der Knopf gedrückt dargestellt, und die Aufforderung endet mit
+\code{[Ortho]}.
+
+Bei eingeschaltetem Ortho wird ein mit der Maus gesetzter Punkt auf diejenige Achse der
+Konstruktionsebene durch den Bezugspunkt verschoben ($u$- oder $v$-Richtung), die der
+Cursorrichtung am nächsten liegt. In der Ansicht Top entstehen so nur waagrechte und
+senkrechte Linien. Das Gummiband zeigt die korrigierte Lage bereits an.
+
+Ortho wirkt nicht
+\begin{itemize}
+\item auf Punkte, die über den Objektfang gefangen wurden -- ein gefangener Punkt hat immer
+  Vorrang und wird nicht verändert;
+\item auf eingetippte Koordinaten;
+\item solange der Befehl noch keinen Bezugspunkt hat (also beim ersten Punkt).
+\end{itemize}
+Eine eingetippte Länge (Abschnitt~\ref{sec:zahleneingabe}) nimmt dagegen die Ortho-korrigierte
+Richtung zum Cursor.
+
+\begin{tipp}
+Wenn ein Punkt mit Ortho nicht dort landet, wo Sie ihn erwarten, hat vermutlich der Objektfang
+gegriffen. Halten Sie \keys{Alt} gedrückt, um den Fang für diesen Klick zu unterdrücken, oder
+schalten Sie ihn mit \keys{F3} ab.
+\end{tipp}
+
+% ============================================================================
+\section{Objektfang}\label{sec:objektfang}
+\index{Objektfang}\index{Fang|see{Objektfang}}
+
+Der Objektfang (\enquote{magnetischer Cursor}) zieht den Cursor auf charakteristische Punkte
+der vorhandenen Geometrie: Enden, Mittelpunkte, Zentren, Schnittpunkte und andere. So setzen Sie
+Punkte exakt -- in doppelter Genauigkeit, direkt aus der NURBS-Geometrie berechnet, nicht aus der
+Bildschirmdarstellung. Der Fang ist aktiv, solange ein Befehl einen Punkt erwartet, und
+funktioniert in allen vier Ansichten und in jedem Darstellungsmodus.
+
+\subsection{Fangsymbole}
+
+Ein grünes Symbol markiert den Fangpunkt; daneben steht in einem dunklen Kästchen die Fangart.
+Abbildung~\ref{fig:fangsymbole} zeigt alle Symbole.
+
+\abbildung[0.95\linewidth]{snap-glyphs.png}{Die Fangsymbole mit ihren Beschriftungen, in der
+Reihenfolge der Statusleiste: Point, End, Corner, Int, Cen, Quad, Mid, Edge, Near,
+Grid.}{fig:fangsymbole}
+
+\subsection{Die Fangarten}
+
+\begin{referenz}{llp{0.17\linewidth}X}
+\toprule
+Fangart & Kürzel & Symbol & Was gefangen wird \\
+\midrule\endhead
+Punkt & \gui{Point} & kleines gefülltes Quadrat & Punktobjekte (erzeugt mit Point oder
+  Intersect). \\
+Ende & \gui{End} & Quadrat & Anfangs- und Endpunkt offener Kurven: Linien, Polylinien,
+  Bögen, Splines, Helices. Geschlossene Kurven (Kreise, geschlossene Polylinien) haben keine
+  Enden. Die inneren Eckpunkte einer Polylinie sind keine Endpunkte (siehe Tipp unten). \\
+Flächenecke & \gui{Corner} & Quadrat mit Punkt & Ecken von Flächen und Körpern: die
+  Endpunkte der Randkanten (B-Rep-Ecken), etwa die Ecken einer Box. \\
+Schnittpunkt & \gui{Int} & X & Schnittpunkte zweier Kurven oder Kanten in 3D. In den
+  Parallelprojektionen (Front, Left, Top) zusätzlich \emph{scheinbare} Schnittpunkte: Kurven,
+  die sich nur in der Ansicht kreuzen, im Raum aber aneinander vorbeilaufen. Der Fang nimmt dann
+  den Punkt auf der vorderen Kurve; die Beschriftung lautet \code{Int (apparent)}. \\
+Zentrum & \gui{Cen} & Kreis & Mittelpunkte von Kreisen und Bögen (Krümmungsmittelpunkt);
+  bei anderen geschlossenen ebenen Kurven, etwa einem Rechteck oder Polygon, der
+  Flächenschwerpunkt. \\
+Quadrant & \gui{Quad} & Raute & Punkte, in denen Kreise und Bögen die Ebenen durch ihren
+  Mittelpunkt parallel zu den Koordinatenebenen schneiden -- bei einem Kreis in der XY-Ebene die
+  Punkte bei 0, 90, 180 und \SI{270}{\degree}. Bei Bögen nur die Punkte, die auf dem Bogen
+  liegen. \\
+Mitte & \gui{Mid} & Dreieck & Punkt auf halber \emph{Bogenlänge} offener Kurven (bei
+  Splines also nicht die Parametermitte). Bei einer Polylinie ist das die Mitte des ganzen
+  Linienzugs, nicht die eines einzelnen Segments. \\
+Flächenkante & \gui{Edge} & (Schalter) & Kein eigener Fangpunkt, sondern ein Schalter: Ist er
+  an, nehmen auch die Kanten von Flächen und Körpern an den Fangarten Mid, Near, Cen und Quad
+  teil -- so fangen Sie zum Beispiel den Mittelpunkt der kreisförmigen Kante einer Bohrung. \\
+Nächster & \gui{Near} & Sanduhr & Der Punkt auf einer Kurve oder Kante, der dem Cursor am
+  nächsten liegt. Damit setzen Sie Punkte \enquote{irgendwo auf} einer Kurve. \\
+Raster & \gui{Grid} & kleines Kreuz & Rasterpunkte der Konstruktionsebene (Schrittweite der
+  feinen Rasterlinien). Standardmäßig ausgeschaltet. \\
+\bottomrule
+\end{referenz}
+
+\enquote{Kurve} heißt hier jede Kurve: Linien, Polylinien, Bögen, Kreise und
+Freiform-NURBS-Kurven. Kreise und Bögen werden dabei an ihrer Form erkannt, nicht daran, mit
+welchem Befehl sie entstanden sind -- auch ein exakt kreisförmiger Spline hat ein Zentrum.
+
+\subsection{Welcher Fangpunkt gewinnt?}\index{Objektfang!Priorität}
+
+\begin{enumerate}
+\item \textbf{Fangradius:} Ein Kandidat zählt nur, wenn er auf dem Bildschirm höchstens
+  \num{10} Pixel vom Cursor entfernt ist. Der Fang verhält sich dadurch bei jeder Zoomstufe
+  gleich: Zoomen Sie hinein, wenn viele Kandidaten dicht beieinander liegen.
+\item \textbf{Priorität:} Liegen mehrere Kandidaten im Fangradius, gewinnt die Fangart mit der
+  höheren Priorität:
+  \begin{center}
+  Point $>$ End $>$ Corner $>$ Int $>$ Cen $>$ Quad $>$ Mid $>$ Edge $>$ Near $>$ Grid
+  \end{center}
+  Innerhalb derselben Fangart gewinnt der Kandidat, der auf dem Bildschirm am nächsten am
+  Cursor liegt, bei Gleichstand der, der näher an der Kamera liegt.
+\item \textbf{Verdeckte Geometrie:} In den Darstellungsmodi \gui{Surfaces} und \gui{Shaded}
+  werden Kandidaten ignoriert, die hinter einer Fläche liegen. Im Modus \gui{Wireframe} sind
+  alle Kandidaten fangbar -- schalten Sie auf Wireframe, um einen Punkt auf der Rückseite eines
+  Körpers zu fangen.
+\end{enumerate}
+
+\subsection{Zwischen Kandidaten wechseln: Tab}\index{Objektfang!Tab}
+
+Liegen mehrere Kandidaten unter dem Cursor, zeigt die Beschriftung zusätzlich ihre Anzahl, etwa
+\code{End  1/3}. Drücken Sie \keys{Tab}, um zum nächsten Kandidaten zu wechseln, und
+\keys{Shift+Tab}, um zum vorherigen zurückzugehen. Ein anschließender Klick (ohne die Maus zu
+bewegen) setzt den gewählten Kandidaten. Bewegen Sie die Maus, beginnt die Auswahl wieder beim
+besten Kandidaten.
+
+\subsection{Fang ein- und ausschalten}\index{Objektfang!ausschalten}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Bedienung & Wirkung \\
+\midrule\endhead
+\keys{F3} oder Knopf \gui{Snap} in der Statusleiste & schaltet den gesamten Objektfang ein
+  und aus. \\
+Knöpfe \gui{Point} \ldots{} \gui{Grid} in der Statusleiste & schalten einzelne Fangarten ein
+  und aus. Eingeschaltete Fangarten sind gedrückt dargestellt. \\
+\keys{Alt} gedrückt halten & unterdrückt den Fang, solange die Taste gehalten wird. Ein
+  \keys{Alt}+\maus{Klick} ohne Mausbewegung setzt einen freien Punkt auf der
+  Konstruktionsebene; \keys{Alt}+\maus{Ziehen} dreht bzw.\ verschiebt dagegen weiterhin die
+  Ansicht. \\
+\bottomrule
+\end{referenz}
+
+Standardmäßig sind alle Fangarten außer \gui{Grid} eingeschaltet. Der Zustand des Hauptschalters
+und der einzelnen Fangarten bleibt über einen Neustart des Programms erhalten.
+
+\begin{tipp}
+\begin{itemize}
+\item Schalten Sie \gui{Grid} ein, wenn Sie grob auf glatten Werten
+  skizzieren wollen; das Raster passt seine Schrittweite der Zoomstufe an (Zehnerpotenzen).
+\item Wenn \gui{Near} ständig andere Fangarten überdeckt, ist meist nichts Besseres im
+  Fangradius; zoomen Sie hinein oder schalten Sie \gui{Near} vorübergehend ab.
+\item Um ein Zentrum zu fangen, bewegen Sie den Cursor auf den Mittelpunkt des Kreises, nicht
+  auf die Kreislinie -- der Fangpunkt muss im Fangradius liegen.
+\item Eine Polylinie, ein Rechteck und ein Polygon sind jeweils \emph{eine} Kurve; ihre inneren
+  Ecken bieten weder \gui{End} noch \gui{Int}. Brauchen Sie die Ecken als Fangpunkte, zerlegen
+  Sie die Kurve mit \gui{Explode} in einzelne Strecken -- deren Enden sind dann fangbar.
+\end{itemize}
+\end{tipp}
+
+% ============================================================================
+\section{Zeichnen (Gruppe Draw)}\label{sec:gruppe-draw}
+
+Die Befehle dieser Gruppe erzeugen Punkte und gerade Kurven. Alle Kurven sind NURBS-Kurven;
+Polylinie, Rechteck und Polygon sind jeweils \emph{eine} Kurve vom Grad~1 mit Knicken an den
+Ecken (mit Explode zerlegen Sie sie in einzelne Strecken).
+
+\subsection{Point -- Punkt}\label{sec:cmd-point}
+\cmd{point}, Aliasse \code{pt}, \code{po}. Setzt Punktobjekte.
+\begin{schritte}
+\item Starten Sie \gui{Point}. Aufforderung: \code{Point: location (Enter / right-click: done)}.
+\item Klicken oder tippen Sie beliebig viele Punkte; jeder Punkt wird sofort erzeugt.
+\item Beenden Sie mit \keys{Enter} oder \maus{Rechtsklick}.
+\end{schritte}
+Punktobjekte dienen als Hilfspunkte für den Fang (Fangart \gui{Point}) und als Markierungen.
+
+\subsection{Line -- Linie}\label{sec:cmd-line}
+\cmd{line}, Aliasse \code{l}, \code{li}; Kürzel \keys{L}. Eine Strecke zwischen zwei Punkten.
+\begin{schritte}
+\item \code{Line: start point} -- Startpunkt setzen.
+\item \code{Line: end point (or length)} -- Endpunkt setzen, oder eine Länge eintippen: Die
+  Linie verläuft dann vom Startpunkt in Richtung Cursor.
+\end{schritte}
+Der Befehl endet nach einer Linie; mit \keys{Enter} starten Sie die nächste. Fallen Start- und
+Endpunkt zusammen, wird der Endpunkt abgelehnt.
+
+\subsection{Polyline -- Polylinie}\label{sec:cmd-polyline}
+\cmd{polyline}, Alias \code{pl}. Ein Linienzug aus geraden Segmenten.
+\begin{schritte}
+\item \code{Polyline: start point}.
+\item \code{Polyline: next point (Enter: done, first point: close)} -- beliebig viele weitere
+  Punkte.
+\item Abschluss: \keys{Enter} oder \maus{Rechtsklick} erzeugt eine \emph{offene} Polylinie (ab
+  zwei Punkten). Ein Klick auf den \emph{Startpunkt} (ab dem vierten Punkt, also mit mindestens
+  drei vorhandenen) schließt sie und beendet den Befehl. Der Punkt muss exakt mit dem
+  Startpunkt übereinstimmen: Tippen Sie seine Koordinaten erneut ein, oder fangen Sie ihn an
+  vorhandener Geometrie (z.\,B.\ einem Punktobjekt oder einem Rasterpunkt mit \gui{Grid}) --
+  die entstehende Polylinie selbst ist während des Zeichnens noch nicht fangbar.
+\end{schritte}
+Zwei aufeinanderfolgende gleiche Punkte werden abgelehnt. Eine geschlossene Polylinie hat einen
+Zentrumsfangpunkt (Flächenschwerpunkt) und lässt sich zu einem Prisma extrudieren und deckeln
+(Beispiel in Abschnitt~\ref{sec:bsp-prisma}).
+
+\subsection{Rectangle -- Rechteck}\label{sec:cmd-rectangle}
+\cmd{rectangle}, Aliasse \code{rec}, \code{rect}. Ein geschlossenes Rechteck, dessen Kanten
+parallel zu den Achsen der Konstruktionsebene liegen.
+\begin{schritte}
+\item \code{Rectangle: first corner}.
+\item \code{Rectangle: opposite corner} -- die diagonal gegenüberliegende Ecke.
+\end{schritte}
+Das Rechteck liegt in der Ebene durch die erste Ecke parallel zur Konstruktionsebene der Ansicht,
+in der Sie die erste Ecke gesetzt haben. Für ein Rechteck mit bekannten Seitenlängen tippen Sie
+die zweite Ecke relativ ein, etwa \code{@40,25}. Hat das Rechteck die Breite oder Höhe 0, wird
+die Ecke abgelehnt.
+
+\subsection{Polygon -- regelmäßiges Vieleck}\label{sec:cmd-polygon}
+\cmd{polygon}, Alias \code{pol}. Ein regelmäßiges, geschlossenes Vieleck in der
+Konstruktionsebene; standardmäßig ein Sechseck.
+\begin{schritte}
+\item \code{Polygon (6 sides): centre (type a number to change the sides)} -- tippen Sie
+  optional zuerst die Eckenzahl (ganze Zahl von 3 bis 1000), dann setzen Sie den Mittelpunkt.
+\item \code{Polygon (6 sides): corner point or radius} -- klicken Sie eine Ecke (bestimmt Größe
+  und Drehlage) oder tippen Sie den Umkreisradius. Bei einem getippten Radius liegt die erste
+  Ecke in $u$-Richtung der Konstruktionsebene.
+\end{schritte}
+
+% ============================================================================
+\section{Kurven (Gruppe Curves)}\label{sec:gruppe-curves}
+
+\subsection{Circle (centre, radius) -- Kreis um Mittelpunkt}\label{sec:cmd-circle}
+\cmd{circle}, Aliasse \code{c}, \code{ci}; Kürzel \keys{C}.
+\begin{schritte}
+\item \code{Circle: centre}.
+\item \code{Circle: radius (point or number)} -- klicken Sie einen Punkt (der Radius ist sein
+  Abstand vom Mittelpunkt, gemessen in der Konstruktionsebene) oder tippen Sie den Radius.
+\end{schritte}
+Der Kreis liegt in der Ebene durch den Mittelpunkt parallel zur Konstruktionsebene. Für einen
+Kreis mit vorgegebenem \emph{Durchmesser} tippen Sie den halben Wert.
+
+\subsection{Circle (3 points) -- Kreis durch drei Punkte}\label{sec:cmd-circle3p}
+\cmd{circle3p}, Alias \code{c3}. Der Kreis durch drei beliebige Punkte im Raum; seine Ebene
+ergibt sich aus den Punkten, nicht aus der Ansicht.
+\begin{schritte}
+\item \code{Circle: point 1 of 3}, \code{Circle: point 2 of 3}, \code{Circle: point 3 of 3}.
+\end{schritte}
+Liegen die drei Punkte auf einer Geraden oder fallen zwei zusammen, wird der dritte Punkt
+abgelehnt.
+
+\subsection{Arc -- Kreisbogen}\label{sec:cmd-arc}
+\cmd{arc}, Alias \code{a}. Ein Kreisbogen durch Anfangspunkt, Endpunkt und einen dritten Punkt
+auf dem Bogen.
+\begin{schritte}
+\item \code{Arc: start point}.
+\item \code{Arc: end point}.
+\item \code{Arc: point on the arc} -- ein beliebiger Punkt zwischen Anfang und Ende auf dem
+  gewünschten Bogen; er legt Radius und Bogenseite fest.
+\end{schritte}
+Der Bogen kann beliebig im Raum liegen. Er läuft vom Anfangspunkt über den dritten Punkt zum
+Endpunkt. Für einen Bogen mit bekanntem Radius $R$ und Pfeilhöhe berechnen Sie den dritten Punkt
+(Beispiel in Abschnitt~\ref{sec:bsp-spiegel}).
+
+\subsection{Helix -- Schraubenlinie}\label{sec:cmd-helix}
+\cmd{helix}, Aliasse \code{h}, \code{he}. Eine zylindrische Schraubenlinie um eine beliebige
+Achse; standardmäßig mit 5 Windungen.
+\begin{schritte}
+\item \code{Helix (5 turns): axis start (type a number to change the turns)} -- optional eine
+  Windungszahl tippen (jede positive Zahl, auch nicht ganzzahlig), dann den Anfang der Achse
+  setzen.
+\item \code{Helix (5 turns): axis end} -- das Ende der Achse. Die Achslänge ist die Höhe der
+  Helix; die Steigung ergibt sich als Höhe geteilt durch Windungen. Auch in diesem Schritt
+  ändert eine Zahl noch die Windungszahl.
+\item \code{Helix (5 turns): radius (point or number)} -- ein Punkt legt Radius und
+  Startrichtung fest (sein Abstand von der Achse); eine getippte Zahl ist der Radius.
+\end{schritte}
+Eine Schraubenfeder modellieren Sie, indem Sie anschließend einen kleinen Kreis an den
+Anfang der Helix setzen und ihn mit \gui{Sweep 1 rail} entlang der Helix führen.
+
+\subsection{Interpolated spline -- interpolierende Spline-Kurve}\label{sec:cmd-spline}
+\cmd{spline}, Alias \code{sp}. Eine glatte Freiformkurve, die exakt durch alle eingegebenen
+Punkte verläuft (kubisch interpolierend; bei nur zwei bzw.\ drei Punkten Grad 1 bzw.\ 2).
+\begin{schritte}
+\item \code{Spline: first point}.
+\item \code{Spline: next point (Enter: done)} -- beliebig viele weitere Punkte.
+\item \keys{Enter} oder \maus{Rechtsklick} erzeugt die Kurve (ab zwei Punkten).
+\end{schritte}
+Splines eignen sich für Profile von Freiformflächen und als Leitkurven für Sweeps. Da sie die
+Punkte interpoliert, schwingt die Kurve bei ungleichmäßig verteilten Punkten über; setzen Sie
+Punkte möglichst gleichmäßig.
+
+\subsection{Offset curve -- Parallelkurve}\label{sec:cmd-offset-curve}
+\cmd{offset\_curve}, Alias \code{offset}. Erzeugt zu jeder ausgewählten Kurve eine
+Parallelkurve in festem Abstand, in der Konstruktionsebene.
+\begin{schritte}
+\item Wählen Sie eine oder mehrere Kurven aus und starten Sie den Befehl.
+\item \code{Offset curve (distance 1): click the side (type a number to change the distance)}
+  -- tippen Sie zuerst den gewünschten Abstand (positive Zahl; Voreinstellung 1), dann klicken
+  Sie auf die Seite, auf der die Parallelkurve entstehen soll. Die Vorschau zeigt sie bereits
+  auf der Seite des Cursors.
+\end{schritte}
+Die Originale bleiben erhalten. Der Abstand wird senkrecht zur Kurve innerhalb der
+Konstruktionsebene der Ansicht gemessen, in der Sie klicken -- zeichnen Sie ebene Kurven also
+in der Ansicht, in deren Ebene sie liegen.
+
+\subsection{Fillet curves -- Kurven verrunden}\label{sec:cmd-fillet-curve}
+\cmd{fillet\_curve}, Alias \code{fillet}. Rundet Ecken mit einem Kreisbogen ab.
+\begin{schritte}
+\item Wählen Sie \emph{eine} oder \emph{zwei} ebene Kurven aus und starten Sie den Befehl.
+\item \code{Fillet: radius (two curves: fillet between them; one curve: all its corners)} --
+  tippen Sie den Radius.
+\end{schritte}
+\begin{itemize}
+\item \textbf{Zwei Kurven} (etwa zwei Linien, die sich treffen oder schneiden): Ein
+  Verrundungsbogen wird erzeugt, und beide Kurven werden bis zum Bogen gekürzt.
+\item \textbf{Eine Kurve} (etwa eine Polylinie, ein Rechteck): \emph{Alle} Ecken der Kurve
+  werden mit dem Radius verrundet; die Kurve wird ersetzt.
+\end{itemize}
+Ist der Radius zu groß für die Geometrie, meldet die Statusleiste
+\code{Input not accepted -- Fillet: radius \ldots}; der Befehl wartet dann auf einen kleineren
+Radius.
+
+% ============================================================================
+\section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
+\index{Fläche}
+
+Bis auf Plane erzeugen alle Befehle dieser Gruppe Flächen aus vorhandenen Kurven oder Flächen,
+die Sie vorher auswählen. Das Ergebnis sind \emph{offene Flächen}, keine Volumenkörper; mit
+\gui{Cap planar holes} und \gui{Join} machen Sie daraus geschlossene Körper
+(Abschnitt~\ref{sec:cmd-cap}). Die Ausgangskurven bleiben jeweils erhalten.
+
+\subsection{Plane -- ebene Rechteckfläche}\label{sec:cmd-plane}
+\cmd{plane}. Eine rechteckige ebene Fläche in der Konstruktionsebene, mit den Kanten parallel zu
+deren Achsen.
+\begin{schritte}
+\item \code{Plane: first corner}.
+\item \code{Plane: opposite corner}.
+\end{schritte}
+Die Bedienung entspricht Rectangle, nur entsteht eine Fläche statt einer Randkurve. Ebene
+Flächen sind nützlich als Schirme, Detektorflächen oder Schnittwerkzeuge für Split und Trim.
+
+\subsection{Extrude -- Extrusion}\label{sec:cmd-extrude}
+\cmd{extrude}, Alias \code{ext}. Zieht jede ausgewählte Kurve geradlinig zu einer Fläche aus.
+\begin{schritte}
+\item Wählen Sie eine oder mehrere Kurven aus und starten Sie den Befehl.
+\item \code{Extrude: distance along the construction-plane normal, or start of the direction}
+  -- tippen Sie eine Distanz, \emph{oder} setzen Sie den Anfangspunkt einer Richtung.
+\item Falls Sie einen Punkt gesetzt haben: \code{Extrude: end of the direction} -- der
+  Endpunkt. Der Vektor vom ersten zum zweiten Punkt ist Richtung und Länge der Extrusion. Statt
+  des Endpunkts können Sie auch eine Länge tippen; sie wirkt dann in Richtung des Cursors.
+\end{schritte}
+\begin{warnung}
+Eine \emph{eingetippte} Distanz extrudiert in dieser Version immer entlang der Welt-$z$-Achse
+(positiv: $+z$) -- das ist die Normale der Konstruktionsebene in Top und Perspective, aber nicht
+in Front und Left. Um in einer anderen Richtung zu extrudieren, geben Sie zwei Punkte ein, etwa
+\code{0,0,0} und \code{0,-10,0} für 10 Einheiten in $-y$-Richtung.
+\end{warnung}
+Eine geschlossene Kurve (Kreis, Rechteck, Polygon, geschlossene Polylinie) ergibt einen offenen
+Mantel; mit \gui{Cap planar holes} wird daraus ein Volumenkörper.
+
+\subsection{Revolve -- Rotationsfläche}\label{sec:cmd-revolve}
+\cmd{revolve}, Alias \code{rev}. Dreht jede ausgewählte Kurve um eine Achse. Das ist der
+wichtigste Befehl für rotationssymmetrische Optik: Linsen- und Spiegelflächen, Fassungen,
+Reflektoren.
+\begin{schritte}
+\item Wählen Sie das Profil (eine oder mehrere Kurven) aus und starten Sie den Befehl.
+\item \code{Revolve: start of the axis} -- erster Punkt der Drehachse.
+\item \code{Revolve: end of the axis} -- zweiter Punkt der Drehachse. Die Vorschau zeigt das
+  Profil in \SI{90}{\degree}-Schritten um die Achse.
+\item \code{Revolve: angle in degrees (Enter: 360)} -- tippen Sie einen Winkel (nicht 0,
+  höchstens \SI{360}{\degree} im Betrag) oder drücken Sie \keys{Enter} für eine volle Umdrehung.
+\end{schritte}
+Positive Winkel drehen gegen den Uhrzeigersinn um die Achsrichtung (vom Anfangs- zum Endpunkt,
+Rechte-Hand-Regel), negative Winkel in die andere Richtung. Für die optische Achse $z$ wählen
+Sie z.\,B.\ \code{0,0,0} und \code{0,0,1} als Achspunkte. Jede Profilkurve ergibt eine eigene
+Fläche; verbinden Sie die Profilkurven vorher mit \gui{Join}, wenn Sie eine einzige Fläche
+wünschen.
+
+\subsection{Loft -- Fläche durch Querschnitte}\label{sec:cmd-loft}
+\cmd{loft}. Eine glatte Fläche durch zwei oder mehr Querschnittskurven.
+\begin{schritte}
+\item Wählen Sie die Querschnitte \emph{in der gewünschten Reihenfolge} aus (Klick,
+  \keys{Shift}+Klick, \ldots).
+\item Starten Sie \gui{Loft}. Die Fläche entsteht sofort.
+\end{schritte}
+Die Querschnitte sollten gleich orientiert sein (alle im selben Drehsinn bzw.\ in derselben
+Richtung laufen), sonst verdreht sich die Fläche. Mit weniger als zwei Kurven erscheint
+\code{Loft: select two or more section curves (in order)}.
+
+\subsection{Sweep 1 rail -- Profil entlang einer Leitkurve}\label{sec:cmd-sweep1}
+\cmd{sweep1}. Führt ein Profil entlang einer Leitkurve (Rail).
+\begin{schritte}
+\item Wählen Sie genau zwei Kurven aus: zuerst das \emph{Profil}, dann die \emph{Leitkurve}.
+\item Starten Sie \gui{Sweep 1 rail}. Die Fläche entsteht sofort.
+\end{schritte}
+Bei falscher Anzahl: \code{Sweep 1 rail: select the profile, then the rail}. Legen Sie das
+Profil an den Anfang der Leitkurve, etwa einen Kreis senkrecht zur Helix für eine Feder.
+
+\subsection{Sweep 2 rails -- Profil entlang zweier Leitkurven}\label{sec:cmd-sweep2}
+\cmd{sweep2}. Führt ein Profil entlang zweier Leitkurven, die zugleich die Breite steuern.
+\begin{schritte}
+\item Wählen Sie genau drei Kurven aus: zuerst das \emph{Profil}, dann \emph{Leitkurve 1}, dann
+  \emph{Leitkurve 2}.
+\item Starten Sie \gui{Sweep 2 rails}.
+\end{schritte}
+Das Profil sollte die beiden Leitkurven an ihren Anfängen berühren.
+
+\subsection{Coons patch -- Fläche aus vier Randkurven}\label{sec:cmd-coons}
+\cmd{coons}. Eine Fläche, die genau von vier Randkurven begrenzt wird.
+\begin{schritte}
+\item Wählen Sie genau vier Kurven aus, die ein geschlossenes Viereck bilden: zwei
+  gegenüberliegende, dann die beiden anderen.
+\item Starten Sie \gui{Coons patch}.
+\end{schritte}
+Die Richtung der einzelnen Kurven wird automatisch angepasst. Die Ecken müssen sich treffen
+(fangen Sie die Endpunkte beim Zeichnen mit \gui{End}).
+
+\subsection{Gordon surface -- Fläche aus einem Kurvennetz}\label{sec:cmd-gordon}
+\cmd{gordon}, Alias \code{network}. Eine Fläche durch ein Netz sich kreuzender Kurven
+(mindestens $2 \times 2$).
+\begin{schritte}
+\item Wählen Sie alle Kurven des Netzes aus, in beliebiger Reihenfolge (mindestens vier).
+\item Starten Sie \gui{Gordon surface}.
+\end{schritte}
+Das Programm sortiert die Kurven selbst in zwei Scharen: Die Kurven, die die zuerst gewählte
+Kurve schneiden, bilden die eine Schar, die übrigen die andere. Jede Kurve der einen Schar muss
+jede Kurve der anderen schneiden. Bilden die Kurven kein Netz, erscheint
+\code{Gordon surface failed: the curves do not form a network}.
+
+\subsection{Offset surface -- Parallelfläche}\label{sec:cmd-offset-surface}
+\cmd{offset\_surface}, Alias \code{offsetsrf}. Erzeugt zu jeder ausgewählten Fläche eine
+Parallelfläche im festen Abstand entlang der Flächennormalen.
+\begin{schritte}
+\item Wählen Sie eine oder mehrere \emph{unbeschnittene} Flächen aus und starten Sie den
+  Befehl.
+\item \code{Offset surface: distance along the normal (negative: other side)} -- tippen Sie den
+  Abstand; ein negatives Vorzeichen legt die Parallelfläche auf die andere Seite.
+\end{schritte}
+\begin{hinweis}
+\enquote{Unbeschnitten} sind Flächen, die direkt aus Plane, Extrude, Revolve, Loft, Sweep,
+Coons, Gordon oder Offset entstanden sind. Flächen eines Volumenkörpers (Box, Kugel, Ergebnis
+einer Booleschen Operation oder von Join/Cap) und beschnittene Flächen werden nicht
+angenommen; dann erscheint \code{Offset surface: select (untrimmed) surfaces}.
+\end{hinweis}
+
+\subsection{Fillet surfaces -- Flächen verrunden}\label{sec:cmd-fillet-surface}
+\cmd{fillet\_surface}, Alias \code{filletsrf}. Erzeugt eine Rundungsfläche (Rollkugel-Fillet)
+zwischen zwei Flächen.
+\begin{schritte}
+\item Wählen Sie genau zwei unbeschnittene Flächen aus und starten Sie den Befehl.
+\item \code{Fillet surfaces: radius} -- tippen Sie den Radius.
+\end{schritte}
+Auf welcher Seite der Flächen die Rundung liegt, ermittelt das Programm selbst (es probiert die
+möglichen Seiten durch). Die Ausgangsflächen werden nicht beschnitten; das erledigen Sie bei
+Bedarf mit Trim.
+
+\subsection{Cap planar holes -- ebene Öffnungen schließen}\label{sec:cmd-cap}
+\cmd{cap}. Schließt alle ebenen offenen Ränder der ausgewählten Flächen mit beschnittenen
+ebenen Deckeln und näht alles zu \emph{einem} Körper zusammen. Typisch: Eine extrudierte
+geschlossene Kurve wird so zum Volumenkörper.
+\begin{schritte}
+\item Wählen Sie die Fläche(n) aus und starten Sie \gui{Cap planar holes} (Gruppe Surfaces).
+\end{schritte}
+Das Ergebnis ersetzt das zuerst ausgewählte Objekt (Name, Layer und Farbe bleiben), die übrigen
+ausgewählten Objekte gehen darin auf. Die Statusleiste meldet
+\code{Capped: closed solid, volume ...}, wenn ein geschlossener Körper entstanden ist, sonst
+\code{Capped (still open)}. Gibt es keinen ebenen offenen Rand, erscheint
+\code{Cap planar holes failed: no planar open loop to cap}.
+
+% ============================================================================
+\section{Volumenkörper (Gruppe Solids)}\label{sec:gruppe-solids}
+\index{Volumenkörper}
+
+Die Grundkörper werden als geschlossene Hüllen (B-Rep-Schalen) mit exakten Flächen erzeugt.
+Box, Cylinder, Cone und Torus beziehen sich auf die Konstruktionsebene der Ansicht, in der Sie
+den ersten Punkt setzen; die Höhe zählt positiv entlang der Normalen $n$
+(Abschnitt~\ref{sec:mod-konstruktionsebene}), negative Höhen bauen den Körper auf die andere Seite.
+
+\subsection{Box -- Quader}\label{sec:cmd-box}
+\cmd{box}, Alias \code{b}.
+\begin{schritte}
+\item \code{Box: first corner of the base}.
+\item \code{Box: opposite corner of the base} -- die Grundfläche ist ein Rechteck in der
+  Konstruktionsebene; es muss in beiden Richtungen eine Ausdehnung haben.
+\item \code{Box: height (point or number)} -- tippen Sie die Höhe (Vorzeichen = Richtung) oder
+  klicken Sie einen Punkt; dann zählt dessen Abstand von der Grundfläche entlang der Normalen.
+\end{schritte}
+Die Kanten des Quaders liegen parallel zu den Weltachsen.
+
+\subsection{Sphere -- Kugel}\label{sec:cmd-sphere}
+\cmd{sphere}, Alias \code{sph}.
+\begin{schritte}
+\item \code{Sphere: centre}.
+\item \code{Sphere: radius (point or number)} -- Radius tippen oder einen Punkt auf der Kugel
+  setzen (Abstand im Raum).
+\end{schritte}
+
+\subsection{Cylinder -- Zylinder}\label{sec:cmd-cylinder}
+\cmd{cylinder}, Alias \code{cyl}. Ein Kreiszylinder, dessen Achse senkrecht zur
+Konstruktionsebene steht.
+\begin{schritte}
+\item \code{Cylinder: centre of the base} -- Mittelpunkt der Grundfläche.
+\item \code{Cylinder: radius (point or number)}.
+\item \code{Cylinder: height (point or number)} -- mit Vorzeichen.
+\end{schritte}
+
+\subsection{Cone -- Kegel}\label{sec:cmd-cone}
+\cmd{cone}. Ein spitzer Kreiskegel; Eingabe wie Cylinder:
+\code{Cone: centre of the base}, \code{Cone: radius (point or number)},
+\code{Cone: height (point or number)}. Die Spitze liegt auf der Achse in der angegebenen Höhe.
+
+\subsection{Torus -- Ring}\label{sec:cmd-torus}
+\cmd{torus}, Alias \code{tor}. Ein Torus, dessen Mittelebene in der Konstruktionsebene liegt.
+\begin{schritte}
+\item \code{Torus: centre}.
+\item \code{Torus: major radius (point or number)} -- Radius des Mittelkreises.
+\item \code{Torus: tube radius (point or number)} -- Radius des Rohrquerschnitts. Ein Punkt
+  bestimmt ihn als Abstand vom Mittelkreis. Er muss kleiner als der große Radius sein.
+\end{schritte}
+
+\subsection{Boolesche Operationen}\label{sec:boolesche}
+\index{Boolesche Operation}
+
+Die drei Booleschen Operationen verknüpfen geschlossene Volumenkörper zu einem neuen Körper.
+Sie arbeiten sofort auf der Auswahl, ohne weitere Eingabe.
+
+\begin{referenz}{lllX}
+\toprule
+Werkzeug & Name & Alias & Ergebnis \\
+\midrule\endhead
+\gui{Boolean union} & \cmd{union} & \code{bu} & Vereinigung aller ausgewählten Körper. \\
+\gui{Boolean difference} & \cmd{difference} & \code{bd} & Der \emph{zuerst} ausgewählte Körper
+  minus alle anderen ausgewählten Körper. \\
+\gui{Boolean intersection} & \cmd{intersection} & \code{bi} & Der Bereich, der in
+  \emph{allen} ausgewählten Körpern liegt. \\
+\bottomrule
+\end{referenz}
+
+\begin{schritte}
+\item Wählen Sie mindestens zwei Volumenkörper aus. Für die Differenz zuerst den Körper, aus dem
+  ausgeschnitten wird, dann mit \keys{Shift}+Klick die Werkzeugkörper.
+\item Starten Sie die Operation. Das Ergebnis ersetzt die Eingangskörper.
+\end{schritte}
+
+Der neue Körper übernimmt Name, Layer und Farbe des zuerst ausgewählten Körpers; die
+Eingangskörper werden entfernt. Mit \keys{Strg+Z} erhalten Sie sie zurück. Bei mehr als zwei
+Körpern werden Vereinigung und Schnitt nacheinander über alle Körper gebildet.
+
+Mögliche Meldungen:
+\begin{itemize}
+\item \code{Select at least two solids} bzw.\ \code{Select the solid to cut first, then the
+  solids to subtract} -- es sind weniger als zwei Körper ausgewählt (Kurven und Flächen zählen
+  nicht).
+\item \code{Boolean ... failed: Booleans need closed solids} -- einer der Körper ist eine
+  offene Hülle, etwa nach Join aus Flächen, die keinen geschlossenen Körper bilden. Einzelne
+  Flächen wie eine Extrusion ohne Deckel zählen gar nicht als Körper; schließen Sie sie vorher
+  mit Cap.
+\item \code{Boolean ... failed: the result is empty} -- die Körper überlappen sich nicht (bei
+  Schnitt) oder der Werkzeugkörper umschließt den Grundkörper ganz (bei Differenz).
+\end{itemize}
+
+\begin{tipp}
+Vermeiden Sie bei Differenzen genau aufeinanderliegende Flächen: Lassen Sie einen
+Bohrungszylinder ein Stück über den Grundkörper hinausragen, statt ihn exakt bündig enden zu
+lassen (Beispiel in Abschnitt~\ref{sec:bsp-platte}).
+\end{tipp}
+
+% ============================================================================
+\section{Transformieren (Gruppe Transform)}\label{sec:gruppe-transform}
+\index{Transformation}
+
+Alle Befehle dieser Gruppe wirken auf die ausgewählten Objekte -- Kurven, Flächen, Körper,
+Punkte (Abschnitt~\ref{sec:auswahlbefehle}). Die Transformationen sind exakt: NURBS ändern
+unter diesen Abbildungen ihre Form nicht. Während der Eingabe zeigt die Vorschau die
+transformierten Objekte als Drahtmodell. Move, Rotate und Scale verändern die Objekte selbst;
+Copy, Mirror und die Reihen (Arrays) erzeugen Kopien, die Name, Layer und Farbe des Originals
+übernehmen.
+
+\subsection{Move -- Verschieben}\label{sec:cmd-move}
+\cmd{move}, Alias \code{m}; Kürzel \keys{M}.
+\begin{schritte}
+\item \code{Move: point to move from} -- Bezugspunkt, z.\,B.\ eine gefangene Ecke.
+\item \code{Move: point to move to} -- Zielpunkt. Die Objekte werden um den Vektor zwischen
+  beiden Punkten verschoben.
+\end{schritte}
+Für eine Verschiebung um einen bekannten Vektor tippen Sie als zweiten Punkt \code{@dx,dy,dz};
+für eine Verschiebung um eine Länge in Cursorrichtung tippen Sie nur die Länge.
+
+\subsection{Copy -- Kopieren}\label{sec:cmd-copy}
+\cmd{copy}, Aliasse \code{co}, \code{cp}. Wie Move, aber die Originale bleiben, und Sie können
+mehrere Kopien nacheinander ablegen.
+\begin{schritte}
+\item \code{Copy: point to move from}.
+\item \code{Copy: point to copy to (Enter: done)} -- jeder Punkt legt eine Kopie ab, jeweils
+  bezogen auf den ersten Punkt. Beenden mit \keys{Enter}.
+\end{schritte}
+
+\subsection{Rotate -- Drehen}\label{sec:cmd-rotate}
+\cmd{rotate}, Alias \code{ro}. Dreht um eine Achse durch einen Punkt, parallel zur Normalen der
+Konstruktionsebene (in Top also um eine $z$-parallele Achse).
+\begin{schritte}
+\item \code{Rotate: centre (axis: normal of the construction plane)} -- Drehzentrum.
+\item \code{Rotate: angle in degrees or first reference point} -- tippen Sie den Winkel (in
+  Grad, positiv gegen den Uhrzeigersinn um die Normale gesehen, also so, wie es in der Ansicht
+  erscheint) \emph{oder} setzen Sie einen ersten Bezugspunkt.
+\item Nur nach einem Bezugspunkt: \code{Rotate: second reference point} -- die Objekte werden
+  um den Winkel zwischen den Richtungen Zentrum--Bezugspunkt~1 und Zentrum--Bezugspunkt~2
+  gedreht. So richten Sie ein Objekt an vorhandener Geometrie aus.
+\end{schritte}
+Um eine andere Achsrichtung zu verwenden, arbeiten Sie in der passenden Ansicht: in Front um
+eine $y$-parallele, in Left um eine $x$-parallele Achse.
+
+\subsection{Scale -- Skalieren}\label{sec:cmd-scale}
+\cmd{scale}, Alias \code{sc}. Gleichmäßige Skalierung in allen drei Richtungen um einen
+Basispunkt.
+\begin{schritte}
+\item \code{Scale: base point} -- der Punkt, der fest bleibt.
+\item \code{Scale: factor or first reference point} -- tippen Sie den Faktor (größer 0;
+  \code{2} verdoppelt, \code{0.5} halbiert) \emph{oder} setzen Sie einen Bezugspunkt.
+\item Nur nach einem Bezugspunkt: \code{Scale: second reference point} -- der Faktor ist das
+  Verhältnis der Abstände Basispunkt--Punkt~2 zu Basispunkt--Punkt~1.
+\end{schritte}
+Mit den Bezugspunkten skalieren Sie ein Objekt auf ein Zielmaß, ohne den Faktor auszurechnen:
+Basispunkt und Bezugspunkt~1 an die Enden einer Kante fangen, Bezugspunkt~2 im gewünschten
+Abstand tippen (etwa \code{@50,0}).
+
+\subsection{Mirror -- Spiegeln}\label{sec:cmd-mirror}
+\cmd{mirror}, Alias \code{mi}. Erzeugt gespiegelte \emph{Kopien}; die Originale bleiben.
+\begin{schritte}
+\item \code{Mirror: start of the mirror line (copies, plane through the line and the
+  construction-plane normal)}.
+\item \code{Mirror: end of the mirror line}.
+\end{schritte}
+Gespiegelt wird an der Ebene, die die Spiegellinie enthält und senkrecht zur
+Konstruktionsebene steht. In Top spiegelt eine Linie entlang der $y$-Achse also an der
+$yz$-Ebene. Die Spiegellinie darf nicht parallel zur Normalen liegen.
+
+\subsection{Linear array -- lineare Reihe}\label{sec:cmd-array-linear}
+\cmd{array\_linear}, Alias \code{array}. Kopien in gleichen Schritten entlang einer Richtung.
+\begin{schritte}
+\item \code{Linear array (3 items): base point (type a number to change the count)} --
+  optional die Gesamtzahl tippen (ganze Zahl ab 2, \emph{einschließlich} des Originals), dann
+  den Basispunkt setzen.
+\item \code{Linear array (3 items): step to the next item} -- der Punkt, an dem die erste
+  Kopie liegen soll; der Vektor Basispunkt--Punkt ist der Schritt.
+\end{schritte}
+Mit \code{@10,0} als zweitem Punkt entsteht eine Reihe im Abstand 10 in $u$-Richtung.
+
+\subsection{Grid array -- rechteckige Matrix}\label{sec:cmd-array-grid}
+\cmd{array\_grid}. Kopien in einem Raster aus zwei Richtungen; standardmäßig $3 \times 3$.
+\begin{schritte}
+\item \code{Grid array (3 $\times$ 3): base point (type two numbers to change the counts)} --
+  optional zwei Zahlen nacheinander tippen (jeweils mit \keys{Enter}): erst die Anzahl in
+  Richtung~1, dann in Richtung~2 (ganze Zahlen ab 1). Dann den Basispunkt setzen.
+\item \code{Grid array (3 $\times$ 3): step in the first direction} -- Schritt in Richtung~1.
+\item \code{Grid array (3 $\times$ 3): step in the second direction} -- Schritt in
+  Richtung~2.
+\end{schritte}
+Beide Schritte beziehen sich auf den Basispunkt, so dass \code{@30,0} und \code{@0,30} ein
+quadratisches Raster mit 30 Einheiten Abstand ergeben.
+
+\subsection{Polar array -- Kreisreihe}\label{sec:cmd-array-polar}
+\cmd{array\_polar}, Alias \code{arraypolar}. Kopien gleichmäßig auf einem Kreisbogen um eine
+Achse parallel zur Normalen der Konstruktionsebene; standardmäßig 6 Elemente.
+\begin{schritte}
+\item \code{Polar array (6 items): centre (type a number to change the count; axis:
+  construction-plane normal)} -- optional die Gesamtzahl (ganze Zahl ab 2, einschließlich
+  Original), dann das Zentrum setzen.
+\item \code{Polar array (6 items): total angle in degrees (Enter: 360)} -- tippen Sie den
+  Gesamtwinkel (nicht 0, höchstens \SI{360}{\degree} im Betrag) oder drücken Sie \keys{Enter}
+  für einen Vollkreis.
+\end{schritte}
+Beim Vollkreis fällt die letzte Kopie nicht auf das Original: 6 Elemente liegen im Abstand von
+\SI{60}{\degree}. Die Vorschau zeigt immer die Verteilung auf dem Vollkreis.
+
+% ============================================================================
+\section{Bearbeiten (Gruppe Edit)}\label{sec:gruppe-edit}
+
+\subsection{Trim -- Stutzen}\label{sec:cmd-trim}
+\cmd{trim}, Alias \code{tr}. Schneidet ein Objekt an anderen Objekten und entfernt den
+angeklickten Teil.
+\begin{schritte}
+\item Wählen Sie zuerst das zu stutzende Objekt aus, dann mit \keys{Shift}+Klick die
+  Schneidobjekte.
+\item \code{Trim: click the part of the first selected object to remove} -- klicken Sie auf das
+  Stück, das wegfallen soll.
+\end{schritte}
+Zulässige Kombinationen:
+\begin{itemize}
+\item \textbf{Kurve} an Kurven und/oder Flächen: Die Kurve wird an allen Schnittpunkten
+  geteilt; das angeklickte Stück wird entfernt, die übrigen Stücke bleiben als einzelne Kurven.
+\item \textbf{Fläche} (eine einzelne Fläche) an einer Schnittfläche: Die Fläche wird entlang der
+  Schnittkurve geteilt; der angeklickte Teil wird entfernt.
+\end{itemize}
+Schneiden die Schneidobjekte das Objekt nicht oder liegt der Klick auf keinem Teil, wird der
+Klick mit \code{Input not accepted -- Trim: \ldots} abgelehnt; klicken Sie erneut oder brechen
+Sie mit \keys{Esc} ab und prüfen Sie die Auswahl.
+
+\subsection{Split -- Teilen}\label{sec:cmd-split}
+\cmd{split}. Teilt ein Objekt, ohne etwas zu entfernen.
+\begin{itemize}
+\item \textbf{Eine Kurve an einem Punkt:} Wählen Sie genau eine Kurve aus und starten Sie
+  Split. Aufforderung \code{Split: click the point on the curve} -- klicken Sie (am besten mit
+  dem Fang \gui{Near}, \gui{Mid} oder \gui{Int}) auf die Teilungsstelle. Es entstehen zwei
+  Kurven. Ein Punkt an einem Kurvenende wird abgelehnt.
+\item \textbf{Eine Fläche an einer Schnittfläche:} Wählen Sie zuerst die zu teilende Fläche,
+  dann die Schnittfläche, und starten Sie Split. Die Fläche wird sofort entlang der Schnittkurve
+  geteilt. Schneiden sich die Flächen nicht: \code{Split failed: the surfaces do not intersect}.
+\end{itemize}
+Die Teile übernehmen Name, Layer und Farbe des Originals.
+
+\subsection{Join -- Verbinden}\label{sec:cmd-join}
+\cmd{join}, Alias \code{j}. Verbindet mehrere Objekte zu einem.
+\begin{itemize}
+\item \textbf{Kurven:} Die ausgewählten Kurven werden Ende an Anfang zu \emph{einer} Kurve
+  verkettet -- in beliebiger Auswahlreihenfolge und Laufrichtung; Kurven werden bei Bedarf
+  umgedreht. Die Enden müssen sich berühren, sonst erscheint
+  \code{Join failed: the curves do not form one chain}.
+\item \textbf{Flächen:} Flächen und Flächen von Körpern werden entlang gemeinsamer Kanten zu
+  einer Hülle vernäht. Die Statusleiste meldet die Anzahl der Flächen und ob ein geschlossener
+  Körper entstanden ist, z.\,B.\ \code{Joined 6 faces, closed solid}.
+\end{itemize}
+Kurven und Flächen lassen sich nicht gemischt verbinden (\code{select either curves or
+surfaces}); nötig sind mindestens zwei Objekte. Das Ergebnis ersetzt das zuerst ausgewählte
+Objekt; die anderen gehen darin auf.
+
+\subsection{Explode -- Zerlegen}\label{sec:cmd-explode}
+\cmd{explode}, Alias \code{x}. Das Gegenstück zu Join.
+\begin{itemize}
+\item \textbf{Körper und Hüllen} werden in ihre einzelnen Flächen zerlegt.
+\item \textbf{Kurven} werden an ihren Knicken zerlegt: eine Polylinie, ein Rechteck oder Polygon
+  in einzelne Strecken. Auch Kreise und Bögen über \SI{90}{\degree} sind intern aus
+  Viertelbögen zusammengesetzt und zerfallen dabei in diese Teilbögen.
+\end{itemize}
+Die Statusleiste meldet die Anzahl der Teile. Glatte Kurven ohne Knick bleiben unverändert;
+gibt es gar nichts zu zerlegen, erscheint \code{Explode failed: nothing to explode}.
+
+\subsection{Delete -- Löschen}\label{sec:cmd-delete}
+Das Werkzeug \gui{Delete} löscht die ausgewählten Objekte -- wie \menu{Edit,Delete},
+\keys{Entf} oder die Rücktaste. Es ist kein Befehl der Befehlszeile. Einzelne Flächen, Kanten
+oder Ecken eines Körpers lassen sich nicht für sich löschen; dafür zerlegen Sie den Körper
+zuerst mit Explode.
+
+% ============================================================================
+\section{Analysieren (Gruppe Analyze)}\label{sec:gruppe-analyze}
+\index{Messen}
+
+Die Analysebefehle verändern das Modell nicht (mit Ausnahme von Intersect, das Punkte und
+Kurven erzeugt). Ihre Ergebnisse stehen in der Statusleiste. Zahlen werden mit bis zu acht
+(Distance: zehn) gültigen Stellen ausgegeben.
+
+\subsection{Distance -- Abstand}\label{sec:cmd-distance}
+\cmd{distance}, Aliasse \code{dist}, \code{di}.
+\begin{schritte}
+\item \code{Distance: first point}.
+\item \code{Distance: second point}.
+\end{schritte}
+Ergebnis: \code{Distance 25   (dx 15, dy 20, dz 0)} -- der räumliche Abstand und seine
+Komponenten. Die Meldung bleibt in der Statusleiste stehen, bis eine neue erscheint. Fangen Sie
+die Punkte, um exakte Abstände zu erhalten.
+
+\subsection{Angle -- Winkel}\label{sec:cmd-angle}
+\cmd{angle}, Alias \code{ang}.
+\begin{schritte}
+\item \code{Angle: vertex} -- der Scheitelpunkt.
+\item \code{Angle: point on the first leg}.
+\item \code{Angle: point on the second leg}.
+\end{schritte}
+Ergebnis: \code{Angle 90}\si{\degree} -- der Winkel zwischen den Schenkeln im Raum (0 bis
+\SI{180}{\degree}).
+
+\subsection{Curvature -- Krümmung}\label{sec:cmd-curvature}
+\cmd{curvature}, Alias \code{curv}.
+\begin{schritte}
+\item Wählen Sie genau eine Kurve oder eine Fläche (bzw.\ einen Körper) aus und starten Sie den
+  Befehl.
+\item \code{Curvature: point on the selected curve or surface} -- klicken Sie auf die Stelle,
+  an der gemessen werden soll. Ausgewertet wird der nächstgelegene Punkt der Kurve bzw.\
+  Fläche.
+\end{schritte}
+Ergebnis bei einer Kurve: \code{Curvature 0.02   radius 50} (Krümmung und Krümmungsradius) bzw.\
+\code{Curvature 0 (straight)}. Bei einer Fläche: \code{k1 ...   k2 ...   Gaussian ...   mean
+...} -- die beiden Hauptkrümmungen, die Gaußsche und die mittlere Krümmung. Bei einem Körper wird
+die Fläche verwendet, die dem Klickpunkt am nächsten liegt. So prüfen Sie zum Beispiel den
+Scheitelradius einer modellierten Linsenfläche.
+
+\subsection{Area -- Fläche und Länge}\label{sec:cmd-area}
+\cmd{area}. Summiert die Flächeninhalte aller ausgewählten Flächen und Körper und die Längen
+aller ausgewählten Kurven. Wählen Sie die Objekte aus und starten Sie den Befehl. Ergebnis:
+\code{Area ...   Length ...} (nur die Teile, die vorkommen).
+
+\subsection{Volume / mass properties -- Volumen und Schwerpunkt}\label{sec:cmd-volume}
+\cmd{mass\_properties}, Alias \code{volume}. Berechnet das Gesamtvolumen und den gemeinsamen
+Schwerpunkt der ausgewählten \emph{geschlossenen} Körper. Ergebnis:
+\code{Volume ...   centroid (x, y, z)}. Offene Flächen werden übergangen; ist kein geschlossener
+Körper ausgewählt, erscheint \code{Volume / mass properties failed: select closed solids}.
+Volume eignet sich gut, um zu prüfen, ob ein Körper wirklich geschlossen ist.
+
+\subsection{Intersection check -- Schnittpunkte und Schnittkurven}\label{sec:cmd-intersect}
+\cmd{intersection\_check}, Alias \code{intersect}. Berechnet alle Schnitte zwischen den
+ausgewählten Objekten und legt sie als neue Objekte an:
+\begin{itemize}
+\item Kurve mit Kurve und Kurve mit Fläche: Schnittpunkte als Punktobjekte,
+\item Fläche mit Fläche: Schnittkurven (und gegebenenfalls einzelne Berührpunkte).
+\end{itemize}
+Flächen desselben Körpers werden nicht miteinander geschnitten. Ergebnis in der Statusleiste:
+\code{Intersections: 1 curve(s), 2 point(s)}. Die erzeugten Punkte und Kurven können Sie mit
+dem Fang weiterverwenden, etwa als Schnittkante einer Linse mit einer Blendenebene.
+
+% ============================================================================
+\section{Arbeitsabläufe an Beispielen}\label{sec:mod-beispiele}
+
+Die folgenden Beispiele führen Schritt für Schritt durch typische Aufgaben. Sie verwenden
+eingetippte Koordinaten, damit Sie die Ergebnisse genau nachvollziehen können; in der Praxis
+können Sie jeden Punkt ebenso mit der Maus und dem Fang setzen. \enquote{(Enter)} bedeutet
+jeweils: mit \keys{Enter} bestätigen. Die optische Achse ist in allen Beispielen die $z$-Achse.
+
+\subsection{Plankonvexe Linse als Volumenkörper}\label{sec:bsp-linse}
+\index{Linse modellieren}
+
+Ziel: eine plankonvexe Linse mit \SI{25}{mm} Durchmesser, \SI{5}{mm} Mittendicke und
+\SI{50}{mm} Krümmungsradius, die plane Seite bei $z=0$, der Scheitel bei $z=5$.
+
+Idee: Die Linse ist die Schnittmenge einer Kugel (Radius 50, Mittelpunkt auf der Achse bei
+$z = 5 - 50 = -45$) mit einem Zylinder (Radius 12.5, von $z=0$ bis $z=5$).
+
+\begin{schritte}
+\item Bewegen Sie die Maus über die Ansicht \textbf{Top}, damit Zylinder in $z$-Richtung
+  stehen.
+\item Kugel: \code{sph} (Enter), \code{0,0,-45} (Enter), \code{50} (Enter).
+\item Zylinder: \code{cyl} (Enter), \code{0,0,0} (Enter), \code{12.5} (Enter), \code{5}
+  (Enter).
+\item Wählen Sie die Kugel und mit \keys{Shift}+Klick den Zylinder aus (die Reihenfolge ist bei
+  der Schnittmenge gleichgültig).
+\item \code{bi} (Enter). Kugel und Zylinder werden durch die Linse ersetzt.
+\item Kontrolle: Linse auswählen, \code{volume} (Enter). Die Statusleiste zeigt ein Volumen von
+  etwa \num{2066.78} (\si{\cubic\milli\metre}). Die Randdicke können Sie mit \gui{Distance}
+  zwischen den beiden Randkanten messen (Fang \gui{Corner} bzw.\ \gui{Quad} mit eingeschaltetem
+  \gui{Edge}); sie beträgt $5 - (50 - \sqrt{50^2 - 12.5^2}) \approx \num{3.412}$.
+\item Mit \gui{Curvature} auf der gewölbten Fläche erhalten Sie die Hauptkrümmungen
+  $k_1 = k_2 = \pm 0.02$, also den Radius 50.
+\end{schritte}
+
+\paragraph{Bikonvexe Linse.} Die Schnittmenge wird über alle ausgewählten Körper gebildet; für
+eine symmetrische Bikonvexlinse mit \SI{6}{mm} Mittendicke genügen daher zwei Kugeln und ein
+Zylinder: Kugeln mit Radius 50 um \code{0,0,-47} und \code{0,0,47}, Zylinder um
+\code{0,0,-3} mit Radius 12.5 und Höhe 6; alle drei auswählen, \code{bi}.
+
+\subsection{Sphärischer Spiegel als Rotationsfläche}\label{sec:bsp-spiegel}
+\index{Spiegel modellieren}
+
+Ziel: ein Hohlspiegel mit Radius \SI{100}{mm} und \SI{50}{mm} Durchmesser, Scheitel im
+Ursprung, Krümmungsmittelpunkt bei $(0,0,100)$. Wir zeichnen das halbe Profil als Bogen in der
+XZ-Ebene und drehen es um die $z$-Achse.
+
+Die Pfeilhöhe am Rand ($r=25$) ist $100 - \sqrt{100^2 - 25^2} \approx \num{3.1754}$, bei $r =
+12.5$ beträgt sie $\approx \num{0.7843}$.
+
+\begin{schritte}
+\item Bogen: \code{a} (Enter), dann \code{0,0,0} (Enter) als Anfang, \code{25,0,3.1754}
+  (Enter) als Ende und \code{12.5,0,0.7843} (Enter) als Punkt auf dem Bogen. Der Bogen geht
+  exakt durch diese drei Punkte; sein Radius ist durch die gerundete Eingabe sehr nahe an 100.
+\item Wählen Sie den Bogen aus.
+\item \code{rev} (Enter), Achsanfang \code{0,0,0} (Enter), Achsende \code{0,0,10} (Enter),
+  dann \keys{Enter} für \SI{360}{\degree}.
+\item Prüfen Sie mit \gui{Curvature} auf der Fläche den Radius.
+\item Optional eine Rückseite: Fläche auswählen, \code{offsetsrf} (Enter), \code{5} oder
+  \code{-5} (Enter) -- das Vorzeichen wählt die Seite. Prüfen Sie in der Ansicht Front, ob die
+  Parallelfläche hinter dem Spiegel liegt; sonst \keys{Strg+Z} und das andere Vorzeichen.
+\end{schritte}
+
+Für asphärische oder freigeformte Profile zeichnen Sie statt des Bogens eine
+\gui{Interpolated spline} durch berechnete Stützpunkte und verfahren ebenso.
+
+\subsection{Prisma aus einem Profil: Extrudieren und Deckeln}\label{sec:bsp-prisma}
+
+Ziel: ein sechseckiger Stab mit Umkreisradius 10 und Länge 20 als geschlossener Körper.
+
+\begin{schritte}
+\item Maus über \textbf{Top}. Polygon: \code{pol} (Enter), \code{0,0} (Enter), \code{10}
+  (Enter). Es entsteht ein Sechseck in der XY-Ebene.
+\item Sechseck auswählen, \code{ext} (Enter), \code{20} (Enter). Es entsteht der offene
+  Mantel.
+\item Mantel auswählen, \code{cap} (Enter). Die Statusleiste meldet
+  \code{Capped: closed solid, volume 5196.1524} -- das ist
+  $\frac{3\sqrt{3}}{2} \cdot 10^2 \cdot 20$.
+\end{schritte}
+
+Auf dieselbe Weise entstehen aus einem Rechteck eine Platte, aus einem Kreis ein Zylinder und
+aus einer geschlossenen Polylinie beliebige prismatische Körper, etwa Halterungen oder
+Blendenträger.
+
+\subsection{Platte mit Bohrung: Boolesche Differenz}\label{sec:bsp-platte}
+
+Ziel: eine Blende -- eine Platte $40 \times 40 \times 5$ mit einer zentralen Bohrung von
+\SI{10}{mm} Durchmesser.
+
+\begin{schritte}
+\item Maus über \textbf{Top}. Quader: \code{b} (Enter), \code{-20,-20} (Enter),
+  \code{20,20} (Enter), \code{5} (Enter).
+\item Zylinder, der oben und unten übersteht: \code{cyl} (Enter), \code{0,0,-1} (Enter),
+  \code{5} (Enter), \code{7} (Enter).
+\item Klicken Sie \emph{zuerst} auf die Platte, dann mit \keys{Shift}+Klick auf den Zylinder.
+\item \code{bd} (Enter). Die Platte hat jetzt eine Bohrung.
+\item Kontrolle mit \code{volume}: $40 \cdot 40 \cdot 5 - \pi \cdot 5^2 \cdot 5 \approx
+  \num{7607.30}$.
+\end{schritte}
+
+Für mehrere Bohrungen auf einem Lochkreis setzen Sie einen Zylinder außerhalb der Mitte, wählen
+ihn aus und vervielfältigen ihn mit \gui{Polar array} um den Ursprung, bevor Sie Platte und
+alle Zylinder für die Differenz auswählen (Platte zuerst).
+
+\subsection{Flächen aus Kurven: Loft und Sweep}\label{sec:bsp-loft}
+
+\paragraph{Konischer Übergang mit Loft.}
+\begin{schritte}
+\item Maus über \textbf{Top}. Kreis \code{c} (Enter), \code{0,0,0} (Enter), \code{10} (Enter).
+\item Zweiter Kreis in der Höhe 20: \code{c} (Enter), \code{0,0,20} (Enter), \code{5} (Enter).
+\item Ersten Kreis anklicken, zweiten mit \keys{Shift}+Klick dazunehmen.
+\item \code{loft} (Enter). Es entsteht die Mantelfläche eines Kegelstumpfs; mit \code{cap}
+  schließen Sie sie zu einem Körper.
+\end{schritte}
+Mit drei oder mehr Querschnitten (in Auswahlreihenfolge) entstehen gewölbte Übergänge, etwa
+für Lichtleiter oder Trichter.
+
+\paragraph{Rohr mit Sweep 1 rail.}
+\begin{schritte}
+\item Zeichnen Sie die Leitkurve, z.\,B.\ eine \gui{Interpolated spline} oder einen Bogen.
+\item Zeichnen Sie das Profil, einen kleinen Kreis, an den Anfang der Leitkurve -- in der
+  Ansicht, deren Konstruktionsebene senkrecht zur Leitkurve an ihrem Anfang steht; den
+  Mittelpunkt fangen Sie mit \gui{End}.
+\item Profil anklicken, Leitkurve mit \keys{Shift}+Klick dazunehmen, \code{sweep1} (Enter).
+\end{schritte}
+
+\subsection{Linsen-Array mit Grid array}\label{sec:bsp-array}
+
+\begin{schritte}
+\item Erzeugen Sie eine Linse wie in Abschnitt~\ref{sec:bsp-linse} und wählen Sie sie aus.
+\item Maus über \textbf{Top}. \code{array\_grid} (Enter).
+\item \code{5} (Enter), \code{4} (Enter) -- die Aufforderung zeigt jetzt
+  \code{Grid array (5 $\times$ 4): base point \ldots}.
+\item Basispunkt \code{0,0} (Enter), erster Schritt \code{@30,0} (Enter), zweiter Schritt
+  \code{@0,30} (Enter).
+\end{schritte}
+Es entstehen 19 Kopien; zusammen mit dem Original sind es $5 \times 4 = 20$ Linsen im Abstand
+von \SI{30}{mm}.
+
+\subsection{Kurven stutzen und verbinden}\label{sec:bsp-trim}
+
+Ein häufiger Ablauf beim Zeichnen von Profilen: Linien grob über ihre Schnittpunkte hinaus
+zeichnen, dann die Überstände entfernen und alles zu einer geschlossenen Kurve verbinden.
+
+\begin{schritte}
+\item Zeichnen Sie zwei sich kreuzende Linien.
+\item Wählen Sie die erste Linie (die gekürzt werden soll), dann mit \keys{Shift}+Klick die
+  zweite (das Schneidobjekt).
+\item \code{tr} (Enter) und klicken Sie auf den überstehenden Teil der ersten Linie. Er
+  verschwindet; der Rest bleibt als neue Linie.
+\item Wiederholen Sie das umgekehrt für die zweite Linie.
+\item Wählen Sie alle Teilkurven des Profils aus und verbinden Sie sie mit \code{j} (Enter) zu
+  einer Kurve. Ecken runden Sie anschließend mit \code{fillet} ab (Kurve auswählen, Befehl
+  starten, Radius tippen).
+\end{schritte}
+
+\begin{tipp}
+Nach jedem Schritt können Sie mit \keys{Strg+Z} zurückgehen. Das Menü \menu{Edit} zeigt, welcher
+Befehl zuletzt ausgeführt wurde. So probieren Sie gefahrlos Varianten aus -- etwa das
+Vorzeichen einer Offset-Distanz oder die Reihenfolge der Auswahl.
+\end{tipp}
+
+\section{Häufige Fehler}\label{sec:modellieren-fehler}
+
+\begin{referenz}{p{0.38\linewidth}X}
+\toprule
+Problem & Ursache und Abhilfe \\
+\midrule\endhead
+Der Befehl startet nicht, die Statusleiste meldet \enquote{select \ldots} &
+  Der Befehl arbeitet auf der Auswahl. Wählen Sie die Objekte \emph{vor} dem Start aus
+  (Abschnitt~\ref{sec:auswahlbefehle}). \\
+Ein Kreis, Rechteck oder Zylinder liegt in der falschen Ebene &
+  Die Maus war zuletzt über einer anderen Ansicht. Bewegen Sie die Maus vor dem Tippen über die
+  gewünschte Ansicht oder setzen Sie den ersten Punkt dort mit der Maus. \\
+Eingetippte Koordinaten landen woanders als erwartet &
+  Mit zwei Werten gelten Ebenenkoordinaten der Ansicht (in Front ist der zweite Wert $z$).
+  Verwenden Sie drei Werte für Weltkoordinaten. Dezimaltrennzeichen ist der Punkt. \\
+Der Punkt springt an eine unerwartete Stelle &
+  Der Objektfang hat gegriffen. Prüfen Sie das Fangsymbol; \keys{Tab} wechselt den Kandidaten,
+  \keys{Alt} unterdrückt den Fang, \keys{F3} schaltet ihn ab. \\
+Ortho wirkt nicht &
+  Gefangene und eingetippte Punkte werden von Ortho nicht verändert (Abschnitt~\ref{sec:ortho}). \\
+Boolesche Operation meldet \enquote{Select at least two solids} oder \enquote{Booleans need
+closed solids} &
+  Ein Objekt ist kein geschlossener Körper (z.\,B.\ eine ungedeckelte Extrusion oder eine offene
+  Hülle). Schließen Sie es mit Cap oder Join; prüfen Sie mit Volume. \\
+Boolean difference zieht das Falsche ab &
+  Die Auswahlreihenfolge war vertauscht. \keys{Strg+Z}, dann zuerst den Grundkörper wählen. \\
+Offset surface oder Fillet surfaces nehmen eine Fläche nicht an &
+  Es ist eine Fläche eines Körpers oder eine beschnittene Fläche. Diese Befehle arbeiten nur mit
+  unbeschnittenen Einzelflächen. \\
+Loft verdreht die Fläche &
+  Die Querschnitte laufen in unterschiedlicher Richtung oder wurden in falscher Reihenfolge
+  gewählt. \\
+\code{h} startet nicht die Helix &
+  In einer Ansicht ist \keys{H} das Kürzel für Hide. Klicken Sie zuerst in die Befehlszeile
+  und tippen Sie dort, oder starten Sie die Helix über die Werkzeugspalte. \\
+\bottomrule
+\end{referenz}
+
+\fussy

@@ -1,0 +1,228 @@
+\chapter{Referenz: Raytracer-Plugin}\label{kap:plugin-raytracer}
+\index{Raytracer!Referenz}
+
+Dieser Anhang listet alles auf, was das Plugin \plugin{Raytracer} anbietet. Die Bedienung mit
+Beispielen beschreibt \autoref{kap:raytracer}.
+
+\section{Steckbrief}\label{sec:ref-rt-steckbrief}
+
+\begin{referenz}{@{}l >{\raggedright\arraybackslash}X@{}}
+\toprule
+Eigenschaft & Wert \\
+\midrule\endhead
+Kennung (\param{id}) & \code{raytracer} \\
+Name & Raytracer \\
+Version & 0.1.0 \\
+Plugin-API & 1 \\
+Einstiegspunkt & \code{raytracer\_plugin:RaytracerPlugin} \\
+Beschreibung & Raytatouille: load optical systems, trace rays, irradiance on the image, optimise live. Needs the Python package raytatouille in the plugin environment. \\
+Python-Anforderungen & \code{numpy}; \code{raytatouille>=0.9}; \code{rtt\_fusion>=0.2} (pip: \code{rtt-fusion}); \code{fieldtracing>=0.2} (pip: \code{photonpower-fieldtracing}) \\
+Module & \datei{raytracer\_plugin.py} (Aktionen), \datei{rtt\_nurbs.py} (Umwandlung der Flächen in NURBS) \\
+Beispiel & \datei{examples/singlet\_optim.rtt.json} \\
+\bottomrule
+\end{referenz}
+
+\section{Aktionen}\label{sec:ref-rt-aktionen}
+
+Alle Aktionen außer \gui{Section $\to$ group} erscheinen als Knopf im Panel \gui{Plugin}, im Menü
+\menu{Plugins,Raytracer} und als Knopf der Gruppe \gui{Raytracer} in der Werkzeugspalte (dort
+beschriftet mit den ersten drei Buchstaben). Die Reihenfolge ist die der Anwendung (alphabetisch
+nach dem internen Namen). Jede Aktion ist ein Rückgängig-Schritt.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{4.4cm}@{}}
+\toprule
+Aktion & Wirkung & Statusmeldung bei Erfolg \\
+\midrule\endhead
+\gui{Camera image} & Bestrahlungsstärke auf der letzten Fläche jedes gewählten Strahlengangs mit vielen Strahlen, als Bild im Fenster \gui{Image} und wahlweise als Feld auf der Fläche; Strahlengänge mit derselben letzten Fläche werden addiert & \texttt{camera image on }\textit{Fläche}\texttt{ (peak …) from … rays} \\
+\gui{Follow the workflow} & ergänzt die Beschreibung der bearbeitbaren Daten der \code{rtt.*}-Blöcke im Workflow und zeichnet das System neu, wenn der Workflow es geändert hat. Wird von der Anwendung nach jeder Änderung des Node-Workflows still ausgeführt; schlägt nie fehl & leer \\
+\gui{Load system} & liest die Systemdatei, lädt die Glaskataloge, zeichnet alle Flächen und Linsenränder in einer Gruppenstruktur nach dem Systembaum; ersetzt eine frühere Zeichnung & \textit{System}\texttt{: }\textit{n}\texttt{ surfaces} \\
+\gui{New Raytatouille system} & legt im Node-Workflow ein neues System an (Quelle, Blende, Detektor, Zweig \code{main}) und zeichnet es; braucht RTT-Fusion mit \code{new\_system} & \texttt{new system \dq{}…\dq{}: source, stop, detector and the branch main – …} \\
+\gui{Optimise} & Optimierer von Raytatouille mit Variablen und Gütefunktion des Systems; zeichnet nach jeder angenommenen Iteration neu; Kurve der Gütefunktion; \keys{Esc} endet mit dem letzten angenommenen Stand & \textit{Status}\texttt{ after }\textit{n}\texttt{ iterations, }$\varphi$\texttt{ = …} \\
+\gui{Save system} & schreibt das aktuelle System (bzw. das System des Workflows) als \datei{.rtt.json} nach \gui{Save as} oder als \datei{\textit{System}.optimised.rtt.json} & \texttt{saved }\textit{Pfad} \\
+\gui{Section $\to$ group} & nur im Kontextmenü eines Blocks \code{rtt.section} im Node-Workflow: zerlegt den Abschnitt in eine Gruppe mit einem Block je Element & \textit{Block}\texttt{: a group of }\textit{n}\texttt{ blocks (…) – double-click opens it} \\
+\gui{Trace rays} & verfolgt Strahlen entlang der gewählten Strahlengänge, ein Linien-Satz je Strahlengang; mit \gui{Quick irradiance} zusätzlich eine grobe Bestrahlungsstärke als Feld & \texttt{rays reaching the end of the path – }\textit{Pfad}\texttt{: }\textit{ok}\texttt{/}\textit{gesamt}\texttt{, …} \\
+\gui{Update drawing} & zeichnet das System des Node-Workflows sofort & \texttt{drawn from the workflow: …} \\
+\gui{Workflow from system} & erzeugt den Node-Workflow aus dem aktuellen System (je Strahlengang ein Zweig); übernimmt Änderungen eines früheren Workflows & \texttt{workflow: }\textit{n}\texttt{ blocks, }\textit{m}\texttt{ connections, }\textit{k}\texttt{ branches; kept …} \\
+\bottomrule
+\end{referenz}
+
+\section{Parameter}\label{sec:ref-rt-parameter}
+
+Die Parameter stehen im Panel \gui{Plugin} in vier Gruppen. Sie werden pro Dokument gespeichert;
+\gui{Reset parameters} stellt die Standardwerte her.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{1.5cm} >{\raggedright\arraybackslash}p{1.8cm} >{\raggedright\arraybackslash}p{2.1cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Schlüssel / Beschriftung & Typ & Standard & Bereich, Einheit & Bedeutung \\
+\midrule\endhead
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{System}}} \\
+\param{system}\newline\gui{System file} & Datei & leer & Filter \enquote{Raytatouille system (*.rtt.json *.json)} & die Systemdatei für \gui{Load system} \\
+\param{catalogs}\newline\gui{Glass catalogues} & Dateiliste & leer & Filter \enquote{Glass catalogues (*.agf *.AGF);;All files (*)} & AGF-Kataloge (\gui{Add…}, \gui{Remove}). Immer zusätzlich verwendet: \datei{*.agf} neben der Systemdatei und in ihrem Unterordner \datei{catalogs}. Dokumente mit der alten Textform (durch \code{;} getrennte Pfade) werden weiterhin gelesen \\
+\param{tolerance}\newline\gui{Drawing tolerance} & Zahl & 0{,}0001 & $10^{-7}$ \dots{} 1~mm; 7 Nachkommastellen & größte Abweichung der gezeichneten NURBS von der optischen Fläche (nur die Zeichnung; Strahlen laufen auf den exakten Flächen) \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Trace}}} \\
+\param{path}\newline\gui{Paths} & Text & leer & -- & Namen der Strahlengänge, durch Kommas getrennt; leer: alle. Gilt auch für \gui{Camera image} \\
+\param{fields}\newline\gui{Field} & Ganzzahl & 0 & $\geq 0$ & 0: alle Feldpunkte; $k$: nur der $k$-te. Gilt auch für \gui{Camera image} \\
+\param{wavelengths}\newline\gui{Wavelengths} & Auswahl & \code{all} & \code{all}, \code{reference} & alle Wellenlängen oder nur die Referenzwellenlänge. Gilt auch für \gui{Camera image} \\
+\param{rays}\newline\gui{Rays (drawn)} & Ganzzahl & 127 & 1 \dots{} 20\,000 & gezeichnete Strahlen je Feld und Wellenlänge (hexapolare Pupille; die nächste mögliche Zahl 1, 7, 19, 37, \dots{} 127, \dots{} wird verwendet) \\
+\param{colour\_by}\newline\gui{Colour by} & Auswahl & \code{wavelength} & \code{wavelength}, \code{field}, \code{path} & Einfärbung der Strahlen \\
+\param{irradiance}\newline\gui{Quick irradiance} & Ja/Nein & aus & -- & grobe Bestrahlungsstärke mit \gui{Trace rays}; für ein echtes Kamerabild \gui{Camera image} \\
+\param{irradiance\_rays}\newline\gui{Rays (quick irradiance)} & Ganzzahl & 5\,000 & 7 \dots{} 500\,000 & Strahlen je Feld und Wellenlänge der schnellen Bestrahlungsstärke \\
+\param{grid}\newline\gui{Quick irradiance grid} & Ganzzahl & 128 & 8 \dots{} 1\,024 & Zellen an der langen Seite der schnellen Bestrahlungsstärke \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Camera image}}} \\
+\param{camera\_rays}\newline\gui{Rays per field and wavelength} & Ganzzahl & 200\,000 & 1\,000 \dots{} 50\,000\,000 & viele Strahlen für ein glattes Bild; die Zeit wächst linear \\
+\param{camera\_pixels}\newline\gui{Pixels (long side)} & Ganzzahl & 512 & 16 \dots{} 4\,096 & Pixel an der langen Seite; Pixel quadratisch \\
+\param{camera\_on\_surface}\newline\gui{Also on the surface in 3D} & Ja/Nein & an & -- & das Bild zusätzlich als Feld auf der Fläche \\
+\midrule
+\multicolumn{5}{@{}l}{\textbf{Gruppe \gui{Optimise}}} \\
+\param{save\_as}\newline\gui{Save as} & Datei zum Spei\-chern & leer & Filter \enquote{Raytatouille system (*.rtt.json)} & Ziel von \gui{Save system}; leer: neben der Systemdatei, Endung \datei{.optimised.rtt.json} statt \datei{.rtt.json} \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Mögliche Strahlenzahlen.} Die Pupille wird hexapolar mit $r$ Ringen abgetastet:
+$N = 1 + 3r(r+1)$ Strahlen, also 7, 19, 37, 61, 91, 127, 169, 217, 271, 331, \dots{} Das Plugin
+wählt das $r \geq 1$, dessen $N$ der Eingabe am nächsten liegt. Beispiele: 127 $\to$ 6 Ringe
+(127 Strahlen), 5\,000 $\to$ 40 Ringe (4\,921 Strahlen), 200\,000 $\to$ 258 Ringe (200\,467
+Strahlen).
+
+\section{Ergebnisse}\label{sec:ref-rt-ergebnisse}
+
+Jede rechnende Aktion legt im Dock \gui{Results} einen neuen Lauf an. Linien und Felder lassen
+sich dort einzeln ein- und ausblenden, Bilder erscheinen im Fenster \gui{Image}, Kurven im Dock
+\gui{Plot}.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{2.1cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Aktion & Lauf (Dock \gui{Results}) & Art & Inhalt \\
+\midrule\endhead
+\gui{Trace rays} & \texttt{Trace }\textit{Datei} & Linien & \texttt{Rays }\textit{Pfad} je Strahlengang; Werte nach \gui{Colour by}: Wellenlänge in nm (viridis), Feldnummer (plasma) oder Pfadnummer (coolwarm, Bereich 1 bis Zahl der Pfade) \\
+ & & Feld auf Fläche & \texttt{Irradiance }\textit{Fläche} (nur mit \gui{Quick irradiance}), Einheit \code{W/mm\textsuperscript{2} (rel.)} \\
+\gui{Camera image} & \texttt{Camera image }\textit{Datei} & Bild & \texttt{Camera image }\textit{Fläche} im Fenster \gui{Image}, Achsen in mm (lokale x, y der Fläche), Einheit \code{W/mm\textsuperscript{2} (rel.)}; Beschreibung mit Strahlen, Pfaden, Feldern, Wellenlängen, Pixelzahl und Pixelgröße \\
+ & & Feld auf Fläche & \texttt{Irradiance }\textit{Fläche} (mit \gui{Also on the surface in 3D}) \\
+\gui{Optimise} & \texttt{Optimisation} & Kurve & \texttt{Merit function} im Dock \gui{Plot}: x \enquote{iteration}, y \enquote{log10 $\varphi$}, wächst live \\
+\bottomrule
+\end{referenz}
+
+\textit{Datei} ist der Name der Systemdatei bis zum ersten Punkt. Diese Ergebnisse werden nicht im
+Dokument gespeichert.
+
+\section{Modellobjekte und Attribute}\label{sec:ref-rt-attribute}
+
+\gui{Load system} (und das Zeichnen aus dem Workflow) legt an:
+
+\begin{itemize}
+  \item eine Gruppe \texttt{Raytatouille: }\textit{Name} und darunter Gruppen für Baugruppen und
+    Elemente des Systembaums;
+  \item je optische Fläche eine NURBS-Fläche, benannt nach der Flächen-\param{id};
+  \item je Linsenrand eine Regelfläche \textit{Element}\texttt{ edge} (weitere: \texttt{edge 2}, \dots).
+\end{itemize}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Attribut & an & Wert \\
+\midrule\endhead
+\param{rtt.surface} & jeder Fläche & \param{id} der Fläche im System \\
+\param{rtt.location} & jeder Fläche & JSON-Pfad der Fläche im Systembaum \\
+\param{rtt.kind} & jeder Fläche & Art der Fläche laut Raytatouille (z.\,B. \code{detector}) \\
+\param{rtt.shape} & jeder Fläche & Form der Fläche laut Raytatouille \\
+\param{rtt.nurbs\_error\_mm} & jeder Fläche & größte Abweichung der Zeichnung in mm (3 gültige Stellen) \\
+\param{rtt.anchor} & erster Fläche & \code{true}: Anker des Systems \\
+\param{rtt.revision} & Anker & Nummer des Systemstands im Plugin-Prozess (folgt Rückgängig/Wiederholen) \\
+\param{rtt.file} & Anker & Pfad der geladenen Systemdatei \\
+\param{rtt.workflow} & Anker & Kennung des Workflow-Stands, wenn das System aus dem Workflow gezeichnet wurde \\
+\param{rtt.rim} & Linsenrändern & Name des Elements \\
+\param{sim.inactive} & beliebig (von Hand) & wird noch nicht ausgewertet; das Log nennt solche Objekte \\
+\bottomrule
+\end{referenz}
+
+Objekte mit \param{rtt.surface} oder \param{rtt.rim} und Gruppen, deren Name mit
+\texttt{Raytatouille: } beginnt, werden beim nächsten Zeichnen entfernt.
+
+\section{Workflow-Blöcke}\label{sec:ref-rt-bloecke}
+\index{Node-Workflow!Raytatouille-Blöcke}
+
+Der Raytracer stellt dem Node-Workflow die Raytatouille-Blocktypen zur Verfügung; berechnet werden
+sie im Prozess des Raytracers. Die Typen und ihre Anschlüsse kommen aus dem Paket \code{rtt\_fusion}
+(RTT-Fusion); die folgende Liste gibt den Stand der mit diesem Handbuch ausgelieferten Version
+wieder und kann sich mit neueren Versionen ändern. Die Buchstaben bei den Anschlüssen nennen die
+Darstellungen des Lichts, die ein Anschluss annimmt: \textbf{R} Strahlen, \textbf{H} Felder; die
+weiteren (G, S, T, P) beschreibt \autoref{kap:workflow}. Allgemeines zu Blöcken, Anschlüssen und
+Zweigen steht in \autoref{kap:workflow} und \autoref{kap:workflow-bloecke}.
+
+\subsection{Blöcke aus einem System}
+
+Diese Blöcke entstehen mit \gui{Workflow from system}.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Typ, Kategorie & Anschlüsse & Parameter \\
+\midrule\endhead
+\code{rtt.source}\newline Kategorie \code{source}\newline\small Feldpunkte, Wellenlängen, Polarisation eines Systems & \code{out} (aus, Licht \enquote{light}; G, H, P, R, S) & \param{system} (Datei, \enquote{Raytatouille system}); \param{fields} (Text: Feldindizes, leer: alle); \param{wavelengths} (Text: Wellenlängenindizes, leer: alle); Daten: \param{rtt\_system} (Einstellungen des Systems), \param{rtt\_tree} (Baumknoten, die keinem Block gehören), \param{rtt\_paths} (Reihenfolge und Schlüssel der Strahlengänge), \param{rtt\_catalogs} (Glaskatalog-Dateien), \param{rtt\_catalog\_data} (gespeicherte Glaskataloge) \\
+\code{rtt.section}\newline Kategorie \code{domain}\newline\small sequentielle Flächen, z.\,B. ein Objektiv & \code{front\_in}, \code{back\_out}, \code{back\_in}, \code{front\_out} (G, H, P, R, S, T) & \param{location} (Text: Knoten im Systembaum); \param{offset} (Punkt, mm: Verschiebung der Elemente des Blocks); \param{drive} (Zahl, mm: Verschiebung entlang der Flächennormalen, gesetzt vom Antrieb eines Phasenschiebers). Kontextmenü: \gui{Section $\to$ group} \\
+\code{rtt.mirror}\newline Kategorie \code{domain}\newline\small Spiegel (eine reflektierende Fläche) & \code{in}, \code{out} (G, H, R, S) & \param{surface} (Text); \param{offset} (Punkt, mm); \param{drive} (Zahl, mm) \\
+\code{rtt.splitter}\newline Kategorie \code{splitter}\newline\small teilt in Kanäle, vereint kohärent je Gruppe & ein: \code{in}, \code{r\_in}, \code{t\_in}; aus: \code{r} (reflected), \code{t} (transmitted), \code{merged} (combined); jeweils G, H, R, S & \param{surface} (Text); \param{offset} (Punkt, mm); \param{drive} (Zahl, mm) \\
+\code{rtt.detector}\newline Kategorie \code{detector}\newline\small Detektor bzw. Kamera: Amplituden innerhalb, Intensitäten zwischen Kohärenzgruppen & \code{in} (G, H, P, R, S); Daten aus: \code{image} & \param{surface} (Text); \param{pixels} (Ganzzahl, \enquote{pixels (long side)}, Standard 512, 16 \dots{} 8\,192); \param{half\_size} (Zahlenliste, mm: Bildfenster $[h_u, h_v]$; leer: die Apertur des Detektors) \\
+\bottomrule
+\end{referenz}
+
+Die Blöcke eines importierten Systems enthalten außerdem die Daten ihrer Elemente (Parameter
+\param{rtt}, \param{runs}); sie erscheinen im Dialog \gui{Parameters…} als Reiter je Element
+(Längen in mm, Winkel in Grad bei Schlüsseln mit \code{\_deg}, Wellenlängen in
+\si{\micro\metre}).
+
+\subsection{Neue Teile (\code{rtt.part.*})}
+
+Diese Teile fügen Sie mit \gui{Add block} ein. Jedes ist ein echtes Element des Systems, das der
+Workflow beschreibt; Lage und Daten geben Sie in \gui{Parameters…} ein. Alle haben nur den
+Daten-Parameter \param{rtt\_new} (das Raytatouille-Element: Lage, Flächen, Glas), dessen
+Vorgabe hier steht. Im Editor zeigt ein Block je Lichtanschluss einen Punkt; intern hat jeder
+Anschluss eine Eingangs- und eine Ausgangsseite (\code{\_in}, \code{\_out}). Alle Lichtanschlüsse
+nehmen H und R an.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Typ & Anschlüsse & Vorgabe von \param{rtt\_new} \\
+\midrule\endhead
+\code{rtt.part.mirror}\newline Raytatouille mirror & \code{front} & \code{mirror} \enquote{Mirror}, Fläche \code{M}, kreisförmige Apertur Radius 12{,}5~mm, Wechselwirkung \code{ideal\_mirror} \\
+\code{rtt.part.splitter}\newline Raytatouille beam splitter & \code{front\_a}, \code{front\_b}, \code{back\_a}, \code{back\_b} & \code{thin\_element} \enquote{Beam splitter}, um \SI{45}{\degree} gedreht (\code{rotation\_deg} [45, 0, 0]), Fläche \code{BS}, Radius 12{,}5~mm, \code{ideal\_beam\_splitter} \\
+\code{rtt.part.lens}\newline Raytatouille lens & \code{front}, \code{back} & \code{lens} \enquote{Lens}, Material \code{CONST:1.5168}, Flächen \code{S1} (Radius 51{,}68~mm) und \code{S2} (Radius $-51{,}68$~mm, 4~mm dahinter), Aperturradius 12{,}5~mm \\
+\code{rtt.part.stop}\newline Raytatouille stop & \code{front}, \code{back} & \code{stop} \enquote{Stop}, Fläche \code{STO}, kreisförmige Apertur Radius 5~mm \\
+\code{rtt.part.detector}\newline Raytatouille detector & \code{in}; Daten aus: \code{image} & \code{detector} \enquote{Detector}, Fläche \code{IMG}, rechteckige Apertur $\pm 5$~mm \\
+\bottomrule
+\end{referenz}
+
+Beim Strahlteiler gilt: Wer das Teil auf der Seite verlässt, auf der das Licht hereinkam, wurde
+reflektiert. Ein Spiegel wird über denselben Anschluss verlassen, über den das Licht kam.
+
+\section{Glaskataloge}\label{sec:ref-rt-kataloge}
+
+Verwendet werden, ohne Doppelte, in dieser Reihenfolge:
+\begin{enumerate}
+  \item die Dateien von \gui{Glass catalogues},
+  \item \datei{*.agf} im Ordner der Systemdatei,
+  \item \datei{*.agf} im Unterordner \datei{catalogs},
+  \item im Workflow gespeicherte Kataloge (\param{rtt\_catalog\_data} der Quelle), soweit keine
+    Datei sie liefert.
+\end{enumerate}
+Der Workflow übernimmt die Dateien aus 1.--3. in \param{rtt\_catalogs} und speichert ihren Inhalt
+bei \gui{Check workflow} oder \gui{Run workflow} in \param{rtt\_catalog\_data}.
+
+\section{Meldungen im Plugin-Log}\label{sec:ref-rt-log}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.45\linewidth} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Meldung & Bedeutung \\
+\midrule\endhead
+\texttt{glass catalogues: …} & verwendete Kataloge; gespeicherte mit \texttt{(stored)} \\
+\texttt{catalogue …: …} & ein Katalog ließ sich nicht lesen und wurde übersprungen \\
+\texttt{drawn with more than the tolerance …} & Flächen über der Zeichentoleranz, mit Abweichung \\
+\texttt{irradiance on … (…): rays not counted – …} & nicht gezählte Strahlen: \texttt{outside the grid}, \texttt{vignetted}, \texttt{not reached} \\
+\texttt{irradiance on …: curved surface of revolution – not mapped yet} & keine Bestrahlungsstärke auf gekrümmten Rotationsflächen \\
+\texttt{irradiance: … is not drawn} & die letzte Fläche ist nicht gezeichnet \\
+\texttt{… the last event changes the weight – computed with recorded paths and fewer rays (… pupil rings)} & reflektierende/absorbierende letzte Fläche: höchstens 80 Ringe \\
+\texttt{path …: …} & ein Strahlengang konnte nicht verfolgt werden (die übrigen schon) \\
+\texttt{marked inactive in CAD but still traced …} & Objekte mit \param{sim.inactive}, die trotzdem gerechnet werden \\
+\texttt{drawing not updated: …}, \texttt{fields not updated: …} & \gui{Follow the workflow} konnte nach einer Workflow-Änderung nicht zeichnen bzw. die Felder der Blöcke nicht beschreiben \\
+\bottomrule
+\end{referenz}
