@@ -353,8 +353,8 @@ class TestMainWindowPlugins : public QObject {
     doc->requestWorkflowShown();
     doc->markSaved();
     QApplication::processEvents();  // fitAll
-    auto node = [](const QJsonObject& w, const QString& id) {
-      for (const QJsonValue& v : w["graph"].toObject()["nodes"].toArray()) {
+    auto node = [](const QJsonObject& workflow, const QString& id) {
+      for (const QJsonValue& v : workflow["graph"].toObject()["nodes"].toArray()) {
         if (v.toObject()["id"].toString() == id) return v.toObject();
       }
       return QJsonObject{};
