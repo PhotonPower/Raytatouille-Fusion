@@ -64,8 +64,9 @@ eigene Gruppe mit dessen Aktionen (siehe Kapitel~\ref{kap:plugins}).
 
 Die Knöpfe zeigen eine Kurzbeschriftung (etwa \gui{Ln} für Line oder \gui{Ext} für Extrude),
 solange für den Befehl kein Symbol hinterlegt ist. Wenn Sie die Maus über einen Knopf halten,
-nennt ein Tooltip den vollen Namen und gegebenenfalls das Tastenkürzel, zum Beispiel
-\enquote{Line (L)}; die Statusleiste zeigt den Namen ebenfalls. Die Anzahl der Knopfspalten
+nennt ein Tooltip den vollen Namen und darunter, was Sie tippen müssen, um den Befehl über die
+Tastatur zu starten, zum Beispiel \enquote{Line} und \enquote{Type: l + Enter}; die Statusleiste
+zeigt den Namen ebenfalls. Die Anzahl der Knopfspalten
 richtet sich nach der Breite der Werkzeugspalte -- ziehen Sie den Rand des Docks breiter, um
 mehr Knöpfe nebeneinander zu sehen. Die Kurzbeschriftungen aller Knöpfe stehen in der Tabelle
 in Anhang~\ref{kap:befehle}.
@@ -119,27 +120,30 @@ Verwechseln Sie nicht \code{intersection} und \code{intersect}: \code{intersecti
 Flächen (Werkzeug \gui{Intersection check} in der Gruppe Analyze).
 \end{warnung}
 
-\subsection{Mit Tastenkürzeln}\index{Tastenkürzel!Befehle}
+\subsection{Aliasse sind keine Tastenkürzel}\index{Tastenkürzel!Befehle}
 
-Drei Werkzeuge nennen im Tooltip ein Tastenkürzel: \gui{Line} (\keys{L}), \gui{Circle (centre,
-radius)} (\keys{C}) und \gui{Move} (\keys{M}). Diese Buchstaben sind zugleich die Aliasse
-\code{l}, \code{c} und \code{m}: Drücken Sie in einer Ansicht \keys{L} und dann \keys{Enter},
-so startet Line. Das Werkzeug \gui{Delete} löscht die Auswahl; dasselbe erreichen Sie mit
-\keys{Entf} (siehe Abschnitt~\ref{sec:gruppe-edit}).
+Die Befehle haben keine eigenen Tastenkürzel: Ein Alias wie \code{l} startet einen Befehl erst
+mit \keys{Enter}. Der Tooltip jedes Werkzeugs nennt den kürzesten Alias, etwa \enquote{Type: l +
+Enter} bei \gui{Line}, \enquote{Type: c + Enter} bei \gui{Circle (centre, radius)} und
+\enquote{Type: m + Enter} bei \gui{Move}. Ein echtes Tastenkürzel hat nur das Werkzeug
+\gui{Delete}: Es löscht die Auswahl wie \keys{Entf} (siehe Abschnitt~\ref{sec:gruppe-edit}); es
+ist kein Befehl der Befehlszeile und hat daher keinen Alias.
 
 \begin{hinweis}
-Einige Buchstaben sind in den Ansichten mit anderen Funktionen belegt und gelangen dann nicht in
-die Befehlszeile: \keys{H} blendet die Auswahl aus (\gui{Hide}), \keys{Z} leitet die
-Tastenfolgen \keys{Z}, \keys{E} (Zoom extents) und \keys{Z}, \keys{S} (Zoom selected) ein, und
-die \keys{Leertaste} maximiert die aktive Ansicht. Um zum Beispiel die Helix mit \code{h} zu
-starten, klicken Sie zuerst in die Befehlszeile und tippen dort -- in der Befehlszeile werden
-alle Zeichen ganz normal eingegeben.
+Einige Tasten sind in den Ansichten mit anderen Funktionen belegt und gelangen dann nicht in
+die Befehlszeile: \keys{Z} leitet die Tastenfolgen \keys{Z}, \keys{E} (Zoom extents) und
+\keys{Z}, \keys{S} (Zoom selected) ein, und die \keys{Leertaste} maximiert die aktive Ansicht.
+\keys{H} blendet die Auswahl aus (\gui{Hide}) -- aber nur, wenn etwas ausgewählt ist; ist
+nichts ausgewählt, wird \keys{H} wie jeder andere Buchstabe in die Befehlszeile geschrieben.
+So starten Sie die Helix auch aus einer Ansicht heraus mit \code{h} und \keys{Enter}, solange
+die Auswahl leer ist. In der Befehlszeile selbst werden alle Zeichen ganz normal eingegeben.
 \end{hinweis}
 
 \subsection{Den letzten Befehl wiederholen}\index{Befehl!wiederholen}
 
-Drücken Sie \keys{Enter}, während kein Befehl läuft und die Befehlszeile leer ist, so wird der
-zuletzt gestartete Befehl erneut gestartet. Das ist praktisch, wenn Sie mehrere Linien,
+Drücken Sie \keys{Enter}, während kein Befehl läuft und die Befehlszeile leer ist, oder klicken
+Sie ohne laufenden Befehl mit der rechten Maustaste in eine Ansicht (\maus{Rechtsklick ohne
+Ziehen}), so wird der zuletzt gestartete Befehl erneut gestartet. Das ist praktisch, wenn Sie mehrere Linien,
 Kreise oder Verschiebungen nacheinander ausführen. Wiederholt wird der Befehl mit seinem
 Ausgangszustand (etwa wieder mit 6 Ecken beim Polygon); auswahlbasierte Befehle verwenden die
 \emph{dann aktuelle} Auswahl.
@@ -180,10 +184,16 @@ Ergebnisse und Fehler meldet das Programm in der Statusleiste links unten:
 \toprule
 Meldung & Bedeutung \\
 \midrule\endhead
+\code{<Befehl>: <Grund>} & Die Eingabe wurde abgelehnt oder der Geometriekern konnte das
+  Ergebnis nicht berechnen; der Text nach dem Doppelpunkt nennt den Grund, zum Beispiel
+  \code{Fillet: radius 5 too large for these curves} oder \code{Split: the point is at an end
+  of the curve}. Ein Befehl, der auf eine Eingabe wartet, bleibt im selben Schritt; geben Sie
+  einen anderen Wert ein. Befehle, die sofort auf der Auswahl arbeiten (etwa Join, Explode,
+  Cap), enden ohne Ergebnis. \\
 \code{Input not accepted -- <Aufforderung>} & Die Eingabe passt nicht zum aktuellen Schritt,
-  zum Beispiel ein Endpunkt, der mit dem Startpunkt zusammenfällt, ein Radius 0 oder drei Punkte
-  auf einer Geraden beim Kreis durch drei Punkte. Der Befehl bleibt im selben Schritt; geben Sie
-  einen anderen Wert ein. \\
+  und der Befehl nennt keinen eigenen Grund -- zum Beispiel ein Endpunkt, der mit dem
+  Startpunkt zusammenfällt, ein Radius 0 oder drei Punkte auf einer Geraden beim Kreis durch
+  drei Punkte. Der Befehl bleibt im selben Schritt; geben Sie einen anderen Wert ein. \\
 \code{Unknown command '...'} & Der eingetippte Name ist weder Befehl noch Alias. \\
 \code{No command is waiting for a point} & Sie haben Koordinaten eingegeben, ohne dass ein
   Befehl läuft. \\
@@ -198,8 +208,8 @@ Meldung & Bedeutung \\
 \code{<Befehl> cancelled} & Der Befehl wurde abgebrochen, ohne etwas zu erzeugen. \\
 \code{<Befehl>: select objects first} & Ein auswahlbasierter Befehl wurde ohne Auswahl
   gestartet (Abschnitt~\ref{sec:auswahlbefehle}). \\
-\code{<Befehl> failed: ...} & Der Geometriekern konnte das Ergebnis nicht berechnen; der Text
-  nach dem Doppelpunkt nennt den Grund. \\
+\code{Boolean ... failed: ...} & Eine Boolesche Operation ist gescheitert; der Text nach dem
+  Doppelpunkt nennt den Grund (Abschnitt~\ref{sec:boolesche}). \\
 \bottomrule
 \end{referenz}
 
@@ -262,7 +272,9 @@ Eingabe & Bedeutung \\
 \end{referenz}
 
 Was \enquote{x} und \enquote{y} bei der Eingabe mit zwei Werten bedeuten, hängt von der Ansicht
-ab, in der sich die Maus zuletzt befand:
+ab, in der Sie arbeiten: Beim Start eines Befehls ist das die \emph{aktive} Ansicht (die Sie
+zuletzt angeklickt haben), danach die Ansicht, über der die Maus während des Befehls zuletzt
+war:
 
 \begin{referenz}{lllX}
 \toprule
@@ -276,11 +288,12 @@ Left (YZ) & $-y$ & $z$ & $(0,\,-3,\,4)$ \\
 \end{referenz}
 
 \begin{tipp}
-Bewegen Sie die Maus kurz über die gewünschte Ansicht, \emph{bevor} Sie Koordinaten oder Zahlen
-eintippen. Die Konstruktionsebene, auf die sich \code{x,y}, \code{@dx,dy}, \code{d<a} und viele
-Befehle (Rechteck, Kreis, Zylinder, Rotation \ldots) beziehen, ist immer die der Ansicht, über
-der die Maus zuletzt war. Mit drei Werten (\code{x,y,z}) sind Sie dagegen unabhängig von der
-Ansicht.
+Bewegen Sie die Maus nach dem Start des Befehls kurz über die gewünschte Ansicht, \emph{bevor}
+Sie Koordinaten oder Zahlen eintippen. Die Konstruktionsebene, auf die sich \code{x,y},
+\code{@dx,dy}, \code{d<a}, eine eingetippte Extrude-Distanz und viele Befehle (Rechteck, Kreis,
+Zylinder, Rotation \ldots) beziehen, ist die der Ansicht, über der die Maus während des Befehls
+zuletzt war -- oder, solange die Maus noch über keiner Ansicht war, die der aktiven Ansicht. Mit
+drei Werten (\code{x,y,z}) sind Sie dagegen unabhängig von der Ansicht.
 \end{tipp}
 
 \paragraph{Der Bezugspunkt.}\index{Bezugspunkt}
@@ -297,7 +310,7 @@ abgelehnt.
 Ein Quadrat mit 20 Einheiten Kantenlänge als Polylinie in der Ansicht Top:
 \begin{lstlisting}
 pl            (Enter)  Polyline: start point
-0,0           (Enter)  Polyline: next point (Enter: done, first point: close)
+0,0           (Enter)  Polyline: next point (Enter: done, snap to the first point: close)
 @20,0         (Enter)
 @0,20         (Enter)
 @-20,0        (Enter)
@@ -342,10 +355,11 @@ Form von Schlüsselwörtern gibt es nicht.
 \toprule
 Eingabe & Wirkung \\
 \midrule\endhead
-\keys{Enter} (leere Befehlszeile) oder \maus{Rechtsklick} in einer Ansicht &
+\keys{Enter} (leere Befehlszeile) oder \maus{Rechtsklick} (ohne Ziehen) in einer Ansicht &
   beendet den laufenden Befehl. Befehle mit offener Punktanzahl (Point, Polyline, Spline, Copy)
   erzeugen dabei ihr Ergebnis; Revolve und Polar array verwenden \SI{360}{\degree}. Läuft kein
-  Befehl, wiederholt \keys{Enter} den letzten Befehl. \\
+  Befehl, wiederholen \keys{Enter} und der Rechtsklick den letzten Befehl. Ein Ziehen mit der
+  rechten Maustaste dreht bzw.\ verschiebt nur die Ansicht. \\
 \keys{Esc} & bricht den laufenden Befehl ab (\code{<Befehl> cancelled}); was der Befehl noch
   nicht erzeugt hat, wird verworfen. Läuft kein Befehl, bricht \keys{Esc} einen laufenden
   Plugin-Auftrag ab, und erst wenn auch der nicht läuft, hebt es die Auswahl auf (Menü
@@ -407,7 +421,8 @@ Normalen $n = u \times v$. Das Raster der Ansicht liegt in dieser Ebene. Sie bes
 \item wie zweiwertige Koordinaten \code{x,y}, \code{@dx,dy} und Polarkoordinaten gemeint sind,
 \item in welcher Ebene Rechteck, Polygon, Kreis, Plane und die Grundflächen von Box, Zylinder,
   Kegel und Torus liegen,
-\item die Richtung der Höhe bei Box, Cylinder und Cone (positive Werte entlang $n$),
+\item die Richtung der Höhe bei Box, Cylinder und Cone (positive Werte entlang $n$) und einer
+  eingetippten Distanz bei Extrude,
 \item die Drehachse bei Rotate und Polar array und die Spiegelebene bei Mirror,
 \item die Achsen des Ortho-Modus.
 \end{itemize}
@@ -494,8 +509,12 @@ Fangart & Kürzel & Symbol & Was gefangen wird \\
 Punkt & \gui{Point} & kleines gefülltes Quadrat & Punktobjekte (erzeugt mit Point oder
   Intersect). \\
 Ende & \gui{End} & Quadrat & Anfangs- und Endpunkt offener Kurven: Linien, Polylinien,
-  Bögen, Splines, Helices. Geschlossene Kurven (Kreise, geschlossene Polylinien) haben keine
-  Enden. Die inneren Eckpunkte einer Polylinie sind keine Endpunkte (siehe Tipp unten). \\
+  Bögen, Splines, Helices. Dazu \emph{jede Ecke} einer Polylinie, eines Rechtecks, eines
+  Polygons und einer mit Join verbundenen Kurve -- bei geschlossenen Kurven auch die Ecke am
+  Anfang/Ende (Naht). Bei Kurven höheren Grades (Splines, Bögen, verbundene Kurven) zählen nur
+  echte Knicke, an denen die Tangente springt. Glatte geschlossene Kurven wie Kreise haben keine
+  Enden. Beim Zeichnen einer Polylinie sind auch ihre bereits gesetzten Punkte fangbar, so dass
+  Sie sie am Startpunkt schließen können (Abschnitt~\ref{sec:cmd-polyline}). \\
 Flächenecke & \gui{Corner} & Quadrat mit Punkt & Ecken von Flächen und Körpern: die
   Endpunkte der Randkanten (B-Rep-Ecken), etwa die Ecken einer Box. \\
 Schnittpunkt & \gui{Int} & X & Schnittpunkte zweier Kurven oder Kanten in 3D. In den
@@ -510,8 +529,9 @@ Quadrant & \gui{Quad} & Raute & Punkte, in denen Kreise und Bögen die Ebenen du
   Punkte bei 0, 90, 180 und \SI{270}{\degree}. Bei Bögen nur die Punkte, die auf dem Bogen
   liegen. \\
 Mitte & \gui{Mid} & Dreieck & Punkt auf halber \emph{Bogenlänge} offener Kurven (bei
-  Splines also nicht die Parametermitte). Bei einer Polylinie ist das die Mitte des ganzen
-  Linienzugs, nicht die eines einzelnen Segments. \\
+  Splines also nicht die Parametermitte). Hat eine Kurve Ecken (Polylinie, Rechteck, Polygon,
+  verbundene Kurve, auch geschlossen), hat stattdessen \emph{jedes Segment} zwischen zwei Ecken
+  seine eigene Mitte. \\
 Flächenkante & \gui{Edge} & (Schalter) & Kein eigener Fangpunkt, sondern ein Schalter: Ist er
   an, nehmen auch die Kanten von Flächen und Körpern an den Fangarten Mid, Near, Cen und Quad
   teil -- so fangen Sie zum Beispiel den Mittelpunkt der kreisförmigen Kante einer Bohrung. \\
@@ -581,9 +601,9 @@ und der einzelnen Fangarten bleibt über einen Neustart des Programms erhalten.
   Fangradius; zoomen Sie hinein oder schalten Sie \gui{Near} vorübergehend ab.
 \item Um ein Zentrum zu fangen, bewegen Sie den Cursor auf den Mittelpunkt des Kreises, nicht
   auf die Kreislinie -- der Fangpunkt muss im Fangradius liegen.
-\item Eine Polylinie, ein Rechteck und ein Polygon sind jeweils \emph{eine} Kurve; ihre inneren
-  Ecken bieten weder \gui{End} noch \gui{Int}. Brauchen Sie die Ecken als Fangpunkte, zerlegen
-  Sie die Kurve mit \gui{Explode} in einzelne Strecken -- deren Enden sind dann fangbar.
+\item Eine Polylinie, ein Rechteck und ein Polygon sind jeweils \emph{eine} Kurve, dennoch ist
+  jede ihrer Ecken ein \gui{End} und jedes Segment hat ein \gui{Mid}. Sie müssen die Kurve
+  dafür nicht mit \gui{Explode} zerlegen.
 \end{itemize}
 \end{tipp}
 
@@ -592,7 +612,8 @@ und der einzelnen Fangarten bleibt über einen Neustart des Programms erhalten.
 
 Die Befehle dieser Gruppe erzeugen Punkte und gerade Kurven. Alle Kurven sind NURBS-Kurven;
 Polylinie, Rechteck und Polygon sind jeweils \emph{eine} Kurve vom Grad~1 mit Knicken an den
-Ecken (mit Explode zerlegen Sie sie in einzelne Strecken).
+Ecken. Jede Ecke ist ein Fangpunkt \gui{End}, jedes Segment hat ein \gui{Mid}; mit Explode
+zerlegen Sie die Kurve bei Bedarf in einzelne Strecken.
 
 \subsection{Point -- Punkt}\label{sec:cmd-point}
 \cmd{point}, Aliasse \code{pt}, \code{po}. Setzt Punktobjekte.
@@ -604,7 +625,7 @@ Ecken (mit Explode zerlegen Sie sie in einzelne Strecken).
 Punktobjekte dienen als Hilfspunkte für den Fang (Fangart \gui{Point}) und als Markierungen.
 
 \subsection{Line -- Linie}\label{sec:cmd-line}
-\cmd{line}, Aliasse \code{l}, \code{li}; Kürzel \keys{L}. Eine Strecke zwischen zwei Punkten.
+\cmd{line}, Aliasse \code{l}, \code{li}. Eine Strecke zwischen zwei Punkten.
 \begin{schritte}
 \item \code{Line: start point} -- Startpunkt setzen.
 \item \code{Line: end point (or length)} -- Endpunkt setzen, oder eine Länge eintippen: Die
@@ -617,14 +638,15 @@ Endpunkt zusammen, wird der Endpunkt abgelehnt.
 \cmd{polyline}, Alias \code{pl}. Ein Linienzug aus geraden Segmenten.
 \begin{schritte}
 \item \code{Polyline: start point}.
-\item \code{Polyline: next point (Enter: done, first point: close)} -- beliebig viele weitere
-  Punkte.
+\item \code{Polyline: next point (Enter: done, snap to the first point: close)} -- beliebig
+  viele weitere Punkte.
 \item Abschluss: \keys{Enter} oder \maus{Rechtsklick} erzeugt eine \emph{offene} Polylinie (ab
   zwei Punkten). Ein Klick auf den \emph{Startpunkt} (ab dem vierten Punkt, also mit mindestens
   drei vorhandenen) schließt sie und beendet den Befehl. Der Punkt muss exakt mit dem
-  Startpunkt übereinstimmen: Tippen Sie seine Koordinaten erneut ein, oder fangen Sie ihn an
-  vorhandener Geometrie (z.\,B.\ einem Punktobjekt oder einem Rasterpunkt mit \gui{Grid}) --
-  die entstehende Polylinie selbst ist während des Zeichnens noch nicht fangbar.
+  Startpunkt übereinstimmen: Die bereits gesetzten Punkte der entstehenden Polylinie sind
+  während des Zeichnens als \gui{End} fangbar -- bewegen Sie den Cursor auf den Startpunkt, bis
+  das Fangsymbol erscheint, und klicken Sie. Alternativ tippen Sie seine Koordinaten erneut
+  ein.
 \end{schritte}
 Zwei aufeinanderfolgende gleiche Punkte werden abgelehnt. Eine geschlossene Polylinie hat einen
 Zentrumsfangpunkt (Flächenschwerpunkt) und lässt sich zu einem Prisma extrudieren und deckeln
@@ -657,7 +679,7 @@ Konstruktionsebene; standardmäßig ein Sechseck.
 \section{Kurven (Gruppe Curves)}\label{sec:gruppe-curves}
 
 \subsection{Circle (centre, radius) -- Kreis um Mittelpunkt}\label{sec:cmd-circle}
-\cmd{circle}, Aliasse \code{c}, \code{ci}; Kürzel \keys{C}.
+\cmd{circle}, Aliasse \code{c}, \code{ci}.
 \begin{schritte}
 \item \code{Circle: centre}.
 \item \code{Circle: radius (point or number)} -- klicken Sie einen Punkt (der Radius ist sein
@@ -730,6 +752,22 @@ Die Originale bleiben erhalten. Der Abstand wird senkrecht zur Kurve innerhalb d
 Konstruktionsebene der Ansicht gemessen, in der Sie klicken -- zeichnen Sie ebene Kurven also
 in der Ansicht, in deren Ebene sie liegen.
 
+Kann die Parallelkurve nicht gebildet werden, nennt die Statusleiste den Grund, und der Befehl
+wartet auf einen neuen Klick bzw.\ Abstand:
+\begin{itemize}
+\item \code{Offset curve: the distance must be positive (click the side)} -- Sie haben 0 oder
+  einen negativen Abstand getippt; die Seite wählen Sie mit dem Klick.
+\item \code{Offset curve: the curve does not lie in the construction plane of this view –
+  click the side in a view parallel to the curve} -- klicken Sie in der Ansicht, in deren
+  Ebene die Kurve liegt.
+\item \code{Offset curve: the curve has corners – Explode it and offset the pieces, or fillet
+  the corners first} -- Kurven mit Ecken (Polylinie, Rechteck, Polygon) zerlegen Sie mit
+  \gui{Explode} oder runden ihre Ecken vorher mit \gui{Fillet curves} ab.
+\item \code{Offset curve: distance <d> is larger than the radius of curvature on that side} --
+  auf der Innenseite einer Krümmung darf der Abstand den Krümmungsradius nicht überschreiten;
+  wählen Sie einen kleineren Abstand oder die andere Seite.
+\end{itemize}
+
 \subsection{Fillet curves -- Kurven verrunden}\label{sec:cmd-fillet-curve}
 \cmd{fillet\_curve}, Alias \code{fillet}. Rundet Ecken mit einem Kreisbogen ab.
 \begin{schritte}
@@ -743,9 +781,17 @@ in der Ansicht, in deren Ebene sie liegen.
 \item \textbf{Eine Kurve} (etwa eine Polylinie, ein Rechteck): \emph{Alle} Ecken der Kurve
   werden mit dem Radius verrundet; die Kurve wird ersetzt.
 \end{itemize}
-Ist der Radius zu groß für die Geometrie, meldet die Statusleiste
-\code{Input not accepted -- Fillet: radius \ldots}; der Befehl wartet dann auf einen kleineren
-Radius.
+Passt der Radius nicht, nennt die Statusleiste den Grund, und der Befehl wartet auf einen
+anderen Radius (oder \keys{Esc}):
+\begin{itemize}
+\item \code{Fillet: radius 5 too large for these curves} -- tippen Sie einen kleineren Radius.
+\item \code{Fillet: the radius must be positive}.
+\item \code{Fillet: the curves do not meet – extend them or pick two curves that cross}.
+\item \code{Fillet: the curves are tangent where they meet (nothing to round)}.
+\item \code{Fillet: the curve is not planar}.
+\item \code{Fillet: the curve has no corners} -- die eine ausgewählte Kurve hat keine Ecke, die
+  sich verrunden ließe.
+\end{itemize}
 
 % ============================================================================
 \section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
@@ -776,12 +822,23 @@ Flächen sind nützlich als Schirme, Detektorflächen oder Schnittwerkzeuge für
   Endpunkt. Der Vektor vom ersten zum zweiten Punkt ist Richtung und Länge der Extrusion. Statt
   des Endpunkts können Sie auch eine Länge tippen; sie wirkt dann in Richtung des Cursors.
 \end{schritte}
-\begin{warnung}
-Eine \emph{eingetippte} Distanz extrudiert in dieser Version immer entlang der Welt-$z$-Achse
-(positiv: $+z$) -- das ist die Normale der Konstruktionsebene in Top und Perspective, aber nicht
-in Front und Left. Um in einer anderen Richtung zu extrudieren, geben Sie zwei Punkte ein, etwa
-\code{0,0,0} und \code{0,-10,0} für 10 Einheiten in $-y$-Richtung.
-\end{warnung}
+Eine \emph{eingetippte} Distanz wirkt entlang der Normalen $n$ der Konstruktionsebene der
+Ansicht, in der Sie arbeiten -- der aktiven Ansicht beim Start des Befehls, danach der Ansicht,
+über der die Maus zuletzt war (Abschnitt~\ref{sec:mod-konstruktionsebene}):
+
+\begin{referenz}{lX}
+\toprule
+Ansicht & Richtung einer positiven Distanz \\
+\midrule\endhead
+Top, Perspective & $+z$ \\
+Front & $-y$ (zum Betrachter) \\
+Left & $-x$ (zum Betrachter) \\
+\bottomrule
+\end{referenz}
+
+Eine negative Distanz extrudiert in die Gegenrichtung. Die Distanz 0 wird mit
+\code{Extrude: the distance must not be 0} abgelehnt. Für eine beliebige andere Richtung geben
+Sie zwei Punkte ein, etwa \code{0,0,0} und \code{0,5,10} für eine schräge Extrusion.
 Eine geschlossene Kurve (Kreis, Rechteck, Polygon, geschlossene Polylinie) ergibt einen offenen
 Mantel; mit \gui{Cap planar holes} wird daraus ein Volumenkörper.
 
@@ -797,6 +854,11 @@ Reflektoren.
 \item \code{Revolve: angle in degrees (Enter: 360)} -- tippen Sie einen Winkel (nicht 0,
   höchstens \SI{360}{\degree} im Betrag) oder drücken Sie \keys{Enter} für eine volle Umdrehung.
 \end{schritte}
+Fällt das Achsende auf den Achsanfang, meldet die Statusleiste \code{Revolve: the end of the
+axis must differ from its start}; ein Winkel außerhalb des Bereichs ergibt \code{Revolve: the
+angle must be between -360 and 360 degrees and not 0}, ein weiterer Punkt statt des Winkels
+\code{Revolve: type the angle in degrees, or Enter for 360}. Der Befehl wartet jeweils auf eine
+passende Eingabe.
 Positive Winkel drehen gegen den Uhrzeigersinn um die Achsrichtung (vom Anfangs- zum Endpunkt,
 Rechte-Hand-Regel), negative Winkel in die andere Richtung. Für die optische Achse $z$ wählen
 Sie z.\,B.\ \code{0,0,0} und \code{0,0,1} als Achspunkte. Jede Profilkurve ergibt eine eigene
@@ -852,7 +914,7 @@ Die Richtung der einzelnen Kurven wird automatisch angepasst. Die Ecken müssen 
 Das Programm sortiert die Kurven selbst in zwei Scharen: Die Kurven, die die zuerst gewählte
 Kurve schneiden, bilden die eine Schar, die übrigen die andere. Jede Kurve der einen Schar muss
 jede Kurve der anderen schneiden. Bilden die Kurven kein Netz, erscheint
-\code{Gordon surface failed: the curves do not form a network}.
+\code{Gordon surface: the curves do not form a network}.
 
 \subsection{Offset surface -- Parallelfläche}\label{sec:cmd-offset-surface}
 \cmd{offset\_surface}, Alias \code{offsetsrf}. Erzeugt zu jeder ausgewählten Fläche eine
@@ -892,7 +954,7 @@ Das Ergebnis ersetzt das zuerst ausgewählte Objekt (Name, Layer und Farbe bleib
 ausgewählten Objekte gehen darin auf. Die Statusleiste meldet
 \code{Capped: closed solid, volume ...}, wenn ein geschlossener Körper entstanden ist, sonst
 \code{Capped (still open)}. Gibt es keinen ebenen offenen Rand, erscheint
-\code{Cap planar holes failed: no planar open loop to cap}.
+\code{Cap planar holes: no planar open loop to cap}.
 
 % ============================================================================
 \section{Volumenkörper (Gruppe Solids)}\label{sec:gruppe-solids}
@@ -1004,7 +1066,7 @@ Copy, Mirror und die Reihen (Arrays) erzeugen Kopien, die Name, Layer und Farbe 
 übernehmen.
 
 \subsection{Move -- Verschieben}\label{sec:cmd-move}
-\cmd{move}, Alias \code{m}; Kürzel \keys{M}.
+\cmd{move}, Alias \code{m}.
 \begin{schritte}
 \item \code{Move: point to move from} -- Bezugspunkt, z.\,B.\ eine gefangene Ecke.
 \item \code{Move: point to move to} -- Zielpunkt. Die Objekte werden um den Vektor zwischen
@@ -1119,9 +1181,10 @@ Zulässige Kombinationen:
 \item \textbf{Fläche} (eine einzelne Fläche) an einer Schnittfläche: Die Fläche wird entlang der
   Schnittkurve geteilt; der angeklickte Teil wird entfernt.
 \end{itemize}
-Schneiden die Schneidobjekte das Objekt nicht oder liegt der Klick auf keinem Teil, wird der
-Klick mit \code{Input not accepted -- Trim: \ldots} abgelehnt; klicken Sie erneut oder brechen
-Sie mit \keys{Esc} ab und prüfen Sie die Auswahl.
+Schneiden die Schneidobjekte die Kurve nicht, wird der Klick mit \code{Trim: the cutting
+objects do not cross the curve} abgelehnt; liegt der Klick bei einer Fläche auf keinem Teil, mit
+\code{Trim: click on the part to remove}. Klicken Sie erneut, oder brechen Sie mit \keys{Esc} ab
+und prüfen Sie die Auswahl.
 
 \subsection{Split -- Teilen}\label{sec:cmd-split}
 \cmd{split}. Teilt ein Objekt, ohne etwas zu entfernen.
@@ -1129,10 +1192,11 @@ Sie mit \keys{Esc} ab und prüfen Sie die Auswahl.
 \item \textbf{Eine Kurve an einem Punkt:} Wählen Sie genau eine Kurve aus und starten Sie
   Split. Aufforderung \code{Split: click the point on the curve} -- klicken Sie (am besten mit
   dem Fang \gui{Near}, \gui{Mid} oder \gui{Int}) auf die Teilungsstelle. Es entstehen zwei
-  Kurven. Ein Punkt an einem Kurvenende wird abgelehnt.
+  Kurven. Ein Punkt an einem Kurvenende wird mit \code{Split: the point is at an end of the
+  curve} abgelehnt; der Befehl wartet auf einen anderen Punkt.
 \item \textbf{Eine Fläche an einer Schnittfläche:} Wählen Sie zuerst die zu teilende Fläche,
   dann die Schnittfläche, und starten Sie Split. Die Fläche wird sofort entlang der Schnittkurve
-  geteilt. Schneiden sich die Flächen nicht: \code{Split failed: the surfaces do not intersect}.
+  geteilt. Schneiden sich die Flächen nicht: \code{Split: the surfaces do not intersect}.
 \end{itemize}
 Die Teile übernehmen Name, Layer und Farbe des Originals.
 
@@ -1142,7 +1206,7 @@ Die Teile übernehmen Name, Layer und Farbe des Originals.
 \item \textbf{Kurven:} Die ausgewählten Kurven werden Ende an Anfang zu \emph{einer} Kurve
   verkettet -- in beliebiger Auswahlreihenfolge und Laufrichtung; Kurven werden bei Bedarf
   umgedreht. Die Enden müssen sich berühren, sonst erscheint
-  \code{Join failed: the curves do not form one chain}.
+  \code{Join: the curves do not form one chain}.
 \item \textbf{Flächen:} Flächen und Flächen von Körpern werden entlang gemeinsamer Kanten zu
   einer Hülle vernäht. Die Statusleiste meldet die Anzahl der Flächen und ob ein geschlossener
   Körper entstanden ist, z.\,B.\ \code{Joined 6 faces, closed solid}.
@@ -1160,7 +1224,7 @@ Objekt; die anderen gehen darin auf.
   Viertelbögen zusammengesetzt und zerfallen dabei in diese Teilbögen.
 \end{itemize}
 Die Statusleiste meldet die Anzahl der Teile. Glatte Kurven ohne Knick bleiben unverändert;
-gibt es gar nichts zu zerlegen, erscheint \code{Explode failed: nothing to explode}.
+gibt es gar nichts zu zerlegen, erscheint \code{Explode: nothing to explode}.
 
 \subsection{Delete -- Löschen}\label{sec:cmd-delete}
 Das Werkzeug \gui{Delete} löscht die ausgewählten Objekte -- wie \menu{Edit,Delete},
@@ -1220,7 +1284,7 @@ aller ausgewählten Kurven. Wählen Sie die Objekte aus und starten Sie den Befe
 \cmd{mass\_properties}, Alias \code{volume}. Berechnet das Gesamtvolumen und den gemeinsamen
 Schwerpunkt der ausgewählten \emph{geschlossenen} Körper. Ergebnis:
 \code{Volume ...   centroid (x, y, z)}. Offene Flächen werden übergangen; ist kein geschlossener
-Körper ausgewählt, erscheint \code{Volume / mass properties failed: select closed solids}.
+Körper ausgewählt, erscheint \code{Volume / mass properties: select closed solids}.
 Volume eignet sich gut, um zu prüfen, ob ein Körper wirklich geschlossen ist.
 
 \subsection{Intersection check -- Schnittpunkte und Schnittkurven}\label{sec:cmd-intersect}
@@ -1428,8 +1492,18 @@ Loft verdreht die Fläche &
   Die Querschnitte laufen in unterschiedlicher Richtung oder wurden in falscher Reihenfolge
   gewählt. \\
 \code{h} startet nicht die Helix &
-  In einer Ansicht ist \keys{H} das Kürzel für Hide. Klicken Sie zuerst in die Befehlszeile
-  und tippen Sie dort, oder starten Sie die Helix über die Werkzeugspalte. \\
+  In einer Ansicht blendet \keys{H} die Auswahl aus, solange etwas ausgewählt ist. Heben Sie
+  die Auswahl mit \keys{Esc} auf, oder tippen Sie in der Befehlszeile; alternativ starten Sie
+  die Helix über die Werkzeugspalte. \\
+Eine eingetippte Extrude-Distanz geht in die falsche Richtung &
+  Sie wirkt entlang der Normalen der Ansicht, über der die Maus zuletzt war (Front: $-y$, Left:
+  $-x$, Top: $+z$). Bewegen Sie die Maus vor dem Tippen über die gewünschte Ansicht, ändern Sie
+  das Vorzeichen oder geben Sie die Richtung mit zwei Punkten an. \\
+Ein Rechtsklick startet unerwartet einen Befehl &
+  Ohne laufenden Befehl wiederholt ein Rechtsklick (ohne Ziehen) in einer Ansicht den letzten
+  Befehl. Zum Drehen oder Verschieben ziehen Sie mit der rechten Taste. \keys{Esc} bricht den
+  wiederholten Befehl ab; hat ein Auswahlbefehl (etwa eine Boolesche Operation) sofort ein
+  Ergebnis erzeugt, nehmen Sie es mit \keys{Strg+Z} zurück. \\
 \bottomrule
 \end{referenz}
 

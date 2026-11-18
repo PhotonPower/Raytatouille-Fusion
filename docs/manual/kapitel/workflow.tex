@@ -276,7 +276,9 @@ reicht vom 0,05-Fachen bis zum 8-Fachen.
         \code{data}, \code{detector}, \code{domain}, \code{meta}, \code{source},
         \code{splitter}); darin stehen die Blocktypen mit ihrer Kennung, der Tooltip
         beschreibt den Typ. Blöcke anderer Plugins erscheinen hier, sobald \gui{Check workflow}
-        einmal gelaufen ist.
+        einmal gelaufen ist. Angeboten werden nur Typen, die diese Installation rechnen kann
+        (dazu die Typen, die der Workflow schon enthält); geplante Typen ohne Rechner und
+        Blöcke nicht geladener Plugins fehlen in der Liste.
   \item Wählen Sie einen Typ. Der Block erscheint an der Stelle des Rechtsklicks, mit den
         Standardwerten seiner Parameter. Seine Kennung ist der letzte Teil des Typs, z.\,B.\
         \code{image} für \block{display.image}, bei Wiederholung \code{image\_2},
@@ -636,7 +638,9 @@ prüft den Workflow, ohne zu rechnen:
         (\gui{Add block}).
   \item Es übernimmt die Glaskataloge aus dem Raytracer-Panel und speichert Dateien, die Blöcke
         nennen, in den Blöcken (Abschnitt~\ref{sec:workflow-eingebettet}).
-  \item Es prüft Blöcke, Ports, Verbindungen, Äste, Gruppen und Varianten.
+  \item Es prüft Blöcke, Ports, Verbindungen, Äste, Gruppen und Varianten. Für jeden (nicht
+        stummgeschalteten) Block, den diese Installation nicht rechnen kann, gibt es die
+        Warnung \code{check.no\_evaluator}.
   \item Ist alles fehlerfrei, wird der Workflow entlang der Äste \enquote{abgerollt}, und der
         Planer wählt für jede Verbindung und Richtung die Darstellung.
   \item Es bestimmt, welche Blöcke noch aktuelle Ergebnisse haben (Haken und Kreuze).
@@ -905,6 +909,9 @@ oder Ast). \emph{Fehler} (error) verhindern das Rechnen, \emph{Warnungen} (warni
 \code{graph.node\_type\_unknown} & Unbekannter Blocktyp. Plugin fehlt oder ist zu alt. \\
 \code{graph.provider\_missing} & Der Typ stammt von einem Plugin, das nicht verfügbar ist
   (Abschnitt~\ref{sec:workflow-anbieter}). \\
+\code{check.no\_evaluator} & Warnung: Für den Blocktyp gibt es in dieser Installation keinen
+  Rechner (geplanter Typ, oder sein Plugin ist nicht geladen). Ein Lauf, der den Block braucht,
+  bricht mit \code{exec.no\_evaluator} ab; Plugin laden oder Block entfernen. \\
 \code{graph.param\_unknown} & Ein Parameter gehört nicht zum Blocktyp. \\
 \code{graph.socket\_unknown} & Ein Link nennt einen Anschluss, den der Block nicht hat. \\
 \code{graph.link\_direction} & Ein Link läuft nicht von einem Ausgang zu einem Eingang. \\
@@ -959,7 +966,10 @@ oder Ast). \emph{Fehler} (error) verhindern das Rechnen, \emph{Warnungen} (warni
 \multicolumn{2}{@{}l}{\textit{Beim Rechnen}} \\
 \code{exec.transport\_unsupported} & Der feste Transport kommt erst in einer späteren Stufe;
   meist fehlt \code{fieldtracing} für H. \\
-\code{exec.no\_evaluator} & Für den Blocktyp gibt es keinen Rechner (Plugin oder Paket fehlt). \\
+\code{exec.no\_evaluator} & Für den Blocktyp gibt es keinen Rechner (geplanter Typ, oder
+  Plugin bzw.\ Paket fehlt); \gui{Check workflow} warnt davor mit \code{check.no\_evaluator}. \\
+\code{exec.convert\_unsupported} & Ein \block{fusion.convert} soll in eine Darstellung umwandeln,
+  die diese Version noch nicht rechnet (G, S, P), oder für R bzw.\ H fehlt \code{fieldtracing}. \\
 \code{exec.param} & Ein Parameter ist ungültig, z.\,B.\ eine Datei nicht lesbar. \\
 \code{exec.field} & Fehler bei einer Feldrechnung. \\
 \code{exec.condense} & Die Gruppe lässt sich nicht verdichten. \\
