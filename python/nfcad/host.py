@@ -37,6 +37,8 @@ class Host:
         self._jobs: dict[int, Context] = {}
         self._evaluations: queue.Queue = queue.Queue()
         threading.Thread(target=self._evaluate_loop, daemon=True).start()
+        self._previews: queue.Queue = queue.Queue()
+        threading.Thread(target=self._preview_loop, daemon=True).start()
 
     def send(self, message: dict) -> None:
         self.transport.send(message)
@@ -81,6 +83,8 @@ class Host:
                 threading.Thread(target=self._run_job, args=(ctx, msg["action"]), daemon=True).start()
             elif kind == "evaluate":  # a block for the workflow engine (ADR 0010), one at a time
                 self._evaluations.put((msg["rid"], msg.get("request", {})))
+            elif kind == "preview":  # an overview drawing of a block (docs/plugin-api.md), own thread
+                self._previews.put((msg["rid"], msg.get("request", {})))
             elif kind == "cancel":
                 ctx = self._jobs.get(msg.get("job"))
                 if ctx is not None:
@@ -95,6 +99,19 @@ class Host:
                 response = {"ok": False, "error": f"{type(e).__name__}: {e}"}
                 self.send({"type": "log", "job": 0, "text": traceback.format_exc()})
             self.send({"type": "evaluated", "rid": rid, "response": response})
+
+    def _preview_loop(self) -> None:
+        while True:
+            rid, request = self._previews.get()
+            try:
+                response = self.plugin.preview_block(request)
+                if not isinstance(response, dict):
+                    raise TypeError(f"preview_block returned {type(response).__name__}, not a dict")
+                json.dumps(response, allow_nan=False)  # NaN or a NumPy number would not reach CAD
+            except Exception as e:  # the dialog shows the error over the block's schematic
+                response = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+                self.send({"type": "log", "job": 0, "text": traceback.format_exc()})
+            self.send({"type": "previewed", "rid": rid, "response": response})
 
     def _run_job(self, ctx: Context, action: str) -> None:
         try:

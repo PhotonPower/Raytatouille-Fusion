@@ -100,6 +100,7 @@ std::optional<Manifest> read_manifest(const QString& dir, QString* error) {
   m.description = o["description"].toString();
   for (const QJsonValue& r : o["requires"].toArray()) m.requirements << r.toString().trimmed();
   m.update_url = o["update_url"].toString();
+  for (const QJsonValue& t : o["previews"].toArray()) m.previews << t.toString();
   m.directory = QDir(dir).absolutePath();
   m.source_directory = m.directory;
   if (m.id.isEmpty() || m.entry.isEmpty()) return fail(QObject::tr("plugin.json needs 'id' and 'entry'"));
@@ -135,6 +136,7 @@ void PluginHost::start(const QString& python, const QString& pythonpath) {
   server_ = new QTcpServer(this);
   if (!server_->listen(QHostAddress::LocalHost, 0)) {
     emit failed(tr("cannot open the plugin channel: %1").arg(server_->errorString()));
+    failPreviews(tr("cannot open the plugin channel: %1").arg(server_->errorString()));
     return;
   }
   connect(server_, &QTcpServer::newConnection, this, &PluginHost::onConnection);
@@ -166,6 +168,7 @@ void PluginHost::start(const QString& python, const QString& pythonpath) {
   connect(process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
     if (e == QProcess::FailedToStart) {
       emit failed(tr("cannot start Python (%1): %2").arg(process_->program(), process_->errorString()));
+      failPreviews(tr("cannot start Python (%1)").arg(process_->program()));
     }
   });
   process_->start(python, {QStringLiteral("-m"), QStringLiteral("nfcad.host"), QStringLiteral("--server"),
@@ -239,6 +242,7 @@ void PluginHost::handle(const QJsonObject& msg) {
     blocks_ = msg["blocks"].toArray();
     ready_ = true;
     emit readyChanged(true);
+    sendPreviews();
     if (queued_) {
       const auto [action, params, target] = *queued_;
       queued_.reset();
@@ -253,6 +257,12 @@ void PluginHost::handle(const QJsonObject& msg) {
            msg["user_error"].toBool());
   } else if (type == QLatin1String("evaluated")) {
     emit evaluated(msg["rid"].toInt(), msg["response"].toObject());
+  } else if (type == QLatin1String("previewed")) {
+    const auto it = previews_.find(msg["rid"].toInt());
+    if (it == previews_.end()) return;
+    const Preview p = it->second;
+    previews_.erase(it);
+    if (p.context) p.done(msg["response"].toObject());
   } else if (type == QLatin1String("request") || type == QLatin1String("notify")) {
     const int rid = msg["rid"].toInt();
     if (type == QLatin1String("request") && router_ &&
@@ -624,8 +634,55 @@ void PluginHost::evaluate(int rid, const QJsonObject& request) {
   send({{"type", "evaluate"}, {"rid", rid}, {"request", request}});
 }
 
+void PluginHost::preview(const QJsonObject& request, QObject* context, std::function<void(const QJsonObject&)> done) {
+  const int rid = next_preview_++;
+  previews_[rid] = Preview{request, context, std::move(done)};
+  if (ready_) sendPreviews();
+}
+
+void PluginHost::sendPreviews() {
+  for (auto it = previews_.begin(); it != previews_.end();) {
+    if (!it->second.context) {  // the dialog is gone: nothing to draw for
+      it = previews_.erase(it);
+      continue;
+    }
+    if (!it->second.sent) {
+      send({{"type", "preview"}, {"rid", it->first}, {"request", it->second.request}});
+      it->second.sent = true;
+    }
+    ++it;
+  }
+}
+
+void PluginHost::failPreviews(const QString& why) {
+  std::map<int, Preview> open;
+  open.swap(previews_);
+  for (auto& [rid, p] : open) {
+    if (p.context) p.done(QJsonObject{{"ok", false}, {"error", why}});
+  }
+}
+
+namespace {
+bool matches(const QStringList& patterns, const QString& type) {
+  for (const QString& p : patterns) {
+    if (p == type || (p.endsWith(QLatin1Char('*')) && type.startsWith(p.chopped(1)))) return true;
+  }
+  return false;
+}
+}  // namespace
+
+bool PluginHost::provides(const QString& type) const {
+  for (const QJsonValue& b : blocks_) {
+    if (b.toObject()["type"].toString() == type) return true;
+  }
+  return false;
+}
+
+bool PluginHost::draws(const QString& type) const { return matches(manifest_.previews, type); }
+
 void PluginHost::onProcessFinished(int code, QProcess::ExitStatus status) {
   emit stopped();
+  failPreviews(tr("the plugin %1 stopped").arg(manifest_.name));
   const bool was_ready = ready_;
   ready_ = false;
   if (socket_ != nullptr) socket_->deleteLater();

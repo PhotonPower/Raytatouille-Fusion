@@ -7,6 +7,22 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Overview of every workflow block.** The parameter dialog of a block in the node editor opens on
+  a new first tab *Overview*: a drawing of the block's sub-model with the values in the dialog
+  (also those not applied yet), redrawn a moment after a value changes and with *Update*. The
+  Raytracer draws `rtt.*` blocks in the meridional section – lenses as the closed outlines of their
+  glass segments from the exact sag profiles, coloured by glass with the index in the legend,
+  cemented groups, stops, mirrors, ideal lenses, detectors, the axis and a fan of real rays along
+  the block's run; the source the whole system. The FourierGrating plugin draws a grating's or
+  stack's cross-section over two periods with layer thicknesses, profiles (lamellar, sinus,
+  triangle, points, 2D layers cut), materials and the incidence; the workflow engine the ideal
+  optics (`optics.*`) and the particle. Every other block shows its schematic (ports, sockets,
+  parameters). Context menu: copy or save the image. Plugin API: `Plugin.preview_block(request)`
+  returns a dependency-free 2-D vector drawing (`nfcad.drawing`, format `nfcad-drawing` 1:
+  polygons with materials, polylines, texts, dimensions, arrows; CAD draws it scaled, dark-palette
+  aware, with a legend); `plugin.json` may list further types under `"previews"`
+  (docs/plugin-api.md, "Block previews"). A future kernel (e.g. FEM) draws its mesh's section the
+  same way.
 - **User manual (German, LaTeX and PDF)**: `docs/manual/handbuch.pdf`, about 390 pages – installation,
   main window, navigation, modelling with every command, layers and groups, files, plugins, the
   node workflow, the Raytracer, Path Tracer, FourierGrating and Automotive Lighting plugins; appendices

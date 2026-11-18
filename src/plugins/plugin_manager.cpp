@@ -7,6 +7,8 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <QStandardPaths>
+#include <algorithm>
+#include <memory>
 
 #include "plugins/signature.hpp"
 
@@ -217,6 +219,55 @@ PluginHost* PluginManager::plugin(const QString& id) const {
     if (h->manifest().id == id) return h.get();
   }
   return nullptr;
+}
+
+std::vector<PluginHost*> PluginManager::previewOrder(const std::vector<PluginHost*>& hosts, const QString& type,
+                                                    const QString& provider) {
+  std::vector<PluginHost*> out;
+  auto add = [&out](PluginHost* h) {
+    if (h != nullptr && std::find(out.begin(), out.end(), h) == out.end()) out.push_back(h);
+  };
+  for (PluginHost* h : hosts) {
+    if (!provider.isEmpty() && h->manifest().id == provider) add(h);
+  }
+  for (PluginHost* h : hosts) {
+    if (h->provides(type)) add(h);
+  }
+  for (PluginHost* h : hosts) {
+    if (h->draws(type)) add(h);
+  }
+  return out;
+}
+
+std::vector<PluginHost*> PluginManager::previewers(const QString& type, const QString& provider) const {
+  std::vector<PluginHost*> all;
+  for (const auto& h : hosts_) all.push_back(h.get());
+  return previewOrder(all, type, provider);
+}
+
+void PluginManager::preview(const QString& type, const QString& provider, const QJsonObject& request, QObject* context,
+                            std::function<void(const QJsonObject&)> done) {
+  // one after the other: a plugin that does not draw the type passes it on
+  auto ask = std::make_shared<std::function<void(std::vector<PluginHost*>, QString)>>();
+  *ask = [this, request, context, done, type, weak = std::weak_ptr(ask)](std::vector<PluginHost*> left, QString why) {
+    if (left.empty()) {
+      done(QJsonObject{{"ok", false},
+                       {"unsupported", true},
+                       {"error", why.isEmpty() ? tr("no plugin draws blocks of type %1").arg(type) : why}});
+      return;
+    }
+    PluginHost* h = left.front();
+    left.erase(left.begin());
+    if (!h->running()) h->start(python(), nfcadPythonPath());
+    h->preview(request, context, [done, left, why, next = weak.lock()](const QJsonObject& answer) {
+      if (answer["unsupported"].toBool() && next) {
+        (*next)(left, why.isEmpty() ? answer["error"].toString() : why);
+      } else {
+        done(answer);
+      }
+    });
+  };
+  (*ask)(previewers(type, provider), {});
 }
 
 int PluginManager::run(PluginHost* host, const QString& action, const QJsonObject& params, const QJsonObject& target) {

@@ -16,6 +16,9 @@ my_plugin/
   "entry": "my_plugin:Raytracer", "description": "…" }
 ```
 
+Optional: `"requires"` (Python packages, see *Distribution*), `"previews"` (block types whose
+overview the plugin draws besides its own, see *Block previews*), `"update_url"`.
+
 `my_plugin.py`:
 
 ```python
@@ -134,6 +137,73 @@ CAD routes these requests and starts a plugin when its blocks are asked for; eva
 plugin run one after the other in a thread of their own (not the action's). The engine uses
 `ctx.block_catalogues()` (the other plugins' types with provider id and version) and
 `ctx.evaluate_block(provider, request)`; a provider that stops while evaluating fails the request.
+
+### Block previews (overview drawings)
+
+Every block's parameter dialog in the node editor opens on the tab **Overview**: a drawing of
+the block's sub-model – a lens or an objective in its meridional section, a grating's
+cross-section, a detector's plane. A plugin draws its blocks with `preview_block`; it returns a
+small 2-D **vector drawing** as JSON (no plotting library needed, nothing is installed for it),
+which CAD scales to the tab, colours for the light or dark palette and gives a legend of the
+materials:
+
+```python
+from nfcad.drawing import Drawing, answer, unsupported
+
+class Gratings(Plugin):
+    def preview_block(self, request):    # in a thread of its own; keep it under a second
+        node = request["node"]             # the block with the values in the dialog (unsaved)
+        if node["type"] != "fg.stack":
+            return unsupported()           # CAD asks the next plugin or shows the schematic
+        d = Drawing(f"{node['name']} – cross-section", unit="µm", axes=("x", "y"))
+        d.material("si", "si · n = 3.88 + 0.02i")
+        d.polygon([(0, 0), (1, 0), (1, 0.2), (0, 0.2)], material="si")
+        d.dimension((1.1, 0), (1.1, 0.2), "0.2")
+        d.arrow((0.3, 0.6), (0.5, 0.2), "λ = 0.6 µm")
+        return answer(d)                   # {"ok": True, "drawing": {...}}
+```
+
+**Request** (`preview_block(request)`): `node` – the block as in the workflow, its `params`
+merged with the values in the dialog that are not applied yet (fields are JSON pointers into
+the params, so a radius changed in the dialog is already in the data); `type` – its catalogue
+entry; `model` – the whole model of the workflow (e.g. for the source's glass catalogues);
+`scope` – the groups the block lies in; `locale` – CAD's locale (e.g. `de_DE`).
+
+**Answer**: `{"ok": true, "drawing": …}`; `{"ok": false, "error": "…"}` is shown in red over the
+block's schematic; `{"ok": false, "unsupported": true}` passes the block on. Exceptions become
+errors (traceback in the *Plugin log*); NaN or NumPy numbers in the answer are refused.
+
+**Drawing** (format `nfcad-drawing`, version 1; `nfcad.drawing.Drawing.to_json()`):
+
+| key | meaning |
+|---|---|
+| `title` | shown on top |
+| `unit`, `axes` | unit of all coordinates (`"mm"`, `"µm"`) and the names of the horizontal and vertical axis (`["z", "y"]`); `"axes": false` draws no ticks (a schematic) |
+| `aspect` | `"equal"` (default: one scale for both axes) or `"fit"` (each axis fills the tab) |
+| `items` | `polygon` (`points` ≥ 3, filled; `material`, `fill` "#rrggbb", `hatched`), `polyline` (`points` ≥ 2), `text` (`at`, `text`, `align` left/center/right, `valign` top/middle/bottom), `dimension` (`from`, `to`, `text`: a double arrow with its value), `arrow` (`from`, `to`, `text`) |
+| `role` | of lines, arrows and texts, gives colour and pen: `outline` (default), `surface`, `axis` (dash-dot), `ray`, `light`, `stop`, `detector`, `dimension`, `guide` (dotted), `note`, `error`; `color`, `width` (pixels), `dashed` override it |
+| `materials` | legend entries `{"name", "label", "fill"?}`; a material only named by a polygon is added; without a fill the colour comes from the name (the same material looks the same in every drawing, air nearly transparent) |
+| `notes` | lines under the drawing |
+
+Coordinates are finite numbers, y up; at most 20 000 items and 400 000 points. CAD refuses a
+malformed drawing (with the reason, over the schematic) and skips item types it does not know,
+so a newer plugin still draws. `nfcad.drawing.check(json)` gives what CAD would refuse – for a
+plugin's tests.
+
+**Who is asked**: the block's provider (the plugin named in its catalogue entry or in the
+workflow's `providers`, else the plugin whose `blocks()` include the type), then every plugin
+whose `plugin.json` lists the type under `"previews"` (`"rtt.*"` matches a prefix) – a plugin
+that draws types it does not provide (the engine draws `optics.*`) or that is not started yet.
+CAD starts a plugin for it. Without an answer the dialog shows the block's **schematic**: the
+block with its ports (light left in, right out), data sockets, type, description and first
+parameters. The drawing is made when the tab is shown, again a moment after a value in the
+dialog changed, and with *Update*; an answer that is overtaken by a newer request is dropped.
+A future kernel (e.g. FEM) draws its mesh's cross-section the same way: polygons per material,
+`aspect` equal, `unit` of the mesh.
+
+Messages: CAD → plugin `{"type": "preview", "rid", "request"}`, plugin → CAD
+`{"type": "previewed", "rid", "response"}`; previews run in a thread of their own (beside
+actions and block evaluations), one after the other.
 
 Raise `nfcad.UserError("…")` for problems the user can fix (missing input, wrong file): CAD
 shows the message as it is. Any other exception is reported as a plugin error with its

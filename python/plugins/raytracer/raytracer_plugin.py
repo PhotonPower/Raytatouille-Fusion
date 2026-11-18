@@ -706,6 +706,12 @@ class RaytracerPlugin(Plugin):
             return {"ok": False, "error": "the Raytracer needs raytatouille and RTT-Fusion with remote blocks"}
         return provider.handle(request) if hasattr(provider, "handle") else provider.evaluate(request)
 
+    def preview_block(self, request: dict) -> dict:
+        """The y–z section of an rtt.* block's elements, with rays (rtt_preview)."""
+        import rtt_preview
+
+        return rtt_preview.preview(request)
+
     # ------------------------------------------------------------------ node workflow (RTT-Fusion)
     @staticmethod
     def _fusion():

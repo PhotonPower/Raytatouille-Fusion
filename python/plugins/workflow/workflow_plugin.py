@@ -153,6 +153,12 @@ class WorkflowEngine(Plugin):
         self._model_ids: set[str] | None = None
         self._failures: list[str] = []
 
+    def preview_block(self, request: dict) -> dict:
+        """The overview drawing of an ideal-optics block or a particle (workflow_preview)."""
+        import workflow_preview
+
+        return workflow_preview.preview(request)
+
     def _blocks(self, ctx, registry) -> tuple[dict, dict]:
         """The other plugins' block types in `registry` (ADR 0010, D2/D3): their evaluators (a
         request each) and the providers by type {"plugin", "version"}."""

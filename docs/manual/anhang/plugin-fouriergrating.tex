@@ -390,6 +390,48 @@ Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
 \end{referenz}
 
 % ---------------------------------------------------------------------------------------------
+\section{Übersichtsbild der Blöcke}\label{sec:fg-ref-uebersicht}
+\index{Uebersichtsbild@Übersichtsbild!FourierGrating}
+
+Für \block{fg.grating} und \block{fg.stack} zeichnet das Plugin den Reiter \gui{Overview} des
+Dialogs \gui{Parameters…} (Modul \datei{fg\_preview.py}, reines Python;
+Abschnitt~\ref{sec:workflow-uebersicht}) aus der Konfiguration des Blocks (\param{config}, sonst
+die Datei unter \param{fouriergrating}) mit den Werten im Dialog:
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.0cm}X@{}}
+\toprule
+Teil & Darstellung (x–y-Ebene, µm) \\
+\midrule\endhead
+Ausschnitt & zwei Perioden $0 \dots 2\Lambda$; ohne Periode (Schichtstapel) die 1,5-fache
+  Gesamtdicke; mit \code{rings} radial $\pm 1{,}3\,r_\text{max}$ \\
+Substrat, Superstrat & Streifen unter bzw.\ über dem Stapel mit Namen (Halbräume, nicht
+  maßstäblich hoch) \\
+\code{homogeneous} & Rechteck im Material \\
+\code{lamellar1d} & ein Rechteck je Lamelle und Periode (\code{breakpoints\_um}, \code{materials}) \\
+\code{profile1d} & Profil $g(x)$ exakt (\code{sinus}, \code{triangle} mit \code{apex\_x\_um},
+  \code{points}): darunter \code{below}, darüber \code{above}; Höhe \code{depth\_um} \\
+\code{profile2d} & wie \code{profile1d} im Schnitt bei $z_0$ (Hinweis) \\
+\code{polygon2d}, \code{contour2d} & Hintergrund und die Einschlüsse im Schnitt auf Höhe $z$ des
+  ersten Einschlusses (Hinweis \enquote{layer $n$: … cut at z = …}); NURBS-Ränder über ihr
+  Kontrollpolygon, Löcher nicht (\enquote{approximate}) \\
+\code{rings} & radiale Bereiche zu beiden Seiten der Achse \\
+andere (\code{cad}, \code{rings\_profile}, \code{json}) & schraffiertes Band mit dem Typnamen \\
+Bemaßung & rechts jede Schichtdicke ab 3\,\% der Gesamtdicke; dünnere im Hinweis
+  \enquote{thin layers (not dimensioned)}; oben die Periode \enquote{$\Lambda$ = … µm} \\
+Einfall & Pfeil auf die Oberseite unter $\theta$ = \code{phi\_deg} mit $\lambda$, $\psi$, TE
+  (\code{delta\_deg} 0) bzw.\ TM (90); beim Gitter gestrichelt die nullte Ordnung der gewählten
+  Seite (\enquote{R$_0$}, \enquote{T$_0$}) \\
+Legende & Material mit $n$, $n + \mathrm{i}k$, $\varepsilon$ oder dem Namen des Modells
+  (\code{sellmeier}, \code{table}, …) \\
+Hinweise & Lage und Normale des Blocks im System; verschiedene Maßstäbe bei sehr flachen oder
+  hohen Stapeln; 2D-Gitter mit Periode $z$ \\
+\bottomrule
+\end{referenz}
+
+Ein Gitter, das nur eine Jones-Tabelle hält, erscheint als Probenebene mit Einfall und seinen
+Ordnungen (Winkel schematisch). Ohne Konfiguration meldet der Reiter \enquote{… holds no
+FourierGrating configuration (Store panel configuration in block, or name a configuration file)}.
+
 \section{Panel und Konfigurationsdatei}\label{sec:fg-ref-zuordnung}
 
 So entsprechen die Felder des Panels den Schlüsseln der Konfiguration von FourierGrating:

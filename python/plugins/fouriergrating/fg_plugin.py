@@ -15,6 +15,7 @@ import fg_cad
 import fg_config
 import fg_estimate
 import fg_nearfield
+import fg_preview
 import fg_optimize
 import fg_scan
 
@@ -252,6 +253,13 @@ class FourierGratingPlugin(Plugin):
         if provider is None:
             return {"ok": False, "error": "the FourierGrating plugin needs RTT-Fusion with remote blocks"}
         return provider.handle(request) if hasattr(provider, "handle") else provider.evaluate(request)
+
+    def preview_block(self, request: dict) -> dict:
+        """The cross-section of a grating's or stack's configuration (fg_preview)."""
+        try:
+            return fg_preview.preview(request, block_config)
+        except UserError as e:  # a configuration file that cannot be read
+            return {"ok": False, "error": str(e)}
 
     # ------------------------------------------------------------------ the configuration a block holds
     @action("Store panel configuration in block",

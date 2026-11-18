@@ -40,6 +40,16 @@ class NodeEditor : public QGraphicsView {
   /// of a type; the main window fills it from the plugins' actions with block types.
   using BlockAction = std::pair<QString, std::function<void()>>;
   std::function<std::vector<BlockAction>(const QString& id, const QString& type)> block_actions;
+  /// The overview drawing of a block for the tab "Overview" of its parameter dialog
+  /// (docs/plugin-api.md, "Block previews"): `request` is {"node" (with the values in the
+  /// dialog, not yet applied), "type", "model" (the whole model), "scope", "locale"}; `done` gets
+  /// the plugin's answer later ({"ok": true, "drawing"} or {"ok": false, "error",
+  /// "unsupported"?}) unless `context` is gone. The main window asks the plugins
+  /// (PluginManager::preview); without it every block gets its schematic.
+  using PreviewDone = std::function<void(const QJsonObject& answer)>;
+  std::function<void(const QString& type, const QString& provider, const QJsonObject& request, QObject* context,
+                     PreviewDone done)>
+      block_preview;
 
   void setWorkflow(const QJsonObject& workflow);
   [[nodiscard]] const QJsonObject& workflow() const { return workflow_; }
@@ -72,8 +82,13 @@ class NodeEditor : public QGraphicsView {
   [[nodiscard]] QStringList replacementsFor(const QString& id) const;
   /// Sets parameters of a block (merged into its "params").
   void setParams(const QString& id, const QJsonObject& params);
-  /// Dialog with the type's parameters (number, integer, boolean, text, file, numbers, point).
+  /// Dialog with the type's parameters (number, integer, boolean, text, file, numbers, point)
+  /// and, as the first tab, an overview drawing of the block (block_preview; refreshed when a
+  /// value changes and with Update).
   void editParams(const QString& id);
+  /// The request block_preview gets for a block with these parameter changes (plain names or
+  /// JSON pointers, as setParams takes them).
+  [[nodiscard]] QJsonObject previewRequest(const QString& id, const QJsonObject& changes = {}) const;
   /// Marks the block that is computed now (empty: none) – a bright frame and "running …".
   void setRunning(const QString& id);
   /// Up to date (true: green tick) / out of date (false: red cross) per block; blocks not listed

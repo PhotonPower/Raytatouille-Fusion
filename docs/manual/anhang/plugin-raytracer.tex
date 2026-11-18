@@ -195,6 +195,40 @@ Typ & Anschlüsse & Vorgabe von \param{rtt\_new} \\
 Beim Strahlteiler gilt: Wer das Teil auf der Seite verlässt, auf der das Licht hereinkam, wurde
 reflektiert. Ein Spiegel wird über denselben Anschluss verlassen, über den das Licht kam.
 
+\subsection{Übersichtsbild}\label{sec:ref-rt-uebersicht}
+\index{Uebersichtsbild@Übersichtsbild!Raytracer}
+
+Für alle Blöcke \code{rtt.*} zeichnet der Raytracer den Reiter \gui{Overview} des Dialogs
+\gui{Parameters…} (Modul \datei{rtt\_preview.py}; Abschnitt~\ref{sec:workflow-uebersicht}):
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{3.0cm}X@{}}
+\toprule
+Block & Inhalt \\
+\midrule\endhead
+\code{rtt.section}, \code{rtt.part.lens} & Meridionalschnitt (y–z, mm) der Elemente: Linsen als
+  geschlossene Kontur je Glas (\code{raytatouille.layout.outlines}, exakte Pfeilhöhen über den
+  Aperturen), Legende \enquote{Glas · n = …} bei der Referenzwellenlänge der Quelle, Kittglieder
+  je Glas; Blenden als Marken bis zum 1,5-fachen Öffnungsradius mit \enquote{stop $\varnothing$ …}; ideale
+  Linsen mit Pfeilspitzen und $f$; optische Achse; Elementnamen (bis zwölf Elemente); sieben
+  parallele Strahlen entlang des ersten Laufs (\param{runs}) des Blocks, auf 85\,\% der kleinsten
+  Öffnung; Bemaßung Mittendicke bzw.\ erster bis letzter Scheitel. Bei einer einzelnen Linse
+  nennen die Hinweise Radien, Konik, Dicken und Durchmesser. \\
+\code{rtt.mirror}, \code{rtt.splitter}, \code{rtt.detector}, übrige \code{rtt.part.*} &
+  Profil der Fläche in der y–z-Ebene: Spiegel kräftig, Strahlteiler gestrichelt, Detektor blau,
+  Blende als Marken; ohne Strahlen. \\
+\code{rtt.source} & das ganze System (Baumgerüst \param{rtt\_tree}, die Elemente aller Blöcke, neue
+  Teile) ohne Strahlen; Hinweis mit Wellenlängen und Zahl der Feldpunkte. \\
+\bottomrule
+\end{referenz}
+
+Die Koordinaten sind die der Baugruppe des Blocks (Abschnitte, Spiegel) bzw.\ des Systems (Quelle,
+neue Teile). Kompiliert wird mit den Glaskatalogen der Quelle (\param{rtt\_catalog\_data},
+\param{rtt\_catalogs}); fehlt ein Glas, wird die Geometrie mit einer festen Brechzahl gezeichnet,
+und der Hinweis lautet \enquote{glasses unknown (…) -- geometry only, no rays; add the glass
+catalogue in the Raytracer panel}. Flächen, die die y–z-Ebene nicht schneidet, nennt der Hinweis
+\enquote{… not in the y–z section}. Ohne das Paket \code{raytatouille} meldet der Reiter
+\enquote{the Raytracer's overview needs the Python package raytatouille}.
+
 \section{Glaskataloge}\label{sec:ref-rt-kataloge}
 
 Verwendet werden, ohne Doppelte, in dieser Reihenfolge:

@@ -53,6 +53,18 @@ class Plugin:
         ``BlockProvider.evaluate``; one request at a time, in a thread of its own."""
         return {"ok": False, "error": f"{type(self).__name__} provides no blocks"}
 
+    def preview_block(self, request: dict) -> dict:
+        """The overview drawing of a workflow block (docs/plugin-api.md, "Block previews") for the
+        tab "Overview" of its parameter dialog: ``request`` holds the block (``"node"``, with the
+        values in the dialog, not yet applied), its catalogue entry (``"type"``), the whole model
+        (``"model"``: e.g. the source's glass catalogues), the groups around it (``"scope"``) and
+        CAD's ``"locale"``. Return ``nfcad.drawing.answer(drawing)`` – or
+        ``nfcad.drawing.unsupported()`` for a type this plugin does not draw (CAD then asks the next
+        plugin or shows the block's schematic); an error ``{"ok": False, "error": …}`` is shown over
+        the schematic. Called in a thread of its own, one request at a time; keep it quick (a second
+        at most) – the user waits for it."""
+        return {"ok": False, "unsupported": True, "error": f"{type(self).__name__} draws no blocks"}
+
     def actions(self) -> dict[str, dict]:
         out = {}
         for name in dir(type(self)):

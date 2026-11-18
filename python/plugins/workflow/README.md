@@ -33,5 +33,11 @@ paths are cleared, so the `.rttf` computes on any machine; a named file that can
 warning (`graph.file_unreadable`). STEP files of CAD layers in a FourierGrating configuration stay
 outside (`graph.file_external`).
 
+**Overviews** (tab *Overview* of a block's parameter dialog, `workflow_preview.py`, pure Python):
+the engine draws the blocks it computes itself – the ideal optics `optics.*` (a lens as its symbol
+with focal points and f, a detector's plane with its size and the arriving light, the collimated
+source's beam, a mirror hatched behind, a splitter dashed, an interface with both indices) and the
+particle `fusion.particle` (its circle in µm); `plugin.json` lists them under `"previews"`.
+
 A workflow made before the blocks held their data cannot run here: run *Workflow from system* once
 in the Raytracer plugin.

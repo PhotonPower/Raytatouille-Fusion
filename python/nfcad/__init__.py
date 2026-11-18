@@ -8,5 +8,6 @@ its actions; the actions talk to CAD through the :class:`Context` they receive.
 from .plugin import API_VERSION, Plugin, action
 from .context import Cancelled, Context, UserError
 from .params import Param
+from . import drawing
 
-__all__ = ["API_VERSION", "Plugin", "action", "Context", "Cancelled", "UserError", "Param"]
+__all__ = ["API_VERSION", "Plugin", "action", "Context", "Cancelled", "UserError", "Param", "drawing"]

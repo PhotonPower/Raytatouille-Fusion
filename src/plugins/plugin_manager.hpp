@@ -72,6 +72,20 @@ class PluginManager : public QObject {
   /// Problems found while loading (invalid manifests, …).
   [[nodiscard]] const QStringList& problems() const { return problems_; }
 
+  /// The overview drawing of a block of `type` (docs/plugin-api.md, "Block previews"): asks
+  /// the block's provider (`provider`, else the plugin whose blocks include the type), then the
+  /// plugins whose manifest lists the type under "previews" – started if needed – until one
+  /// draws it, and calls `done` with the answer ({"ok": true, "drawing"} or {"ok": false,
+  /// "error", "unsupported"?}; "unsupported" also when no plugin draws the type). Nothing is
+  /// called once `context` is gone.
+  void preview(const QString& type, const QString& provider, const QJsonObject& request, QObject* context,
+               std::function<void(const QJsonObject&)> done);
+  /// The plugins asked for a preview of `type`, in that order: the provider (by id), the
+  /// plugins whose blocks include the type, the plugins whose manifest lists it under "previews".
+  [[nodiscard]] std::vector<PluginHost*> previewers(const QString& type, const QString& provider) const;
+  [[nodiscard]] static std::vector<PluginHost*> previewOrder(const std::vector<PluginHost*>& hosts, const QString& type,
+                                                             const QString& provider);
+
   /// Starts the plugin if needed and runs the action.
   int run(PluginHost* host, const QString& action, const QJsonObject& params = {}, const QJsonObject& target = {});
 

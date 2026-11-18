@@ -1,0 +1,323 @@
+{
+ "format": "nfcad-drawing",
+ "version": 1,
+ "title": "Si line grating – cross-section x–y",
+ "unit": "µm",
+ "aspect": "equal",
+ "items": [
+  {
+   "type": "polygon",
+   "points": [
+    [
+     0.0,
+     -0.36
+    ],
+    [
+     2.0,
+     -0.36
+    ],
+    [
+     2.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ]
+   ],
+   "material": "si"
+  },
+  {
+   "type": "text",
+   "at": [
+    1.96,
+    -0.108
+   ],
+   "text": "substrate si",
+   "align": "right",
+   "role": "note"
+  },
+  {
+   "type": "polygon",
+   "points": [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     2.0,
+     0.0
+    ],
+    [
+     2.0,
+     0.05
+    ],
+    [
+     0.0,
+     0.05
+    ]
+   ],
+   "material": "sio2"
+  },
+  {
+   "type": "dimension",
+   "from": [
+    2.1,
+    0.0
+   ],
+   "to": [
+    2.1,
+    0.05
+   ],
+   "text": "0.05",
+   "role": "dimension"
+  },
+  {
+   "type": "polyline",
+   "points": [
+    [
+     2.0,
+     0.05
+    ],
+    [
+     2.14,
+     0.05
+    ]
+   ],
+   "role": "guide"
+  },
+  {
+   "type": "polygon",
+   "points": [
+    [
+     0.0,
+     0.05
+    ],
+    [
+     0.5,
+     0.05
+    ],
+    [
+     0.5,
+     0.15000000000000002
+    ],
+    [
+     0.0,
+     0.15000000000000002
+    ]
+   ],
+   "material": "si"
+  },
+  {
+   "type": "polygon",
+   "points": [
+    [
+     0.5,
+     0.05
+    ],
+    [
+     1.0,
+     0.05
+    ],
+    [
+     1.0,
+     0.15000000000000002
+    ],
+    [
+     0.5,
+     0.15000000000000002
+    ]
+   ],
+   "material": "air"
+  },
+  {
+   "type": "polygon",
+   "points": [
+    [
+     1.0,
+     0.05
+    ],
+    [
+     1.5,
+     0.05
+    ],
+    [
+     1.5,
+     0.15000000000000002
+    ],
+    [
+     1.0,
+     0.15000000000000002
+    ]
+   ],
+   "material": "si"
+  },
+  {
+   "type": "polygon",
+   "points": [
+    [
+     1.5,
+     0.05
+    ],
+    [
+     2.0,
+     0.05
+    ],
+    [
+     2.0,
+     0.15000000000000002
+    ],
+    [
+     1.5,
+     0.15000000000000002
+    ]
+   ],
+   "material": "air"
+  },
+  {
+   "type": "dimension",
+   "from": [
+    2.1,
+    0.05
+   ],
+   "to": [
+    2.1,
+    0.15000000000000002
+   ],
+   "text": "0.1",
+   "role": "dimension"
+  },
+  {
+   "type": "polyline",
+   "points": [
+    [
+     2.0,
+     0.15000000000000002
+    ],
+    [
+     2.14,
+     0.15000000000000002
+    ]
+   ],
+   "role": "guide"
+  },
+  {
+   "type": "polygon",
+   "points": [
+    [
+     0.0,
+     0.15000000000000002
+    ],
+    [
+     2.0,
+     0.15000000000000002
+    ],
+    [
+     2.0,
+     0.51
+    ],
+    [
+     0.0,
+     0.51
+    ]
+   ],
+   "material": "air"
+  },
+  {
+   "type": "text",
+   "at": [
+    0.04,
+    0.33
+   ],
+   "text": "superstrate air",
+   "align": "left",
+   "role": "note"
+  },
+  {
+   "type": "polyline",
+   "points": [
+    [
+     2.0,
+     0.0
+    ],
+    [
+     2.14,
+     0.0
+    ]
+   ],
+   "role": "guide"
+  },
+  {
+   "type": "dimension",
+   "from": [
+    0.0,
+    -0.288
+   ],
+   "to": [
+    1.0,
+    -0.288
+   ],
+   "text": "Λ = 1 µm",
+   "role": "dimension"
+  },
+  {
+   "type": "arrow",
+   "from": [
+    0.9499893248319241,
+    0.4336246328675159
+   ],
+   "to": [
+    1.0,
+    0.15000000000000002
+   ],
+   "role": "light",
+   "text": "λ = 0.5461 µm, θ = 10°, TE",
+   "align": "right"
+  },
+  {
+   "type": "arrow",
+   "from": [
+    1.0,
+    0.15000000000000002
+   ],
+   "to": [
+    1.037508006376057,
+    0.3627184746506369
+   ],
+   "role": "light",
+   "dashed": true
+  },
+  {
+   "type": "text",
+   "at": [
+    1.037508006376057,
+    0.3627184746506369
+   ],
+   "text": "R₀",
+   "align": "left",
+   "valign": "bottom",
+   "role": "note"
+  }
+ ],
+ "materials": [
+  {
+   "name": "si",
+   "label": "si · n = 4.087 + 0.035i"
+  },
+  {
+   "name": "sio2",
+   "label": "sio2 · n = 1.46"
+  },
+  {
+   "name": "air",
+   "label": "air · n = 1"
+  }
+ ],
+ "notes": [
+  "in the system at 0, 0, 57.9 mm, normal 0, 0, -1"
+ ],
+ "axes": [
+  "x",
+  "y"
+ ]
+}
