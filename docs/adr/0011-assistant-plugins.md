@@ -213,8 +213,13 @@ The tool catalogue itself is never stale: it comes from the plugins' `hello` mes
   A2, otherwise turns with tools run without streaming).
 - **Claude Agent:** Anthropic Messages API with tool use; model selectable; the API key is
   **not** a parameter (parameters are saved in the document): the action *Set API key* stores it
-  in the system's key store (Python `keyring`), the variable `ANTHROPIC_API_KEY` is read as
-  fall-back. Prompt caching for system prompt and tool catalogue. Before the first message in a
+  in the system's key store with Python `keyring` under the fixed names **service
+  `raytatouille-fusion`, user `anthropic-api-key`** (`keyring.get_password("raytatouille-fusion",
+  "anthropic-api-key")`), so that a key stored by hand beforehand
+  (`python -m keyring set raytatouille-fusion anthropic-api-key`) is found; the variable
+  `ANTHROPIC_API_KEY` is read as fall-back. `keyring` is in the plugin's `requires`; when no
+  key store is available (`keyring` reports a fail or plain-text backend), the plugin says so
+  instead of storing the key in plain text. Prompt caching for system prompt and tool catalogue. Before the first message in a
   document the dock asks once whether data of this document may be sent to Anthropic (saved in
   the document). Tokens and costs per turn in the dock.
 
