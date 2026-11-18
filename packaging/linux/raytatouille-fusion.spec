@@ -39,6 +39,8 @@ DESTDIR=%{buildroot} cmake --install build --component app
 %{_datadir}/applications/io.github.photonpower.RaytatouilleFusion.desktop
 %{_datadir}/icons/hicolor/scalable/apps/io.github.photonpower.RaytatouilleFusion.svg
 %{_datadir}/metainfo/io.github.photonpower.RaytatouilleFusion.metainfo.xml
+# MIME types .rttf / .nfcad / .nfplugin (the shared-mime-info file trigger updates the database)
+%{_datadir}/mime/packages/io.github.photonpower.RaytatouilleFusion.xml
 %{_datadir}/raytatouille-fusion/
 
 %changelog

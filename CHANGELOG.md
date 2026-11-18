@@ -13,6 +13,21 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   with all keyboard shortcuts, every command of the command line, the programs' command-line options
   and environment variables, a parameter reference per plugin, every workflow block, plugin
   management, the file format, troubleshooting and a glossary. Source in `docs/manual/` (`make`).
+- **Layers: current layer, lock, delete.** The current layer (bold in the *Layers* dock, *Make
+  current*) receives new objects – drawn, imported with *Import STEP…*, made by plugins – and is
+  saved with the document. A locked layer's objects stay visible and can be snapped to, but cannot
+  be selected and so not changed. *Delete layer…* asks whether the objects move to *Default* or are
+  deleted; *Default* stays. File format: optional `"locked"` per layer and `"current_layer"`
+  (docs/file-format.md), compatible both ways.
+- **File → Open Recent** with the last ten documents and *Clear list*.
+- **Opening files from the Finder (macOS) and the file manager (Linux).** The application's
+  `Info.plist` declares `.rttf` / `.nfcad` (documents), `.step` / `.stp` and `.nfplugin`, and a
+  double-clicked file arrives as `QFileOpenEvent`; Linux installs the MIME types
+  `application/x-raytatouille-fusion` and `application/x-raytatouille-fusion-plugin`
+  (shared-mime-info) and the desktop file names them. As with the command-line argument, a
+  `.nfplugin` is installed, a document or STEP file opened after asking to save the changes.
+- **File → Open… shows plugin packages (`.nfplugin`)**, which it installs; choosing one no longer
+  asks to save the document first.
 - **The plugins ship with the application** (Windows installer, macOS DMG, RPM): Raytracer,
   Workflow, FourierGrating, Path Tracer and Automotive Lighting are installed with it and load
   without a signature, as part of the installation (ADR 0009, addendum). A plugin folder of one's
@@ -75,6 +90,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   ray tracing) with R112 still met.
 
 ### Changed
+- **More undo steps**: new, renamed, recoloured and deleted layers, renamed groups, and every edit
+  in the node editor (moving a block counts once, at the release; before, only plugin runs that
+  changed the workflow could be undone).
 - **Automotive Lighting plugin**: the elements of a patterned lens may be turned (*spread turned
   by*, a new column of the element table): a cylinder lens turned by 15° spreads the light along a
   line that rises by 15°, as the facets of a clear-lens reflector lay their filament images along
@@ -102,6 +120,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   0.2.1 `fusion.convert`); a run with one stopped with `exec.no_evaluator`. The library now holds
   only types this installation can compute (plus those the workflow already uses), and *Check
   workflow* warns on each block without an evaluator (`check.no_evaluator`).
+- **Closing did not ask to save after layer and visibility changes.** Creating, renaming,
+  recolouring layers, renaming groups and showing or hiding layers, groups and objects (Hide,
+  Isolate, Unhide, the check boxes) now mark the document modified.
 - **Windows (and Linux under a light system theme): the menu bar and other texts were dark on
   dark.** The dark style sheet coloured only some widgets; the rest took the light system palette.
   The application now uses a dark palette everywhere: Fusion with the colours of `dark.qss` on

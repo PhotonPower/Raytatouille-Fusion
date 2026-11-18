@@ -97,7 +97,7 @@ document as modified but is not an undo step.
 | `ctx.plugin_params(plugin_id)` | the parameters another plugin's panel holds in this document (read only; only the values set there, not its defaults) |
 | `ctx.set_params({name: value})` | sets parameters of this plugin (e.g. from a configuration file the user loads): saved in the document, shown in the panel, given to the next action; an unknown name is an error |
 | `ctx.entities(ids=None, selection=False)` | objects as dicts; `geometry` in the [.nfcad format](file-format.md) |
-| `ctx.add(geometry, name, attributes, group=0)` | new object (in a model tree group), returns its id |
+| `ctx.add(geometry, name, attributes, group=0)` | new object (in a model tree group, on the current layer), returns its id |
 | `ctx.remove(id)` | removes an object |
 | `ctx.groups()` / `ctx.add_group(name, parent=0)` / `ctx.remove_group(id)` | model tree groups (id, name, parent); only empty groups can be removed |
 | `ctx.replace(id, geometry)` | new geometry for an object – shown immediately (live optimisation) |

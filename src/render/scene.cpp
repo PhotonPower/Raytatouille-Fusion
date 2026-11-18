@@ -19,6 +19,7 @@ void Scene::add(document::EntityId id) {
   item.geometry = e->geometry;
   item.color = doc_->displayColor(*e);
   item.visible = doc_->isDisplayed(*e);
+  item.locked = doc_->isLocked(*e);
   item.mesh.reset();
   service_->request(id, e->revision, e->geometry);
   emit changed();
@@ -33,6 +34,7 @@ void Scene::update(document::EntityId id) {
   }
   it->second.color = doc_->displayColor(*e);
   it->second.visible = doc_->isDisplayed(*e);
+  it->second.locked = doc_->isLocked(*e);
   if (it->second.geometry != e->geometry) {
     it->second.geometry = e->geometry;
     service_->request(id, e->revision, e->geometry);  // keep the old mesh until the new arrives
@@ -54,6 +56,7 @@ void Scene::rebuild() {
     item.geometry = e.geometry;
     item.color = doc_->displayColor(e);
     item.visible = doc_->isDisplayed(e);
+    item.locked = doc_->isLocked(e);
     service_->request(id, e.revision, e.geometry);
   }
   emit changed();
@@ -115,6 +118,15 @@ std::vector<pick::Target> Scene::pickTargets() const {
   out.reserve(items_.size());
   for (const auto& [id, item] : items_) {
     if (item.visible && item.mesh) out.push_back({id, item.mesh.get(), item.geometry});
+  }
+  return out;
+}
+
+std::vector<pick::Target> Scene::selectableTargets() const {
+  std::vector<pick::Target> out;
+  out.reserve(items_.size());
+  for (const auto& [id, item] : items_) {
+    if (item.visible && !item.locked && item.mesh) out.push_back({id, item.mesh.get(), item.geometry});
   }
   return out;
 }

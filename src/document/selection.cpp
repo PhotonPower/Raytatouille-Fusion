@@ -19,7 +19,12 @@ QString sub_element_name(const SubElement& s) {
 Selection::Selection(QObject* parent) : QObject(parent) {}
 
 void Selection::attach(Document* doc) {
+  doc_ = doc;
   connect(doc, &Document::entityRemoved, this, &Selection::dropEntity);
+  // an object whose layer is locked (or that moved to a locked layer) leaves the selection
+  connect(doc, &Document::entityChanged, this, [this](EntityId id) {
+    if (doc_->isLocked(id)) dropEntity(id);
+  });
   connect(doc, &Document::documentReset, this, [this] {
     hovered_.reset();
     clear();
@@ -47,6 +52,7 @@ std::vector<EntityId> Selection::entities() const {
 void Selection::apply(const std::vector<SelectionItem>& items, Mode mode) {
   std::set<SelectionItem> next = mode == Mode::Replace ? std::set<SelectionItem>{} : items_;
   for (const SelectionItem& i : items) {
+    if (doc_ != nullptr && mode != Mode::Remove && doc_->isLocked(i.entity)) continue;  // locked layer
     switch (mode) {
       case Mode::Replace:
       case Mode::Add: next.insert(i); break;

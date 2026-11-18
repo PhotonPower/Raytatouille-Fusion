@@ -129,9 +129,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   }
   // the version changes whenever docks are added, so that an old layout does not hide them
   restoreState(settings.value(QStringLiteral("window/state")).toByteArray(), kWindowStateVersion);
+  // documents opened in the Finder / Dock come as QFileOpenEvent to the application (macOS)
+  qApp->installEventFilter(this);
 }
 
 MainWindow::~MainWindow() {
+  qApp->removeEventFilter(this);
   // Stopping the plugin processes emits signals; the window must not receive them while it is
   // being destroyed.
   if (plugins_ != nullptr) {
@@ -153,6 +156,10 @@ void MainWindow::createMenus() {
   QMenu* file = menuBar()->addMenu(tr("&File"));
   file->addAction(tr("&New"), QKeySequence::New, this, &MainWindow::newDocument);
   file->addAction(tr("&Open…"), QKeySequence::Open, this, &MainWindow::openDialog);
+  recent_menu_ = file->addMenu(tr("Open &Recent"));
+  recent_menu_->setObjectName(QStringLiteral("recentMenu"));
+  connect(recent_menu_, &QMenu::aboutToShow, this, &MainWindow::fillRecentMenu);
+  fillRecentMenu();
   file->addAction(tr("&Import STEP…"), QKeySequence(Qt::CTRL | Qt::Key_I), this,
                   &MainWindow::importStepDialog);
   file->addSeparator();
@@ -479,7 +486,8 @@ void MainWindow::createPanels() {
   };
   connect(doc_, &document::Document::workflowChanged, this, [show_workflow] { show_workflow(false); });
   connect(doc_, &document::Document::documentReset, this, [show_workflow] { show_workflow(true); });
-  connect(node_editor_, &ui::NodeEditor::edited, doc_, &document::Document::setWorkflow);
+  // every edit in the node editor is one undo step (a dragged block: one at the release)
+  connect(node_editor_, &ui::NodeEditor::edited, doc_, [this](const QJsonObject& w) { doc_->editWorkflow(w); });
   // plugins that follow the workflow (e.g. the Raytracer draws what an edit changed): shortly
   // after the last edit, if the plugin runs and is idle
   auto* follow = new QTimer(this);

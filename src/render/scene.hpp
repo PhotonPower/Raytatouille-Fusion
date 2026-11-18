@@ -22,6 +22,7 @@ class Scene : public QObject {
     document::GeometryPtr geometry;     ///< to detect geometry changes
     QColor color;
     bool visible = true;
+    bool locked = false;  ///< on a locked layer: drawn and snapped to, but not selectable
   };
 
   Scene(document::Document* doc, tessellation::TessellationService* service,
@@ -35,8 +36,10 @@ class Scene : public QObject {
   /// Bounds of selected entities and sub-elements (faces, edges, B-rep vertices); invalid if
   /// none of them is visible and tessellated.
   [[nodiscard]] tessellation::Box3 bounds(const std::vector<document::SelectionItem>& items) const;
-  /// Visible, tessellated items for picking and snapping.
+  /// Visible, tessellated items for snapping (also those on locked layers).
   [[nodiscard]] std::vector<pick::Target> pickTargets() const;
+  /// Visible, tessellated items that can be selected (not on a locked layer): hover and selection.
+  [[nodiscard]] std::vector<pick::Target> selectableTargets() const;
   /// Number of triangles of all tessellated items.
   [[nodiscard]] std::size_t triangleCount() const;
 

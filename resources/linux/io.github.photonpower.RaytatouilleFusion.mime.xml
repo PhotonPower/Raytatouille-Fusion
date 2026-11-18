@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- shared-mime-info: installed as share/mime/packages/io.github.photonpower.RaytatouilleFusion.xml -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-raytatouille-fusion">
+    <comment>Raytatouille Fusion document</comment>
+    <sub-class-of type="application/json"/>
+    <generic-icon name="application-x-generic"/>
+    <glob pattern="*.rttf"/>
+    <glob pattern="*.nfcad"/>
+  </mime-type>
+  <mime-type type="application/x-raytatouille-fusion-plugin">
+    <comment>Raytatouille Fusion plugin package</comment>
+    <sub-class-of type="application/zip"/>
+    <generic-icon name="package-x-generic"/>
+    <glob pattern="*.nfplugin"/>
+  </mime-type>
+</mime-info>

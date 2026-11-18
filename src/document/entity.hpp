@@ -20,6 +20,10 @@ using EntityId = std::uint64_t;
 using LayerId = std::uint32_t;
 using GroupId = std::uint32_t;  ///< 0: top level (no group)
 
+/// Layer of a new entity that has none yet: the document puts it on its current layer when it
+/// is added (Document::addEntities, apply, insert). Never stored in a document.
+inline constexpr LayerId kCurrentLayer = 0xFFFFFFFFu;
+
 /// Geometry of an entity: exact Nurbforge values (immutable, ADR 0003).
 using Geometry =
     std::variant<nf::Vec3, nf::NurbsCurve, nf::NurbsSurface, nf::TrimmedSurface, nf::Shell>;
@@ -38,7 +42,7 @@ enum class GeometryKind { Point, Curve, Surface, TrimmedSurface, Shell };
 struct Entity {
   EntityId id = 0;  ///< assigned by Document; 0 = not yet in a document
   QString name;
-  LayerId layer = 0;
+  LayerId layer = kCurrentLayer;  ///< kCurrentLayer: the document's current layer when added
   std::optional<QColor> color;  ///< empty: layer colour
   bool visible = true;
   GroupId group = 0;           ///< model tree (docs/plugins.md, P1)

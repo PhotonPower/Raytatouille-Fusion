@@ -141,7 +141,9 @@ set_target_properties(RaytatouilleFusion PROPERTIES
   MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.photonpower.raytatouillefusion"
   MACOSX_BUNDLE_BUNDLE_NAME "Raytatouille Fusion"
   MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-  MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")
+  MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+  # Qt's template plus the document types (.rttf, .nfcad, STEP, .nfplugin): Finder opens them here
+  MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/Info.plist.in")
 target_compile_definitions(nfcad_core PUBLIC NFCAD_VERSION="${PROJECT_VERSION}"
                            PRIVATE NFCAD_PYTHON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/python")
 
@@ -199,6 +201,9 @@ if(UNIX AND NOT APPLE)
           DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps COMPONENT app)
   install(FILES resources/linux/${_nfcad_id}.metainfo.xml
           DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo COMPONENT app)
+  # MIME types of the documents and plugin packages (shared-mime-info; the .desktop file names them)
+  install(FILES resources/linux/${_nfcad_id}.mime.xml
+          DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages RENAME ${_nfcad_id}.xml COMPONENT app)
 else()
   # Windows: windeployqt, macOS: macdeployqt into the installed application
   qt_generate_deploy_app_script(TARGET RaytatouilleFusion OUTPUT_SCRIPT _nfcad_deploy

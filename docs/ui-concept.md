@@ -8,14 +8,25 @@
 | Viewports (centre) | `ViewportGrid` | 2×2 grid of `Viewport` (QRhiWidget) with splitters; Front, Left, Top, Perspective |
 | View toolbar (top) | `QToolBar` | display mode (wireframe / surfaces / shaded), standard views, zoom extents, grid on/off |
 | Property panel (right) | `QDockWidget` → `PropertyPanel` | properties of the selection (type, degrees, knots, length / area / volume) |
-| Layer panel (right) | `QDockWidget` → `LayerPanel` | visibility, colour, name, new layer, move selection to a layer |
+| Layer panel (right) | `QDockWidget` → `LayerPanel` | visibility, name, lock, colour; the current layer in bold (new objects go there); new layer, delete layer (objects to Default or deleted – asked), make current, move selection to a layer; context menu with the same |
 | Results (right, tab) | `QDockWidget` → `ResultsPanel` | runs and their results (rays, fields, curves) with visibility; delete, convert rays to curves |
 | Plot (bottom) | `QDockWidget` → `PlotWidget` | curves of the results, live; appears with the first curve |
 | Model tree (right, tab next to Layers) | `QDockWidget` → `ModelTreePanel` | groups and objects, visibility check boxes, selection in both directions, context menu: group, ungroup, hide, isolate, show all; STEP files are imported as one group |
 | Command line (bottom) | `QLineEdit` + `CommandController` | prompt, typed commands, coordinates and numbers ([commands.md](commands.md)) |
 | Status bar | `QStatusBar` + `SnapBar` | cursor coordinates, active view, snap toggles |
 
-The window remembers its geometry and dock layout (`QSettings`).
+The window remembers its geometry and dock layout (`QSettings`). *File → Open Recent* keeps the
+last ten documents (`QSettings` key `recentFiles`, with *Clear list*); files opened from outside –
+the command line, a Finder double-click (`QFileOpenEvent`, document types in
+`resources/macos/Info.plist.in`), the Linux desktop file with its MIME types – go the same way
+as *Open*: a `.nfplugin` is installed, anything else replaces the document after asking to save.
+
+**Undo and the modified state.** Everything that changes the model is an undo step on the
+document's `QUndoStack`: commands, plugin runs, groups, attributes, new / renamed / recoloured /
+deleted layers, renamed groups, moving objects to a layer and every edit in the node editor
+(a dragged block once, at the release). Visibility (layers, groups, objects: Hide, Isolate,
+Unhide, the check boxes), layer locks and the current layer are states, not undo steps – as in
+other CAD programs – but they are saved with the document, so they mark it modified.
 
 ## Tool column
 
@@ -175,7 +186,8 @@ catalogues travel with it, `rtt_catalogs` of the source), and the
 CAD view shows it – NURBS derived from the exact data, drawn again shortly after every edit of
 the workflow (a plugin action marked `on_workflow_edit`, run by CAD when the plugin is idle; an
 unfinished value just waits for the next edit), before a computation, or with *Update drawing*. *Optimise* writes its result into the blocks;
-a plugin run that changes the workflow is undone together with its drawing (one undo step).
+a plugin run that changes the workflow is undone together with its drawing (one undo step);
+every edit in the node editor is an undo step of its own (`Document::editWorkflow`).
 *Save system* exports the workflow's system as .rtt.json. Without a workflow the plugin works on
 the loaded file as before.
 
@@ -197,6 +209,9 @@ is drawn in the CAD view and computes like an imported element.
 | Drag left → right | window: objects completely inside the rectangle (solid blue frame) |
 | Drag right → left | crossing: objects inside or touching the rectangle (dashed green frame) |
 | `Esc` / Cmd+A / `Delete` | select none / select all / delete selected objects (undoable) |
+
+Objects on a locked layer are drawn and snapped to, but neither hovered nor selected
+(`Scene::selectableTargets`; `Selection` refuses them and drops them when their layer is locked).
 
 The object under the cursor is highlighted in cyan (with Cmd/Ctrl + Shift held: the face, edge
 or vertex), selected objects in yellow; the status bar names the hovered object. Pick tolerance

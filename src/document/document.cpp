@@ -182,10 +182,10 @@ class AppliedCommand : public QUndoCommand {
     for (const Entity& e : added_) doc_->insert(e);
     for (const auto& [id, before, after] : geometry_) doc_->setGeometry(id, after);
     for (const auto& [id, before, after] : attributes_) doc_->setEntityAttributes(id, after);
-    if (workflow_) doc_->setWorkflow(workflow_->second);
+    if (workflow_) doc_->replaceWorkflow(workflow_->second);
   }
   void undo() override {
-    if (workflow_) doc_->setWorkflow(workflow_->first);
+    if (workflow_) doc_->replaceWorkflow(workflow_->first);
     for (const auto& [id, before, after] : attributes_) doc_->setEntityAttributes(id, before);
     for (const auto& [id, before, after] : geometry_) doc_->setGeometry(id, before);
     for (auto it = added_.rbegin(); it != added_.rend(); ++it) doc_->erase(it->id);
@@ -229,6 +229,80 @@ class AssignLayerCommand : public QUndoCommand {
   LayerId layer_;
 };
 
+class AddLayerCommand : public QUndoCommand {
+ public:
+  AddLayerCommand(Document* doc, Layer layer)
+      : QUndoCommand(QObject::tr("New layer")), doc_(doc), layer_(std::move(layer)) {}
+  void redo() override { layer_.id = doc_->insertLayer(layer_); }
+  void undo() override { doc_->eraseLayer(layer_.id); }
+  [[nodiscard]] LayerId layerId() const { return layer_.id; }
+
+ private:
+  Document* doc_;
+  Layer layer_;
+};
+
+class ChangeLayerCommand : public QUndoCommand {
+ public:
+  ChangeLayerCommand(Document* doc, const QString& text, const Layer& before, QString name, QColor color)
+      : QUndoCommand(text), doc_(doc), id_(before.id), old_name_(before.name), old_color_(before.color),
+        name_(std::move(name)), color_(std::move(color)) {}
+  void redo() override { doc_->changeLayer(id_, name_, color_); }
+  void undo() override { doc_->changeLayer(id_, old_name_, old_color_); }
+
+ private:
+  Document* doc_;
+  LayerId id_;
+  QString old_name_;
+  QColor old_color_;
+  QString name_;
+  QColor color_;
+};
+
+class RemoveLayerCommand : public QUndoCommand {
+ public:
+  RemoveLayerCommand(Document* doc, Layer layer, int index, bool current)
+      : QUndoCommand(QObject::tr("Delete layer")), doc_(doc), layer_(std::move(layer)), index_(index),
+        current_(current) {}
+  void redo() override { doc_->eraseLayer(layer_.id); }
+  void undo() override {
+    doc_->insertLayer(layer_, index_);
+    if (current_) doc_->restoreCurrentLayer(layer_.id);
+  }
+
+ private:
+  Document* doc_;
+  Layer layer_;
+  int index_;
+  bool current_;
+};
+
+class RenameGroupCommand : public QUndoCommand {
+ public:
+  RenameGroupCommand(Document* doc, GroupId id, QString before, QString after)
+      : QUndoCommand(QObject::tr("Rename group")), doc_(doc), id_(id), before_(std::move(before)),
+        after_(std::move(after)) {}
+  void redo() override { doc_->setGroupName(id_, after_); }
+  void undo() override { doc_->setGroupName(id_, before_); }
+
+ private:
+  Document* doc_;
+  GroupId id_;
+  QString before_, after_;
+};
+
+class WorkflowCommand : public QUndoCommand {
+ public:
+  WorkflowCommand(Document* doc, const QString& text, QJsonObject before, QJsonObject after)
+      : QUndoCommand(text), doc_(doc), before_(std::move(before)), after_(std::move(after)) {}
+  void redo() override { doc_->replaceWorkflow(after_); }
+  void undo() override { doc_->replaceWorkflow(before_); }
+
+ private:
+  Document* doc_;
+  QJsonObject before_, after_;
+};
+
 }  // namespace
 
 Document::Document(QObject* parent) : QObject(parent) { layers_.push_back(default_layer()); }
@@ -253,6 +327,21 @@ QColor Document::displayColor(const Entity& e) const {
 bool Document::isDisplayed(const Entity& e) const {
   const Layer* l = layer(e.layer);
   return e.visible && (l == nullptr || l->visible) && !groupHidden(e.group);
+}
+
+bool Document::isLocked(const Entity& e) const {
+  const Layer* l = layer(e.layer);
+  return l != nullptr && l->locked;
+}
+
+bool Document::isLocked(EntityId id) const {
+  const Entity* e = entity(id);
+  return e != nullptr && isLocked(*e);
+}
+
+std::size_t Document::entityCount(LayerId layer) const {
+  return static_cast<std::size_t>(std::count_if(entities_.begin(), entities_.end(),
+                                                [layer](const auto& kv) { return kv.second.layer == layer; }));
 }
 
 const Group* Document::group(GroupId id) const {
@@ -300,6 +389,12 @@ void Document::ungroup(GroupId id) {
 }
 
 void Document::renameGroup(GroupId id, const QString& name) {
+  const Group* g = group(id);
+  if (g == nullptr || g->name == name) return;
+  undo_.push(new RenameGroupCommand(this, id, g->name, name));
+}
+
+void Document::setGroupName(GroupId id, const QString& name) {
   for (Group& g : groups_) {
     if (g.id == id && g.name != name) {
       g.name = name;
@@ -313,6 +408,7 @@ void Document::setEntityVisible(EntityId id, bool visible) {
   if (it == entities_.end() || it->second.visible == visible) return;
   it->second.visible = visible;
   ++it->second.revision;
+  markDirty();
   emit entityChanged(id);
 }
 
@@ -320,6 +416,7 @@ void Document::setGroupVisible(GroupId id, bool visible) {
   for (Group& g : groups_) {
     if (g.id == id && g.visible != visible) {
       g.visible = visible;
+      markDirty();
       touchEntities(entitiesInGroup(id));
       emit groupsChanged();
     }
@@ -328,14 +425,20 @@ void Document::setGroupVisible(GroupId id, bool visible) {
 
 void Document::isolate(const std::vector<EntityId>& ids) {
   const std::set<EntityId> keep(ids.begin(), ids.end());
-  for (Group& g : groups_) g.visible = true;  // keep the path to the isolated objects open
+  bool changed = false;
+  for (Group& g : groups_) {  // keep the path to the isolated objects open
+    changed = changed || !g.visible;
+    g.visible = true;
+  }
   for (auto& [id, e] : entities_) {
     const bool v = keep.contains(id);
     if (e.visible != v) {
       e.visible = v;
       ++e.revision;
+      changed = true;
     }
   }
+  if (changed) markDirty();
   touchEntities([this] {
     std::vector<EntityId> all;
     for (const auto& [id, e] : entities_) all.push_back(id);
@@ -352,19 +455,29 @@ std::size_t Document::showHiddenEntities() {
     ++e.revision;
     shown.push_back(id);
   }
+  if (!shown.empty()) markDirty();
   touchEntities(shown);
   return shown.size();
 }
 
 void Document::showAll() {
-  for (Group& g : groups_) g.visible = true;
-  for (Layer& l : layers_) l.visible = true;
+  bool changed = false;
+  for (Group& g : groups_) {
+    changed = changed || !g.visible;
+    g.visible = true;
+  }
+  for (Layer& l : layers_) {
+    changed = changed || !l.visible;
+    l.visible = true;
+  }
   std::vector<EntityId> all;
   for (auto& [id, e] : entities_) {
+    changed = changed || !e.visible;
     e.visible = true;
     ++e.revision;
     all.push_back(id);
   }
+  if (changed) markDirty();
   touchEntities(all);
   emit groupsChanged();
   emit layersChanged();
@@ -421,7 +534,14 @@ void Document::touchEntities(const std::vector<EntityId>& ids) {
   }
 }
 
+LayerId Document::resolveLayer(LayerId layer) const {
+  if (layer == kCurrentLayer) layer = current_layer_;
+  return this->layer(layer) != nullptr ? layer : 0;
+}
+
 std::vector<EntityId> Document::addEntities(std::vector<Entity> entities, const QString& text) {
+  // new objects go to the current layer (fixed here, so that a redo puts them back on the same one)
+  for (Entity& e : entities) e.layer = resolveLayer(e.layer);
   auto* cmd = new AddEntitiesCommand(this, std::move(entities), text);
   undo_.push(cmd);  // runs redo()
   return cmd->ids();
@@ -434,7 +554,7 @@ void Document::removeEntities(const std::vector<EntityId>& ids, const QString& t
 EntityId Document::insert(Entity e) {
   if (e.id == 0) e.id = next_id_++;
   next_id_ = std::max(next_id_, e.id + 1);
-  if (layer(e.layer) == nullptr) e.layer = 0;
+  e.layer = resolveLayer(e.layer);  // a plugin's new object: the current layer
   const EntityId id = e.id;
   entities_.insert_or_assign(id, std::move(e));
   emit entityAdded(id);
@@ -450,6 +570,7 @@ Entity Document::erase(EntityId id) {
 
 std::vector<EntityId> Document::apply(Edit edit, const QString& text) {
   if (edit.empty()) return {};
+  for (Entity& e : edit.add) e.layer = resolveLayer(e.layer);
   auto* cmd = new EditCommand(this, std::move(edit), text);
   undo_.push(cmd);
   return cmd->added();
@@ -474,7 +595,9 @@ void Document::setPluginParameters(const QString& plugin, const QJsonObject& val
 
 void Document::setAllPluginParameters(const QJsonObject& all) { plugin_parameters_ = all; }
 
-void Document::markKeptChanged() {
+void Document::markKeptChanged() { markDirty(); }
+
+void Document::markDirty() {
   if (!settings_dirty_) {
     settings_dirty_ = true;
     emit modificationChanged(true);
@@ -484,10 +607,18 @@ void Document::markKeptChanged() {
 void Document::setWorkflow(const QJsonObject& workflow) {
   if (workflow_ == workflow) return;
   workflow_ = workflow;
-  if (!settings_dirty_) {
-    settings_dirty_ = true;
-    emit modificationChanged(true);
-  }
+  markDirty();
+  emit workflowChanged();
+}
+
+void Document::editWorkflow(const QJsonObject& workflow, const QString& text) {
+  if (workflow_ == workflow) return;
+  undo_.push(new WorkflowCommand(this, text.isEmpty() ? tr("Edit node workflow") : text, workflow_, workflow));
+}
+
+void Document::replaceWorkflow(const QJsonObject& workflow) {
+  if (workflow_ == workflow) return;
+  workflow_ = workflow;
   emit workflowChanged();
 }
 
@@ -555,41 +686,113 @@ void Document::setEntityLayer(EntityId id, LayerId layer) {
   emit entityChanged(id);
 }
 
-void Document::setLayerColor(LayerId id, const QColor& color) {
-  for (Layer& l : layers_) {
-    if (l.id == id && l.color != color) {
-      l.color = color;
-      touchLayer(id);
-      emit layersChanged();
-    }
-  }
+LayerId Document::addLayer(Layer layer) {
+  auto* cmd = new AddLayerCommand(this, std::move(layer));
+  undo_.push(cmd);
+  return cmd->layerId();
 }
 
 void Document::renameLayer(LayerId id, const QString& name) {
-  for (Layer& l : layers_) {
-    if (l.id == id && l.name != name) {
-      l.name = name;
-      emit layersChanged();
-    }
-  }
+  const Layer* l = layer(id);
+  if (l == nullptr || l->name == name || name.isEmpty()) return;
+  undo_.push(new ChangeLayerCommand(this, tr("Rename layer"), *l, name, l->color));
 }
 
-LayerId Document::addLayer(Layer layer) {
-  LayerId next = 0;
-  for (const Layer& l : layers_) next = std::max(next, l.id + 1);
-  layer.id = next;
-  layers_.push_back(std::move(layer));
-  emit layersChanged();
-  return next;
+void Document::setLayerColor(LayerId id, const QColor& color) {
+  const Layer* l = layer(id);
+  if (l == nullptr || l->color == color || !color.isValid()) return;
+  undo_.push(new ChangeLayerCommand(this, tr("Layer colour"), *l, l->name, color));
+}
+
+bool Document::removeLayer(LayerId id, LayerContents contents) {
+  const Layer* l = layer(id);
+  if (id == 0 || l == nullptr) return false;
+  std::vector<EntityId> on_layer;
+  for (const auto& [eid, e] : entities_) {
+    if (e.layer == id) on_layer.push_back(eid);
+  }
+  const auto index = static_cast<int>(l - layers_.data());
+  const Layer copy = *l;
+  const bool current = current_layer_ == id;
+  // one undo step: first the objects (moved or deleted), then the layer itself
+  undo_.beginMacro(tr("Delete layer %1").arg(l->name));
+  if (!on_layer.empty()) {
+    if (contents == LayerContents::Delete) {
+      undo_.push(new RemoveEntitiesCommand(this, on_layer, tr("Delete objects")));
+    } else {
+      undo_.push(new AssignLayerCommand(this, on_layer, 0));
+    }
+  }
+  undo_.push(new RemoveLayerCommand(this, copy, index, current));
+  undo_.endMacro();
+  return true;
 }
 
 void Document::setLayerVisible(LayerId id, bool visible) {
   for (Layer& l : layers_) {
     if (l.id == id && l.visible != visible) {
       l.visible = visible;
+      markDirty();
       touchLayer(id);
       emit layersChanged();
     }
+  }
+}
+
+void Document::setLayerLocked(LayerId id, bool locked) {
+  for (Layer& l : layers_) {
+    if (l.id == id && l.locked != locked) {
+      l.locked = locked;
+      markDirty();
+      touchLayer(id);  // the views and the selection follow (locked objects cannot be picked)
+      emit layersChanged();
+    }
+  }
+}
+
+void Document::setCurrentLayer(LayerId id) {
+  if (id == current_layer_ || layer(id) == nullptr) return;
+  current_layer_ = id;
+  markDirty();
+  emit layersChanged();
+}
+
+void Document::restoreCurrentLayer(LayerId id) {
+  if (id == current_layer_ || layer(id) == nullptr) return;
+  current_layer_ = id;
+  emit layersChanged();
+}
+
+LayerId Document::insertLayer(Layer layer, int index) {
+  LayerId next = 0;
+  for (const Layer& l : layers_) next = std::max(next, l.id + 1);
+  if (this->layer(layer.id) != nullptr || layer.id == kCurrentLayer) layer.id = next;
+  const LayerId id = layer.id;
+  if (index < 0 || index > static_cast<int>(layers_.size())) {
+    layers_.push_back(std::move(layer));
+  } else {
+    layers_.insert(layers_.begin() + index, std::move(layer));
+  }
+  touchLayer(id);  // objects that were on it (undo of a deletion) take its colour again
+  emit layersChanged();
+  return id;
+}
+
+void Document::eraseLayer(LayerId id) {
+  if (std::erase_if(layers_, [id](const Layer& l) { return l.id == id; }) == 0) return;
+  if (current_layer_ == id) current_layer_ = 0;
+  touchLayer(id);
+  emit layersChanged();
+}
+
+void Document::changeLayer(LayerId id, const QString& name, const QColor& color) {
+  for (Layer& l : layers_) {
+    if (l.id != id || (l.name == name && l.color == color)) continue;
+    const bool recolour = l.color != color;
+    l.name = name;
+    l.color = color;
+    if (recolour) touchLayer(id);
+    emit layersChanged();
   }
 }
 
@@ -604,8 +807,8 @@ void Document::touchLayer(LayerId id) {
 
 void Document::clear() { reset({default_layer()}, {}); }
 
-void Document::reset(std::vector<Layer> layers, std::vector<Entity> entities,
-                     std::vector<Group> groups, QJsonObject plugin_parameters, QJsonObject workflow) {
+void Document::reset(std::vector<Layer> layers, std::vector<Entity> entities, std::vector<Group> groups,
+                     QJsonObject plugin_parameters, QJsonObject workflow, LayerId current_layer) {
   undo_.clear();
   entities_.clear();
   plugin_parameters_ = std::move(plugin_parameters);
@@ -614,6 +817,7 @@ void Document::reset(std::vector<Layer> layers, std::vector<Entity> entities,
   groups_ = std::move(groups);
   layers_ = std::move(layers);
   if (layer(0) == nullptr) layers_.insert(layers_.begin(), default_layer());
+  current_layer_ = layer(current_layer) != nullptr ? current_layer : 0;
   next_id_ = 1;
   for (Entity& e : entities) {
     if (e.id == 0) e.id = next_id_;

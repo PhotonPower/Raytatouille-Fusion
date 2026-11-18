@@ -13,6 +13,8 @@
   <url type="homepage">https://github.com/PhotonPower/Raytatouille-Fusion</url>
   <provides>
     <binary>RaytatouilleFusion</binary>
+    <mediatype>application/x-raytatouille-fusion</mediatype>
+    <mediatype>application/x-raytatouille-fusion-plugin</mediatype>
   </provides>
   <releases>
     <release version="1.0.0" date="2026-11-11"/>
