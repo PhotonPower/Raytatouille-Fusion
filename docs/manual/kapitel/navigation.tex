@@ -43,6 +43,9 @@ Alles zeigen (Zoom extents) & \keys{Z}, dann \keys{E}; \maus{Doppelklick mit der
 Auswahl zeigen (Zoom selected) & \keys{Z}, dann \keys{S}; Knopf \gui{Zoom selected} & ohne
   Auswahl wie Zoom extents. \\
 Maximieren / zurück & \keys{Leertaste} & aktive Ansicht. \\
+Befehl beenden / wiederholen & \maus{Rechtsklick ohne Ziehen} & wie \keys{Enter}: beendet den
+  laufenden Befehl, ohne laufenden Befehl startet er den letzten erneut. Nur ein Ziehen dreht
+  bzw.\ verschiebt. \\
 \bottomrule
 \end{referenz}
 
@@ -342,7 +345,9 @@ Modellbaums:
 \endhead
 \gui{Hide} & \keys{H} & Blendet die ausgewählten Objekte aus und hebt ihre Auswahl auf. Die
   Statusleiste meldet \enquote{\textit{n} object(s) hidden -- Unhide (Shift+H) shows them
-  again}; ohne Auswahl \enquote{Hide: select objects first}. \\
+  again}; ohne Auswahl meldet \gui{Hide} (Menü, Knopf) \enquote{Hide: select objects first}.
+  Die Taste \keys{H} in einer Ansicht blendet nur mit Auswahl aus; ohne Auswahl wird sie in die
+  Befehlszeile geschrieben. \\
 \gui{Isolate selected} (Modellbaum: \gui{Isolate}) & -- & Blendet alle \emph{anderen} Objekte
   aus und zeigt die ausgewählten. Alle Gruppen werden dabei eingeschaltet, damit der Weg zu den
   isolierten Objekten frei ist; die Ebenen bleiben, wie sie sind. \\

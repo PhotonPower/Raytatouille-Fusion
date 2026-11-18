@@ -4,7 +4,8 @@ Dieser Anhang beschreibt alle Blocktypen, die der Node-Workflow (Kapitel~\ref{ka
 in der vorliegenden Version kennt: die eingebauten Typen der Workflow-Maschine (RTT-Fusion) und die
 Typen, die die Plugins \plugin{Raytracer} und \plugin{FourierGrating} liefern. Die Angaben stammen
 aus der Blockbibliothek, die die Workflow-Maschine dem Editor übergibt; im Editor finden Sie
-dieselben Typen unter \gui{Add block}, geordnet nach Kategorie.
+die Typen unter \gui{Add block}, geordnet nach Kategorie -- dort aber nur die, die Ihre
+Installation rechnen kann (Abschnitt~\ref{sec:bloecke-auswertung}).
 
 \section{Lesehilfe}\label{sec:bloecke-lesehilfe}
 
@@ -692,10 +693,12 @@ Ein ebener Detektor (analytisch): kohärentes Bild, Amplituden je Kohärenzgrupp
 
 
 \begin{hinweis}
-Für \block{fusion.convert}, \block{analysis.camera\_image} und \block{biooptomd.layer} hat die
-Workflow-Maschine in der vorliegenden Version keinen Rechner; ein Lauf, der einen von ihnen
-braucht, meldet \code{exec.no\_evaluator}. Umwandlungen plant der Planer ohnehin selbst; für
-Kamerabilder verwenden Sie den Detektor eines Systems mit einem \block{display.image}.
+Für \block{analysis.camera\_image} und \block{biooptomd.layer} hat die Workflow-Maschine in der
+vorliegenden Version keinen Rechner, für \block{fusion.convert} erst ab RTT-Fusion 0.2.1.
+\gui{Add block} bietet solche Typen nicht an; steht ein solcher Block schon im Workflow, warnt
+\gui{Check workflow} mit \code{check.no\_evaluator}, und ein Lauf, der ihn braucht, bricht mit
+\code{exec.no\_evaluator} ab. Umwandlungen plant der Planer ohnehin selbst; für Kamerabilder
+verwenden Sie den Detektor eines Systems mit einem \block{display.image}.
 \end{hinweis}
 
 
@@ -708,6 +711,13 @@ Kamerabilder verwenden Sie den Detektor eines Systems mit einem \block{display.i
 Eine ausdrückliche Umwandlung zwischen Darstellungen (R $\to$ H, H $\leftrightarrow$ G,
 G $\leftrightarrow$ S …). Normalerweise plant der Planer Umwandlungen selbst; sichtbar wird eine
 Umwandlung nur, wenn Sie sie festlegen.
+
+Gerechnet wird ab RTT-Fusion 0.2.1 (mit \code{fieldtracing}): R $\to$ H (Strahlen zu einem Feld
+auf der Portebene) und H $\to$ R. Licht, das schon in der Zieldarstellung ankommt, geht
+unverändert durch. Die Ziele G, S und P kommen in einer späteren Stufe; ein Lauf meldet dann
+\code{exec.convert\_unsupported}, ebenso wenn \code{fieldtracing} fehlt. Stellen Sie
+\param{to} daher auf \code{R} oder \code{H} -- der Standardwert \code{S} ist noch nicht
+rechenbar.
 
 \textbf{Licht:} \code{in} (ein, RHGSTP); \code{out} (aus, RHGSTP).
 

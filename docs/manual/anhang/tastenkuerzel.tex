@@ -26,7 +26,8 @@ maßgeblich ist dann die Anzeige im Menü.
 Einbuchstabige Kürzel wie \keys{H} oder \keys{Z}, \keys{E} wirken, solange eine Ansicht (oder
 ein anderes Element des Hauptfensters außer einem Textfeld) den Tastaturfokus hat. Steht der
 Cursor in der Befehlszeile oder in einem Eingabefeld, werden die Buchstaben ganz normal
-eingegeben.
+eingegeben. \keys{H} in einer Ansicht blendet nur aus, wenn etwas ausgewählt ist; ohne Auswahl
+wird der Buchstabe in die Befehlszeile geschrieben (etwa für den Alias \code{h} der Helix).
 \end{hinweis}
 
 % ---------------------------------------------------------------------------
@@ -66,7 +67,7 @@ Kürzel & Menü & Wirkung \\
 \keys{Strg+G} & \menu{Edit,Group…} & Auswahl gruppieren (Kapitel~\ref{kap:organisieren}). \\
 \keys{Strg+Shift+G} & \menu{Edit,Ungroup} & Gruppe auflösen. \\
 \keys{H} & \menu{Edit,Hide} & Ausgewählte Objekte ausblenden (auch Knopf in der
-  Ansichts-Werkzeugleiste). \\
+  Ansichts-Werkzeugleiste). Ohne Auswahl geht \keys{H} in einer Ansicht in die Befehlszeile. \\
 -- & \menu{Edit,Isolate selected} & Nur die Auswahl anzeigen; ohne Kürzel. \\
 \keys{Shift+H} & \menu{Edit,Unhide} & Mit Hide oder Isolate ausgeblendete Objekte wieder
   anzeigen. Layer und Kontrollkästchen im Modellbaum behalten ihren Zustand. \\
@@ -179,11 +180,12 @@ Tippen in einer Ansicht & Die Zeichen gehen in die Befehlszeile (Befehlsnamen, K
 \keys{Enter} & Eingabe der Befehlszeile ausführen; bei leerer Zeile den laufenden Befehl
   beenden oder, wenn keiner läuft, den letzten Befehl wiederholen. \\
 \maus{Rechtsklick} (ohne Ziehen) in einer Ansicht & laufenden Befehl beenden (wie
-  \keys{Enter}). \\
+  \keys{Enter}); läuft keiner, den letzten Befehl wiederholen. Rechts \emph{ziehen} dreht bzw.\
+  verschiebt nur die Ansicht. \\
 \keys{Esc} & laufenden Befehl abbrechen. \\
-\keys{L}, \keys{Enter} & Befehl Line (Tooltip-Kürzel \enquote{L}, zugleich Alias \code{l}). \\
-\keys{C}, \keys{Enter} & Befehl Circle (centre, radius). \\
-\keys{M}, \keys{Enter} & Befehl Move. \\
+Alias + \keys{Enter} & Befehl starten, z.\,B.\ \code{l} Line, \code{c} Circle (centre,
+  radius), \code{m} Move, \code{h} Helix. Der Tooltip jedes Werkzeugs nennt den Alias
+  (\enquote{Type: l + Enter}). \\
 \keys{Entf} & Werkzeug Delete: Auswahl löschen. \\
 \keys{F8} & Ortho ein/aus (Knopf \gui{Ortho} in der Statusleiste). \\
 \maus{Klick} auf einen Werkzeugknopf & Befehl starten. \\
@@ -191,10 +193,11 @@ Tippen in einer Ansicht & Die Zeichen gehen in die Befehlszeile (Befehlsnamen, K
 \bottomrule
 \end{referenz}
 
-Die Werkzeug-Kürzel \keys{L}, \keys{C} und \keys{M} sind keine eigenständigen Tastenbelegungen:
-Der Buchstabe wird -- wie jedes in einer Ansicht getippte Zeichen -- in die Befehlszeile
-geschrieben und mit \keys{Enter} als Alias ausgeführt. Alle Befehle mit Namen und Aliassen
-stehen in Anhang~\ref{kap:befehle}; die Eingabe von Punkten und Zahlen beschreibt
+Die Befehle haben keine eigenen Tastenkürzel; ein einzelner Buchstabe wie \keys{L} startet
+nichts. Er wird -- wie jedes in einer Ansicht getippte Zeichen -- in die Befehlszeile
+geschrieben und erst mit \keys{Enter} als Alias ausgeführt. Einziges Werkzeug mit echtem
+Tastenkürzel ist \gui{Delete} (\keys{Entf}). Alle Befehle mit Namen und Aliassen stehen in
+Anhang~\ref{kap:befehle}; die Eingabe von Punkten und Zahlen beschreibt
 Abschnitt~\ref{sec:punkteingabe}.
 
 % ---------------------------------------------------------------------------

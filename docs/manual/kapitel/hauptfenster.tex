@@ -89,14 +89,15 @@ sind, merkt sich das Programm. Anfangs sind \gui{Draw} und \gui{Curves} sowie di
 Plugins aufgeklappt, alle übrigen zugeklappt.
 
 \paragraph{Tooltips.} Hält man den Mauszeiger über einen Knopf, erscheint ein Tooltip mit dem
-vollen Namen des Befehls und, falls vorhanden, einem Kürzel, z.\,B.\ \enquote{Line (L)}; die
-Statusleiste zeigt den Namen ebenfalls. Die Knöpfe tragen derzeit kurze Textkürzel statt
-Symbolen (\gui{Pt} für Point, \gui{Ln} für Line \dots).
+vollen Namen des Befehls und darunter dem Alias, den Sie tippen können, z.\,B.\
+\enquote{Line} und \enquote{Type: l + Enter}; die Statusleiste zeigt den Namen ebenfalls. Die
+Knöpfe tragen derzeit kurze Textkürzel statt Symbolen (\gui{Pt} für Point, \gui{Ln} für Line
+\dots).
 
-Die Kürzel \keys{L} (Line), \keys{C} (Circle) und \keys{M} (Move) im Tooltip sind die
-Kurzformen der Befehle für die Befehlszeile: Tippen Sie in einer Ansicht \keys{L} und drücken
-Sie \keys{Enter} -- der Buchstabe landet in der Befehlszeile, \keys{Enter} startet den Befehl.
-Jeder Befehl hat eine solche Kurzform (\autoref{kap:befehle}).
+Der Alias ist kein Tastenkürzel: Tippen Sie in einer Ansicht \code{l} und drücken Sie
+\keys{Enter} -- der Buchstabe landet in der Befehlszeile, erst \keys{Enter} startet den Befehl.
+Jeder Befehl hat einen solchen Alias (\autoref{kap:befehle}). Ein echtes Tastenkürzel hat nur
+\gui{Delete} (\keys{Entf}); sein Tooltip nennt es in Klammern.
 
 \paragraph{Befehl starten.} Ein Klick auf einen Knopf startet den Befehl. Die Befehlszeile
 zeigt dann, welche Eingabe erwartet wird (\autoref{sec:befehlszeile}). Ein laufender Befehl wird
@@ -107,23 +108,31 @@ Die festen Gruppen und ihre Befehle (Einzelheiten zu jedem Befehl in
 
 \begin{referenz}{>{\raggedright\arraybackslash}p{2.2cm}X}
 \toprule
-\textbf{Gruppe} & \textbf{Befehle (Knopfbeschriftung: Name; in Klammern das Kürzel aus dem
-  Tooltip)} \\
+\textbf{Gruppe} & \textbf{Befehle (Knopfbeschriftung: Name; in Klammern, was der Tooltip zu
+  tippen empfiehlt)} \\
 \midrule
 \endhead
-\gui{Draw} & Pt: Point, Ln: Line (\code{l}), PL: Polyline, Rec: Rectangle, Pol: Polygon \\
-\gui{Curves} & Ci: Circle (centre, radius) (\code{c}), C3: Circle (3 points), Arc: Arc, Hx:
-  Helix, Sp: Interpolated spline, Off: Offset curve, Fil: Fillet curves \\
-\gui{Surfaces} & Pln: Plane, Ext: Extrude, Rev: Revolve, Lft: Loft, Sw1: Sweep 1 rail, Sw2:
-  Sweep 2 rails, Cns: Coons patch, Gor: Gordon surface, OfS: Offset surface, FiS: Fillet
-  surfaces, Cap: Cap planar holes \\
-\gui{Solids} & Box, Sph: Sphere, Cyl: Cylinder, Con: Cone, Tor: Torus, $\cup$: Boolean
-  union, $-$: Boolean difference, $\cap$: Boolean intersection \\
-\gui{Transform} & Mv: Move (\code{m}), Cp: Copy, Rot: Rotate, Scl: Scale, Mir: Mirror, ArL:
-  Linear array, ArG: Grid array, ArP: Polar array \\
-\gui{Edit} & Trm: Trim, Spl: Split, Jn: Join, Exp: Explode, Del: Delete (\keys{Entf}) \\
-\gui{Analyze} & Dst: Distance, Ang: Angle, Crv: Curvature, Are: Area, Vol: Volume / mass
-  properties, Chk: Intersection check \\
+\gui{Draw} & Pt: Point (\code{pt}), Ln: Line (\code{l}), PL: Polyline (\code{pl}), Rec:
+  Rectangle (\code{rec}), Pol: Polygon (\code{pol}) \\
+\gui{Curves} & Ci: Circle (centre, radius) (\code{c}), C3: Circle (3 points) (\code{c3}), Arc:
+  Arc (\code{a}), Hx: Helix (\code{h}), Sp: Interpolated spline (\code{sp}), Off: Offset curve
+  (\code{offset}), Fil: Fillet curves (\code{fillet}) \\
+\gui{Surfaces} & Pln: Plane (\code{plane}), Ext: Extrude (\code{ext}), Rev: Revolve
+  (\code{rev}), Lft: Loft (\code{loft}), Sw1: Sweep 1 rail (\code{sweep1}), Sw2: Sweep 2 rails
+  (\code{sweep2}), Cns: Coons patch (\code{coons}), Gor: Gordon surface (\code{gordon}), OfS:
+  Offset surface (\code{offsetsrf}), FiS: Fillet surfaces (\code{filletsrf}), Cap: Cap planar
+  holes (\code{cap}) \\
+\gui{Solids} & Box (\code{b}), Sph: Sphere (\code{sph}), Cyl: Cylinder (\code{cyl}), Con: Cone
+  (\code{cone}), Tor: Torus (\code{tor}), $\cup$: Boolean union (\code{bu}), $-$: Boolean
+  difference (\code{bd}), $\cap$: Boolean intersection (\code{bi}) \\
+\gui{Transform} & Mv: Move (\code{m}), Cp: Copy (\code{co}), Rot: Rotate (\code{ro}), Scl:
+  Scale (\code{sc}), Mir: Mirror (\code{mi}), ArL: Linear array (\code{array}), ArG: Grid
+  array (\code{array\_grid}), ArP: Polar array (\code{arraypolar}) \\
+\gui{Edit} & Trm: Trim (\code{tr}), Spl: Split (\code{split}), Jn: Join (\code{j}), Exp:
+  Explode (\code{x}), Del: Delete (Tastenkürzel \keys{Entf}) \\
+\gui{Analyze} & Dst: Distance (\code{di}), Ang: Angle (\code{ang}), Crv: Curvature
+  (\code{curv}), Are: Area (\code{area}), Vol: Volume / mass properties (\code{volume}), Chk:
+  Intersection check (\code{intersect}) \\
 \bottomrule
 \end{referenz}
 
@@ -415,7 +424,8 @@ Punkt & \code{10,20,0}\newline \code{@5,0,0}\newline \code{25<30} & Koordinaten 
 Zahl & \code{12.5} & Länge, Radius, Anzahl usw., wo der Befehl eine Zahl erwartet; sonst eine
   Länge in Richtung vom letzten Punkt zum Cursor. \\
 leere Eingabe & \keys{Enter} & beendet den laufenden Befehl (z.\,B.\ eine Polylinie); ohne
-  laufenden Befehl wird der letzte Befehl wiederholt. \\
+  laufenden Befehl wird der letzte Befehl wiederholt. Ein \maus{Rechtsklick} ohne Ziehen in
+  einer Ansicht wirkt ebenso. \\
 \bottomrule
 \end{referenz}
 
@@ -427,10 +437,16 @@ ab (\enquote{\dots{} cancelled}).
 
 \begin{warnung}
 Einige Tasten sind in den Ansichten mit Funktionen belegt und gelangen deshalb \emph{nicht} in
-die Befehlszeile: \keys{H} blendet die Auswahl aus, \keys{Leertaste} maximiert die Ansicht,
-\keys{Z} leitet die Zoom-Kürzel ein. Befehle, die mit diesen Buchstaben beginnen -- etwa
-\cmd{h} bzw.\ \cmd{Helix} --, tippen Sie deshalb nach einem Klick in die Befehlszeile ein.
+die Befehlszeile: \keys{Leertaste} maximiert die Ansicht, \keys{Z} leitet die Zoom-Kürzel ein.
+Brauchen Sie diese Zeichen in der Befehlszeile, klicken Sie zuerst hinein. \keys{H} blendet die Auswahl aus, aber nur, wenn etwas ausgewählt ist; ohne Auswahl wird
+\keys{H} wie jeder andere Buchstabe in die Befehlszeile geschrieben -- \code{h} und
+\keys{Enter} starten dann die Helix.
 \end{warnung}
+
+Kann ein Befehl eine Eingabe nicht verwenden, nennt die Statusleiste den Grund, etwa
+\enquote{Fillet: radius 5 too large for these curves}, und der Befehl wartet auf eine andere
+Eingabe. Nur wenn der Befehl keinen eigenen Grund kennt, erscheint \enquote{Input not accepted
+-- \textit{Aufforderung}} (\autoref{sec:mod-befehlszeile}).
 
 Die Befehlszeile ist fest angedockt und lässt sich weder schließen noch verschieben.
 
@@ -655,5 +671,5 @@ Neben der Menüleiste gibt es Kontextmenüs (Rechtsklick) an diesen Stellen:
 \end{itemize}
 
 Ein Rechtsklick in eine Ansicht öffnet kein Menü: Mit der rechten Maustaste wird gedreht
-oder verschoben, und während ein Befehl läuft, beendet ein kurzer Rechtsklick die Eingabe wie
-\keys{Enter}.
+oder verschoben. Ein kurzer Rechtsklick ohne Ziehen wirkt wie \keys{Enter}: Während ein Befehl
+läuft, beendet er die Eingabe; läuft keiner, wiederholt er den letzten Befehl.
