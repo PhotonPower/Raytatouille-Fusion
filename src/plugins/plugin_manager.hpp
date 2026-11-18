@@ -36,7 +36,8 @@ class PluginManager : public QObject {
 
   [[nodiscard]] QString python() const;
   void setPython(const QString& path);
-  /// Configured folders plus the folder of installed plugins (always searched, first).
+  /// Configured folders plus the folder of installed plugins (always searched, first) and the
+  /// plugins bundled with the application (searched last: a folder of one's own wins).
   [[nodiscard]] QStringList folders() const;
   /// Where "Install plugin…" puts plugins: <app data>/plugins (or $NFCAD_PLUGIN_INSTALL_DIR).
   [[nodiscard]] static QString installFolder();
@@ -45,6 +46,13 @@ class PluginManager : public QObject {
   /// Removes an installed plugin (only from installFolder()) and reloads; error or empty.
   QString uninstall(const QString& id);
   [[nodiscard]] bool isInstalled(const PluginHost* host) const;
+  /// Plugins that ship with the application: <nfcad python>/plugins of the installation
+  /// (Windows <prefix>/python/plugins, macOS Contents/Resources/python/plugins, Linux
+  /// share/raytatouille-fusion/python/plugins); empty if there is none (development build).
+  /// They load without a signature: they are part of the installed application (ADR 0009).
+  [[nodiscard]] static QString bundledFolder();
+  /// numpy plus the requirements of all loaded plugins, each once.
+  [[nodiscard]] QStringList requirements() const;
   /// Checks the Python interpreter against the requirements of all plugins (blocking).
   [[nodiscard]] EnvironmentReport checkEnvironment() const;
   void setFolders(const QStringList& folders);

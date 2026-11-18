@@ -24,6 +24,13 @@ work identically on macOS, Windows and RHEL 10 without depending on a system cry
   the signer's machine; the secret key (32-byte seed, file mode 0600) never enters the
   repository.
 
+- *Addendum 2026-11-18:* the plugins installed **with the application** (`<prefix>/python/plugins`,
+  `Contents/Resources/python/plugins`, `share/raytatouille-fusion/python/plugins`;
+  `PluginManager::bundledFolder`) load without a signature: they come from the same installer
+  and lie in the same write-protected folder as the executable, so a signature would vouch for
+  nothing the installation does not already. Only these fixed places relative to the executable
+  count, no setting or environment variable. A plugin of a user folder with the same id wins.
+
 **Consequences.** No new runtime dependency; signatures can be checked independently with any
 Ed25519 implementation (tested against Python `cryptography`). A signature proves origin and
 integrity, not harmlessness – there is no sandbox (ADR 0008). Replacing the publisher key

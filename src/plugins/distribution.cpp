@@ -83,10 +83,16 @@ int compare_versions(const QString& a, const QString& b) {
 }
 
 std::optional<Requirement> parse_requirement(const QString& text) {
-  static const QRegularExpression re(QStringLiteral("^\\s*([A-Za-z_][A-Za-z0-9_.]*)\\s*(?:(>=|==)\\s*([0-9][0-9A-Za-z.+-]*))?\\s*$"));
+  static const QRegularExpression re(QStringLiteral(
+      "^\\s*([A-Za-z_][A-Za-z0-9_.]*)\\s*(?:(>=|==)\\s*([0-9][0-9A-Za-z.+-]*))?\\s*"
+      "(?:\\(\\s*([A-Za-z0-9][A-Za-z0-9._-]*)\\s*\\))?\\s*$"));
   const auto m = re.match(text);
   if (!m.hasMatch()) return std::nullopt;
-  return Requirement{m.captured(1), m.captured(2), m.captured(3)};
+  return Requirement{m.captured(1), m.captured(2), m.captured(3), m.captured(4)};
+}
+
+QString pip_spec(const Requirement& r) {
+  return (r.distribution.isEmpty() ? r.name : r.distribution) + r.op + r.version;
 }
 
 QString pack_plugin(const QString& dir, const QString& package) {
@@ -179,9 +185,8 @@ QString EnvironmentReport::pipCommand() const {
   QStringList missing;
   for (const PackageStatus& p : packages) {
     if (p.satisfied) continue;
-    missing << (p.requirement.op.isEmpty() ? p.requirement.name
-                                           : QStringLiteral("\"%1%2%3\"").arg(p.requirement.name, p.requirement.op,
-                                                                              p.requirement.version));
+    const QString spec = pip_spec(p.requirement);
+    missing << (p.requirement.op.isEmpty() ? spec : QStringLiteral("\"%1\"").arg(spec));
   }
   if (missing.isEmpty() || python.isEmpty()) return {};
   return QStringLiteral("\"%1\" -m pip install %2").arg(QDir::toNativeSeparators(python), missing.join(QLatin1Char(' ')));

@@ -44,7 +44,7 @@ PluginSettingsDialog::PluginSettingsDialog(plugins::PluginManager* manager, QWid
   auto* check = new QPushButton(tr("Check environment"), this);
   check->setToolTip(tr("Runs the interpreter and looks for the packages the plugins need (plugin.json \"requires\")"));
   auto* create = new QPushButton(tr("Create environment…"), this);
-  create->setToolTip(tr("Creates a new virtual environment (venv) from the interpreter above and installs numpy"));
+  create->setToolTip(tr("Creates a new virtual environment (venv) from the interpreter above and installs the packages the plugins need"));
   env_row->addWidget(check);
   env_row->addWidget(create);
   env_row->addStretch();
@@ -122,19 +122,13 @@ PluginSettingsDialog::PluginSettingsDialog(plugins::PluginManager* manager, QWid
 
 void PluginSettingsDialog::checkEnvironment() {
   // the interpreter in the field (not yet applied)
-  QStringList requirements{QStringLiteral("numpy")};
-  for (const auto& h : manager_->plugins()) {
-    for (const QString& r : h->manifest().requirements) {
-      if (!requirements.contains(r)) requirements << r;
-    }
-  }
   QApplication::setOverrideCursor(Qt::WaitCursor);
-  const plugins::EnvironmentReport r = plugins::check_environment(python_->text().trimmed(), requirements);
+  const plugins::EnvironmentReport r = plugins::check_environment(python_->text().trimmed(), manager_->requirements());
   QApplication::restoreOverrideCursor();
   QStringList lines;
   lines << (r.python_version.isEmpty() ? r.error : tr("Python %1  %2").arg(r.python_version, r.error.isEmpty() ? tr("ok") : r.error));
   for (const plugins::PackageStatus& p : r.packages) {
-    const QString want = p.requirement.op.isEmpty() ? p.requirement.name : p.requirement.name + p.requirement.op + p.requirement.version;
+    const QString want = p.requirement.name + p.requirement.op + p.requirement.version;
     lines << QStringLiteral("%1 %2  %3").arg(p.satisfied ? QStringLiteral("✓") : QStringLiteral("✗"), want,
                                               p.satisfied ? p.version : p.error);
   }
@@ -156,18 +150,23 @@ void PluginSettingsDialog::createEnvironment() {
 #else
   const QString python = QDir(target).filePath(QStringLiteral("bin/python"));
 #endif
+  // what the plugins need (numpy and the kernel packages, with their pip names)
+  QStringList packages;
+  for (const QString& text : manager_->requirements()) {
+    if (const auto req = plugins::parse_requirement(text)) packages << plugins::pip_spec(*req);
+  }
   report_->setPlainText(tr("Creating %1 from %2 …").arg(target, base));
-  // two steps, asynchronous: venv, then numpy into it
+  // two steps, asynchronous: venv, then the packages into it
   auto* venv = new QProcess(this);
   venv->setProcessChannelMode(QProcess::MergedChannels);
   connect(venv, &QProcess::readyRead, this, [this, venv] { report_->appendPlainText(QString::fromLocal8Bit(venv->readAll()).trimmed()); });
-  connect(venv, &QProcess::finished, this, [this, venv, python](int code, QProcess::ExitStatus status) {
+  connect(venv, &QProcess::finished, this, [this, venv, python, packages](int code, QProcess::ExitStatus status) {
     venv->deleteLater();
     if (status != QProcess::NormalExit || code != 0 || !QFileInfo::exists(python)) {
       report_->appendPlainText(tr("Creating the environment failed."));
       return;
     }
-    report_->appendPlainText(tr("Installing numpy …"));
+    report_->appendPlainText(tr("Installing %1 …").arg(packages.join(QStringLiteral(", "))));
     auto* pip = new QProcess(this);
     pip->setProcessChannelMode(QProcess::MergedChannels);
     connect(pip, &QProcess::readyRead, this, [this, pip] { report_->appendPlainText(QString::fromLocal8Bit(pip->readAll()).trimmed()); });
@@ -175,13 +174,13 @@ void PluginSettingsDialog::createEnvironment() {
       pip->deleteLater();
       if (s == QProcess::NormalExit && c == 0) {
         python_->setText(python);
-        report_->appendPlainText(tr("Done – the new interpreter is set above (applied with OK). Install the kernel "
-                                    "packages into it, then use Check environment."));
+        report_->appendPlainText(tr("Done – the new interpreter is set above (applied with OK)."));
       } else {
-        report_->appendPlainText(tr("Installing numpy failed."));
+        report_->appendPlainText(tr("Installing the packages failed – see above; Check environment shows what is missing."));
+        python_->setText(python);
       }
     });
-    pip->start(python, {QStringLiteral("-m"), QStringLiteral("pip"), QStringLiteral("install"), QStringLiteral("numpy")});
+    pip->start(python, QStringList{QStringLiteral("-m"), QStringLiteral("pip"), QStringLiteral("install")} + packages);
   });
   venv->start(base, {QStringLiteral("-m"), QStringLiteral("venv"), target});
 }

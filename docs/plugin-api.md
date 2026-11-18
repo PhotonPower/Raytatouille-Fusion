@@ -172,10 +172,12 @@ thread of the plugin process, so Cancel is always received; a plugin that does n
 ## Distribution
 
 **Requirements.** `plugin.json` lists the Python packages a plugin needs:
-`"requires": ["numpy", "raytatouille>=0.9"]` (import name, optionally `>=` or `==` a version).
-*Plugins → Settings… → Check environment* runs the chosen interpreter and shows what is
-missing, with the `pip install` command; *Create environment…* makes a new venv (with numpy)
-from the interpreter in the field. Installing a plugin checks its requirements too. CAD does
+`"requires": ["numpy", "raytatouille>=0.9", "fieldtracing>=0.2 (photonpower-fieldtracing)"]`
+(import name, optionally `>=` or `==` a version, and in parentheses the pip name when it
+differs from the import name). *Plugins → Settings… → Check environment* runs the chosen
+interpreter and shows what is missing, with the `pip install` command; *Create environment…*
+makes a new venv from the interpreter in the field and installs numpy and the requirements of
+all loaded plugins into it. Installing a plugin checks its requirements too. CAD does
 not ship a Python (decision D5): plugins use the environment with your kernel libraries.
 
 **Packages.** A plugin is distributed as a `.nfplugin` file – a zip archive of the plugin
