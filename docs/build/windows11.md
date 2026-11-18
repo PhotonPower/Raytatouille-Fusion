@@ -1,5 +1,9 @@
 # Building on Windows 11
 
+> Only **using** the application? Install it with the installer and follow *First start* in the
+> [user guide](../user-guide.md): Python from python.org, then *Plugins → Settings… → Create
+> environment…*. No compiler is needed: the kernel packages come as Windows wheels from PyPI.
+
 > Status: supported (M7). CI builds and runs all tests on `windows-latest` (MSVC, Qt 6.8);
 > the Packages workflow builds the installer.
 

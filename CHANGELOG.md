@@ -7,6 +7,15 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **The plugins ship with the application** (Windows installer, macOS DMG, RPM): Raytracer,
+  Workflow, FourierGrating, Path Tracer and Automotive Lighting are installed with it and load
+  without a signature, as part of the installation (ADR 0009, addendum). A plugin folder of one's
+  own with the same plugin id replaces the installed plugin.
+- **Create environment… installs everything the plugins need**: numpy and the kernel packages
+  from PyPI (raytatouille, rtt-fusion, photonpower-fieldtracing, fouriergrating, pathtracer – wheels
+  for Windows, Linux and macOS), not only numpy. `plugin.json` `requires` can name the pip
+  distribution when it differs from the import name: `"fieldtracing>=0.2 (photonpower-fieldtracing)"`.
+  On Windows, the Python on the PATH skips the Microsoft Store stubs and also finds the launcher `py`.
 - **Results are saved in the `.rttf` file.** The newest result of every display window of the
   node workflow (camera images, pupil images, curves of sweeps, tables, bars) is written with
   the document and shown again after opening. Each result carries a fingerprint of what it was

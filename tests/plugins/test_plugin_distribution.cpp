@@ -80,6 +80,16 @@ class TestPluginDistribution : public QObject {
     QCOMPARE(r->version, QStringLiteral("0.9"));
     QVERIFY(parse_requirement(QStringLiteral("numpy"))->op.isEmpty());
     QVERIFY(!parse_requirement(QStringLiteral("numpy; rm -rf /")).has_value());
+    QCOMPARE(pip_spec(*r), QStringLiteral("raytatouille>=0.9"));
+    // pip name in parentheses when it differs from the import name
+    const auto d = parse_requirement(QStringLiteral("fieldtracing>=0.2 (photonpower-fieldtracing)"));
+    QVERIFY(d.has_value());
+    QCOMPARE(d->name, QStringLiteral("fieldtracing"));
+    QCOMPARE(d->distribution, QStringLiteral("photonpower-fieldtracing"));
+    QCOMPARE(pip_spec(*d), QStringLiteral("photonpower-fieldtracing>=0.2"));
+    QCOMPARE(pip_spec(*parse_requirement(QStringLiteral("rtt_fusion (rtt-fusion)"))), QStringLiteral("rtt-fusion"));
+    QVERIFY(!parse_requirement(QStringLiteral("a (b c)")).has_value());
+    QVERIFY(!parse_requirement(QStringLiteral("a (b; rm)")).has_value());
   }
 
   void packInstallUpdateUninstall() {
@@ -189,7 +199,7 @@ class TestPluginDistribution : public QObject {
     const QString python = find_python();
     if (python.isEmpty()) QSKIP("no Python");
     const EnvironmentReport r = check_environment(
-        python, {QStringLiteral("json"), QStringLiteral("nfcad_no_such_package"), QStringLiteral("json>=99"), QStringLiteral("bad req!")});
+        python, {QStringLiteral("json"), QStringLiteral("nfcad_no_such_package (nfcad-dist)"), QStringLiteral("json>=99"), QStringLiteral("bad req!")});
     QVERIFY2(r.error.isEmpty(), qPrintable(r.error));
     QVERIFY(!r.python_version.isEmpty());
     QCOMPARE(r.packages.size(), std::size_t{4});
@@ -199,7 +209,8 @@ class TestPluginDistribution : public QObject {
     QVERIFY(r.packages[1].error.contains(QStringLiteral("ModuleNotFoundError")));
     QVERIFY(!r.packages[3].satisfied);
     QVERIFY(!r.ok());
-    QVERIFY(r.pipCommand().contains(QStringLiteral("nfcad_no_such_package")));
+    QVERIFY(r.pipCommand().contains(QStringLiteral(" nfcad-dist")));  // the pip name
+    QVERIFY(!r.pipCommand().contains(QStringLiteral("nfcad_no_such_package")));
     const EnvironmentReport none = check_environment(path(QStringLiteral("no/python")), {});
     QVERIFY(!none.error.isEmpty());
   }

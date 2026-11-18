@@ -41,10 +41,19 @@ QString PluginManager::python() const {
     if (QFileInfo::exists(dev)) return dev;
   }
 #endif
+#ifdef Q_OS_WIN
+  // python.org installs python.exe and the launcher py.exe; python3.exe / python.exe under
+  // \WindowsApps\ are the Store's stubs, which only open the Microsoft Store
+  for (const char* name : {"python", "py", "python3"}) {
+    const QString found = QStandardPaths::findExecutable(QString::fromLatin1(name));
+    if (!found.isEmpty() && !found.contains(QStringLiteral("WindowsApps"), Qt::CaseInsensitive)) return found;
+  }
+#else
   for (const char* name : {"python3", "python"}) {
     const QString found = QStandardPaths::findExecutable(QString::fromLatin1(name));
     if (!found.isEmpty()) return found;
   }
+#endif
   return QStringLiteral("python3");
 }
 
@@ -77,14 +86,28 @@ bool PluginManager::isInstalled(const PluginHost* host) const {
   return QFileInfo(host->manifest().source_directory).absolutePath() == QDir(installFolder()).absolutePath();
 }
 
-EnvironmentReport PluginManager::checkEnvironment() const {
-  QStringList requirements{QStringLiteral("numpy")};  // the nfcad package uses it for arrays
+QStringList PluginManager::requirements() const {
+  QStringList out{QStringLiteral("numpy")};  // the nfcad package uses it for arrays
   for (const auto& h : hosts_) {
     for (const QString& r : h->manifest().requirements) {
-      if (!requirements.contains(r)) requirements << r;
+      if (!out.contains(r)) out << r;
     }
   }
-  return check_environment(python(), requirements);
+  return out;
+}
+
+EnvironmentReport PluginManager::checkEnvironment() const {
+  return check_environment(python(), requirements());
+}
+
+QString PluginManager::bundledFolder() {
+  const QDir app(QCoreApplication::applicationDirPath());
+  // only the places of an installation (not the source tree of a development build)
+  for (const char* rel : {"../Resources/python/plugins", "../share/raytatouille-fusion/python/plugins", "../python/plugins"}) {
+    const QString dir = app.filePath(QString::fromLatin1(rel));
+    if (QFileInfo::exists(QDir(dir).filePath(QStringLiteral("../nfcad/__init__.py")))) return QDir(dir).absolutePath();
+  }
+  return {};
 }
 
 QStringList PluginManager::folders() const {
@@ -98,6 +121,8 @@ QStringList PluginManager::folders() const {
   }
 #endif
   if (!out.contains(installFolder())) out.prepend(installFolder());  // installed plugins win over same ids
+  const QString bundled = bundledFolder();
+  if (!bundled.isEmpty() && !out.contains(bundled)) out << bundled;  // last: one's own folders win
   return out;
 }
 
@@ -146,16 +171,19 @@ void PluginManager::reload() {
   const bool developer = developerMode();
   const QStringList keys = trustedKeys();
   int copies = 0;
+  const QString bundled = bundledFolder();
   for (const QString& folder : folders()) {
     const QDir dir(folder);
+    // part of the installed application (write-protected like the executable): no signature needed
+    const bool shipped = !bundled.isEmpty() && dir.absolutePath() == bundled;
     const QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
     for (const QString& sub : subdirs) {
       const QString path = dir.filePath(sub);
       if (!QFileInfo::exists(QDir(path).filePath(QStringLiteral("plugin.json")))) continue;
       // signed: check a private copy and run that; otherwise only in developer mode, from the folder
-      const QString copy = runtime_->isValid() ? runtime_->filePath(QString::number(++copies)) : QString();
+      const QString copy = !shipped && runtime_->isValid() ? runtime_->filePath(QString::number(++copies)) : QString();
       const Verification v = copy.isEmpty() ? Verification{} : verify_plugin(path, keys, copy);
-      if (!v.ok() && !developer) {
+      if (!v.ok() && !developer && !shipped) {
         problems_ << tr("%1: %2 – not loaded (only signed plugins; unsigned ones in developer mode)")
                          .arg(QDir::toNativeSeparators(path), v.message.isEmpty() ? tr("cannot be checked") : v.message);
         continue;
@@ -167,12 +195,13 @@ void PluginManager::reload() {
         continue;
       }
       m->source_directory = QDir(path).absolutePath();
-      m->trusted = v.ok();
-      if (!v.ok()) {
+      m->trusted = v.ok() || shipped;
+      if (!m->trusted) {
         m->trust_note = v.status == Verification::Status::Unsigned ? tr("unsigned") : tr("signature invalid");
         problems_ << tr("%1: %2 – loaded because developer mode is on").arg(QDir::toNativeSeparators(path), v.message);
       }
       if (plugin(m->id) != nullptr) {
+        if (shipped) continue;  // the user's own folder has this plugin: it replaces the bundled one
         problems_ << tr("%1: plugin id '%2' is used twice").arg(path, m->id);
         continue;
       }

@@ -19,12 +19,18 @@ namespace nfcad::plugins {
 [[nodiscard]] int compare_versions(const QString& a, const QString& b);
 
 /// "name", "name>=1.2" or "name==1.2" → name, operator (empty if none), version.
+/// A plugin requirement: "name", "name>=1.2" or "name==1.2", optionally followed by the pip
+/// distribution in parentheses when it differs from the import name:
+/// "fieldtracing>=0.2 (photonpower-fieldtracing)".
 struct Requirement {
-  QString name;
+  QString name;          ///< import name (checked with importlib)
   QString op;
   QString version;
+  QString distribution;  ///< pip name; empty = name
 };
 [[nodiscard]] std::optional<Requirement> parse_requirement(const QString& text);
+/// What pip installs for it: "<distribution or name><op><version>".
+[[nodiscard]] QString pip_spec(const Requirement& r);
 
 // ---------------------------------------------------------------- packages (.nfplugin)
 /// A .nfplugin file is a zip archive of one plugin folder (plugin.json at the top or in a

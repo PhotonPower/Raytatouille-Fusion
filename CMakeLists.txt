@@ -187,6 +187,10 @@ else()
 endif()
 install(DIRECTORY python/nfcad DESTINATION ${_nfcad_py_dest} COMPONENT app
         PATTERN "__pycache__" EXCLUDE)
+# the plugins ship with the application (PluginManager::bundledFolder, loaded without signature)
+install(DIRECTORY python/plugins DESTINATION ${_nfcad_py_dest} COMPONENT app
+        PATTERN "__pycache__" EXCLUDE PATTERN "*.pyc" EXCLUDE PATTERN "*.agf" EXCLUDE
+        PATTERN "SIGNATURE" EXCLUDE)
 if(UNIX AND NOT APPLE)
   set(_nfcad_id io.github.photonpower.RaytatouilleFusion)
   install(FILES resources/linux/${_nfcad_id}.desktop

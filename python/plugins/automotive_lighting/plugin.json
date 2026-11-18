@@ -4,6 +4,6 @@
   "version": "0.22.0",
   "api": 1,
   "entry": "al_plugin:AutomotiveLighting",
-  "requires": ["numpy"],
+  "requires": ["numpy", "pathtracer>=0.3"],
   "description": "Headlamps and signal lamps for filament lamps. Patterned lens: a paraboloid and a lens of prisms, cylinder lenses and pillows. Clear-lens headlamp: the facetted reflector of a low beam for a filament lamp (H4, H7, …) – mirror strips whose filament images touch the cut-off line, joined by walls with draft and fillets to one mouldable surface; filament images and light distribution (UN/ECE R112 test points); the light distribution also by ray tracing, with the coil modelled as a helix of wire with cooler ends, the bulb's glass and black top, the H4's shield and second coil (Path Tracer kernel)."
 }

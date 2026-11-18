@@ -17,7 +17,15 @@ lines, fields and images on faces, curves in a plot.
 | AlmaLinux / RHEL 10 | `raytatouille-fusion-<version>.x86_64.rpm` | `sudo dnf install ./raytatouille-fusion-*.rpm` (Qt from the distribution). |
 
 Plugins run in **your** Python environment (3.10 or newer, with numpy and the kernel packages),
-see [Plugins](#plugins).
+see [Plugins](#plugins). The plugins of the project (Raytracer, Workflow, FourierGrating, Path
+Tracer, Automotive Lighting) are installed with the application.
+
+**First start** – install Python once (Windows: [python.org](https://www.python.org/downloads/),
+tick *Add python.exe to PATH*; macOS: python.org or Homebrew; RHEL: `dnf install python3.12`),
+then *Plugins → Settings… → Create environment…*: it makes a venv and installs numpy and the
+kernel packages from PyPI (raytatouille, rtt-fusion, photonpower-fieldtracing, fouriergrating,
+pathtracer, with prebuilt wheels for Windows, Linux and macOS). Confirm with OK; *Check
+environment* should then show only ✓.
 
 ## The main window
 
@@ -109,7 +117,9 @@ undo step**.
    *Plugins → Show in the side panels* keeps a plugin out of the tool column and the Plugin
    panel (check box per plugin, remembered); its actions stay in the *Plugins* menu.
 3. **Signatures** – only plugins signed by the publisher whose key is built into the
-   application are loaded. *Developer mode* also loads unsigned plugins (for plugin
+   application are loaded, and the plugins installed with the application (they are part of
+   it, in its write-protected folder). A plugin folder of your own with the same plugin id
+   replaces the installed one. *Developer mode* also loads unsigned plugins (for plugin
    developers); a red banner in the status bar shows that it is on.
 
 ![Plugin settings](images/plugin-settings.png)
