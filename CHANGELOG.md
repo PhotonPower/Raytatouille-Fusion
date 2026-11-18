@@ -82,6 +82,21 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   direction – instead of spreads across and up and down.
 
 ### Fixed
+- **Extrude: a typed distance went along +Z in every view.** It now follows the normal of the
+  construction plane of the view one works in (Front: −Y, Left: −X), as the prompt says.
+- **Right-click with no running command repeats the last command** in the views (like Enter on an
+  empty command line), as documented; a right drag still orbits / pans.
+- **Tool tooltips named shortcuts that did not exist** (L, C, M). They now say what to type, e.g.
+  "Type: l + Enter"; only Delete has a real shortcut.
+- **H in a view always meant Hide**, so the Helix alias could not be typed there. With nothing
+  selected, H is now typed into the command line; with a selection it still hides.
+- **Snaps on polylines, rectangles and polygons**: every corner is an End and every segment has a
+  Mid (before: only the ends and the middle of the whole curve). The points of a polyline being
+  drawn snap too, so it can be closed by snapping its start point.
+- **Error messages say why**: Fillet curves, Offset curve, Revolve, Extrude, Split and Trim show the
+  reason ("Fillet: radius 5 too large for these curves", "Split: the point is at an end of the
+  curve") instead of only "Input not accepted – <prompt>"; the kernel's function names are not
+  shown.
 - **Workflow: blocks that cannot be computed are no longer offered.** *Add block* listed planned
   types without an evaluator (`analysis.camera_image`, `biooptomd.layer`, and before RTT-Fusion
   0.2.1 `fusion.convert`); a run with one stopped with `exec.no_evaluator`. The library now holds

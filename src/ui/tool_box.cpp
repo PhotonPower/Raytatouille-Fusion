@@ -53,11 +53,7 @@ ToolGroup::ToolGroup(const ToolGroupDef& def, QWidget* parent) : QWidget(parent)
     } else {
       button->setText(tool.short_label);  // placeholder until the icon set exists
     }
-    QString tip = tool.label;
-    if (!tool.shortcut.isEmpty()) {
-      tip += QStringLiteral("  (%1)").arg(tool.shortcut.toString(QKeySequence::NativeText));
-    }
-    button->setToolTip(tip);
+    button->setToolTip(tool_tip(tool));
     button->setStatusTip(tool.label);
     connect(button, &QToolButton::clicked, this, [this, id = tool.id] { emit toolTriggered(id); });
     buttons_.push_back(button);

@@ -22,6 +22,9 @@ struct SnapQuery {
   bool faces_occlude = true; ///< surfaces / shaded mode: candidates behind faces are ignored
   /// Construction plane and minor grid spacing for Grid snaps.
   std::optional<std::pair<viewport::CPlane, float>> grid;
+  /// Points of the object the running command is drawing (not yet in the document), offered as
+  /// End snaps: e.g. the start of a polyline in progress, to close it.
+  std::vector<SnapPoint> command_points;
 };
 
 struct SnapResult {

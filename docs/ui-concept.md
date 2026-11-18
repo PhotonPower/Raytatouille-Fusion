@@ -22,7 +22,8 @@ The window remembers its geometry and dock layout (`QSettings`).
 Icon buttons are arranged in **groups**. Each group has a header row (triangle + name); a click
 collapses or expands it. Several groups can be open at the same time; the state is saved.
 Buttons are 32 × 32 px icons (SVG, scaled for Retina) in a grid whose column count follows the
-column width. A tooltip shows the name and shortcut; the status bar shows a one-line help.
+column width. A tooltip shows the name, a real shortcut if there is one (Delete) and the alias to
+type ("Type: l + Enter"); the status bar shows a one-line help.
 
 | Group | Tools (planned) |
 |---|---|
@@ -35,8 +36,8 @@ column width. A tooltip shows the name and shortcut; the status bar shows a one-
 | Analyze | distance, angle, curvature, area, volume / mass properties, intersection check |
 | View | display modes, standard views, zoom extents (also in the view toolbar) |
 
-Tool definitions are data (`src/ui/tool_catalog.cpp`): id, group, label, icon, shortcut,
-status tip. Commands look up their id; the tool column is generated from the catalog.
+Tool definitions are data (`src/ui/tool_catalog.cpp`): id, group, label, icon, shortcut (only
+registered ones), alias, status tip. Commands look up their id; the tool column is generated from the catalog.
 
 Icons: own SVG set in `resources/icons/<group>/<tool>.svg`, monochrome, 24 px grid, drawn with
 `currentColor` so that they can be coloured for light and dark themes. Missing icons fall back

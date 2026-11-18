@@ -57,6 +57,9 @@ class Viewport : public QRhiWidget {
   [[nodiscard]] bool pointInput() const { return point_input_; }
   /// Rubber-band preview of the active command (world polylines), drawn in all views.
   void setPreview(const std::vector<std::vector<QVector3D>>& polylines);
+  /// Points of the object the active command is drawing, offered as End snaps (e.g. the start
+  /// of a polyline in progress, to close it).
+  void setCommandSnapPoints(std::vector<snap::SnapPoint> points) { command_points_ = std::move(points); }
   /// Current snap candidates under the cursor (best first) and the chosen one.
   [[nodiscard]] const std::vector<snap::SnapResult>& snapCandidates() const { return snaps_; }
 
@@ -79,9 +82,14 @@ class Viewport : public QRhiWidget {
   /// Point input: a point was clicked; `type` is valid if `snapped`.
   void pointPicked(const nfcad::snap::SnapPoint& point, bool snapped, nfcad::snap::SnapType type);
   void pointInputFinished();
+  /// Right click without dragging while no point is asked for (repeats the last command,
+  /// docs/commands.md).
+  void rightClicked();
   /// Point input: the (snapped) point under the cursor changed.
   void pointerMoved(const nfcad::snap::SnapPoint& point, bool valid, bool snapped);
-  /// Printable text typed while the view has the focus (goes to the command line).
+  /// Printable text typed while the view has the focus (goes to the command line). H with
+  /// nothing selected is text too (the Hide shortcut would do nothing), so the Helix aliases
+  /// can be typed.
   void textTyped(const QString& text);
   /// Enter / Return pressed in the view.
   void enterPressed();
@@ -132,6 +140,7 @@ class Viewport : public QRhiWidget {
   bool snap_enabled_ = true;
   bool point_input_ = false;
   std::vector<snap::SnapResult> snaps_;
+  std::vector<snap::SnapPoint> command_points_;
   std::size_t snap_index_ = 0;
   QPointF snap_px_{-1, -1};
   snap::SnapPoint cursor_point_;  // snapped or construction-plane point under the cursor

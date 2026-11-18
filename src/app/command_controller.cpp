@@ -26,6 +26,10 @@ CommandController::CommandController(document::Document* doc, document::Selectio
     connect(v, &viewport::Viewport::pointPicked, this,
             [this, v](const snap::SnapPoint& p, bool snapped, snap::SnapType) { onPicked(v, p, snapped); });
     connect(v, &viewport::Viewport::pointInputFinished, this, &CommandController::finishOrRepeat);
+    // right click with no running command: repeat the last one (like Enter on an empty line)
+    connect(v, &viewport::Viewport::rightClicked, this, [this] {
+      if (!command_) finishOrRepeat();
+    });
     connect(v, &viewport::Viewport::enterPressed, this, &CommandController::finishOrRepeat);
     connect(v, &viewport::Viewport::textTyped, this, [this](const QString& text) {
       line_->setFocus();
@@ -97,6 +101,9 @@ bool CommandController::start(const QString& name) {
     }
   }
   command_ = std::move(cmd);
+  // typed input before the cursor visits a view refers to the active view's construction plane
+  if (grid_->activeView() != nullptr) plane_ = frameOf(grid_->activeView());
+  command_->setViewPlane(plane_);
   grid_->setPointInput(true);
   if (grid_->activeView() != nullptr) grid_->activeView()->setFocus();
   emit activeChanged(true);
@@ -139,9 +146,10 @@ void CommandController::submit(const QString& text) {
       return;
     case ParsedInput::Kind::Number: {
       if (!command_) return;
+      command_->setViewPlane(plane_);
       const Command::Result r = command_->number(in.number);
-      if (r != Command::Result::Rejected) {
-        handle(r);
+      if (r != Command::Result::Rejected || !command_->message().isEmpty()) {
+        handle(r);  // done, or rejected with a reason
         return;
       }
       // a length along the direction from the base point to the cursor
@@ -193,6 +201,7 @@ Point3 CommandController::constrained(const Point3& p, bool snapped) const {
 void CommandController::onPointer(viewport::Viewport* view, const Point3& p, bool valid,
                                   bool snapped) {
   plane_ = frameOf(view);
+  if (command_) command_->setViewPlane(plane_);
   cursor_ = constrained(p, snapped);
   cursor_valid_ = valid;
   refresh();
@@ -201,6 +210,7 @@ void CommandController::onPointer(viewport::Viewport* view, const Point3& p, boo
 void CommandController::onPicked(viewport::Viewport* view, const Point3& p, bool snapped) {
   if (!command_) return;
   plane_ = frameOf(view);
+  command_->setViewPlane(plane_);
   handle(command_->point(constrained(p, snapped), plane_));
 }
 
@@ -224,16 +234,26 @@ void CommandController::handle(Command::Result r) {
     case Command::Result::Cancelled:
       end(tr("%1 cancelled").arg(command_->title()));
       break;
-    case Command::Result::Rejected:
-      status_->showMessage(tr("Input not accepted – %1").arg(command_->prompt()), 4000);
+    case Command::Result::Rejected: {
+      // the command's reason (e.g. "Fillet: radius 5 too large for these curves"), else the prompt
+      const QString why = command_->takeMessage();
+      if (why.isEmpty()) {
+        status_->showMessage(tr("Input not accepted – %1").arg(command_->prompt()), 4000);
+      } else {
+        status_->showMessage(why, 8000);
+      }
       break;
+    }
   }
 }
 
 void CommandController::end(const QString& message) {
   command_.reset();
   grid_->setPointInput(false);
-  for (viewport::Viewport* v : grid_->views()) v->setPreview({});
+  for (viewport::Viewport* v : grid_->views()) {
+    v->setPreview({});
+    v->setCommandSnapPoints({});
+  }
   line_->setPlaceholderText(tr("Command:"));
   if (!message.isEmpty()) status_->showMessage(message, message.startsWith(tr("Distance")) ? 0 : 5000);
   emit activeChanged(false);
@@ -253,7 +273,11 @@ void CommandController::refresh() {
       preview.push_back(std::move(v));
     }
   }
-  for (viewport::Viewport* v : grid_->views()) v->setPreview(preview);
+  const std::vector<Point3> snap_points = command_->snapPoints();
+  for (viewport::Viewport* v : grid_->views()) {
+    v->setPreview(preview);
+    v->setCommandSnapPoints(snap_points);
+  }
 }
 
 }  // namespace nfcad::app

@@ -9,8 +9,8 @@ four views and in every display mode.
 | Type | Glyph | Applies to | Definition | Nurbforge |
 |---|---|---|---|---|
 | **Point** | small filled square | point entities, control points (optional) | the point itself | – |
-| **End** | square | open curves, edges | `C(u_min)`, `C(u_max)` | `NurbsCurve` evaluation |
-| **Mid** | triangle | curves, edges | point at half the **arc length** (not half the parameter) | `arc_length`, inverse by Newton |
+| **End** | square | open curves, edges; the corners of polylines, rectangles, polygons and joined curves; the points of the object being drawn | `C(u_min)`, `C(u_max)`; corners: interior knots of multiplicity ≥ degree (degree 1: every vertex, else where the tangent jumps), on closed curves also the seam | `NurbsCurve` evaluation, `unique_knots` |
+| **Mid** | triangle | curves, edges; each segment of a polyline / curve with corners | point at half the **arc length** (not half the parameter) of the curve, or of each segment between two corners | `arc_length`, inverse by Newton |
 | **Centre** | circle | circles, arcs, closed planar curves, polylines that form a closed loop | circle/arc: centre of curvature; other closed planar curves: area centroid | curvature / `properties` |
 | **Quadrant** | diamond | circles, arcs | points where the circle crosses the planes through its centre parallel to the coordinate planes (0°, 90°, 180°, 270° in the world or CPlane axes) | `intersect(curve, plane)` |
 | **Near** | hourglass | any curve or edge | closest point on the curve to the cursor ray | `closest_point` |
@@ -19,8 +19,12 @@ four views and in every display mode.
 | **Face edge** | (toggle) | faces, shells | the B-rep edges / boundary curves take part in Mid, Near, Centre and Quadrant (e.g. the centre of a drilled hole); their ends are Face corners | `ShellEdge::curve`, `boundary_curves` |
 | *Grid* | small cross | construction plane | grid points (lowest priority; off by default) | – |
 
-"Lines" in the list above means every curve: straight lines, polylines (each segment counts),
+"Lines" in the list above means every curve: straight lines, polylines (each segment counts:
+its corners are Ends, its middle a Mid – also for rectangles, polygons and closed polylines),
 arcs, circles and free-form NURBS curves.
+
+**While drawing**, the points of the object in progress snap as End too (they are not in the
+document yet): a polyline is closed by snapping to its start point.
 
 ## Behaviour
 
@@ -76,8 +80,11 @@ Measured (release build, Apple Silicon): **0.34 ms** per query with 10 000 curve
 
 ## Implementation notes
 
-- `kernel/curve_features` computes ends, mid (half arc length), centre, axis cut points
+- `kernel/curve_features` computes ends, mid (half arc length), corners and segment mids
+  (curves with C0 kinks: polylines, rectangles, polygons, joined curves), centre, axis cut points
   ("quadrants") and detects circles / arcs exactly (equidistant samples, 1e-7 relative).
+- `SnapQuery::command_points`: points of the running command (`Command::snapPoints()`, e.g. the
+  vertices of a polyline being drawn), offered as End.
 - Characteristic points are cached per entity on first contact (`SnapEngine::cache`);
   intersections per curve pair. The cache follows the geometry identity.
 - Intersections between edges of the same face / shell are not offered: they only meet at

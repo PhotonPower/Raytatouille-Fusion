@@ -60,7 +60,7 @@ class ImmediateCommand : public Command {
     try {
       run_(*this, selection);
     } catch (const std::exception& e) {
-      message_ = QObject::tr("%1 failed: %2").arg(title_, QString::fromUtf8(e.what()));
+      message_ = failure(title_, e);
       entities_.clear();
       remove_.clear();
       replace_.clear();
@@ -303,7 +303,7 @@ class SplitTrimCommand : public Command {
       f();
       return true;
     } catch (const std::exception& e) {
-      message_ = QObject::tr("%1 failed: %2").arg(title(), QString::fromUtf8(e.what()));
+      message_ = failure(title(), e);
       entities_.clear();
       remove_.clear();
       return false;

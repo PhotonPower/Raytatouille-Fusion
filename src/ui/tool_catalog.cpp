@@ -1,49 +1,60 @@
 #include "ui/tool_catalog.hpp"
 
+#include <QObject>
+
 namespace nfcad::ui {
 
 namespace {
 
-ToolDef t(const char* id, const char* label, const char* short_label, QKeySequence key = {}) {
+/// alias: the shortest name of the command to type in the command line (or in a view) + Enter.
+ToolDef t(const char* id, const char* label, const char* short_label, const char* alias,
+          QKeySequence key = {}) {
   return {QString::fromLatin1(id), QString::fromUtf8(label), QString::fromUtf8(short_label),
-          std::move(key)};
+          std::move(key), QString::fromLatin1(alias)};
 }
 
 std::vector<ToolGroupDef> build() {
   return {
       {"draw", "Draw", true,
-       {t("point", "Point", "Pt"), t("line", "Line", "Ln", QKeySequence(Qt::Key_L)),
-        t("polyline", "Polyline", "PL"), t("rectangle", "Rectangle", "Rec"),
-        t("polygon", "Polygon", "Pol")}},
+       {t("point", "Point", "Pt", "pt"), t("line", "Line", "Ln", "l"),
+        t("polyline", "Polyline", "PL", "pl"), t("rectangle", "Rectangle", "Rec", "rec"),
+        t("polygon", "Polygon", "Pol", "pol")}},
       {"curves", "Curves", true,
-       {t("circle", "Circle (centre, radius)", "Ci", QKeySequence(Qt::Key_C)),
-        t("circle3p", "Circle (3 points)", "C3"), t("arc", "Arc", "Arc"),
-        t("helix", "Helix", "Hx"), t("spline", "Interpolated spline", "Sp"),
-        t("offset_curve", "Offset curve", "Off"), t("fillet_curve", "Fillet curves", "Fil")}},
+       {t("circle", "Circle (centre, radius)", "Ci", "c"),
+        t("circle3p", "Circle (3 points)", "C3", "c3"), t("arc", "Arc", "Arc", "a"),
+        t("helix", "Helix", "Hx", "h"), t("spline", "Interpolated spline", "Sp", "sp"),
+        t("offset_curve", "Offset curve", "Off", "offset"),
+        t("fillet_curve", "Fillet curves", "Fil", "fillet")}},
       {"surfaces", "Surfaces", false,
-       {t("plane", "Plane", "Pln"), t("extrude", "Extrude", "Ext"),
-        t("revolve", "Revolve", "Rev"), t("loft", "Loft", "Lft"),
-        t("sweep1", "Sweep 1 rail", "Sw1"), t("sweep2", "Sweep 2 rails", "Sw2"),
-        t("coons", "Coons patch", "Cns"), t("gordon", "Gordon surface", "Gor"),
-        t("offset_surface", "Offset surface", "OfS"), t("fillet_surface", "Fillet surfaces", "FiS"),
-        t("cap", "Cap planar holes", "Cap")}},
+       {t("plane", "Plane", "Pln", "plane"), t("extrude", "Extrude", "Ext", "ext"),
+        t("revolve", "Revolve", "Rev", "rev"), t("loft", "Loft", "Lft", "loft"),
+        t("sweep1", "Sweep 1 rail", "Sw1", "sweep1"), t("sweep2", "Sweep 2 rails", "Sw2", "sweep2"),
+        t("coons", "Coons patch", "Cns", "coons"), t("gordon", "Gordon surface", "Gor", "gordon"),
+        t("offset_surface", "Offset surface", "OfS", "offsetsrf"),
+        t("fillet_surface", "Fillet surfaces", "FiS", "filletsrf"),
+        t("cap", "Cap planar holes", "Cap", "cap")}},
       {"solids", "Solids", false,
-       {t("box", "Box", "Box"), t("sphere", "Sphere", "Sph"), t("cylinder", "Cylinder", "Cyl"),
-        t("cone", "Cone", "Con"), t("torus", "Torus", "Tor"), t("union", "Boolean union", "∪"),
-        t("difference", "Boolean difference", "−"), t("intersection", "Boolean intersection", "∩")}},
+       {t("box", "Box", "Box", "b"), t("sphere", "Sphere", "Sph", "sph"),
+        t("cylinder", "Cylinder", "Cyl", "cyl"), t("cone", "Cone", "Con", "cone"),
+        t("torus", "Torus", "Tor", "tor"), t("union", "Boolean union", "∪", "bu"),
+        t("difference", "Boolean difference", "−", "bd"),
+        t("intersection", "Boolean intersection", "∩", "bi")}},
       {"transform", "Transform", false,
-       {t("move", "Move", "Mv", QKeySequence(Qt::Key_M)), t("copy", "Copy", "Cp"),
-        t("rotate", "Rotate", "Rot"), t("scale", "Scale", "Scl"), t("mirror", "Mirror", "Mir"),
-        t("array_linear", "Linear array", "ArL"), t("array_grid", "Grid array", "ArG"),
-        t("array_polar", "Polar array", "ArP")}},
+       {t("move", "Move", "Mv", "m"), t("copy", "Copy", "Cp", "co"),
+        t("rotate", "Rotate", "Rot", "ro"), t("scale", "Scale", "Scl", "sc"),
+        t("mirror", "Mirror", "Mir", "mi"), t("array_linear", "Linear array", "ArL", "array"),
+        t("array_grid", "Grid array", "ArG", "array_grid"),
+        t("array_polar", "Polar array", "ArP", "arraypolar")}},
       {"edit", "Edit", false,
-       {t("trim", "Trim", "Trm"), t("split", "Split", "Spl"), t("join", "Join", "Jn"),
-        t("explode", "Explode", "Exp"), t("delete", "Delete", "Del", QKeySequence::Delete)}},
+       {t("trim", "Trim", "Trm", "tr"), t("split", "Split", "Spl", "split"),
+        t("join", "Join", "Jn", "j"), t("explode", "Explode", "Exp", "x"),
+        // not a command: the Edit menu's Delete (Del / Backspace)
+        t("delete", "Delete", "Del", "", QKeySequence::Delete)}},
       {"analyze", "Analyze", false,
-       {t("distance", "Distance", "Dst"), t("angle", "Angle", "Ang"),
-        t("curvature", "Curvature", "Crv"), t("area", "Area", "Are"),
-        t("mass_properties", "Volume / mass properties", "Vol"),
-        t("intersection_check", "Intersection check", "Chk")}},
+       {t("distance", "Distance", "Dst", "di"), t("angle", "Angle", "Ang", "ang"),
+        t("curvature", "Curvature", "Crv", "curv"), t("area", "Area", "Are", "area"),
+        t("mass_properties", "Volume / mass properties", "Vol", "volume"),
+        t("intersection_check", "Intersection check", "Chk", "intersect")}},
   };
 }
 
@@ -52,6 +63,18 @@ std::vector<ToolGroupDef> build() {
 const std::vector<ToolGroupDef>& tool_catalog() {
   static const std::vector<ToolGroupDef> catalog = build();
   return catalog;
+}
+
+QString tool_tip(const ToolDef& tool) {
+  QString tip = tool.label;
+  if (!tool.shortcut.isEmpty()) {
+    tip += QStringLiteral("  (%1)").arg(tool.shortcut.toString(QKeySequence::NativeText));
+  }
+  if (!tool.alias.isEmpty()) {
+    // not a shortcut: the name to type in the command line (typing in a view goes there too)
+    tip += QStringLiteral("\n") + QObject::tr("Type: %1 + Enter").arg(tool.alias);
+  }
+  return tip;
 }
 
 }  // namespace nfcad::ui

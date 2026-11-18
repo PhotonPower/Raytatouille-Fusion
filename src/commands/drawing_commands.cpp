@@ -106,7 +106,7 @@ class PolylineCommand : public Command {
   QString title() const override { return QObject::tr("Polyline"); }
   QString prompt() const override {
     if (pts_.empty()) return QObject::tr("Polyline: start point");
-    return QObject::tr("Polyline: next point (Enter: done, first point: close)");
+    return QObject::tr("Polyline: next point (Enter: done, snap to the first point: close)");
   }
   Result point(const Point3& p, const PlaneFrame&) override {
     if (!pts_.empty() && dist(pts_.back(), p) < kEps) return Result::Rejected;
@@ -127,6 +127,8 @@ class PolylineCommand : public Command {
   std::optional<Point3> basePoint() const override {
     return pts_.empty() ? std::nullopt : std::optional(pts_.back());
   }
+  // its own vertices snap (End): snapping the start closes the polyline
+  std::vector<Point3> snapPoints() const override { return pts_; }
 
  private:
   Result create() {

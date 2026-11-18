@@ -3,6 +3,7 @@
 #include <QTest>
 #include <QToolButton>
 
+#include "commands/command.hpp"
 #include "ui/tool_box.hpp"
 #include "ui/tool_catalog.hpp"
 
@@ -20,6 +21,27 @@ class TestToolCatalog : public QObject {
         ids.insert(tool.id);
       }
     }
+  }
+
+  void aliasesStartTheirCommand() {
+    // the tooltip shows the alias to type (not a fake one-letter shortcut); it must start the
+    // tool's command
+    for (const auto& group : nfcad::ui::tool_catalog()) {
+      for (const auto& tool : group.tools) {
+        if (tool.id == QLatin1String("delete")) {  // the Edit menu's Delete, a real shortcut
+          QVERIFY(tool.alias.isEmpty() && !tool.shortcut.isEmpty());
+          continue;
+        }
+        QVERIFY2(!tool.alias.isEmpty(), qPrintable(tool.id));
+        QVERIFY2(tool.shortcut.isEmpty(), qPrintable(tool.id));  // no unregistered shortcuts
+        const auto cmd = nfcad::commands::create_command(tool.alias);
+        QVERIFY2(cmd != nullptr, qPrintable(tool.alias));
+        QCOMPARE(cmd->id(), tool.id);
+        QVERIFY(nfcad::ui::tool_tip(tool).contains(QStringLiteral("Type: %1 + Enter").arg(tool.alias)));
+      }
+    }
+    const auto& line = nfcad::ui::tool_catalog().front().tools[1];
+    QCOMPARE(nfcad::ui::tool_tip(line), QStringLiteral("Line\nType: l + Enter"));
   }
 
   void groupCollapsesAndEmits() {

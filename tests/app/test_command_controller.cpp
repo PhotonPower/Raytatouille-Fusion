@@ -2,12 +2,14 @@
 #include <QSignalSpy>
 #include <QStatusBar>
 #include <QTest>
+#include <algorithm>
 #include <nurbforge/nurbforge.hpp>
 
 #include "app/command_controller.hpp"
 #include "document/document.hpp"
 #include "document/selection.hpp"
 #include "render/scene.hpp"
+#include "snap/snap_engine.hpp"
 #include "tessellation/tessellation_service.hpp"
 #include "viewport/viewport.hpp"
 #include "viewport/viewport_grid.hpp"
@@ -134,6 +136,122 @@ class TestCommandController : public QObject {
     QVERIFY(!c.active());
     const auto& shell = std::get<nf::Shell>(*doc.entity(result)->geometry);
     QVERIFY(std::abs(shell.mass_properties().centroid.z - 12.0) < 1e-6);
+  }
+
+  void extrudeTypedDistanceInTheActiveView() {
+    // a typed distance extrudes along the normal of the active view's construction plane
+    nfcad::document::Document doc;
+    nfcad::document::Selection selection;
+    selection.attach(&doc);
+    nfcad::viewport::ViewportGrid grid;
+    grid.resize(1000, 800);
+    QLineEdit line;
+    QStatusBar status;
+    CommandController c(&doc, &selection, &grid, &line, &status);
+    const auto ids = doc.addEntities({nfcad::document::make_entity(nf::make_line({0, 0, 0}, {2, 0, 0}))},
+                                     QStringLiteral("add"));
+    nfcad::viewport::Viewport* front = grid.views()[0];
+    QCOMPARE(front->kind(), nfcad::viewport::ViewKind::Front);
+    front->resize(500, 400);
+    QTest::mouseClick(front, Qt::MiddleButton, Qt::NoModifier, {250, 200});  // activates it
+    QCOMPARE(grid.activeView(), front);
+    selection.apply({{ids[0], {}}}, nfcad::document::Selection::Mode::Replace);
+    c.submit(QStringLiteral("ext"));
+    QVERIFY(c.active());
+    c.submit(QStringLiteral("3"));
+    QVERIFY(!c.active());
+    const nf::NurbsSurface* made = nullptr;
+    for (const auto& [id, e] : doc.entities()) {
+      if (const auto* s = std::get_if<nf::NurbsSurface>(e.geometry.get())) made = s;
+    }
+    QVERIFY(made != nullptr);
+    double min_y = 0.0;
+    for (const nf::Vec3& p : made->control_points()) {
+      QVERIFY(std::abs(p.z) < 1e-12);  // Front: along -Y, not +Z
+      min_y = std::min(min_y, p.y);
+    }
+    QVERIFY(std::abs(min_y + 3.0) < 1e-12);
+  }
+
+  void rejectedInputShowsTheReason() {
+    nfcad::document::Document doc;
+    nfcad::document::Selection selection;
+    selection.attach(&doc);
+    nfcad::viewport::ViewportGrid grid;
+    QLineEdit line;
+    QStatusBar status;
+    CommandController c(&doc, &selection, &grid, &line, &status);
+    const auto ids = doc.addEntities({nfcad::document::make_entity(nf::make_line({-5, 0, 0}, {0, 0, 0})),
+                                      nfcad::document::make_entity(nf::make_line({0, 0, 0}, {0, 5, 0}))},
+                                     QStringLiteral("add"));
+    selection.apply({{ids[0], {}}, {ids[1], {}}}, nfcad::document::Selection::Mode::Replace);
+    c.submit(QStringLiteral("fillet"));
+    QVERIFY(c.active());
+    c.submit(QStringLiteral("10"));
+    QVERIFY(c.active());  // the command waits for another radius
+    QVERIFY2(status.currentMessage().contains(QStringLiteral("too large")), qPrintable(status.currentMessage()));
+    QVERIFY(!status.currentMessage().contains(QStringLiteral("Input not accepted")));
+    c.submit(QStringLiteral("1"));
+    QVERIFY(!c.active());
+  }
+
+  void rightClickRepeatsTheLastCommand() {
+    nfcad::document::Document doc;
+    nfcad::viewport::ViewportGrid grid;
+    grid.resize(1000, 800);
+    QLineEdit line;
+    QStatusBar status;
+    CommandController c(&doc, nullptr, &grid, &line, &status);
+    nfcad::viewport::Viewport* top = grid.views()[1];
+    top->resize(500, 400);
+    QTest::mouseClick(top, Qt::RightButton, Qt::NoModifier, {250, 200});
+    QVERIFY(!c.active());  // no last command yet
+    c.submit(QStringLiteral("line"));
+    c.submit(QStringLiteral("0,0"));
+    c.submit(QStringLiteral("1,0"));
+    QVERIFY(!c.active());
+    QTest::mouseClick(top, Qt::RightButton, Qt::NoModifier, {250, 200});
+    QCOMPARE(c.activeId(), QStringLiteral("line"));
+    QTest::mouseClick(top, Qt::RightButton, Qt::NoModifier, {250, 200});  // finishes (cancels) it
+    QVERIFY(!c.active());
+    // a right drag pans / orbits and repeats nothing
+    QTest::mousePress(top, Qt::RightButton, Qt::NoModifier, {250, 200});
+    move(*top, {300, 220});
+    QTest::mouseRelease(top, Qt::RightButton, Qt::NoModifier, {300, 220});
+    QVERIFY(!c.active());
+  }
+
+  void polylineClosesBySnappingItsStart() {
+    nfcad::document::Document doc;
+    nfcad::tessellation::TessellationService service;
+    nfcad::render::Scene scene(&doc, &service);
+    nfcad::snap::SnapEngine engine;
+    nfcad::viewport::ViewportGrid grid;
+    grid.setScene(&scene);
+    grid.setSnapEngine(&engine);
+    grid.resize(1000, 800);
+    QLineEdit line;
+    QStatusBar status;
+    CommandController c(&doc, nullptr, &grid, &line, &status);
+    nfcad::viewport::Viewport* top = grid.views()[1];
+    top->resize(500, 400);
+    top->zoomExtents();
+
+    c.start(QStringLiteral("polyline"));
+    c.submit(QStringLiteral("0,0"));
+    c.submit(QStringLiteral("10,0"));
+    c.submit(QStringLiteral("10,10"));
+    // click a few pixels next to the start: the cursor snaps to it (End) and closes the polyline
+    const QPointF start = *top->camera().project({0.0F, 0.0F, 0.0F});
+    const QPoint near = (start + QPointF(3, -2)).toPoint();
+    move(*top, near);
+    QVERIFY(!top->snapCandidates().empty());
+    QCOMPARE(top->snapCandidates().front().type, nfcad::snap::SnapType::End);
+    QTest::mouseClick(top, Qt::LeftButton, Qt::NoModifier, near);
+    QVERIFY(!c.active());
+    const auto& pl = last_curve(doc);
+    QCOMPARE(pl.control_points().size(), std::size_t{4});
+    QVERIFY(nf::distance(pl.evaluate(pl.domain_end()), {0, 0, 0}) == 0.0);
   }
 
   void distanceMessageInStatusBar() {

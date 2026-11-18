@@ -1,4 +1,5 @@
 #include <QTest>
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <nurbforge/analysis/properties.hpp>
@@ -58,6 +59,70 @@ class TestSurfaceCommands : public QObject {
     c->point({0, 0, 0}, kTop);
     QCOMPARE(c->point({0, 3, 4}, kTop), R::Done);  // by two points
     QVERIFY(std::abs(nf::area(surface(c->takeEntities()[0])) - 5.0) < 1e-12);
+  }
+
+  void extrudeTypedDistanceFollowsTheViewPlane() {
+    // Front view: construction plane XZ, normal X × Z = -Y; a typed distance goes along it
+    const PlaneFrame front{{0, 0, 0}, {1, 0, 0}, {0, 0, 1}, {0, -1, 0}};
+    auto c = started(QStringLiteral("extrude"), {make_entity(nf::make_line({0, 0, 0}, {2, 0, 0}))});
+    c->setViewPlane(front);
+    QCOMPARE(c->number(3.0), R::Done);
+    const auto made = c->takeEntities();
+    const auto& s = surface(made[0]);
+    double min_y = 0.0;
+    for (const nf::Vec3& p : s.control_points()) {
+      QVERIFY(std::abs(p.z) < 1e-12);  // not along +Z
+      min_y = std::min(min_y, p.y);
+    }
+    QVERIFY(std::abs(min_y + 3.0) < 1e-12);
+    // Left view: normal -X
+    c = started(QStringLiteral("extrude"), {make_entity(nf::make_line({0, 0, 0}, {0, 2, 0}))});
+    c->setViewPlane({{0, 0, 0}, {0, -1, 0}, {0, 0, 1}, {-1, 0, 0}});
+    QCOMPARE(c->number(2.0), R::Done);
+    QVERIFY(std::abs(nf::area(surface(c->takeEntities()[0])) - 4.0) < 1e-12);
+    // zero distance: rejected with a reason
+    c = started(QStringLiteral("extrude"), {make_entity(nf::make_line({0, 0, 0}, {2, 0, 0}))});
+    QCOMPARE(c->number(0.0), R::Rejected);
+    QVERIFY(c->message().contains(QStringLiteral("0")));
+  }
+
+  void failuresSayWhy() {
+    // Fillet: radius too large, curves that do not meet, a non-positive radius
+    const Entity a = make_entity(nf::make_line({-5, 0, 0}, {0, 0, 0}));
+    const Entity b = make_entity(nf::make_line({0, 0, 0}, {0, 5, 0}));
+    auto c = started(QStringLiteral("fillet_curve"), {a, b});
+    QCOMPARE(c->number(10.0), R::Rejected);
+    QVERIFY2(c->message().contains(QStringLiteral("too large")), qPrintable(c->message()));
+    QVERIFY(c->takeEdit().empty());
+    QCOMPARE(c->number(-1.0), R::Rejected);
+    QVERIFY(c->message().contains(QStringLiteral("positive")));
+    QCOMPARE(c->number(1.0), R::Done);  // still running after a rejected input
+    c = started(QStringLiteral("fillet_curve"),
+                {make_entity(nf::make_line({-5, 0, 0}, {-1, 0, 0})), make_entity(nf::make_line({0, 1, 0}, {0, 5, 0}))});
+    QCOMPARE(c->number(1.0), R::Rejected);
+    QVERIFY2(c->message().contains(QStringLiteral("do not meet")), qPrintable(c->message()));
+    c = started(QStringLiteral("fillet_curve"), {make_entity(nf::make_circle({0, 0, 0}, {0, 0, 1}, 2.0))});
+    QCOMPARE(c->number(0.5), R::Rejected);
+    QVERIFY(c->message().contains(QStringLiteral("no corners")));
+
+    // Offset: a curve that is not in the view's plane, a non-positive distance
+    c = started(QStringLiteral("offset_curve"),
+                {make_entity(nf::make_circle({0, 0, 0}, {0, 1, 0}, 3.0))});  // in the XZ plane
+    QCOMPARE(c->point({5, 0, 0}, kTop), R::Rejected);
+    QVERIFY2(c->message().contains(QStringLiteral("construction plane")), qPrintable(c->message()));
+    QCOMPARE(c->number(0.0), R::Rejected);
+    QVERIFY(c->message().contains(QStringLiteral("positive")));
+
+    // Revolve: degenerate axis, angle out of range
+    c = started(QStringLiteral("revolve"), {make_entity(nf::make_line({1, 0, 0}, {1, 0, 1}))});
+    c->point({0, 0, 0}, kTop);
+    QCOMPARE(c->point({0, 0, 0}, kTop), R::Rejected);
+    QVERIFY(c->message().contains(QStringLiteral("axis")));
+    c->point({0, 0, 1}, kTop);
+    QCOMPARE(c->number(400.0), R::Rejected);
+    QVERIFY(c->message().contains(QStringLiteral("360")));
+    // the kernel's function name is not shown
+    QVERIFY(!c->message().contains(QStringLiteral("_")));
   }
 
   void revolveLineIsCone() {

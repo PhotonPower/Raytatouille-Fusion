@@ -1,5 +1,6 @@
 #include <QElapsedTimer>
 #include <QTest>
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <nurbforge/nurbforge.hpp>
@@ -130,6 +131,88 @@ class TestSnapEngine : public QObject {
     QVERIFY(f.closed);
     QVERIFY(f.centre);
     QVERIFY(nf::distance(*f.centre, {2, 1, 0}) < 1e-9);
+  }
+
+  void polylineCornersAndSegmentMids() {
+    // open polyline: inner corners are Ends, each segment has a Mid; no whole-curve mid
+    const auto f = nfcad::kernel::curve_features(
+        nf::make_polyline({{0, 0, 0}, {4, 0, 0}, {4, 2, 0}, {10, 2, 0}}));
+    QVERIFY(!f.closed && f.start && f.end);
+    QVERIFY(!f.mid);
+    QCOMPARE(f.corners.size(), std::size_t{2});
+    QVERIFY(nf::distance(f.corners[0], {4, 0, 0}) < 1e-12);
+    QVERIFY(nf::distance(f.corners[1], {4, 2, 0}) < 1e-12);
+    QCOMPARE(f.segment_mids.size(), std::size_t{3});
+    QVERIFY(nf::distance(f.segment_mids[0], {2, 0, 0}) < 1e-12);
+    QVERIFY(nf::distance(f.segment_mids[1], {4, 1, 0}) < 1e-12);
+    QVERIFY(nf::distance(f.segment_mids[2], {7, 2, 0}) < 1e-12);
+  }
+
+  void closedPolylineCornersIncludeTheSeam() {
+    const auto f = nfcad::kernel::curve_features(
+        nf::make_rectangle_curve({0, 0, 0}, {4, 0, 0}, {0, 2, 0}));
+    QVERIFY(f.closed);
+    QCOMPARE(f.corners.size(), std::size_t{4});
+    for (const nf::Vec3& c : {nf::Vec3{0, 0, 0}, {4, 0, 0}, {4, 2, 0}, {0, 2, 0}}) {
+      QVERIFY(std::any_of(f.corners.begin(), f.corners.end(),
+                          [&](const nf::Vec3& p) { return nf::distance(p, c) < 1e-12; }));
+    }
+    QCOMPARE(f.segment_mids.size(), std::size_t{4});
+    for (const nf::Vec3& m : {nf::Vec3{2, 0, 0}, {4, 1, 0}, {2, 2, 0}, {0, 1, 0}}) {
+      QVERIFY(std::any_of(f.segment_mids.begin(), f.segment_mids.end(),
+                          [&](const nf::Vec3& p) { return nf::distance(p, m) < 1e-12; }));
+    }
+  }
+
+  void smoothCurvesHaveNoCorners() {
+    // a circle's double knots are no corners; a line's mid stays the whole-curve mid
+    QVERIFY(nfcad::kernel::curve_features(nf::make_circle({0, 0, 0}, {0, 0, 1}, 2.0)).corners.empty());
+    const auto line = nfcad::kernel::curve_features(nf::make_line({0, 0, 0}, {2, 0, 0}));
+    QVERIFY(line.corners.empty() && line.segment_mids.empty() && line.mid);
+    // a polygon: every vertex is a corner
+    const auto hex = nfcad::kernel::curve_features(
+        nf::make_polygon({0, 0, 0}, {0, 0, 1}, 3.0, 6, {1, 0, 0}));
+    QCOMPARE(hex.corners.size(), std::size_t{6});
+    QCOMPARE(hex.segment_mids.size(), std::size_t{6});
+  }
+
+  void snapsOnPolylineCornersAndSegments() {
+    // rectangle (20,10)-(30,16): corner End and edge Mid, in addition to the centre
+    std::vector<Item> items = {item(1, nf::make_rectangle_curve({20, 10, 0}, {10, 0, 0}, {0, 6, 0}))};
+    const Camera c = camera(ViewKind::Top);
+    SnapEngine e;
+    auto query = [&](const nf::Vec3& p, SnapMask mask) {
+      SnapQuery q;
+      q.cursor_px = *c.project({static_cast<float>(p.x), static_cast<float>(p.y), 0.0F}) + QPointF(2, -1);
+      q.mask = mask;
+      return e.query(targets(items), c, q);
+    };
+    auto r = query({30, 16, 0}, SnapMask::defaults());
+    QVERIFY(!r.empty());
+    QCOMPARE(r.front().type, SnapType::End);
+    QVERIFY(dist(r.front(), {30, 16, 0}) < 1e-12);
+    r = query({30, 13, 0}, only(SnapType::Mid));
+    QVERIFY(!r.empty());
+    QVERIFY(dist(r.front(), {30, 13, 0}) < 1e-12);
+    r = query({25, 10, 0}, only(SnapType::Mid));
+    QVERIFY(!r.empty());
+    QVERIFY(dist(r.front(), {25, 10, 0}) < 1e-12);
+  }
+
+  void commandPointsSnapAsEnds() {
+    // the start of a polyline being drawn (not in the document yet): snapping it closes it
+    const Camera c = camera(ViewKind::Top);
+    SnapQuery q;
+    q.cursor_px = *c.project({-40.0F, 25.0F, 0.0F}) + QPointF(3, 2);
+    q.mask = SnapMask::defaults();
+    q.command_points = {{-40.0, 25.0, 0.0}};
+    const auto r = engine_.query(targets(items_), c, q);
+    QVERIFY(!r.empty());
+    QCOMPARE(r.front().type, SnapType::End);
+    QCOMPARE(r.front().point.x, -40.0);
+    QCOMPARE(r.front().point.y, 25.0);
+    q.mask = only(SnapType::Mid);  // follows the End toggle
+    QVERIFY(engine_.query(targets(items_), c, q).empty());
   }
 
   // ---- snap types (engine, exact results)

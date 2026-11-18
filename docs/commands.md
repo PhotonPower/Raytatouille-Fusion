@@ -1,14 +1,17 @@
 # Commands and keyboard input (M5)
 
-Commands are started from the tool column, or by typing their name (or alias) – typing while a
-view has the focus goes straight to the command line. The prompt in the command line says what
-the command expects; the rubber band (orange) previews the result. Every result is one undo step.
+Commands are started from the tool column, or by typing their name (or alias) + Enter – typing
+while a view has the focus goes straight to the command line. The aliases are no shortcuts: the
+tooltip of each tool says what to type ("Type: l + Enter"). **H** in a view hides the selection;
+with nothing selected it is typed like any other letter (Helix: `h`). The prompt in the command
+line says what the command expects; the rubber band (orange) previews the result. Every result is
+one undo step.
 
 | Command | Alias | Input |
 |---|---|---|
 | Point | `pt` | locations, until Enter / right-click |
 | Line | `l` | start, end (or a length) |
-| Polyline | `pl` | points; Enter: open polyline, clicking the start point: closed |
+| Polyline | `pl` | points; Enter: open polyline, clicking the start point (it snaps as End): closed |
 | Rectangle | `rec` | corner, opposite corner (edges along the construction-plane axes) |
 | Polygon | `pol` | (number of sides,) centre, corner point or circumradius |
 | Circle | `c` | centre, radius point or radius |
@@ -39,7 +42,7 @@ the command expects; the rubber band (orange) previews the result. Every result 
 | Offset curve | `offset` | (distance,) click the side; on the selection, in the construction plane |
 | Fillet curves | `fillet` | radius; two selected curves (arc + both trimmed) or one curve (all corners) |
 | Plane | `plane` | two corners in the construction plane |
-| Extrude | `ext` | selected curves; distance along the plane normal, or two points |
+| Extrude | `ext` | selected curves; a typed distance along the normal of the view's construction plane (Top / Perspective: +Z, Front: −Y, Left: −X; negative: the other way), or two points |
 | Revolve | `rev` | selected curves; axis start, axis end, angle (Enter: 360°) |
 | Loft | `loft` | ≥ 2 selected sections, in selection order |
 | Sweep 1 / 2 rails | `sweep1` / `sweep2` | selected: profile, then rail(s) |
@@ -78,8 +81,19 @@ tessellation.
 | `d<a` / `@d<a` | polar in the construction plane (angle in degrees from its u axis), absolute / relative |
 | number | what the prompt asks for (radius, sides, turns); otherwise a length from the last point towards the cursor |
 | name | starts a command |
-| Enter on an empty line, right-click | finishes the command, or repeats the last one |
+| Enter on an empty line, right-click in a view | finishes the command, or repeats the last one (a right *drag* only orbits / pans) |
 | Esc | cancels |
+
+The construction plane for typed input is that of the view the cursor was last over while the
+command runs; before that, the active view's (the view clicked last).
+
+## Errors
+
+Input a command cannot use leaves it running and the status bar says why, e.g. "Fillet: radius 5
+too large for these curves", "Offset curve: the curve has corners – …", "Split: the point is at
+an end of the curve", "Trim: the cutting objects do not cross the curve", "Revolve: the angle
+must be between -360 and 360 degrees and not 0". Only input without a specific reason shows
+"Input not accepted – <prompt>".
 
 Decimal point `.`; coordinates are separated by `,`.
 
