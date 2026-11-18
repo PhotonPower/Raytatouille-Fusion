@@ -2,6 +2,7 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include "document/selection.hpp"
 #include "viewport/viewport.hpp"
 
 using nfcad::viewport::Viewport;
@@ -60,6 +61,46 @@ class TestViewportInput : public QObject {
     const QVector3D f0 = persp.camera().forward();
     drag(persp, Qt::LeftButton, Qt::AltModifier, {400, 300}, {500, 300});
     QVERIFY((persp.camera().forward() - f0).length() > 0.1F);
+  }
+
+  void rightClickWithoutDragRepeats() {
+    // a right click (no drag) with no point input: rightClicked (the controller repeats the
+    // last command); a right drag only orbits; during point input: pointInputFinished
+    Viewport v(ViewKind::Perspective);
+    v.resize(800, 600);
+    QSignalSpy clicked(&v, &Viewport::rightClicked);
+    QSignalSpy finished(&v, &Viewport::pointInputFinished);
+    QTest::mouseClick(&v, Qt::RightButton, Qt::NoModifier, {400, 300});
+    QCOMPARE(clicked.count(), 1);
+    const QVector3D f0 = v.camera().forward();
+    drag(v, Qt::RightButton, Qt::NoModifier, {400, 300}, {460, 320});
+    QVERIFY((v.camera().forward() - f0).length() > 0.01F);  // orbited
+    QCOMPARE(clicked.count(), 1);
+    v.setPointInput(true);
+    QTest::mouseClick(&v, Qt::RightButton, Qt::NoModifier, {400, 300});
+    QCOMPARE(clicked.count(), 1);
+    QCOMPARE(finished.count(), 1);
+  }
+
+  void hTypesWithoutSelection() {
+    // H is the Hide shortcut; with nothing selected the view takes it as a letter (Helix: h)
+    Viewport v(ViewKind::Top);
+    nfcad::document::Selection selection;
+    v.setSelection(&selection);
+    auto overridden = [&](Qt::KeyboardModifiers mods) {
+      QKeyEvent e(QEvent::ShortcutOverride, Qt::Key_H, mods, QStringLiteral("h"));
+      e.ignore();
+      QApplication::sendEvent(&v, &e);
+      return e.isAccepted();
+    };
+    QVERIFY(overridden(Qt::NoModifier));
+    QVERIFY(!overridden(Qt::ShiftModifier));  // Shift+H stays Unhide
+    QSignalSpy typed(&v, &Viewport::textTyped);
+    QTest::keyClick(&v, Qt::Key_H);
+    QCOMPARE(typed.count(), 1);
+    QCOMPARE(typed.first().at(0).toString(), QStringLiteral("h"));
+    selection.apply({{1, {}}}, nfcad::document::Selection::Mode::Replace);
+    QVERIFY(!overridden(Qt::NoModifier));  // something selected: H hides it
   }
 
   void cursorReportsPlanePoint() {

@@ -30,7 +30,8 @@ environment* should then show only ✓.
 ## The main window
 
 - **Tool column** (left): commands in collapsible groups – Draw, Curves, Surfaces, Solids,
-  Transform, Edit, Analyze, and one group per plugin. Hover for name and shortcut.
+  Transform, Edit, Analyze, and one group per plugin. Hover for the name and what to type to
+  start the tool from the keyboard (e.g. "Type: l + Enter").
 - **Four views** (centre): Front (XZ), Left (YZ), Top (XY) and Perspective. The header of each
   view switches its display mode; **Space** maximises the view under the cursor and back.
 - **Display modes** (toolbar): *Wireframe*, *Surfaces* (flat, with edges) and *Shaded*.
@@ -66,13 +67,19 @@ in yellow. **Esc** clears the selection (or first cancels the running command or
 
 ## Drawing and modelling
 
-Start a command from the tool column, by its shortcut, or by typing its name or alias. Input:
+Start a command from the tool column or by typing its name or alias + Enter (typing in a view
+goes to the command line; **H** there hides the selection, with nothing selected it is just a
+letter, e.g. for Helix `h`). Input:
 
 - **Points** with the mouse (with object snaps) or typed: `x,y,z`, `x,y` (in the construction
   plane), `@dx,dy,dz` relative to the last point, `d<a` as distance and angle.
-- **Numbers** where a length, radius or count is expected.
-- **Enter** or right-click finishes (e.g. a polyline); Enter with an empty command line repeats
-  the last command. **F8** toggles *Ortho* (horizontal / vertical in the construction plane).
+- **Numbers** where a length, radius or count is expected. A typed Extrude distance goes along
+  the normal of the view's construction plane (Front: −Y, Left: −X, Top: +Z).
+- **Enter** or right-click (without dragging) finishes (e.g. a polyline); Enter with an empty
+  command line or a right-click in a view with no running command repeats the last command.
+  **F8** toggles *Ortho* (horizontal / vertical in the construction plane).
+- If an input cannot be used, the status bar says why (e.g. "Fillet: radius 5 too large for
+  these curves") and the command keeps waiting.
 
 All commands with their input: [commands.md](commands.md). Every command is one undo step.
 
@@ -80,7 +87,8 @@ All commands with their input: [commands.md](commands.md). Every command is one 
 
 The cursor snaps to points, ends, midpoints, centres, quadrants (where the axes of the
 construction plane pierce circles), intersections, face corners and edges, and "near" any
-curve. A glyph shows the type:
+curve. Every corner of a polyline, rectangle or polygon counts as an end and every segment has a
+midpoint; the start of a polyline being drawn snaps too, which closes it. A glyph shows the type:
 
 ![Snap glyphs](images/snap-glyphs.png)
 
@@ -161,13 +169,13 @@ Writing your own plugins: [plugin-api.md](plugin-api.md).
 | Ctrl/Cmd + A | select all |
 | Delete / Backspace | delete the selection |
 | Ctrl/Cmd + G, Shift + Ctrl/Cmd + G | group, ungroup |
-| H, Shift + H | hide the selection, unhide (show what Hide and Isolate hid) |
+| H, Shift + H | hide the selection (with nothing selected, H in a view is typed into the command line), unhide (show what Hide and Isolate hid) |
 | Esc | cancel the command / plugin job, else clear the selection |
-| Enter | finish the command; on an empty command line: repeat the last one |
+| Enter, right-click | finish the command; on an empty command line / with no running command: repeat the last one |
 | Space | maximise / restore the view under the cursor |
 | Z, E | zoom extents (active view) |
 | F3 | object snaps on / off |
 | F8 | ortho on / off |
 | Tab / Shift + Tab | next / previous snap candidate |
 | Alt (held) | no snapping |
-| L, C, M | line, circle, move (more in the tooltips of the tool column) |
+| letters + Enter | a command by its name or alias, e.g. `l` line, `c` circle, `m` move (the tooltips of the tool column name them) |

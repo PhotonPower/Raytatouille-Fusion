@@ -229,7 +229,7 @@ void MainWindow::rebuildPluginUi() {
       const QString action = a.id;
       sub->addAction(a.label, this, [this, host, action] { runPluginAction(host, action); });
       group.tools.push_back({QStringLiteral("plugin:%1/%2").arg(m.id, a.id), a.label,
-                             a.label.left(3), QKeySequence()});
+                             a.label.left(3), QKeySequence(), QString()});
     }
     if (!group.tools.empty() && !hidden.contains(m.id)) groups.push_back(std::move(group));
   }

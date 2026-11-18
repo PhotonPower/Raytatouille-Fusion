@@ -23,7 +23,15 @@ struct CircleInfo {
 struct CurveFeatures {
   bool closed = false;
   std::optional<nf::Vec3> start, end;  ///< open curves only
-  std::optional<nf::Vec3> mid;         ///< open curves: point at half the arc length
+  /// Open curves without corners: point at half the arc length.
+  std::optional<nf::Vec3> mid;
+  /// Corners (End snaps): the break points between the segments of a polyline (interior knots
+  /// of multiplicity >= degree of a degree-1 curve), generally the C0 kinks of a curve (left and
+  /// right tangents differ); for closed curves also the seam if it is a kink.
+  std::vector<nf::Vec3> corners;
+  /// Curves with corners (polylines, rectangles, polygons, joined curves): the middle of each
+  /// segment between two corners / ends (half its arc length; straight: the midpoint).
+  std::vector<nf::Vec3> segment_mids;
   std::optional<nf::Vec3> centre;      ///< circles / arcs: centre; closed planar curves: centroid
   /// Circles / arcs: points where the planes through the centre parallel to the coordinate
   /// planes cut the circle (only those on the arc).

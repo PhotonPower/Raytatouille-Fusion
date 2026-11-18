@@ -46,7 +46,7 @@ bool attempt(QString& message, const QString& what, F&& make) {
     make();
     return true;
   } catch (const std::exception& e) {
-    message = QObject::tr("%1 failed: %2").arg(what, QString::fromUtf8(e.what()));
+    message = failure(what, e);
     return false;
   }
 }
@@ -176,13 +176,17 @@ class ExtrudeCommand : public CurveInputCommand {
                                "the direction");
   }
   Result number(double h) override {
-    if (from_ || std::abs(h) < kEps) return Result::Rejected;
-    return create(V(plane_.n) * h);
+    if (from_) return Result::Rejected;  // the controller takes it as a distance towards the cursor
+    if (std::abs(h) < kEps) {
+      message_ = QObject::tr("Extrude: the distance must not be 0");
+      return Result::Rejected;
+    }
+    // along the normal of the construction plane of the view the user works in (Front: -Y, ...)
+    return create(V(view_plane_.n) * h);
   }
-  Result point(const Point3& p, const PlaneFrame& plane) override {
+  Result point(const Point3& p, const PlaneFrame&) override {
     if (!from_) {
       from_ = p;
-      plane_ = plane;
       return Result::Continue;
     }
     if (dist(*from_, p) < kEps) return Result::Rejected;
@@ -205,16 +209,16 @@ class ExtrudeCommand : public CurveInputCommand {
     return out;
   }
   std::optional<Point3> basePoint() const override { return from_; }
-  // the construction plane of the first input decides the default direction
-  bool prepare() override { return true; }
 
  private:
   Result create(const nf::Vec3& d) {
-    for (const nf::NurbsCurve& c : curves_) addSurface(nf::extrude(c, d));
-    return Result::Done;
+    const bool ok = attempt(message_, title(), [&] {
+      for (const nf::NurbsCurve& c : curves_) addSurface(nf::extrude(c, d));
+    });
+    if (!ok) entities_.clear();
+    return ok ? Result::Done : Result::Rejected;
   }
   std::optional<Point3> from_;
-  PlaneFrame plane_;
 };
 
 // ------------------------------------------------------------------------------ Revolve
@@ -232,14 +236,23 @@ class RevolveCommand : public CurveInputCommand {
       a_ = p;
       return Result::Continue;
     }
-    if (!b_ && dist(*a_, p) > kEps) {
+    if (!b_) {
+      if (dist(*a_, p) <= kEps) {
+        message_ = QObject::tr("Revolve: the end of the axis must differ from its start");
+        return Result::Rejected;
+      }
       b_ = p;
       return Result::Continue;
     }
+    message_ = QObject::tr("Revolve: type the angle in degrees, or Enter for 360");
     return Result::Rejected;
   }
   Result number(double deg) override {
-    if (!b_ || deg == 0.0 || std::abs(deg) > 360.0) return Result::Rejected;
+    if (!b_) return Result::Rejected;  // a length along the cursor direction (axis point)
+    if (deg == 0.0 || std::abs(deg) > 360.0) {
+      message_ = QObject::tr("Revolve: the angle must be between -360 and 360 degrees and not 0");
+      return Result::Rejected;
+    }
     return create(deg * std::numbers::pi / 180.0);
   }
   Result finish() override { return b_ ? create(2.0 * std::numbers::pi) : Result::Cancelled; }
@@ -343,18 +356,21 @@ class OffsetCurveCommand : public CurveInputCommand {
         .arg(distance_);
   }
   Result number(double d) override {
-    if (d <= 0) return Result::Rejected;
+    if (d <= 0) {
+      message_ = QObject::tr("Offset curve: the distance must be positive (click the side)");
+      return Result::Rejected;
+    }
     distance_ = d;
     return Result::Continue;
   }
   Result point(const Point3& p, const PlaneFrame& plane) override {
-    const bool ok = attempt(message_, title(), [&] {
+    try {
       for (const nf::NurbsCurve& c : curves_) {
         entities_.push_back(document::make_entity(nf::offset_curve(c, side(c, p, plane) * distance_, V(plane.n))));
       }
-    });
-    if (!ok) {
+    } catch (const std::exception& e) {
       entities_.clear();
+      message_ = explain(e);
       return Result::Rejected;
     }
     return Result::Done;
@@ -371,6 +387,24 @@ class OffsetCurveCommand : public CurveInputCommand {
   }
 
  private:
+  /// The kernel's reason in the user's terms.
+  QString explain(const std::exception& e) const {
+    const QString why = reason(e);
+    if (why.contains(QLatin1String("does not lie in a plane"))) {
+      return QObject::tr("Offset curve: the curve does not lie in the construction plane of this "
+                         "view – click the side in a view parallel to the curve");
+    }
+    if (why.contains(QLatin1String("corner"))) {
+      return QObject::tr("Offset curve: the curve has corners – Explode it and offset the pieces, "
+                         "or fillet the corners first");
+    }
+    if (why.contains(QLatin1String("radius of curvature")) || why.contains(QLatin1String("cusp"))) {
+      return QObject::tr("Offset curve: distance %1 is larger than the radius of curvature on "
+                         "that side")
+          .arg(distance_);
+    }
+    return failure(title(), e);
+  }
   static double side(const nf::NurbsCurve& c, const Point3& p, const PlaneFrame& plane) {
     // left of the direction of travel (seen from the plane normal) is positive
     const nf::CurvePoint foot = nf::closest_point(c, V(p));
@@ -389,13 +423,20 @@ class FilletCurvesCommand : public CurveInputCommand {
     return QObject::tr("Fillet: radius (two curves: fillet between them; one curve: all its corners)");
   }
   Result number(double r) override {
-    if (r <= 0) return Result::Rejected;
-    const bool ok = attempt(message_, title(), [&] {
+    if (r <= 0) {
+      message_ = QObject::tr("Fillet: the radius must be positive");
+      return Result::Rejected;
+    }
+    try {
       const nf::Vec3 n = plane_normal();
       if (curves_.size() == 1) {
+        if (kernel::curve_features(curves_[0]).corners.empty()) {
+          message_ = QObject::tr("Fillet: the curve has no corners");
+          return Result::Rejected;
+        }
         replace_.emplace_back(sources_[0].id, std::make_shared<const document::Geometry>(
                                                   nf::fillet_corners(curves_[0], r)));
-        return;
+        return Result::Done;
       }
       const nf::CurveFillet f = nf::fillet_curves(curves_[0], curves_[1], r, n);
       entities_.push_back(document::make_entity(f.arc));
@@ -405,10 +446,10 @@ class FilletCurvesCommand : public CurveInputCommand {
       if (f.trimmed_b) {
         replace_.emplace_back(sources_[1].id, std::make_shared<const document::Geometry>(*f.trimmed_b));
       }
-    });
-    if (!ok) {
+    } catch (const std::exception& e) {
       entities_.clear();
       replace_.clear();
+      message_ = explain(e, r);
       return Result::Rejected;
     }
     return Result::Done;
@@ -420,6 +461,24 @@ class FilletCurvesCommand : public CurveInputCommand {
   QString requirement() const override { return QObject::tr("one or two planar curves"); }
 
  private:
+  /// The kernel's reason in the user's terms.
+  static QString explain(const std::exception& e, double r) {
+    const QString why = reason(e);
+    if (why.contains(QLatin1String("too large")) || why.contains(QLatin1String("no fillet centre"))) {
+      return QObject::tr("Fillet: radius %1 too large for these curves").arg(r);
+    }
+    if (why.contains(QLatin1String("do not intersect"))) {
+      return QObject::tr("Fillet: the curves do not meet – extend them or pick two curves that "
+                         "cross");
+    }
+    if (why.contains(QLatin1String("tangent at the corner"))) {
+      return QObject::tr("Fillet: the curves are tangent where they meet (nothing to round)");
+    }
+    if (why.contains(QLatin1String("not planar"))) {
+      return QObject::tr("Fillet: the curve is not planar");
+    }
+    return QObject::tr("Fillet: %1").arg(why);
+  }
   nf::Vec3 plane_normal() const {
     // Newell normal of the control points of both curves
     nf::Vec3 n{0, 0, 0};

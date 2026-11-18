@@ -33,7 +33,7 @@ class Command {
     Continue,   ///< waiting for more input
     Done,       ///< finished; take the entities / message
     Cancelled,  ///< nothing created
-    Rejected,   ///< input not accepted in this state (state unchanged)
+    Rejected,   ///< input not accepted in this state (state unchanged); message(): why
   };
 
   virtual ~Command() = default;
@@ -55,6 +55,15 @@ class Command {
   }
   /// Reference for relative input (@dx,dy,dz), ortho and typed distances.
   [[nodiscard]] virtual std::optional<Point3> basePoint() const { return std::nullopt; }
+  /// Points of the object being drawn that the cursor may snap to as End (e.g. the vertices of
+  /// a polyline in progress: snapping its start closes it). Not yet in the document.
+  [[nodiscard]] virtual std::vector<Point3> snapPoints() const { return {}; }
+
+  /// Construction plane of the view the user works in: the active view when the command starts,
+  /// then the view under the cursor (kept current by the controller). Typed input that needs a
+  /// plane before any point was clicked (e.g. Extrude's distance) uses it.
+  void setViewPlane(const PlaneFrame& plane) { view_plane_ = plane; }
+  [[nodiscard]] const PlaneFrame& viewPlane() const { return view_plane_; }
 
   /// Commands on the selection (transforms, Booleans): called once at the start with the
   /// selected entities in selection order. Return false (and set message_) if unsuitable.
@@ -70,14 +79,18 @@ class Command {
   [[nodiscard]] document::Edit takeEdit() {
     return {std::exchange(entities_, {}), std::exchange(remove_, {}), std::exchange(replace_, {})};
   }
-  /// Result text (e.g. a measured distance).
+  /// Result text (e.g. a measured distance); after Rejected: why the input was not accepted
+  /// (empty if there is no specific reason).
   [[nodiscard]] QString message() const { return message_; }
+  /// message() and clears it (the controller reads the reason of a Rejected input once).
+  [[nodiscard]] QString takeMessage() { return std::exchange(message_, {}); }
 
  protected:
   std::vector<document::Entity> entities_;
   std::vector<document::EntityId> remove_;
   std::vector<std::pair<document::EntityId, document::GeometryPtr>> replace_;
   QString message_;
+  PlaneFrame view_plane_;
 };
 
 /// Creates a command by id or alias (case-insensitive): point/pt, line/l, polyline/pl,

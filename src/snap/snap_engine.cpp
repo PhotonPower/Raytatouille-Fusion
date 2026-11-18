@@ -76,7 +76,13 @@ const SnapEngine::Cache& SnapEngine::cache(const pick::Target& t) {
     const kernel::CurveFeatures f = kernel::curve_features(curve);
     if (!edge && f.start) c.fixed.push_back({*f.start, SnapType::End, false});
     if (!edge && f.end) c.fixed.push_back({*f.end, SnapType::End, false});
+    // polylines, rectangles, polygons: every corner is an End, every segment has a Mid
+    // (corners of face edges are Face corners)
+    if (!edge) {
+      for (const nf::Vec3& p : f.corners) c.fixed.push_back({p, SnapType::End, false});
+    }
     if (f.mid) c.fixed.push_back({*f.mid, SnapType::Mid, edge});
+    for (const nf::Vec3& p : f.segment_mids) c.fixed.push_back({p, SnapType::Mid, edge});
     if (f.centre) c.fixed.push_back({*f.centre, SnapType::Centre, edge});
     for (const nf::Vec3& qd : f.quadrants) c.fixed.push_back({qd, SnapType::Quadrant, edge});
   };
@@ -233,6 +239,9 @@ std::vector<SnapResult> SnapEngine::query(const std::vector<pick::Target>& targe
       }
     }
   }
+
+  // ---- points of the object being drawn (e.g. the start of a polyline in progress)
+  for (const SnapPoint& p : q.command_points) add({p.x, p.y, p.z}, SnapType::End, 0);
 
   // ---- Grid points of the construction plane
   if (q.mask.test(SnapType::Grid) && q.grid) {

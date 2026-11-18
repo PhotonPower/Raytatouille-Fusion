@@ -67,6 +67,40 @@ std::optional<nf::Vec3> planar_centroid(const nf::NurbsCurve& c) {
   return sum / area;
 }
 
+/// Unit tangents just before and just after parameter u.
+std::pair<std::optional<nf::Vec3>, std::optional<nf::Vec3>> side_tangents(const nf::NurbsCurve& c,
+                                                                           double u, double h) {
+  const double a = c.domain_start();
+  const double b = c.domain_end();
+  return {unit(c.derivatives(std::max(a, u - h), 1)[1]), unit(c.derivatives(std::min(b, u + h), 1)[1])};
+}
+
+bool is_kink(const std::optional<nf::Vec3>& left, const std::optional<nf::Vec3>& right) {
+  if (!left || !right) return true;  // a vanishing tangent: treat as a corner
+  return nf::dot(*left, *right) < std::cos(1e-4);
+}
+
+/// Break points of a curve: parameters of its corners inside the domain (see CurveFeatures).
+std::vector<double> corner_parameters(const nf::NurbsCurve& c) {
+  std::vector<double> out;
+  const double a = c.domain_start();
+  const double b = c.domain_end();
+  const double h = 1e-7 * (b - a);
+  const auto [values, mult] = nf::unique_knots(c.knots());
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    const double u = values[i];
+    if (u <= a + h || u >= b - h) continue;
+    if (static_cast<std::size_t>(mult[i]) < c.degree()) continue;  // smooth there (C1 or better)
+    if (c.degree() == 1) {
+      out.push_back(u);  // every vertex of a polyline
+      continue;
+    }
+    const auto [left, right] = side_tangents(c, u, h);
+    if (is_kink(left, right)) out.push_back(u);
+  }
+  return out;
+}
+
 }  // namespace
 
 std::optional<CircleInfo> as_circle(const nf::NurbsCurve& c) {
@@ -98,13 +132,58 @@ CurveFeatures curve_features(const nf::NurbsCurve& c) {
   double size = 0.0;
   for (const auto& p : c.control_points()) size = std::max(size, nf::distance(p, a));
   f.closed = nf::distance(a, b) <= 1e-9 * std::max(size, 1.0);
-  if (!f.closed) {
+  const double u0 = c.domain_start();
+  const double u1 = c.domain_end();
+  const std::vector<double> breaks = corner_parameters(c);
+  for (const double u : breaks) f.corners.push_back(c.evaluate(u));
+  bool seam_corner = false;
+  if (f.closed) {
+    const double h = 1e-7 * (u1 - u0);
+    seam_corner = c.degree() == 1 ||
+                  is_kink(side_tangents(c, u1, h).first, side_tangents(c, u0, h).second);
+    if (seam_corner) f.corners.push_back(a);
+  } else {
     f.start = a;
     f.end = b;
+  }
+  // the middle of the curve piece [s, t] (half its arc length; straight: the midpoint)
+  auto piece_mid = [&](double s, double t) {
+    if (c.degree() == 1) return (c.evaluate(s) + c.evaluate(t)) * 0.5;
+    try {
+      return c.evaluate(nf::parameter_at_length(c, nf::arc_length(c, u0, s) +
+                                                       0.5 * nf::arc_length(c, s, t)));
+    } catch (const std::exception&) {
+      return c.evaluate(0.5 * (s + t));
+    }
+  };
+  if (!breaks.empty() || seam_corner) {
+    // segments between consecutive corners / ends
+    std::vector<double> ends = {u0};
+    ends.insert(ends.end(), breaks.begin(), breaks.end());
+    ends.push_back(u1);
+    const bool wrap = f.closed && !seam_corner;  // the first and the last piece are one segment
+    for (std::size_t i = wrap ? 1 : 0; i + (wrap ? 2 : 1) < ends.size(); ++i) {
+      f.segment_mids.push_back(piece_mid(ends[i], ends[i + 1]));
+    }
+    if (wrap) {
+      // (degree >= 2: closed polylines always have a corner at the seam)
+      const double s = breaks.back();
+      const double t = breaks.front();
+      try {
+        const double l1 = nf::arc_length(c, s, u1);
+        const double half = 0.5 * (l1 + nf::arc_length(c, u0, t));
+        f.segment_mids.push_back(c.evaluate(
+            half <= l1 ? nf::parameter_at_length(c, nf::arc_length(c, u0, s) + half)
+                       : nf::parameter_at_length(c, half - l1)));
+      } catch (const std::exception&) {
+        f.segment_mids.push_back(c.evaluate(t));
+      }
+    }
+  } else if (!f.closed) {
     try {
       f.mid = c.evaluate(nf::parameter_at_length(c, 0.5 * nf::arc_length(c)));
     } catch (const std::exception&) {
-      f.mid = c.evaluate(0.5 * (c.domain_start() + c.domain_end()));
+      f.mid = c.evaluate(0.5 * (u0 + u1));
     }
   }
   if (const auto circle = as_circle(c)) {

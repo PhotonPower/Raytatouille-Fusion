@@ -206,6 +206,7 @@ void Viewport::updateSnap(const QPointF& px, Qt::KeyboardModifiers mods) {
     q.mask = snap_mask_;
     q.faces_occlude = mode_ != render::DisplayMode::Wireframe;
     q.grid = std::make_pair(cplane_, grid_spacing(camera_.worldPerPixel()));
+    q.command_points = command_points_;
     snaps_ = snap_engine_->query(scene_->pickTargets(), camera_, q);
   }
   showSnap();
@@ -562,6 +563,7 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
   if (drag_ != Drag::None) {
     const bool click = !drag_moved_;
     drag_ = Drag::None;
+    if (!point_input_ && click && event->button() == Qt::RightButton) emit rightClicked();
     if (point_input_) {
       setCursor(Qt::CrossCursor);
       if (click && event->button() == Qt::RightButton) emit pointInputFinished();
@@ -609,6 +611,17 @@ void Viewport::wheelEvent(QWheelEvent* event) {
 }
 
 bool Viewport::event(QEvent* event) {
+  if (event->type() == QEvent::ShortcutOverride) {
+    // H hides the selection (window shortcut); with nothing selected it is a typed letter, so
+    // the Helix aliases "h" / "he" can be typed in a view like any other command name
+    auto* key = static_cast<QKeyEvent*>(event);
+    const Qt::KeyboardModifiers mods = key->modifiers() & ~Qt::KeypadModifier;
+    if (key->key() == Qt::Key_H && mods == Qt::NoModifier &&
+        (selection_ == nullptr || selection_->empty())) {
+      event->accept();  // delivered as a key press to keyPressEvent -> textTyped
+      return true;
+    }
+  }
   if (event->type() == QEvent::KeyPress && point_input_) {
     auto* key = static_cast<QKeyEvent*>(event);
     if ((key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab) && !snaps_.empty()) {

@@ -80,6 +80,10 @@ class TestEditCommands : public QObject {
     const Entity line = with_id(make_entity(nf::make_line({0, 0, 0}, {10, 0, 0})), 1);
     auto s = create_command(QStringLiteral("split"));
     QVERIFY(s->begin({line}));
+    // at an end of the curve: rejected with the reason (not just "input not accepted")
+    QCOMPARE(s->point({-2, 0, 0}, kTop), R::Rejected);
+    QVERIFY2(s->message().startsWith(QStringLiteral("Split: ")) && s->message().contains(QStringLiteral("end")),
+             qPrintable(s->message()));
     QCOMPARE(s->point({4, 1, 0}, kTop), R::Done);
     const auto e = s->takeEdit();
     QCOMPARE(e.add.size(), std::size_t{2});
@@ -88,6 +92,11 @@ class TestEditCommands : public QObject {
     const Entity cutter = with_id(make_entity(nf::make_line({3, -1, 0}, {3, 1, 0})), 2);
     const Entity cutter2 = with_id(make_entity(nf::make_line({7, -1, 0}, {7, 1, 0})), 3);
     auto t = create_command(QStringLiteral("trim"));
+    const Entity far = with_id(make_entity(nf::make_line({3, 5, 0}, {3, 6, 0})), 4);
+    QVERIFY(t->begin({line, far}));
+    QCOMPARE(t->point({5, 0, 0}, kTop), R::Rejected);
+    QVERIFY2(t->message().contains(QStringLiteral("do not cross")), qPrintable(t->message()));
+    t = create_command(QStringLiteral("trim"));
     QVERIFY(t->begin({line, cutter, cutter2}));
     QCOMPARE(t->point({5, 0.2, 0}, kTop), R::Done);  // remove the middle part
     const auto te = t->takeEdit();
