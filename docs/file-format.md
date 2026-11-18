@@ -13,7 +13,9 @@ Geometry is stored exactly: degrees, knot vectors, control points and weights â€
   "format": "nfcad",
   "version": 1,
   "units": "mm",
-  "layers":   [ { "id": 0, "name": "Default", "color": "#bec6d2", "visible": true } ],
+  "layers":   [ { "id": 0, "name": "Default", "color": "#bec6d2", "visible": true },
+                { "id": 1, "name": "Mounts", "color": "#78a0dc", "visible": true, "locked": true } ],  // "locked": optional
+  "current_layer": 1,                            // optional (missing: 0, Default)
   "groups":   [ { "id": 1, "name": "objective", "parent": 0, "visible": true } ],   // v2
   "entities": [ { "id": "1", "name": "part_0_0", "layer": 0, "visible": true,
                   "color": "#ff0000",            // optional, default: layer colour
@@ -34,6 +36,14 @@ Geometry is stored exactly: degrees, knot vectors, control points and weights â€
 | `surface` | `degree_u`, `degree_v`, `knots_u`, `knots_v`, `num_u`, `num_v`, `points` (row-major, i along u), `weights` |
 | `trimmed_surface` | `surface`, `outer` and `holes` (lists of 2D curves in parameter space, z = 0; omitted if untrimmed), `label` |
 | `shell` | `faces`: list of trimmed surfaces; topology (edges, vertices) is rebuilt by sewing on load |
+
+Layer `0` is *Default*; it is always there (added when a file lacks it). `locked` (optional,
+written only when true) keeps the layer's objects visible but out of selection. `current_layer`
+(optional, written only when it is not 0) is the layer new objects go to; an unknown id falls back
+to 0. Both came after 1.0 within version 2: older readers ignore them (and leave them out when they
+save), and files without them load as before â€“ no layer locked, Default current. Visibility (`visible` of layers, groups and
+entities), the lock and the current layer are saved with the document: changing them marks it
+modified, although they are not undo steps.
 
 Groups form the model tree (`parent` 0 = top level). Attributes are free key / value data
 (strings, numbers, booleans); plugins use namespaced keys (`rtt.*`), `sim.inactive = true`

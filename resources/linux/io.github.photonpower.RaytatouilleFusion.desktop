@@ -7,5 +7,5 @@ Exec=RaytatouilleFusion %F
 Icon=io.github.photonpower.RaytatouilleFusion
 Terminal=false
 Categories=Graphics;Engineering;3DGraphics;
-MimeType=model/step;application/step;
+MimeType=application/x-raytatouille-fusion;application/x-raytatouille-fusion-plugin;model/step;application/step;
 Keywords=CAD;NURBS;STEP;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <optional>
 #include <set>
 #include <vector>
@@ -8,6 +9,8 @@
 #include "document/entity.hpp"
 
 namespace nfcad::document {
+
+class Document;
 
 /// Part of an entity: a face, an edge or a B-rep vertex of a shell or face (index into the
 /// display mesh's sub-elements, which follow the B-rep numbering).
@@ -26,15 +29,16 @@ struct SelectionItem {
 
 [[nodiscard]] QString sub_element_name(const SubElement& s);
 
-/// Selected and hovered items (M3). Kept consistent with the document: removed entities
-/// leave the selection. Not part of the undo history.
+/// Selected and hovered items (M3). Kept consistent with the document: removed entities and
+/// those on a locked layer leave the selection, and objects on a locked layer cannot be
+/// selected. Not part of the undo history.
 class Selection : public QObject {
   Q_OBJECT
  public:
   enum class Mode { Replace, Add, Remove, Toggle };
 
   explicit Selection(QObject* parent = nullptr);
-  /// Follows entity removal / document reset.
+  /// Follows entity removal / document reset and keeps locked objects out.
   void attach(class Document* doc);
 
   [[nodiscard]] const std::set<SelectionItem>& items() const { return items_; }
@@ -63,6 +67,7 @@ class Selection : public QObject {
  private:
   void dropEntity(EntityId id);
   void syncOrder();
+  QPointer<Document> doc_;
   std::set<SelectionItem> items_;
   std::vector<SelectionItem> order_;
   std::optional<SelectionItem> hovered_;

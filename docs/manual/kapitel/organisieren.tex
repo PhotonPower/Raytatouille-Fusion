@@ -25,8 +25,11 @@ seine Ebene und alle seine Gruppen eingeschaltet sind (\autoref{sec:ausblenden})
 \index{Ebene}\index{Layer}
 
 Die Ebenen verwaltet das Dock \gui{Layers} (\menu{View,Layers}). Es zeigt eine Liste mit den
-Spalten \gui{Layer} (Kontrollkästchen und Name) und \gui{Colour} (Farbfeld) und darunter zwei
-Knöpfe.
+Spalten \gui{Layer} (Kontrollkästchen und Name), \gui{Lock} (Kontrollkästchen) und
+\gui{Colour} (Farbfeld) und darunter vier Knöpfe. Die \emph{aktuelle} Ebene steht fett. Ein
+Rechtsklick auf eine Ebene öffnet ein Kontextmenü mit denselben Befehlen (\gui{Make current},
+\gui{Rename}, \gui{Colour...}, \gui{Lock}/\gui{Unlock}, \gui{Move selection here},
+\gui{Delete layer...}).
 
 \begin{referenz}{>{\raggedright\arraybackslash}p{4.2cm}X}
 \toprule
@@ -35,29 +38,41 @@ Knöpfe.
 \endhead
 Kontrollkästchen & Ebene ein- oder ausblenden. Objekte einer ausgeblendeten Ebene sind
   unsichtbar und lassen sich weder auswählen noch fangen. \\
-\maus{Doppelklick} auf den Namen & Name bearbeiten; mit \keys{Enter} bestätigen. \\
+\maus{Doppelklick} auf den Namen & Name bearbeiten; mit \keys{Enter} bestätigen
+  (ein Rückgängig-Schritt \enquote{Rename layer}). \\
+Kontrollkästchen \gui{Lock} & Ebene sperren oder entsperren. Objekte einer gesperrten Ebene
+  bleiben sichtbar und lassen sich fangen, aber nicht auswählen -- und damit auch nicht
+  verschieben, bearbeiten oder löschen. Beim Sperren verlassen sie die Auswahl. \\
 \maus{Doppelklick} auf das Farbfeld & öffnet den Dialog \gui{Layer colour}. Die neue Farbe
-  gilt sofort für alle Objekte der Ebene, die keine eigene Farbe haben. \\
+  gilt sofort für alle Objekte der Ebene, die keine eigene Farbe haben (ein Rückgängig-Schritt
+  \enquote{Layer colour}). \\
 \gui{New layer} & legt eine neue Ebene \enquote{Layer \textit{n}} an, mit einer
-  automatisch gewählten Farbe, die sich von den bisherigen unterscheidet. \\
+  automatisch gewählten Farbe, die sich von den bisherigen unterscheidet (ein
+  Rückgängig-Schritt \enquote{New layer}). \\
+\gui{Delete layer...} & löscht die markierte Ebene. Liegen Objekte darauf, fragt das Programm,
+  ob sie auf \gui{Default} wandern (\gui{Move to Default}) oder mitgelöscht werden
+  (\gui{Delete objects}); \gui{Cancel} bricht ab. Ein Rückgängig-Schritt; \gui{Default} lässt
+  sich nicht löschen. \\
+\gui{Make current} & macht die markierte Ebene zur aktuellen: Neue Objekte entstehen dort. \\
 Klick auf eine Ebene, dann \gui{Move selection here} & verschiebt die ausgewählten Objekte auf
   die markierte Ebene (ein Rückgängig-Schritt \enquote{Change layer}). \\
 \bottomrule
 \end{referenz}
 
-\paragraph{Die Ebene Default.} Jedes Dokument hat die Ebene \gui{Default} (hellgrau).
-Neu gezeichnete, modellierte und eingelesene Objekte landen auf dieser Ebene. Eine
-\enquote{aktuelle Ebene}, auf der neue Objekte entstehen, gibt es nicht; ordnen Sie neue
-Objekte anschließend mit \gui{Move selection here} zu. Kopien (\cmd{Copy}, Anordnungen)
-behalten dagegen die Ebene ihres Originals, und das Ergebnis einer booleschen Operation
-übernimmt Name, Ebene und Farbe des ersten ausgewählten Körpers.
+\paragraph{Die aktuelle Ebene.} Jedes Dokument hat die Ebene \gui{Default} (hellgrau); ein
+neues Dokument beginnt mit ihr als aktueller Ebene. Neu gezeichnete und modellierte, mit
+\menu{File,Import STEP...} eingelesene und von Plugins erzeugte Objekte landen auf der
+\emph{aktuellen} Ebene (fett in der Liste). Markieren Sie eine Ebene und klicken Sie auf
+\gui{Make current}, um sie zur aktuellen zu machen; die Wahl wird mit dem Dokument
+gespeichert. Kopien (\cmd{Copy}, Anordnungen) behalten dagegen die Ebene ihres Originals, und
+das Ergebnis einer booleschen Operation übernimmt Name, Ebene und Farbe des ersten
+ausgewählten Körpers. Wird die aktuelle Ebene gelöscht, ist wieder \gui{Default} aktuell.
 
 \paragraph{Farben.} Ein Objekt wird in der Farbe seiner Ebene gezeichnet, es sei denn, es hat
 eine eigene Farbe. Eigene Farben setzen Plugins oder sie stammen aus einer Datei; in der
 Oberfläche lassen sie sich nicht ändern. Ausgewählte Objekte erscheinen unabhängig davon gelb.
 
-\paragraph{Was es nicht gibt.} Ebenen lassen sich nicht löschen und nicht sperren, und ihre
-Reihenfolge ist fest. Eine nicht mehr benötigte Ebene können Sie leeren und ausblenden.
+\paragraph{Reihenfolge.} Die Reihenfolge der Ebenen ist fest; neue Ebenen kommen ans Ende.
 
 \paragraph{Beispiel: Hilfsgeometrie auf eine eigene Ebene.}
 \begin{schritte}
@@ -77,14 +92,12 @@ Reihenfolge ist fest. Eine nicht mehr benötigte Ebene können Sie leeren und au
 Hülle ausgewählt, wandert die ganze Hülle auf die Ebene.
 \end{hinweis}
 
-\begin{warnung}
-Anlegen, Umbenennen, Umfärben und Ein-/Ausblenden von Ebenen sind keine
-Bearbeitungsschritte: Sie lassen sich nicht rückgängig machen, und das Dokument gilt dadurch
-nicht als geändert -- beim Schließen fragt das Programm also nicht nach dem Speichern, wenn Sie
-\emph{nur} Ebenen bearbeitet haben. Speichern Sie in diesem Fall selbst mit \keys{Strg+S}.
-Das Verschieben von Objekten auf eine Ebene ist dagegen ein normaler, rückgängig zu machender
-Schritt.
-\end{warnung}
+\begin{hinweis}
+Anlegen, Umbenennen, Umfärben und Löschen von Ebenen und das Verschieben von Objekten auf eine
+Ebene sind Rückgängig-Schritte. Ein-/Ausblenden, Sperren und die Wahl der aktuellen Ebene sind
+es nicht -- sie werden aber mit dem Dokument gespeichert: Das Dokument gilt danach als geändert,
+und beim Schließen fragt das Programm nach dem Speichern.
+\end{hinweis}
 
 \section{Gruppen}\label{sec:gruppen}
 \index{Gruppe}
@@ -148,7 +161,7 @@ Gruppenzeile noch einmal an und wiederholen Sie den Befehl.
 
 \begin{itemize}
   \item \textbf{Umbenennen:} Doppelklick auf den Gruppennamen im Modellbaum, neuen Namen
-    tippen, \keys{Enter}. Das Umbenennen ist nicht rückgängig zu machen.
+    tippen, \keys{Enter}. Das Umbenennen ist ein Rückgängig-Schritt (\enquote{Rename group}).
   \item \textbf{Ein- und ausblenden:} Kontrollkästchen vor der Gruppe. Eine ausgeblendete
     Gruppe blendet alle Objekte und Untergruppen darin aus, ohne deren eigene Kästchen zu
     ändern; eingeschaltet erscheint alles wieder so, wie es vorher war. \gui{Show all} und
@@ -179,7 +192,8 @@ Tooltip lautet \enquote{excluded from computations (sim.inactive)} (\autoref{sec
 Ansichten aus; ein Klick auf eine Gruppe wählt alle Objekte darin aus, auch die in
 Untergruppen. Mit \keys{Shift}+Klick markieren Sie einen Bereich von Zeilen, mit
 \keys{Strg}+Klick einzelne Zeilen dazu. Umgekehrt markiert der Baum die Zeilen der Objekte,
-die Sie in den Ansichten auswählen. Das ist der schnellste Weg, ein Objekt in einer großen
+die Sie in den Ansichten auswählen. Objekte auf einer gesperrten Ebene lassen sich auch hier
+nicht auswählen. Das ist der schnellste Weg, ein Objekt in einer großen
 Baugruppe zu finden: Anklicken im Baum, dann \keys{Z}, \keys{S} (\gui{Zoom selected}).
 
 \paragraph{Kontextmenü.} Ein Rechtsklick in den Baum öffnet:
@@ -326,8 +340,13 @@ Import STEP}. Die Zahl der Schritte ist nicht begrenzt.
 \begin{itemize}
   \item Jeder Befehl ergibt einen Schritt, auch wenn er mehrere Objekte erzeugt (eine
     Anordnung, eine Polylinie, \dots).
-  \item \gui{Delete}, \gui{Group}, \gui{Ungroup}, \gui{Move selection here} (\enquote{Change
-    layer}), das Bearbeiten von Attributen (\enquote{Change attribute}).
+  \item \gui{Delete}, \gui{Group}, \gui{Ungroup}, das Umbenennen einer Gruppe, \gui{Move
+    selection here} (\enquote{Change layer}), das Bearbeiten von Attributen (\enquote{Change
+    attribute}).
+  \item Anlegen, Umbenennen, Umfärben und Löschen von Ebenen (das Löschen mitsamt dem
+    Verschieben oder Löschen ihrer Objekte).
+  \item Jede Bearbeitung im Node-Editor (\enquote{Edit node workflow}); das Verschieben eines
+    Blocks zählt einmal, beim Loslassen.
   \item \menu{File,Import STEP...} -- das Einlesen mitsamt der neuen Gruppe ist ein Schritt.
   \item \gui{Convert to CAD curves...} im Dock \gui{Results} (\enquote{Rays to curves}).
   \item Alles, was \emph{eine} Plugin-Aktion am Modell ändert -- neue, geänderte und gelöschte
@@ -339,10 +358,10 @@ Import STEP}. Die Zahl der Schritte ist nicht begrenzt.
 \paragraph{Was kein Schritt ist} und daher nicht rückgängig gemacht werden kann:
 \begin{itemize}
   \item Ansicht und Zoom, Darstellungsmodus, Auswahl,
-  \item Ein- und Ausblenden von Objekten, Gruppen und Ebenen,
-  \item Anlegen, Umbenennen und Umfärben von Ebenen, Umbenennen von Gruppen,
+  \item Ein- und Ausblenden von Objekten, Gruppen und Ebenen, Sperren von Ebenen, die Wahl der
+    aktuellen Ebene (sie werden aber mit dem Dokument gespeichert und markieren es als
+    geändert),
   \item Parameter im Dock \gui{Plugin} (sie werden aber mit dem Dokument gespeichert),
-  \item Bearbeitungen im Node-Editor, die Sie von Hand vornehmen,
   \item Ergebnisse im Dock \gui{Results} (Ein-/Ausblenden, \gui{Delete run}).
 \end{itemize}
 

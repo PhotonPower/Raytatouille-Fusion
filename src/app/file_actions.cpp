@@ -1,11 +1,15 @@
 // File handling of the main window: new, open, import STEP, save (docs/plan.md, M2).
 #include <QApplication>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFileOpenEvent>
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMenu>
 #include <QMessageBox>
+#include <QSettings>
 #include <QStatusBar>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
@@ -32,6 +36,11 @@ namespace {
 const QString kDocumentFilter = QObject::tr("Raytatouille Fusion documents (*.rttf *.nfcad)");
 const QString kSaveFilter = QObject::tr("Raytatouille Fusion documents (*.rttf)");
 const QString kStepFilter = QObject::tr("STEP files (*.step *.stp *.STEP *.STP)");
+const QString kRecentKey = QStringLiteral("recentFiles");
+
+bool is_package(const QString& path) {
+  return path.endsWith(QLatin1String(plugins::kPackageSuffix), Qt::CaseInsensitive);
+}
 
 bool is_step(const QString& path) {
   const QString ext = QFileInfo(path).suffix().toLower();
@@ -64,12 +73,78 @@ void MainWindow::newDocument() {
 }
 
 void MainWindow::openDialog() {
-  if (!maybeSave()) return;
+  const QString packages = tr("Plugin packages (*%1)").arg(QLatin1String(plugins::kPackageSuffix));
   const QString path = QFileDialog::getOpenFileName(
       this, tr("Open"), QFileInfo(doc_->filePath()).absolutePath(),
-      tr("All supported (*.rttf *.nfcad *.step *.stp *.STEP *.STP)") + QStringLiteral(";;") +
-          kDocumentFilter + QStringLiteral(";;") + kStepFilter);
-  if (!path.isEmpty()) openFile(path);
+      tr("All supported (*.rttf *.nfcad *.step *.stp *.STEP *.STP *%1)").arg(QLatin1String(plugins::kPackageSuffix)) +
+          QStringLiteral(";;") + kDocumentFilter + QStringLiteral(";;") + kStepFilter + QStringLiteral(";;") + packages);
+  if (path.isEmpty()) return;
+  // a plugin package is installed and leaves the document alone: no question about saving
+  if (!is_package(path) && !maybeSave()) return;
+  openFile(path);
+}
+
+void MainWindow::openRequested(const QString& path) {
+  if (path.isEmpty()) return;
+  if (!is_package(path) && !maybeSave()) return;
+  if (isMinimized()) showNormal();
+  raise();
+  activateWindow();
+  if (!openFile(path) && !QFileInfo::exists(path)) {
+    removeRecentFile(path);  // gone: out of File → Open Recent
+  }
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (event->type() == QEvent::FileOpen && watched == qApp) {
+    const auto* open = static_cast<QFileOpenEvent*>(event);
+    const QString path = open->file().isEmpty() ? open->url().toLocalFile() : open->file();
+    // after the event's delivery: asking to save the changes opens a dialog
+    QTimer::singleShot(0, this, [this, path] { openRequested(path); });
+    return true;
+  }
+  return QMainWindow::eventFilter(watched, event);
+}
+
+// ------------------------------------------------------------------------------- recent files
+
+QStringList MainWindow::recentFiles() { return QSettings().value(kRecentKey).toStringList(); }
+
+void MainWindow::addRecentFile(const QString& path) {
+  const QString file = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+  QStringList files = recentFiles();
+  files.removeAll(file);
+  files.prepend(file);
+  while (files.size() > kMaxRecentFiles) files.removeLast();
+  QSettings().setValue(kRecentKey, files);
+}
+
+void MainWindow::removeRecentFile(const QString& path) {
+  QStringList files = recentFiles();
+  if (files.removeAll(QDir::cleanPath(QFileInfo(path).absoluteFilePath())) + files.removeAll(path) > 0) {
+    QSettings().setValue(kRecentKey, files);
+  }
+}
+
+void MainWindow::fillRecentMenu() {
+  recent_menu_->clear();
+  recent_menu_->setToolTipsVisible(true);
+  const QStringList files = recentFiles();
+  for (int i = 0; i < files.size(); ++i) {
+    const QString& path = files[i];
+    const QString number = i < 9 ? QStringLiteral("&%1").arg(i + 1) : QStringLiteral("1&0");
+    QString name = QFileInfo(path).fileName();
+    name.replace(QLatin1Char('&'), QStringLiteral("&&"));
+    QAction* a = recent_menu_->addAction(number + QLatin1Char(' ') + name);
+    a->setToolTip(QDir::toNativeSeparators(path));
+    a->setStatusTip(QDir::toNativeSeparators(path));
+    connect(a, &QAction::triggered, this, [this, path] { openRequested(path); });
+  }
+  if (!files.isEmpty()) recent_menu_->addSeparator();
+  // (the menu is filled again when it opens next: an action must not delete itself while triggered)
+  QAction* clear = recent_menu_->addAction(tr("Clear list"), this, [] { QSettings().remove(kRecentKey); });
+  clear->setObjectName(QStringLiteral("clearRecent"));
+  clear->setEnabled(!files.isEmpty());
 }
 
 void MainWindow::importStepDialog() {
@@ -78,7 +153,7 @@ void MainWindow::importStepDialog() {
 }
 
 bool MainWindow::openFile(const QString& path, bool quiet) {
-  if (path.endsWith(QLatin1String(plugins::kPackageSuffix), Qt::CaseInsensitive)) {
+  if (is_package(path)) {
     installPlugin(path);  // a plugin package (P7)
     return true;
   }
@@ -100,6 +175,9 @@ bool MainWindow::openFile(const QString& path, bool quiet) {
     }
     std::fprintf(stderr, "cannot open %s: %s\n", qPrintable(path), qPrintable(error));
     return false;
+  }
+  if (!quiet) {  // (quiet: the benchmark and tests, which leave the user's list alone)
+    addRecentFile(path);
   }
   updateTitle();
   zoomExtentsWhenTessellated();
@@ -137,6 +215,9 @@ void MainWindow::importStep(const QString& path, bool replace, bool quiet) {
             // the shells of a file form one group in the model tree
             const QString group_name = QFileInfo(path).completeBaseName();
             if (replace) {
+              if (!quiet) {  // opened (not imported): File → Open Recent
+                addRecentFile(path);
+              }
               for (document::Entity& e : entities) e.group = 1;
               doc_->reset({}, std::move(entities), {{1, group_name, 0, true}});
             } else {
@@ -196,6 +277,7 @@ bool MainWindow::saveTo(const QString& path) {
   }
   doc_->setFilePath(path);
   doc_->markSaved();
+  addRecentFile(path);
   updateTitle();
   statusBar()->showMessage(tr("Saved %1").arg(QFileInfo(path).fileName()), 4000);
   return true;

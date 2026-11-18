@@ -175,10 +175,9 @@ Geometry geometry_from_json(const QJsonObject& o) {
 QString save_nfcad(const Document& doc, const QString& path, const QJsonObject& extra) {
   QJsonArray layers;
   for (const Layer& l : doc.layers()) {
-    layers.append(QJsonObject{{"id", static_cast<int>(l.id)},
-                              {"name", l.name},
-                              {"color", l.color.name()},
-                              {"visible", l.visible}});
+    QJsonObject o{{"id", static_cast<int>(l.id)}, {"name", l.name}, {"color", l.color.name()}, {"visible", l.visible}};
+    if (l.locked) o["locked"] = true;  // optional (older readers ignore it)
+    layers.append(o);
   }
   QJsonArray groups;
   for (const Group& g : doc.groups()) {
@@ -213,6 +212,7 @@ QString save_nfcad(const Document& doc, const QString& path, const QJsonObject& 
     root.insert("plugins", plugins);  // v2, optional: parameter values per plugin (P4)
   }
   if (!doc.workflow().isEmpty()) root.insert("workflow", doc.workflow());  // v2, optional: node workflow
+  if (doc.currentLayer() != 0) root.insert("current_layer", static_cast<int>(doc.currentLayer()));  // optional
   for (auto it = extra.begin(); it != extra.end(); ++it) {  // v2, optional: e.g. the kept results
     if (!root.contains(it.key())) root.insert(it.key(), it.value());
   }
@@ -244,7 +244,7 @@ QString load_nfcad(Document& doc, const QString& path, QJsonObject* extra) {
   for (const QJsonValue& v : root["layers"].toArray()) {
     const QJsonObject l = v.toObject();
     layers.push_back({static_cast<LayerId>(l["id"].toInt()), l["name"].toString(),
-                      QColor(l["color"].toString()), l["visible"].toBool(true)});
+                      QColor(l["color"].toString()), l["visible"].toBool(true), l["locked"].toBool(false)});
   }
   std::vector<Group> groups;
   for (const QJsonValue& v : root["groups"].toArray()) {  // version 2
@@ -273,10 +273,11 @@ QString load_nfcad(Document& doc, const QString& path, QJsonObject* extra) {
   for (auto it = plugins.begin(); it != plugins.end(); ++it) params.insert(it.key(), it.value().toObject()["params"]);
   // parameters and workflow go in with the content: documentReset then announces the loaded state
   // (before, the workflow was set silently after it and the node workflow window stayed empty)
-  doc.reset(std::move(layers), std::move(entities), std::move(groups), params, root["workflow"].toObject());
+  doc.reset(std::move(layers), std::move(entities), std::move(groups), params, root["workflow"].toObject(),
+            static_cast<LayerId>(root["current_layer"].toInt(0)));
   doc.setFilePath(path);
   if (extra != nullptr) {
-    static const QStringList kOwn = {"format", "version", "units", "layers", "groups", "entities", "plugins", "workflow"};
+    static const QStringList kOwn = {"format", "version", "units", "layers", "groups", "entities", "plugins", "workflow", "current_layer"};
     *extra = {};
     for (auto it = root.begin(); it != root.end(); ++it) {
       if (!kOwn.contains(it.key())) extra->insert(it.key(), it.value());

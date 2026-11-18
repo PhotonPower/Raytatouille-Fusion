@@ -1,4 +1,8 @@
 #include <QDockWidget>
+#include <QFileOpenEvent>
+#include <QGraphicsRectItem>
+#include <QMenu>
+#include <QMouseEvent>
 #include <QTemporaryDir>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -327,6 +331,113 @@ class TestMainWindowPlugins : public QObject {
     }
     QTRY_VERIFY_WITH_TIMEOUT(has_group(), 5000);
     QVERIFY(chooser->findData(QStringLiteral("demo")) >= 0);
+  }
+
+  void workflowEditsAreUndoSteps() {
+    // every edit in the node editor is one undo step; dragging a block is one at the release
+    QStandardPaths::setTestModeEnabled(true);
+    nfcad::app::MainWindow w;
+    w.setAttribute(Qt::WA_DontShowOnScreen);
+    w.resize(1400, 900);
+    w.show();
+    auto* doc = w.findChild<nfcad::document::Document*>();
+    auto* editor = w.findChild<nfcad::ui::NodeEditor*>();
+    QVERIFY(doc != nullptr && editor != nullptr);
+    const QJsonObject wf{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1},
+                                               {"nodes", QJsonArray{QJsonObject{{"id", "a"}, {"type", "rtt.source"},
+                                                                                {"position", QJsonArray{0, 0}}},
+                                                                    QJsonObject{{"id", "b"}, {"type", "rtt.detector"},
+                                                                                {"position", QJsonArray{400, 160}}}}},
+                                               {"links", QJsonArray{}}}}};
+    doc->setWorkflow(wf);
+    doc->requestWorkflowShown();
+    doc->markSaved();
+    QApplication::processEvents();  // fitAll
+    auto node = [](const QJsonObject& workflow, const QString& id) {
+      for (const QJsonValue& v : workflow["graph"].toObject()["nodes"].toArray()) {
+        if (v.toObject()["id"].toString() == id) return v.toObject();
+      }
+      return QJsonObject{};
+    };
+    QCOMPARE(doc->undoStack()->count(), 0);
+    editor->setMuted(QStringLiteral("b"), true);
+    QCOMPARE(doc->undoStack()->count(), 1);
+    QVERIFY(doc->isModified());
+    QVERIFY(node(doc->workflow(), QStringLiteral("b"))["muted"].toBool());
+    doc->undoStack()->undo();
+    QCOMPARE(doc->workflow(), wf);
+    QVERIFY(!doc->isModified());
+    QVERIFY(!node(editor->workflow(), QStringLiteral("b"))["muted"].toBool());  // the editor follows
+    doc->undoStack()->redo();
+    QVERIFY(node(editor->workflow(), QStringLiteral("b"))["muted"].toBool());
+
+    // drag block a: many mouse moves, one undo step
+    QGraphicsRectItem* a = editor->nodeItem(QStringLiteral("a"));
+    QVERIFY(a != nullptr);
+    const QPoint from = editor->mapFromScene(a->sceneBoundingRect().center());
+    QWidget* vp = editor->viewport();
+    QTest::mousePress(vp, Qt::LeftButton, {}, from);
+    for (int k = 1; k <= 10; ++k) {
+      const QPoint p = from + QPoint(6 * k, 3 * k);
+      QMouseEvent move(QEvent::MouseMove, QPointF(p), QPointF(vp->mapToGlobal(p)), Qt::NoButton, Qt::LeftButton,
+                       Qt::NoModifier);
+      QApplication::sendEvent(vp, &move);
+    }
+    QTest::mouseRelease(vp, Qt::LeftButton, {}, from + QPoint(60, 30));
+    QCOMPARE(doc->undoStack()->count(), 2);
+    const QJsonArray moved = node(doc->workflow(), QStringLiteral("a"))["position"].toArray();
+    QVERIFY(moved != QJsonArray({0, 0}));
+    doc->undoStack()->undo();
+    QCOMPARE(node(doc->workflow(), QStringLiteral("a"))["position"].toArray(), QJsonArray({0, 0}));
+    QCOMPARE(node(editor->workflow(), QStringLiteral("a"))["position"].toArray(), QJsonArray({0, 0}));
+  }
+
+  void recentFilesAndFileOpenEvents() {
+    // File → Open Recent, and documents opened in the Finder (QFileOpenEvent to the application)
+    QStandardPaths::setTestModeEnabled(true);
+    const QString organization = QCoreApplication::organizationName();
+    QCoreApplication::setOrganizationName(QStringLiteral("RaytatouilleFusionTest"));  // not the user's list
+    QSettings().remove(QStringLiteral("recentFiles"));
+    QTemporaryDir dir;
+    const QString a = dir.filePath(QStringLiteral("a.rttf"));
+    const QString b = dir.filePath(QStringLiteral("b.rttf"));
+    {
+      nfcad::document::Document d;
+      d.addEntities({nfcad::document::make_entity(nf::Vec3{1, 2, 3}, QStringLiteral("p"))}, QStringLiteral("add"));
+      QVERIFY(nfcad::document::save_nfcad(d, a).isEmpty());
+      QVERIFY(nfcad::document::save_nfcad(d, b).isEmpty());
+    }
+    {
+      nfcad::app::MainWindow w;
+      w.setAttribute(Qt::WA_DontShowOnScreen);
+      w.show();
+      auto* doc = w.findChild<nfcad::document::Document*>();
+      w.openRequested(a);
+      QCOMPARE(doc->filePath(), a);
+      QCOMPARE(nfcad::app::MainWindow::recentFiles(), QStringList{a});
+
+      QFileOpenEvent open(b);
+      QApplication::sendEvent(qApp, &open);
+      QTRY_COMPARE(doc->filePath(), b);
+      QCOMPARE(nfcad::app::MainWindow::recentFiles(), (QStringList{b, a}));
+
+      auto* menu = w.findChild<QMenu*>(QStringLiteral("recentMenu"));
+      QVERIFY(menu != nullptr);
+      emit menu->aboutToShow();
+      QCOMPARE(menu->actions().size(), 4);  // b, a, separator, Clear list
+      QVERIFY(menu->actions()[0]->text().endsWith(QStringLiteral("b.rttf")));
+      menu->actions()[1]->trigger();
+      QCOMPARE(doc->filePath(), a);
+      QCOMPARE(nfcad::app::MainWindow::recentFiles(), (QStringList{a, b}));
+
+      emit menu->aboutToShow();
+      auto* clear = menu->findChild<QAction*>(QStringLiteral("clearRecent"));
+      QVERIFY(clear != nullptr && clear->isEnabled());
+      clear->trigger();
+      QVERIFY(nfcad::app::MainWindow::recentFiles().isEmpty());
+    }
+    QSettings().remove(QStringLiteral("recentFiles"));
+    QCoreApplication::setOrganizationName(organization);
   }
 };
 

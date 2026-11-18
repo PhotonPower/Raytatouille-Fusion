@@ -38,8 +38,9 @@ environment* should then show only ✓.
 - **Hide / Unhide** (toolbar, also *Edit* menu): *Hide* (H) hides the selected objects and
   deselects them; *Unhide* (Shift + H) shows every object hidden with Hide or Isolate again –
   layers and the model tree's check boxes keep their state (*Show all* switches those on too).
-- **Docks** (right): *Properties* of the selection (also free attributes), *Layers*, *Model*
-  tree (groups with visibility check boxes; right-click: group, hide, isolate, unhide, show all),
+- **Docks** (right): *Properties* of the selection (also free attributes), *Layers* (see
+  [Layers](#layers)), *Model* tree (groups with visibility check boxes, double-click a group to
+  rename it; right-click: group, hide, isolate, unhide, show all),
   *Results* of computations, *Plugin* (parameters and actions); *Plot* appears at the bottom
   with the first curve. Every dock can be moved, tabbed or hidden (*View* menu).
 - **Command line** (bottom): type a command or coordinates; the prompt says what is expected.
@@ -83,6 +84,27 @@ letter, e.g. for Helix `h`). Input:
 
 All commands with their input: [commands.md](commands.md). Every command is one undo step.
 
+### Layers
+
+The *Layers* dock lists the layers: the check box shows or hides a layer, *Lock* locks it, a
+double-click on the name renames it, a double-click on the swatch changes its colour; the
+right-click menu has all of it.
+
+- **Current layer** (bold): new objects go there – drawn, imported with *Import STEP…*, made by
+  plugins. Highlight a layer and click *Make current*. A new document starts on *Default*; the
+  current layer is saved with the document.
+- **Locked**: the objects stay visible (and snap points on them still work), but they cannot be
+  selected – neither by clicking nor with a window, *Select All* or the model tree – and so not
+  moved, edited or deleted. Locking a layer deselects its objects.
+- **Delete layer…**: if the layer holds objects, you choose whether they move to *Default* or are
+  deleted with it. *Default* cannot be deleted.
+- *Move selection here* puts the selected objects on the highlighted layer.
+
+New, renamed, recoloured and deleted layers – like renamed groups and moving objects to a layer –
+are undo steps. Showing, hiding and locking (layers, groups, objects with *Hide*, *Isolate*,
+*Unhide* and the check boxes), and the current layer, are not, but they are saved with the
+document: the title bar marks it modified and closing asks to save.
+
 ### Object snaps
 
 The cursor snaps to points, ends, midpoints, centres, quadrants (where the axes of the
@@ -103,6 +125,15 @@ Details: [snapping.md](snapping.md).
 | `.rttf` (also `.nfcad` from before 1.0) | ✓ | ✓ | the document: exact geometry, layers, groups, attributes, plugin parameters ([format](file-format.md)) |
 | STEP | ✓ | ✓ (AP214) | opening replaces the document, *File → Import STEP…* adds to it; *File → Export STEP…* writes solids and surfaces exactly |
 | STL | | ✓ | *File → Export STL…*: binary, from the display tessellation |
+| `.nfplugin` | ✓ | | a plugin package: opening it installs the plugin ([Plugins](#plugins)) |
+
+*File → Open…* takes all of them (the filter *All supported*, or one type). *File → Open Recent*
+lists the last ten documents and STEP files opened or saved; *Clear list* empties it. A
+double-click on a `.rttf`, `.nfcad`, STEP or `.nfplugin` file opens it in the application:
+macOS (Finder; the application declares the types, *Open With* shows it for STEP), Linux (the
+desktop file and the MIME types `application/x-raytatouille-fusion` and
+`application/x-raytatouille-fusion-plugin` installed with the package), or on any system as the
+argument on the command line. If the open document has unsaved changes you are asked first.
 
 Example models are in [`examples/`](../examples/README.md).
 
@@ -147,6 +178,10 @@ bidirectional path tracing – see its [guide](../python/plugins/pathtracer/READ
 [pathtracer](https://github.com/PhotonPower/PathTracer) installed in the plugin's Python it computes
 in C++ on all processor cores.
 
+Editing the **node workflow** (moving a block, connecting, deleting, parameters, groups …) is
+one undo step per edit – dragging a block counts once, when you let go; a plugin run that
+changes the workflow is undone as a whole.
+
 Writing your own plugins: [plugin-api.md](plugin-api.md).
 
 ## Updates, crashes, settings
@@ -163,7 +198,7 @@ Writing your own plugins: [plugin-api.md](plugin-api.md).
 
 | Keys | Action |
 |---|---|
-| Ctrl/Cmd + N, O, S, Shift + S | new, open, save, save as |
+| Ctrl/Cmd + N, O, S, Shift + S | new, open, save, save as (recent documents: *File → Open Recent*) |
 | Ctrl/Cmd + I | import STEP |
 | Ctrl/Cmd + Z, Shift + Ctrl/Cmd + Z | undo, redo |
 | Ctrl/Cmd + A | select all |

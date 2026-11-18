@@ -269,7 +269,7 @@ void Viewport::hoverPick(const QPointF& px, Qt::KeyboardModifiers mods) {
   q.faces = mode_ != render::DisplayMode::Wireframe;
   q.isocurves = mode_ == render::DisplayMode::Wireframe;
   q.sub_elements = sub_element_mode(mods);
-  const auto hit = pick::pick(scene_->pickTargets(), camera_, q);
+  const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
   selection_->setHovered(hit ? std::optional(hit->item) : std::nullopt);
 }
 
@@ -281,7 +281,7 @@ void Viewport::clickSelect(const QPointF& px, Qt::KeyboardModifiers mods) {
   q.faces = mode_ != render::DisplayMode::Wireframe;
   q.isocurves = mode_ == render::DisplayMode::Wireframe;
   q.sub_elements = sub_element_mode(mods);
-  const auto hit = pick::pick(scene_->pickTargets(), camera_, q);
+  const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
   const auto mode = q.sub_elements ? document::Selection::Mode::Toggle : selection_mode(mods);
   if (hit) {
     selection_->apply({hit->item}, mode);
@@ -293,7 +293,7 @@ void Viewport::clickSelect(const QPointF& px, Qt::KeyboardModifiers mods) {
 void Viewport::rectSelect(const QRectF& rect, bool crossing, Qt::KeyboardModifiers mods) {
   if (selection_ == nullptr || scene_ == nullptr) return;
   std::vector<document::SelectionItem> items;
-  for (document::EntityId id : pick::pick_rect(scene_->pickTargets(), camera_, rect, crossing)) {
+  for (document::EntityId id : pick::pick_rect(scene_->selectableTargets(), camera_, rect, crossing)) {
     items.push_back({id, {}});
   }
   selection_->apply(items, selection_mode(mods));

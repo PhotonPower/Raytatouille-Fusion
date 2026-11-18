@@ -36,7 +36,10 @@ Eine Datei ist ein JSON-Objekt mit diesen Abschnitten (gekürzt):
   "format": "nfcad",
   "version": 2,
   "units": "mm",
-  "layers":   [ { "id": 0, "name": "Default", "color": "#bec6d2", "visible": true } ],
+  "layers":   [ { "id": 0, "name": "Default", "color": "#bec6d2", "visible": true },
+                { "id": 1, "name": "Mounts", "color": "#78a0dc", "visible": true,
+                  "locked": true } ],
+  "current_layer": 1,
   "groups":   [ { "id": 1, "name": "objective", "parent": 0, "visible": true } ],
   "entities": [ { "id": "1", "name": "part_0_0", "layer": 0, "visible": true,
                   "color": "#ff0000",
@@ -56,8 +59,11 @@ Eine Datei ist ein JSON-Objekt mit diesen Abschnitten (gekürzt):
 \midrule\endhead
 \param{format}, \param{version}, \param{units} & Kennung \code{"nfcad"}, Formatversion,
   Einheit \code{"mm"}. \\
-\param{layers} & Die Ebenen mit Nummer, Name, Farbe und Sichtbarkeit
-  (\autoref{kap:organisieren}). \\
+\param{layers} & Die Ebenen mit Nummer, Name, Farbe, Sichtbarkeit und -- optional, nur wenn
+  gesetzt -- \param{locked} für eine gesperrte Ebene (\autoref{kap:organisieren}). \\
+\param{current\_layer} & Optional: die aktuelle Ebene, auf der neue Objekte entstehen; fehlt
+  sie (oder ist sie unbekannt), ist es \gui{Default} (0). Wie \param{locked} wird sie nur
+  geschrieben, wenn sie vom Normalfall abweicht; ältere Programmversionen ignorieren beides. \\
 \param{groups} & Die Gruppen des Modellbaums; \param{parent} ist die übergeordnete Gruppe,
   0 bedeutet oberste Ebene. \\
 \param{entities} & Die Objekte: Nummer (als Zeichenkette, 64 Bit), Name, Ebene,

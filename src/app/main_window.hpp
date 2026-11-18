@@ -69,6 +69,13 @@ class MainWindow : public QMainWindow {
   /// Opens a .nfcad document or imports a STEP file (by extension). Returns false on errors
   /// (a message box has been shown unless `quiet`).
   bool openFile(const QString& path, bool quiet = false);
+  /// A file to open from outside or from File → Open Recent (Finder double-click, QFileOpenEvent):
+  /// a plugin package is installed, a document or STEP file replaces the document after asking
+  /// to save the changes.
+  void openRequested(const QString& path);
+  /// The documents of File → Open Recent, newest first (QSettings "recentFiles").
+  [[nodiscard]] static QStringList recentFiles();
+  static constexpr int kMaxRecentFiles = 10;
   /// After a crash in the last session: points to the local crash report (once).
   void reportPreviousCrash();
   /// Benchmark: after loading and tessellation, orbits the perspective view for `frames`
@@ -80,6 +87,8 @@ class MainWindow : public QMainWindow {
  protected:
   void showEvent(QShowEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
+  /// QFileOpenEvent (macOS: a document opened in Finder or dropped on the Dock icon).
+  bool eventFilter(QObject* watched, QEvent* event) override;
 
  private:
   // file handling (app/file_actions.cpp)
@@ -95,6 +104,10 @@ class MainWindow : public QMainWindow {
   [[nodiscard]] std::vector<const document::Entity*> exportEntities() const;
   bool maybeSave();
   void updateTitle();
+  /// Puts a document at the top of File → Open Recent.
+  static void addRecentFile(const QString& path);
+  static void removeRecentFile(const QString& path);
+  void fillRecentMenu();
   void zoomExtentsWhenTessellated();
   void startBenchmark();
 
@@ -154,6 +167,7 @@ class MainWindow : public QMainWindow {
   int benchmark_frames_ = 0;
 
   QMenu* view_menu_ = nullptr;
+  QMenu* recent_menu_ = nullptr;
   viewport::ViewportGrid* grid_ = nullptr;
   ui::ToolBox* toolbox_ = nullptr;
   ui::SnapBar* snapbar_ = nullptr;
