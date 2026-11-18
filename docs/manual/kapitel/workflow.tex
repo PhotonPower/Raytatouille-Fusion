@@ -578,13 +578,13 @@ Workflow folgen, sofern sie laufen und nichts zu tun haben. Der Raytracer zeichn
 haben. Ein halb eingegebener Wert wartet einfach auf die nächste Änderung.
 \end{hinweis}
 
-\begin{warnung}
-Änderungen im Node-Editor selbst (Blöcke, Verbindungen, Parameter, Äste) sind \emph{keine}
-Rückgängig-Schritte; sie markieren nur das Dokument als geändert. Rückgängig machen lassen sich
-die Läufe von Plugins, die den Workflow geändert haben (z.\,B.\ \gui{Workflow from system},
-\gui{Section $\to$ group}, eine Optimierung): \menu{Edit,Undo} setzt den Workflow auf den Stand vor
-diesem Lauf zurück. Speichern Sie vor größeren Umbauten.
-\end{warnung}
+\begin{hinweis}
+Jede Änderung im Node-Editor selbst (Blöcke, Verbindungen, Parameter, Äste, Gruppen) ist ein
+Rückgängig-Schritt (\enquote{Edit node workflow}); das Verschieben eines Blocks zählt einmal,
+beim Loslassen. Auch die Läufe von Plugins, die den Workflow geändert haben (z.\,B.\
+\gui{Workflow from system}, \gui{Section $\to$ group}, eine Optimierung), lassen sich rückgängig
+machen: \menu{Edit,Undo} setzt den Workflow auf den Stand vor diesem Lauf zurück.
+\end{hinweis}
 
 % ---------------------------------------------------------------------------
 \section{Das Workflow-Plugin}\label{sec:workflow-plugin}

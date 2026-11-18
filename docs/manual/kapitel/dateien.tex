@@ -99,12 +99,13 @@ bisherigen Namen zurück. \menu{File,Save As...} schlägt denselben Namen mit de
 
 \begin{schritte}
   \item \menu{File,Open...} (\keys{Strg+O}).
-  \item Hat das aktuelle Dokument ungespeicherte Änderungen, fragt das Programm zuerst
-    \enquote{The document has been modified. Save the changes?} -- \gui{Save} speichert,
-    \gui{Discard} verwirft die Änderungen, \gui{Cancel} bricht das Öffnen ab.
   \item Der Dateidialog beginnt im Ordner des aktuellen Dokuments. Die Dateitypliste bietet
-    \gui{All supported}, \gui{Raytatouille Fusion documents (*.rttf *.nfcad)} und \gui{STEP
-    files}. Wählen Sie die Datei.
+    \gui{All supported}, \gui{Raytatouille Fusion documents (*.rttf *.nfcad)}, \gui{STEP
+    files} und \gui{Plugin packages (*.nfplugin)}. Wählen Sie die Datei.
+  \item Hat das aktuelle Dokument ungespeicherte Änderungen, fragt das Programm nun
+    \enquote{The document has been modified. Save the changes?} -- \gui{Save} speichert,
+    \gui{Discard} verwirft die Änderungen, \gui{Cancel} bricht das Öffnen ab. Ein
+    Plugin-Paket wird ohne diese Frage installiert; das Dokument bleibt dabei unverändert.
 \end{schritte}
 
 Das geöffnete Dokument ersetzt das bisherige vollständig; die Liste der Rückgängig-Schritte
@@ -118,11 +119,11 @@ Lässt sich eine Datei nicht lesen, meldet ein Fenster \enquote{Cannot open \dot
 Grund, etwa \enquote{not a Raytatouille Fusion document} oder \enquote{invalid geometry:
 \dots}. Das bisherige Dokument bleibt dann unverändert.
 
-\begin{hinweis}
-Eine Liste der zuletzt geöffneten Dateien bietet das Programm nicht. Ein Dokument öffnen Sie
-über \menu{File,Open...}, unter Windows auch per Doppelklick im Explorer
-(\autoref{sec:kommandozeile}).
-\end{hinweis}
+\paragraph{Zuletzt geöffnet.} \menu{File,Open Recent} listet die letzten zehn Dokumente und
+STEP-Dateien, die Sie geöffnet oder gespeichert haben, die neueste zuerst; der Tooltip zeigt den
+vollständigen Pfad. \gui{Clear list} leert die Liste. Eine Datei, die es nicht mehr gibt,
+verschwindet beim Versuch, sie zu öffnen, aus der Liste. Dokumente öffnen auch per Doppelklick
+im Dateimanager (\autoref{sec:kommandozeile}).
 
 \subsection{Speichern}
 
@@ -244,10 +245,14 @@ verwenden Sie STEP.
 
 \paragraph{Doppelklick.} Unter Windows verknüpft das Installationsprogramm die Endungen
 \datei{.rttf} und \datei{.nfcad} mit \produkt{}; ein Doppelklick im Explorer startet das
-Programm mit dem Dokument. Unter Linux meldet der Anwendungseintrag das Programm für
-STEP-Dateien an, sodass es im Dateimanager unter \enquote{Öffnen mit} erscheint. Unter macOS
-ist das Programm mit keiner Endung verknüpft; öffnen Sie Dokumente dort über
-\menu{File,Open...} oder aus dem Terminal.
+Programm mit dem Dokument. Unter macOS meldet das Programm \datei{.rttf}, \datei{.nfcad} und
+\datei{.nfplugin} als seine Dateitypen an und STEP-Dateien als Alternative (\enquote{Öffnen
+mit}); ein Doppelklick im Finder öffnet das Dokument bzw.\ installiert das Plugin-Paket, auch
+wenn das Programm schon läuft. Unter Linux installiert das Paket die MIME-Typen
+\code{application/x-raytatouille-fusion} (\datei{.rttf}, \datei{.nfcad}) und
+\code{application/x-raytatouille-fusion-plugin} (\datei{.nfplugin}); der Anwendungseintrag
+meldet das Programm für sie und für STEP-Dateien an. Hat das offene Dokument ungespeicherte
+Änderungen, fragt das Programm zuerst nach dem Speichern.
 
 \paragraph{Kommandozeile.} Das Programm nimmt eine Datei als Argument:
 
