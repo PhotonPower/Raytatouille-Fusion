@@ -89,6 +89,33 @@ def _evaluators(extra: dict) -> dict:
     return {**base, **extra}
 
 
+#: types the engine runs without an evaluator of their own (a junction adds what arrives; a group
+#: is unrolled into its blocks)
+_STRUCTURAL = frozenset({"fusion.sum", "group"})
+
+
+def _runnable_only(wf: dict, blocks, evaluators: dict) -> dict:
+    """The block library without the types nothing in this installation can compute (a planned
+    type, or the block of a plugin that is not loaded), and a warning on each such block in the
+    workflow – so it shows at Check instead of stopping a run. Types the workflow uses stay in the
+    library (the editor draws the blocks from it)."""
+    runnable = set(evaluators) | _STRUCTURAL
+    nodes = list(getattr(blocks, "nodes", {}).values()) if blocks is not None else []
+    used = {n.type_id for n in nodes}
+    out = dict(wf)
+    if out.get("types"):
+        out["types"] = [t for t in out["types"] if t.get("type") in runnable or t.get("type") in used]
+    warnings = [
+        {"code": "check.no_evaluator", "severity": "warning", "location": n.id,
+         "message": f"{n.type_id} cannot be computed in this installation (no evaluator: a planned block "
+                    "type, or its plugin is not loaded) – a run that needs this block stops"}
+        for n in nodes if n.type_id not in runnable and not getattr(n, "muted", False)
+    ]
+    if warnings:
+        out["diagnostics"] = [*(out.get("diagnostics") or []), *warnings]
+    return out
+
+
 class WorkflowEngine(Plugin):
     params = {
         "rays": Param.integer(20_000, min=7, max=500_000, label="Rays per field and wavelength",
@@ -202,6 +229,7 @@ class WorkflowEngine(Plugin):
             wf["diagnostics"], wf["plan"] = workflow.checked(graph, registry)
             self._model_ids = None
         wf["diagnostics"] = list(wf["diagnostics"]) + files
+        wf = _runnable_only(wf, model if model is not None else graph, _evaluators(extra))
         ex = None
         if graph is not None and not any(d["severity"] == "error" for d in wf["diagnostics"]):
             try:  # which blocks the kept results still cover

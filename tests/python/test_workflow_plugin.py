@@ -217,5 +217,20 @@ with tempfile.TemporaryDirectory() as tmp:
     assert message == "workflow: Camera", message
     assert len(ctx.images) == 2
 
+# blocks nothing here can compute: not offered in the library, a warning on the ones in the workflow
+registry, extra = workflow.registry()
+evaluators = workflow_plugin._evaluators(extra)
+library = workflow.catalogue(registry)
+missing = {t["type"] for t in library} - set(evaluators) - workflow_plugin._STRUCTURAL
+assert missing, "every built-in type has an evaluator – pick another planned type for this test"
+planned = sorted(missing)[0]
+g = Graph()
+g.add(Node("p", planned))
+checked = workflow_plugin._runnable_only({"types": library, "diagnostics": []}, g, evaluators)
+assert planned in {t["type"] for t in checked["types"]}  # used: the editor still draws it
+assert [d["code"] for d in checked["diagnostics"]] == ["check.no_evaluator"], checked["diagnostics"]
+empty = workflow_plugin._runnable_only({"types": library, "diagnostics": []}, Graph(), evaluators)
+assert not missing & {t["type"] for t in empty["types"]} and not empty["diagnostics"]
+
 print("workflow plugin: files stored in the document, failures in the status line, R→H at the link, "
-      "glass catalogues stored, kept results not computed again")
+      "glass catalogues stored, kept results not computed again, blocks without evaluator not offered")
