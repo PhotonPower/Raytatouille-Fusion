@@ -67,7 +67,8 @@ class TestSurfaceCommands : public QObject {
     auto c = started(QStringLiteral("extrude"), {make_entity(nf::make_line({0, 0, 0}, {2, 0, 0}))});
     c->setViewPlane(front);
     QCOMPARE(c->number(3.0), R::Done);
-    const auto& s = surface(c->takeEntities()[0]);
+    const auto made = c->takeEntities();
+    const auto& s = surface(made[0]);
     double min_y = 0.0;
     for (const nf::Vec3& p : s.control_points()) {
       QVERIFY(std::abs(p.z) < 1e-12);  // not along +Z
