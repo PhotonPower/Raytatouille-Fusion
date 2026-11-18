@@ -76,6 +76,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   direction – instead of spreads across and up and down.
 
 ### Fixed
+- **Windows (and Linux under a light system theme): the menu bar and other texts were dark on
+  dark.** The dark style sheet coloured only some widgets; the rest took the light system palette.
+  The application now uses a dark palette everywhere: Fusion with the colours of `dark.qss` on
+  Windows and Linux, the native dark appearance on macOS.
 - **Automotive Lighting plugin**: lamp data checked against UN/ECE R37 Rev. 7 – HB3 5.1 mm and
   1860 lm, HB4 1095 lm, P21W/PY21W 6.0 mm; the black top of H7, H8, H11 from γ3 at the coil's end
   nearest the reference plane, of the HB4 from its centre (it reached not far enough back); bulbs

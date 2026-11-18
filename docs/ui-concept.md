@@ -216,5 +216,7 @@ views with Shift-click.
 
 ## Visual style
 
-Dark theme by default (`resources/styles/dark.qss`), light theme selectable. Viewport background
+Dark theme by default (`resources/styles/dark.qss`, with a matching dark palette whatever the
+system theme: Fusion on Windows and Linux, the native dark appearance on macOS), light theme
+selectable. Viewport background
 is a vertical gradient; selection colour yellow, hover cyan, snap glyphs green.
