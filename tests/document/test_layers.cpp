@@ -241,10 +241,13 @@ class TestLayers : public QObject {
     const QString old = dir.filePath(QStringLiteral("old.rttf"));
     QFile f(old);
     QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write(R"({"format":"nfcad","version":2,"units":"mm","current_layer":7,
-               "layers":[{"id":0,"name":"Default","color":"#bec6d2","visible":true},
-                         {"id":1,"name":"L","color":"#ff0000","visible":true}],
-               "entities":[{"id":"3","name":"p","layer":1,"visible":true,"geometry":{"type":"point","point":[1,2,3]}}]})");
+    const QJsonObject file{
+        {"format", "nfcad"}, {"version", 2}, {"units", "mm"}, {"current_layer", 7},
+        {"layers", QJsonArray{QJsonObject{{"id", 0}, {"name", "Default"}, {"color", "#bec6d2"}, {"visible", true}},
+                              QJsonObject{{"id", 1}, {"name", "L"}, {"color", "#ff0000"}, {"visible", true}}}},
+        {"entities", QJsonArray{QJsonObject{{"id", "3"}, {"name", "p"}, {"layer", 1}, {"visible", true},
+                                            {"geometry", QJsonObject{{"type", "point"}, {"point", QJsonArray{1, 2, 3}}}}}}}};
+    f.write(QJsonDocument(file).toJson());
     f.close();
     Document before;
     QCOMPARE(nfcad::document::load_nfcad(before, old), QString());
