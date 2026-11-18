@@ -1,0 +1,131 @@
+\chapter{Das Dateiformat \texorpdfstring{\datei{.rttf}}{.rttf}}\label{kap:dateiformat}
+\index{Dateiformat}\index{rttf}
+
+Dieser Anhang beschreibt, was in einer Dokumentdatei steht. Für die tägliche Arbeit
+brauchen Sie ihn nicht; er hilft, wenn Sie Dateien mit eigenen Programmen auswerten oder
+erzeugen, eine Datei von Hand reparieren oder verstehen wollen, warum eine Datei groß ist.
+
+\section{Überblick}
+
+Dokumente werden mit der Endung \datei{.rttf} (\enquote{Raytatouille Fusion file})
+gespeichert. Dateien mit der Endung \datei{.nfcad} aus der Zeit vor Version~1.0 haben
+denselben Inhalt und werden weiterhin geöffnet; \menu{File,Save As...} bietet sie als
+\datei{.rttf} an. Intern heißt das Format weiterhin \code{"nfcad"}.
+
+\begin{itemize}
+  \item \textbf{Kodierung:} UTF-8-JSON, also eine Textdatei, die sich mit jedem Editor
+    lesen lässt.
+  \item \textbf{Sicheres Schreiben:} Die Datei wird zuerst vollständig unter einem
+    temporären Namen geschrieben und dann in einem Schritt ersetzt. Ein Absturz während des
+    Speicherns hinterlässt daher nie eine halbe Datei.
+  \item \textbf{Einheiten:} Millimeter.
+  \item \textbf{Geometrie exakt:} Gespeichert werden Grade, Knotenvektoren, Kontrollpunkte
+    und Gewichte der NURBS -- keine Dreiecksnetze. Beim Öffnen entsteht exakt dieselbe
+    Geometrie.
+  \item \textbf{Version:} Aktuell ist Version~2; Dateien der Version~1 werden weiterhin
+    gelesen. Neuere Versionen, als das Programm kennt, werden mit einer Meldung abgelehnt; das
+    geöffnete Dokument bleibt dann unverändert.
+\end{itemize}
+
+\section{Aufbau}
+
+Eine Datei ist ein JSON-Objekt mit diesen Abschnitten (gekürzt):
+
+\begin{lstlisting}
+{
+  "format": "nfcad",
+  "version": 2,
+  "units": "mm",
+  "layers":   [ { "id": 0, "name": "Default", "color": "#bec6d2", "visible": true } ],
+  "groups":   [ { "id": 1, "name": "objective", "parent": 0, "visible": true } ],
+  "entities": [ { "id": "1", "name": "part_0_0", "layer": 0, "visible": true,
+                  "color": "#ff0000",
+                  "group": 1,
+                  "attributes": { "rtt.role": "mirror", "sim.inactive": true },
+                  "geometry": { "type": "shell", "faces": [ ... ] } } ],
+  "plugins":  { "raytracer": { "params": { ... } } },
+  "workflow": { "graph": { "format": "rtt-fusion-graph", ... }, ... },
+  "results":  [ { "key": "workflow:Kamerabild", "name": "Kamera", "kind": "image",
+                  "stamp": "3f1c...", "image": { ... } } ]
+}
+\end{lstlisting}
+
+\begin{referenz}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Abschnitt} & \textbf{Inhalt} \\
+\midrule\endhead
+\param{format}, \param{version}, \param{units} & Kennung \code{"nfcad"}, Formatversion,
+  Einheit \code{"mm"}. \\
+\param{layers} & Die Ebenen mit Nummer, Name, Farbe und Sichtbarkeit
+  (\autoref{kap:organisieren}). \\
+\param{groups} & Die Gruppen des Modellbaums; \param{parent} ist die übergeordnete Gruppe,
+  0 bedeutet oberste Ebene. \\
+\param{entities} & Die Objekte: Nummer (als Zeichenkette, 64 Bit), Name, Ebene,
+  Sichtbarkeit, optional eigene Farbe (sonst die der Ebene), Gruppe, freie Attribute und die
+  Geometrie. \\
+\param{plugins} & Die Werte der Parameterformulare je Plugin, nach Plugin-Kennung.
+  Einträge von Plugins, die das Programm nicht kennt, bleiben beim Speichern unverändert
+  erhalten. \\
+\param{workflow} & Der Node-Workflow: Graph mit Blöcken, Verbindungen, Varianten und
+  eingebetteten Dateien (zum Beispiel Glaskatalogen), dazu Diagnosen und Plan
+  (\autoref{kap:workflow}). \\
+\param{results} & Die gespeicherten Ergebnisse der Anzeigefenster (siehe unten). \\
+\bottomrule
+\end{referenz}
+
+\section{Geometrie}\index{NURBS}
+
+\begin{referenz}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{\param{type}} & \textbf{Felder} \\
+\midrule\endhead
+\param{point} & \param{point}: $[x, y, z]$ \\
+\param{curve} & \param{degree}, \param{knots}, \param{points} (flache Liste $x, y, z, \dots$),
+  \param{weights} (fehlt, wenn alle Gewichte 1 sind) \\
+\param{surface} & \param{degree\_u}, \param{degree\_v}, \param{knots\_u}, \param{knots\_v},
+  \param{num\_u}, \param{num\_v}, \param{points} (zeilenweise, Index $i$ entlang $u$),
+  \param{weights} \\
+\param{trimmed\_surface} & \param{surface}, \param{outer} und \param{holes} (Listen von
+  2D-Kurven im Parameterraum mit $z = 0$; fehlen bei ungetrimmten Flächen), \param{label} \\
+\param{shell} & \param{faces}: Liste getrimmter Flächen. Die Topologie (Kanten, Ecken) wird
+  beim Laden durch Vernähen neu aufgebaut. \\
+\bottomrule
+\end{referenz}
+
+\section{Attribute}\index{Attribut}
+
+Attribute sind freie Schlüssel-Wert-Paare (Zeichenketten, Zahlen, Wahrheitswerte) an einem
+Objekt. Plugins verwenden Schlüssel mit Namensraum, etwa \param{rtt.role} für die Rolle einer
+Fläche im Raytracer. Das Attribut \param{sim.inactive} mit dem Wert \code{true} nimmt ein
+Objekt von allen Berechnungen aus, ohne es zu löschen oder auszublenden. Attribute lassen sich
+im \gui{Properties}-Dock bearbeiten (\autoref{kap:organisieren}).
+
+\section{Gespeicherte Ergebnisse}\index{Ergebnisse!gespeichert}\index{Fingerabdruck}
+
+Der Abschnitt \param{results} enthält das jeweils neueste Ergebnis jedes Anzeigefensters mit
+Schlüssel, zum Beispiel \code{workflow:<Block>} für die Anzeigeblöcke des Node-Workflows:
+Bilder, Kurven, Tabellen und Balken. Zu jedem Ergebnis gehört ein \emph{Fingerabdruck}
+(\param{stamp}) dessen, woraus es berechnet wurde.
+
+\begin{itemize}
+  \item Zahlenfelder stehen als Base64 ihrer Little-Endian-Bytes in der Datei: 32-Bit-Gleitkomma
+    für Bildwerte, 64-Bit-Gleitkomma für Kurven und Balken, Bytes für Farben.
+  \item Beim Öffnen erscheinen sie als Ergebnissatz \gui{Saved results}.
+  \item Der Workflow vergleicht die Fingerabdrücke mit dem, was er jetzt berechnen würde. Ein
+    unveränderter Anzeigeblock gilt als aktuell (grüner Haken), und \gui{Run workflow} rechnet
+    ihn nicht noch einmal (\enquote{(unchanged)} in der Statuszeile).
+  \item Zwischenergebnisse (Strahlenbündel, Felder) werden nicht gespeichert -- sie wären
+    groß und lassen sich jederzeit neu berechnen.
+  \item Programme, die den Abschnitt nicht kennen, überspringen ihn.
+\end{itemize}
+
+\begin{tipp}
+Wenn eine Datei unerwartet groß ist, liegt das meist an gespeicherten Bildern hoher Auflösung
+oder an eingebetteten Glaskatalogen. Beides ist gewollt: Die Datei lässt sich so auf einem
+anderen Rechner ohne die Kataloge öffnen und zeigt die Ergebnisse sofort.
+\end{tipp}
+
+\section{Geplante Erweiterungen}
+
+Für spätere Versionen vorgesehen sind binäre Blöcke für große Kontrollnetze, gespeicherte
+B-Rep-Topologie statt erneuten Vernähens und andere Einheiten als Millimeter.

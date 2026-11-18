@@ -1,0 +1,4 @@
+# latexmk -lualatex handbuch.tex  (oder: make)
+$pdf_mode = 4;          # LuaLaTeX
+$out_dir = 'build';
+$max_repeat = 6;

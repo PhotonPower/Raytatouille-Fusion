@@ -1,0 +1,644 @@
+% Anhang: Referenz des FourierGrating-Plugins
+% Quellen: python/plugins/fouriergrating/fg_plugin.py (Parameter, Aktionen), fg_config.py,
+% fg_scan.py, fg_nearfield.py, fg_estimate.py, fg_optimize.py, fg_cad.py, plugin.json;
+% Blocktypen aus dem Paket rtt-fusion (rtt_fusion/graph/grating.py, stack.py)
+\chapter{Referenz: FourierGrating-Plugin}\label{kap:plugin-fouriergrating}
+\index{FourierGrating}
+
+Dieser Anhang listet alle Aktionen, Parameter, Ergebnisse und Dateien des Plugins
+\plugin{FourierGrating}. Die Bedienung erklärt \autoref{kap:fouriergrating}.
+
+\section{Steckbrief}\label{sec:fg-ref-steckbrief}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Eigenschaft & Wert \\
+\midrule
+\endhead
+Name & \plugin{FourierGrating} \\
+Kennung (\param{id}) & \code{fg} \\
+Version & 0.1.0 \\
+Plugin-API & 1 \\
+Einstiegspunkt & \code{fg\_plugin:FourierGratingPlugin} \\
+Python-Pakete (\param{requires}) & \code{numpy}, \code{scipy}, \code{fouriergrating>=0.18} \\
+Ordner & \datei{python/plugins/fouriergrating} (wird mit der Anwendung installiert) \\
+Blocktypen & \block{fg.grating}, \block{fg.stack} (mit \code{rtt-fusion}) \\
+\bottomrule
+\end{referenz}
+
+\section{Python-Anforderungen}\label{sec:fg-ref-python}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Paket / Merkmal & Wofür \\
+\midrule
+\endhead
+\code{numpy} & alle Aktionen (Scan-Kurven, Nahfeld, CSV) \\
+\code{scipy} & \gui{Optimise} (L-BFGS-B aus \code{scipy.optimize}) \\
+\code{fouriergrating} $\geq$ 0.18 & \gui{Solve}, \gui{Scan}, \gui{Near field}, \gui{Optimise},
+  \gui{Check CAD layers}; ohne das Paket meldet jede dieser Aktionen, dass es fehlt \\
+CAD-Slicer in \code{fouriergrating} (Build mit \code{FG\_ENABLE\_NURBFORGE}) & \gui{Check CAD
+  layers} und die Prüfung in \gui{Layer from CAD bodies} \\
+\code{rtt\_fusion.\allowbreak graph.\allowbreak remote} (Paket \code{rtt-fusion} mit Fernblöcken) & Bereitstellen und
+  Auswerten der Blöcke \block{fg.grating} und \block{fg.stack}; das Modul
+  \code{rtt\_fusion.graph.stack} für \block{fg.stack} \\
+\bottomrule
+\end{referenz}
+
+Ohne \code{fouriergrating} funktionieren: \gui{Load configuration}, \gui{Save configuration},
+\gui{Estimate}, \gui{Set Littrow angle}, \gui{Layer from CAD bodies} (ohne Prüfung) sowie die beiden
+Blockaktionen. Ein Gitterblock mit gespeicherter Jones-Tabelle rechnet ebenfalls ohne
+\code{fouriergrating}.
+
+% ---------------------------------------------------------------------------------------------
+\section{Aktionen}\label{sec:fg-ref-aktionen}
+
+Die Aktionen stehen im Menü \menu{Plugins,FourierGrating}, als Knöpfe im Panel \gui{Plugin} und in der
+Werkzeugspalte -- in dieser Reihenfolge (alphabetisch nach dem internen Namen). Die beiden
+Blockaktionen stehen nur im Kontextmenü eines Blocks \block{fg.grating} oder \block{fg.stack} im
+Node-Editor.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{4.2cm}}
+\toprule
+Aktion & Wirkung & Liest / schreibt \\
+\midrule
+\endhead
+\gui{Check CAD layers} & Geometrieprüfung und Bandzerlegung jeder \code{cad}-Schicht durch FourierGrating
+  & Tabellen \enquote{Bands}, \enquote{Findings}; \gui{Preview SVG} \\
+\gui{Estimate} & Zahl der Rechnungen, Matrixgröße, grober Speicherbedarf (Faustregel)
+  & Statusleiste; Warnung im Protokoll \\
+\gui{Layer from CAD bodies} & schreibt die gewählten Körper als STEP und hängt oben eine
+  \code{cad}-Schicht an; prüft sie, wenn möglich & \gui{Bodies}, \gui{STEP file}; Parameter
+  \param{layers} \\
+\gui{Load configuration} & liest eine Konfiguration (.json) ins Panel & \gui{Configuration} \\
+\gui{Near field} & Feld am ersten Punkt der Beleuchtung: vertikaler und horizontaler Schnitt &
+  Bilder / Kurve; \gui{Also write .npz} \\
+\gui{Optimise} & L-BFGS-B mit exakten Gradienten: Parameter innerhalb ihrer Grenzen für die
+  Zielfunktion, am ersten Punkt & Kurve \enquote{objective L}, Tabelle \enquote{Parameters};
+  Panel (mit \gui{Apply the optimum to the panel}) \\
+\gui{Save configuration} & schreibt die Konfiguration des Panels als .json & \gui{Save as}, sonst
+  \gui{Configuration} \\
+\gui{Scan} & alle Punkte der Listen und Bereiche von $\lambda$, Winkeln, Polarisation und eines
+  Sweeps: Effizienz je Ordnung als Kurven & Kurven; \gui{Also write CSV} (\gui{Scan}) \\
+\gui{Set Littrow angle} & $\varphi$ für die \gui{Littrow order} (reflektiert, zurück in die
+  Einfallsrichtung) bei der ersten Wellenlänge und dem ersten $\psi$ & Parameter \param{phi\_deg} \\
+\gui{Solve} & Effizienzen jeder Ordnung am ersten Punkt der Beleuchtung & Tabelle \enquote{Orders},
+  Balken; \gui{Solve: also write CSV} \\
+\midrule
+\gui{Store panel configuration in block} (Blockaktion) & die Konfiguration des Panels wird die des
+  Blocks; Dateiverweis geleert, Jones-Tabelle eines Gitterblocks verworfen & Blockparameter
+  \param{config}, \param{fouriergrating}, \param{table}, \param{table\_data}; Felder des
+  Blockdialogs \\
+\gui{Load block configuration into panel} (Blockaktion) & zeigt die Konfiguration des Blocks im
+  Panel & Panel; \gui{Configuration} wird geleert \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Parameter}\label{sec:fg-ref-parameter}
+
+Die Tabellen geben für jeden Parameter den Schlüssel (so steht er im Dokument und in
+\code{ctx.params}), die Beschriftung im Panel, den Typ, den Standardwert, Einheit und Wertebereich
+sowie die Bedeutung an. \enquote{frei} bedeutet: das Plugin legt keine Grenze fest. Die Gruppen
+stehen in der Reihenfolge, in der das Panel sie zeigt.
+
+Typen: \emph{Zahl} (Drehfeld mit Nachkommastellen), \emph{Ganzzahl}, \emph{Auswahl} (Klappliste),
+\emph{Text} (Eingabezeile), \emph{Schalter}, \emph{Datei} (Pfad mit Dateidialog; \enquote{speichern}:
+Dialog zum Speichern), \emph{Körper} (\gui{Use selection}), \emph{Liste} (Einträge mit \gui{Add},
+\gui{Edit…}, \gui{Remove}, $\uparrow$, $\downarrow$), \emph{Tabelle} (mit \gui{Add row}, \gui{Remove
+row}), \emph{JSON} (Textfeld, ungültiges JSON rot).
+
+\subsection{Ohne Gruppe: Materialien und Schichten}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{materials}\newline\gui{Materials} & Liste (Einträge siehe unten); Standard: \code{air}
+  ($n = 1$), \code{glass} ($n = 1{,}5$) & -- & alle Materialien; ein Eintrag wird in der Liste mit
+  seinem \gui{Name} angezeigt \\
+\param{layers}\newline\gui{Layers (bottom to top)} & Liste (Einträge siehe unten); Standard: leer &
+  -- & Schichtstapel von unten (Substrat) nach oben (Superstrat); ein Eintrag wird mit seinem
+  \gui{Type} angezeigt \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Felder eines Materials} (Dialog \gui{Edit entry} der Liste \gui{Materials}):
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{name}\newline\gui{Name} & Text; \code{air} & -- & Name, unter dem Superstrat, Substrat und
+  Schichten das Material nennen \\
+\param{kind}\newline\gui{Given as} & Auswahl; \code{n} & \code{n}, \code{json} & \code{n}: Brechzahl
+  $n + \mathrm{i}k$; \code{json}: jede andere Form (Permittivität, Tensoren, dispersive Modelle) \\
+\param{n}\newline\gui{n} & Zahl (6 Stellen); 1.0 & frei & Realteil der Brechzahl (bei \code{n}) \\
+\param{k}\newline\gui{k} & Zahl (6 Stellen); 0.0 & frei & Imaginärteil (Absorption); 0: das Material
+  wird als reelle Zahl geschrieben \\
+\param{json}\newline\gui{Material as JSON (json)} & JSON; leer (\code{null}) & -- & das Material in
+  der Form der Konfigurationsdatei (bei \code{json}) \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Felder einer Schicht} (Dialog \gui{Edit entry} der Liste \gui{Layers (bottom to top)}):
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{type}\newline\gui{Type} & Auswahl; \code{homogeneous} & \code{homogeneous},
+  \code{lamellar1d}, \code{json} & Art der Schicht; \code{json}: jeder andere Schichttyp von
+  FourierGrating, als JSON bearbeitet \\
+\param{thickness}\newline\gui{Thickness} & Zahl (6 Stellen); 0.1 & \si{\micro\metre}; $\geq 0$ & Dicke
+  (homogen und Lamellen) \\
+\param{material}\newline\gui{Material (homogeneous)} & Text; \code{air} & -- & Material einer
+  homogenen Schicht \\
+\param{lamellae}\newline\gui{Lamellae (lamellar1d)} & Tabelle; leer & -- & Lamellen: jede von
+  \gui{from x} bis zum \gui{from x} der nächsten Zeile, die letzte bis \gui{End} \\
+\param{end}\newline\gui{End (lamellar1d)} & Zahl (6 Stellen); 0.0 & \si{\micro\metre}; frei & Ende der
+  letzten Lamelle; muss gleich \gui{Period x} sein (nicht geprüft) \\
+\param{json}\newline\gui{Layer as JSON (type json)} & JSON; leer & -- & die Schicht in der Form der
+  Konfigurationsdatei (bei \code{json}) \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Spalten der Tabelle \gui{Lamellae (lamellar1d)}:}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Kopf & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{from}\newline\gui{from x} & Zahl (6 Stellen); 0.0 & \si{\micro\metre}; frei & Beginn der
+  Lamelle; die erste Zeile beginnt bei 0 \\
+\param{material}\newline\gui{material} & Text; \code{air} & -- & Material der Lamelle \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe File}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{config\_file}\newline\gui{Configuration} & Datei; leer & Filter \enquote{FourierGrating
+  configuration (*.json)} & Datei, die \gui{Load configuration} ins Panel liest; Ziel von
+  \gui{Save configuration}, wenn \gui{Save as} leer ist \\
+\param{save\_as}\newline\gui{Save as} & Datei (speichern); leer & wie oben & Ziel von \gui{Save
+  configuration} \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Structure}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{dimension}\newline\gui{Dimension} & Auswahl; \code{1D} & \code{1D}, \code{2D} & Liniengitter
+  (periodisch in x) oder Kreuzgitter (x und z) \\
+\param{solver}\newline\gui{Solver} & Auswahl; \code{rcwa} & \code{rcwa}, \code{rk} & \code{rcwa}:
+  Scheiben (Fourier-Modal-Methode); \code{rk}: differentielle Methode (implizites Runge-Kutta) \\
+\param{nx}\newline\gui{Orders Nx} & Ganzzahl; 10 & 0 bis 200 & Fourier-Ordnungen $-N_x \dots N_x$ \\
+\param{nz}\newline\gui{Orders Nz} & Ganzzahl; 0 & 0 bis 200 & Fourier-Ordnungen $-N_z \dots N_z$
+  (2D) \\
+\param{period\_x}\newline\gui{Period x} & Zahl (6 Stellen); 1.0 & \si{\micro\metre}; $\geq 0$ &
+  Periode $\Lambda_x$ \\
+\param{period\_z}\newline\gui{Period z} & Zahl (6 Stellen); 0.0 & \si{\micro\metre}; $\geq 0$ &
+  Periode $\Lambda_z$ (2D: $> 0$ nötig) \\
+\param{superstrate}\newline\gui{Superstrate} & Text; \code{air} & Materialname & Medium oben, aus
+  dem das Licht einfällt (verlustfrei) \\
+\param{substrate}\newline\gui{Substrate} & Text; \code{glass} & Materialname & Medium unten \\
+\param{solve\_csv}\newline\gui{Solve: also write CSV} & Datei (speichern); leer & Filter
+  \enquote{CSV (*.csv)} & \gui{Solve} schreibt die Ordnungstabelle zusätzlich hierhin \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Incidence}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{lambda\_um}\newline\gui{$\lambda$ / \si{\micro\metre}} & Text; \code{0.6328} &
+  \si{\micro\metre}; Zahl, Liste oder Bereich & Vakuumwellenlänge: \code{0.6}, \code{0.5, 0.6} oder
+  \code{0.5:0.7:21} (von:bis:Schritte) \\
+\param{phi\_deg}\newline\gui{$\varphi$ / deg} & Text; \code{0} & Grad; wie oben & Polarwinkel gegen
+  die Normale (y-Achse) \\
+\param{psi\_deg}\newline\gui{$\psi$ / deg} & Text; \code{0} & Grad; wie oben & Azimut der
+  Einfallsebene gegen x \\
+\param{delta\_deg}\newline\gui{$\delta$ / deg} & Text; \code{0} & Grad; wie oben & Polarisation:
+  0 = s (TE), 90 = p (TM) \\
+\param{littrow\_order}\newline\gui{Littrow order} & Ganzzahl; $-1$ & $-50$ bis 50 & Ordnung, für die
+  \gui{Set Littrow angle} $\varphi$ setzt \\
+\bottomrule
+\end{referenz}
+
+Ein leeres Beleuchtungsfeld lässt den Schlüssel in der Konfiguration weg.
+
+\subsection{Gruppe Scan}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{scan\_x}\newline\gui{x axis} & Auswahl; \code{auto} & \code{auto}, \code{lambda\_um},
+  \code{phi\_deg}, \code{psi\_deg}, \code{delta\_deg}, \code{sweep\_value} & Größe auf der x-Achse;
+  \code{auto}: die mit den meisten Werten (bei Gleichstand $\lambda$); die übrigen variierenden
+  Größen ergeben eigene Kurven \\
+\param{scan\_min}\newline\gui{Orders from efficiency} & Zahl (4 Stellen); 0.01 & 0 bis 1 & eine
+  Ordnung bekommt eine Kurve, wenn sie diese Effizienz irgendwo erreicht \\
+\param{scan\_max\_curves}\newline\gui{At most curves} & Ganzzahl; 24 & 1 bis 500 & höchstens so
+  viele Kurven; weitere werden mit Warnung weggelassen \\
+\param{scan\_csv}\newline\gui{Also write CSV} & Datei (speichern); leer & Filter \enquote{CSV
+  (*.csv)} & jede Ordnung an jedem Punkt, wie \datei{efficiencies.csv} von FourierGrating \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Near field}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{nf\_show}\newline\gui{Show} & Auswahl; \code{|E|$^2$} & siehe \autoref{sec:fg-ref-nahfeld} &
+  dargestellte Größe \\
+\param{nf\_y\_from}\newline\gui{y from} & Zahl (6 Stellen); $-0.2$ & \si{\micro\metre}; frei & unteres
+  Ende des vertikalen Schnitts (0 = Unterkante des Stapels) \\
+\param{nf\_y\_to}\newline\gui{y to} & Zahl (6 Stellen); 0.5 & \si{\micro\metre}; frei & oberes Ende
+  des vertikalen Schnitts \\
+\param{nf\_horizontal\_y}\newline\gui{Horizontal cut at y} & Zahl (6 Stellen); 0.1 &
+  \si{\micro\metre}; frei & Höhe des horizontalen Schnitts \\
+\param{nf\_vertical\_z}\newline\gui{Vertical cut at z (2D)} & Zahl (6 Stellen); 0.0 &
+  \si{\micro\metre}; frei & Lage des vertikalen Schnitts in z (2D) \\
+\param{nf\_nx}\newline\gui{Points x} & Ganzzahl; 400 & 2 bis 4000 & Punkte in x \\
+\param{nf\_ny}\newline\gui{Points y} & Ganzzahl; 300 & 2 bis 4000 & Punkte in y \\
+\param{nf\_nz}\newline\gui{Points z (2D)} & Ganzzahl; 200 & 2 bis 4000 & Punkte in z (2D) \\
+\param{nf\_periods}\newline\gui{Periods} & Ganzzahl; 2 & 1 bis 20 & gezeigte Perioden \\
+\param{nf\_npz}\newline\gui{Also write .npz} & Datei (speichern); leer & Filter \enquote{NumPy
+  archive (*.npz)} & jede Größe beider Schnitte mit ihren Achsen \\
+\bottomrule
+\end{referenz}
+
+{\sloppy Die Werte \param{nf\_horizontal\_y}, \param{nf\_vertical\_z}, \param{nf\_nx}, \param{nf\_ny},
+\param{nf\_nz}, \param{nf\_periods} und der Bereich \param{nf\_y\_from} bis \param{nf\_y\_to} entsprechen den
+Schlüsseln \code{horizontal\_y\_um}, \code{vertical\_z\_um}, \code{nx}, \code{ny}, \code{nz},
+\code{periods} und \code{y\_range\_um} des Blocks \code{nearfield}. Sie werden nur geschrieben, wenn die
+geladene Datei sie hatte oder sie vom Standard abweichen; \gui{Near field} rechnet immer mit allen.\par}
+
+\subsection{Gruppe Optimisation}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{opt\_goal}\newline\gui{Goal} & Auswahl; \code{maximise} & \code{maximise}, \code{minimise} &
+  Richtung der Optimierung \\
+\param{opt\_terms}\newline\gui{Objective L = $\Sigma$ weight $\cdot$ efficiency} & Tabelle; leer &
+  Spalten siehe unten & Glieder der Zielfunktion $L = \sum w\,\eta(\text{side}, n, m)$ \\
+\param{opt\_params}\newline\gui{Parameters} & Tabelle; leer & Spalten siehe unten & Zahlen der
+  Konfiguration per JSON-Zeiger, mit Grenzen \\
+\param{opt\_iterations}\newline\gui{Iterations} & Ganzzahl; 50 & 1 bis 10000 & höchstens so viele
+  Iterationen von L-BFGS-B \\
+\param{opt\_apply}\newline\gui{Apply the optimum to the panel} & Schalter; an & -- & schreibt das
+  Optimum nach dem Ende ins Panel \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Spalten von \gui{Objective L = $\Sigma$ weight $\cdot$ efficiency}:}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Kopf & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{side}\newline\gui{side} & Auswahl; \code{R} & \code{R}, \code{T} & reflektierte oder
+  transmittierte Ordnung \\
+\param{n}\newline\gui{n} & Ganzzahl; $-1$ & $-1000$ bis 1000 & Ordnung in x \\
+\param{m}\newline\gui{m} & Ganzzahl; 0 & $-1000$ bis 1000 & Ordnung in z (1D: 0) \\
+\param{weight}\newline\gui{weight} & Zahl (4 Stellen); 1.0 & frei & Gewicht $w$; Zeilen derselben
+  Ordnung werden addiert \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Spalten von \gui{Parameters}:}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Kopf & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{pointer}\newline\gui{JSON pointer} & Text; \code{/layers/0/\allowbreak thickness\_um} & RFC 6901 & Zahl
+  der Konfiguration, z.\,B. \code{/layers/0/breakpoints\_um/1}, \code{/period\_um/x} \\
+\param{lower}\newline\gui{lower} & Zahl (6 Stellen); 0.0 & frei & Untergrenze \\
+\param{upper}\newline\gui{upper} & Zahl (6 Stellen); 1.0 & frei & Obergrenze; der Startwert muss
+  zwischen beiden liegen \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe CAD layer}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{cad\_bodies}\newline\gui{Bodies} & Körper (mehrere); leer & Art \code{shell} & geschlossene
+  Körper einer Elementarzelle; Material aus dem Attribut \code{material} oder dem Namen; CAD $+Z$ ist
+  die Stapelrichtung \\
+\param{cad\_unit}\newline\gui{Bodies drawn in} & Auswahl; \si{\micro\metre} & \si{\micro\metre},
+  \code{mm} & Einheit der gezeichneten Körper \\
+\param{cad\_step}\newline\gui{STEP file} & Datei (speichern); leer & Filter \enquote{STEP (*.step
+  *.stp)} & wohin die Körper geschrieben werden; die Schicht verweist darauf \\
+\param{cad\_background}\newline\gui{Around the bodies} & Auswahl; \code{superstrate} &
+  \code{superstrate}, \code{substrate} & Material zwischen den Körpern \\
+\param{cad\_slices}\newline\gui{RCWA slices per band} & Ganzzahl; 30 & 1 bis 1000 & Scheiben je Band
+  der RCWA \\
+\param{cad\_preview\_y}\newline\gui{Preview at height} & Zahl (6 Stellen); 0.0 & \si{\micro\metre};
+  frei & Höhe des Vorschauschnitts \\
+\param{cad\_preview}\newline\gui{Preview SVG} & Datei (speichern); leer & Filter \enquote{SVG
+  (*.svg)} & \gui{Check CAD layers} schreibt den Schnitt der ersten \code{cad}-Schicht in dieser
+  Höhe \\
+\bottomrule
+\end{referenz}
+
+\subsection{Gruppe Advanced und verborgene Parameter}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}p{2.7cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}X}
+\toprule
+Schlüssel / Beschriftung & Typ / Standard & Einheit / Bereich & Bedeutung \\
+\midrule
+\endhead
+\param{advanced}\newline\gui{Further settings (JSON)} & JSON; \code{\{\}} & -- & alle übrigen
+  Schlüssel der Konfiguration (Solver-Optionen, \code{sweep}, \code{output}, weitere Schlüssel von
+  \code{incidence}, \code{truncation}, \code{nearfield}), wie in der Datei \\
+\param{\_order} & JSON, verborgen; \code{[]} & -- & Reihenfolge der Schlüssel der geladenen Datei
+  (wird beim Speichern eingehalten) \\
+\param{\_present} & JSON, verborgen; \code{null} & -- & welche Schlüssel die geladene Datei hatte
+  (nur diese oder geänderte werden geschrieben) \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Panel und Konfigurationsdatei}\label{sec:fg-ref-zuordnung}
+
+So entsprechen die Felder des Panels den Schlüsseln der Konfiguration von FourierGrating:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}X}
+\toprule
+Panel & Konfiguration \\
+\midrule
+\endhead
+\param{dimension}, \param{solver} & \code{dimension}, \code{solver} \\
+\param{nx}, \param{nz} & \code{truncation.Nx}, \code{truncation.Nz} \\
+\param{period\_x}, \param{period\_z} & \code{period\_um.x}, \code{period\_um.z} \\
+\param{superstrate}, \param{substrate} & \code{superstrate}, \code{substrate} \\
+\param{lambda\_um}, \param{phi\_deg}, \param{psi\_deg}, \param{delta\_deg} & \code{incidence.lambda\_um}
+  usw.; Liste \code{[...]}, Bereich \code{\{\textquotedbl{}from\textquotedbl{}, \textquotedbl{}to\textquotedbl{}, \textquotedbl{}steps\textquotedbl{}\}} \\
+Material mit \gui{Given as} = \code{n} & \code{materials.<Name>.n}: Zahl (bei $k = 0$) oder
+  \code{[n, k]} \\
+Material mit \gui{Given as} = \code{json} & \code{materials.<Name>}: der JSON-Inhalt \\
+Schicht \code{homogeneous} & \code{\{\textquotedbl{}type\textquotedbl{}: \textquotedbl{}homogeneous\textquotedbl{}, \textquotedbl{}thickness\_um\textquotedbl{}, \textquotedbl{}material\textquotedbl{}\}} \\
+Schicht \code{lamellar1d} & \code{\{\textquotedbl{}type\textquotedbl{}: \textquotedbl{}lamellar1d\textquotedbl{}, \textquotedbl{}thickness\_um\textquotedbl{}, \textquotedbl{}breakpoints\_um\textquotedbl{},
+  \textquotedbl{}materials\textquotedbl{}\}}; \code{breakpoints\_um} = alle \gui{from x} und \gui{End} \\
+Schicht \code{json} & der JSON-Inhalt \\
+Gruppe \gui{Near field} & \code{nearfield} (siehe oben) \\
+\param{advanced} & alle übrigen Schlüssel, unverändert \\
+\bottomrule
+\end{referenz}
+
+Beim Laden erscheinen homogene und Lamellenschichten nur dann als Felder, wenn sie genau die oben
+genannten Schlüssel haben; Materialien nur, wenn sie allein aus \code{n} (Zahl oder Paar) bestehen.
+Alles andere erscheint als JSON-Eintrag.
+
+% ---------------------------------------------------------------------------------------------
+\section{Ergebnisse}\label{sec:fg-ref-ergebnisse}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+Aktion & Ergebnissatz & Inhalt \\
+\midrule
+\endhead
+\gui{Solve} & \enquote{FourierGrating $\lambda$ = … \si{\micro\metre}} & Tabelle \enquote{Orders}
+  (Spalten \code{side}, \code{n}, \code{m}, \code{efficiency}, \code{s part}, \code{p part});
+  Balken \enquote{Efficiency per order} (y-Achse \code{efficiency}); Protokoll: $\Sigma R$, $\Sigma T$,
+  $A$, Energiebilanz, Warnungen \\
+\gui{Scan} & \enquote{FourierGrating scan over …} (Achsenbeschriftung) & Kurven $\Sigma$R, $\Sigma$T und
+  je Ordnung (\code{R n} bzw. \code{R n,m}, mit Zusatz der übrigen variierenden Größen); y-Achse
+  \code{efficiency} \\
+\gui{Near field} & \enquote{FourierGrating near field $\lambda$ = … \si{\micro\metre}} & Bild bzw.
+  Kurve \enquote{<Größe> – vertical cut} und \enquote{<Größe> – horizontal cut}; Beschreibung: die
+  Normierung \\
+\gui{Optimise} & \enquote{FourierGrating optimisation} & Kurve \enquote{objective L} (x:
+  \code{evaluation}, y: \code{L}); Tabelle \enquote{Parameters} (\code{parameter}, \code{start},
+  \code{optimum}, \code{lower}, \code{upper}) \\
+\gui{Check CAD layers}, \gui{Layer from CAD bodies} & \enquote{FourierGrating CAD layers} & Tabelle
+  \enquote{Bands} (\code{layer}, \code{y from / }\si{\micro\metre}, \code{y to /
+  }\si{\micro\metre}, \code{kind}, \code{area fractions}); Tabelle \enquote{Findings}
+  (\code{layer}, \code{severity}, \code{code}, \code{message}, \code{where / }\si{\micro\metre}) \\
+\bottomrule
+\end{referenz}
+
+\subsection{Größen des Nahfelds}\label{sec:fg-ref-nahfeld}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+\gui{Show} & Feld von FourierGrating & Farbskala & Darstellung \\
+\midrule
+\endhead
+\code{|E|$^2$} & \code{absE2} & \code{inferno} & Wert \\
+\code{|H|$^2$} & \code{absH2} & \code{inferno} & Wert \\
+\code{Sy (power flow)} & \code{Sy} & \code{coolwarm} & Wert, Skala symmetrisch um 0 \\
+\code{|Ex|}, \code{|Ey|}, \code{|Ez|}, \code{|Hx|}, \code{|Hy|}, \code{|Hz|} & \code{Ex} \dots{}
+  \code{Hz} & \code{inferno} & Betrag \\
+\code{Re Ex}, \code{Re Ey}, \code{Re Ez}, \code{Re Hx}, \code{Re Hy}, \code{Re Hz} & \code{Ex} \dots{}
+  \code{Hz} & \code{coolwarm} & Realteil, Skala symmetrisch um 0 \\
+\code{material} & \code{material} & \code{viridis} & Materialindex \\
+\bottomrule
+\end{referenz}
+
+Normierung: $|E_\text{inc}| = 1$, das Magnetfeld als $Z_0 H$.
+
+% ---------------------------------------------------------------------------------------------
+\section{Exportierte Dateien}\label{sec:fg-ref-dateien}
+
+\begin{description}
+  \item[Konfiguration] (\gui{Save configuration}) JSON mit zwei Leerzeichen Einrückung, Schlüssel in
+    der Reihenfolge der geladenen Datei; Format nach \datei{docs/config\_format.md} von
+    FourierGrating.
+  \item[Ordnungstabelle] (\gui{Solve: also write CSV}) eine Zeile je Ordnung, Spalten (Kopfzeile) \code{side}, \code{n}, \code{m}, \code{efficiency}, \code{eff\_s}, \code{eff\_p}; Zahlen mit voller Genauigkeit.
+  \item[Scan] (\gui{Also write CSV}) alle Spalten des Scan-Ergebnisses von FourierGrating in seiner
+    Reihenfolge -- wie \datei{efficiencies.csv} von FourierGrating (u.\,a. \code{lambda\_um},
+    \code{phi\_deg}, \code{psi\_deg}, \code{delta\_deg}, \code{side}, \code{n}, \code{m},
+    \code{efficiency}, \code{eff\_s}, \code{eff\_p}, bei einem Sweep dessen Wert); komplexe Spalten
+    als \code{<Name>\_re} und \code{<Name>\_im}; eine Zeile je Ordnung und Punkt.
+  \item[Nahfeld] (\gui{Also write .npz}) komprimiertes NumPy-Archiv: jedes Feld jedes Schnitts unter
+    \code{<Schnitt>/<Name>} (komplexe Felder unverändert), dazu \code{<Schnitt>/meta} als JSON-Text;
+    Schnitte \code{vertical} und \code{horizontal} (und die Angaben zur Beleuchtung).
+  \item[STEP] (\gui{STEP file}) die gewählten Körper, je einer benannt nach seinem Objekt, in der
+    gewählten Reihenfolge.
+  \item[Vorschau] (\gui{Preview SVG}) der Schnitt der ersten \code{cad}-Schicht in der Höhe
+    \gui{Preview at height}.
+\end{description}
+
+\subsection{Die angelegte CAD-Schicht}
+
+\gui{Layer from CAD bodies} hängt diesen Eintrag (als Schicht vom Typ \code{json}) an:
+
+\begin{lstlisting}
+{ "type": "cad",
+  "file": "<absoluter Pfad der STEP-Datei>",
+  "unit": "um",                      (oder "mm")
+  "axes": { "y": "+Z", "x": "+X" },
+  "background": "superstrate",       (oder "substrate")
+  "bodies": [ { "index": 0, "material": "si" }, ... ],
+  "slicing": { "rcwa_slices": 30 } }
+\end{lstlisting}
+
+% ---------------------------------------------------------------------------------------------
+\section{Formeln der Aufwandsschätzung}\label{sec:fg-ref-schaetzung}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.0cm}>{\raggedright\arraybackslash}X}
+\toprule
+Größe & Berechnung \\
+\midrule
+\endhead
+Scanpunkte & Produkt der Zahl der Werte von $\lambda$, $\varphi$, $\psi$, $\delta$ (Zahl: 1, Liste:
+  Länge, Bereich: \code{steps}) \\
+Rechnungen & Scanpunkte $\times$ Sweep-Werte \\
+Fourier-Glieder $n_f$ & $2N_x + 1$ (1D), $(2N_x + 1)(2N_z + 1)$ (2D) \\
+Matrixgröße & $n = 4 n_f$ \\
+Speicher & $\min(\text{Scanpunkte}, \text{Kerne}) \times 12 \times n^2 \times 16$ Byte; bei
+  \gui{Optimise} ein Punkt \\
+Warnschwelle & 70\,\% des Arbeitsspeichers \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------------------------
+\section{Workflow-Blöcke}\label{sec:fg-ref-bloecke}
+\index{fg.grating}\index{fg.stack}
+
+Die Blocktypen stammen aus dem Paket \code{rtt-fusion} und werden im Prozess des Plugins
+ausgewertet. Die folgenden Angaben entsprechen der installierten Version des Pakets; andere Versionen
+können weitere Parameter haben. Die Darstellungen sind R (Strahlen) und H (Felder). Allgemeines zu
+Ports und Blöcken steht in \autoref{kap:workflow} und \autoref{kap:workflow-bloecke}.
+
+\subsection{Gitter: fg.grating}
+
+Periodische Probe (\enquote{Periodic sample (FourierGrating table): diffraction orders as channels}),
+Kategorie Strahlteiler. Frühere Kennung \block{fusion.grating} (wird beim Laden umgesetzt).
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Anschluss & Richtung, Art & Bedeutung \\
+\midrule
+\endhead
+\code{in} & Eingang, Licht (R, H) & einfallendes Licht \\
+\code{out} (\enquote{orders}) & Ausgang, Licht (R, H) & die weitergegebenen Ordnungen \\
+Port \code{front} & \code{in}/\code{out} & Seite der Probe, an der Licht ein- und austritt \\
+\bottomrule
+\end{referenz}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}X}
+\toprule
+Parameter & Typ / Standard & Bedeutung \\
+\midrule
+\endhead
+\param{table} & Datei; leer & Jones-Tabelle (\code{raytatouille-result}-Datei); \gui{Check workflow}
+  übernimmt sie in den Block (\param{table\_data}) und leert den Pfad \\
+\param{fouriergrating} & Datei; leer & FourierGrating-Konfiguration; der Block baut seine Tabelle um
+  die Strahlen (R) oder rechnet jede ebene Welle eines Felds (H); \gui{Check workflow} übernimmt sie
+  in \param{config} \\
+\param{config} & Daten; \code{\{\}} & die Konfiguration, die der Block hält (vor der Datei) \\
+\param{table\_data} & Daten; \code{\{\}} & die Jones-Tabelle, die der Block hält (vor der Datei; hat
+  Vorrang vor der Konfiguration) \\
+\param{side} & Auswahl; \code{reflected} & \code{reflected} oder \code{transmitted}: die
+  weitergegebenen Ordnungen (mit Konfiguration) \\
+\param{orders} & Zahlenliste; leer & weitergegebene Ordnungen; leer: alle der Tabelle \\
+\param{n\_in} & Zahl; 1.0 & Brechzahl des Einfallsmediums (R, gebaute Tabelle) \\
+\param{sigma\_step} (\gui{Ray path}: \gui{$\sigma$ step of the table}) & Zahl; 0.01 ($\geq 10^{-5}$) &
+  Abstand der Stützstellen der Tabelle in den Richtungskosinus $\sigma = n \sin\theta$ (kubisch
+  interpoliert); kleiner ist genauer und braucht mehr Rechnungen \\
+\param{sigma\_margin} (\gui{Ray path}: \gui{$\sigma$ margin of the table}) & Zahl; 0.01 ($\geq 0$) &
+  wie weit die Tabelle über den $\sigma$-Bereich der Strahlen hinausreicht \\
+\param{point} & Punkt; (0, 0, 0) \si{\milli\metre} & Lage der Probe \\
+\param{normal} & Punkt; (0, 0, 1) & Flächennormale \\
+\param{grating\_vector} & Punkt; (1, 0, 0) & lokale x-Richtung, senkrecht zu den Gitterlinien \\
+\param{field\_transfer} (\gui{Field path}) & Auswahl; \code{exact} & \code{exact}: FourierGrating je
+  ebener Welle; \code{interpolated}: aus einem geprüften Teilgitter des Spektrums, für breite
+  Bündel viel schneller \\
+\param{field\_threshold} (\gui{Field path}) & Zahl; $10^{-10}$ & ebene Wellen unter diesem Anteil
+  der größten Amplitude entfallen (H) \\
+\param{field\_grid\_max} (\gui{Field path}) & Ganzzahl; 1024 & höchstens so viele Gitterpunkte je
+  Achse für ein Feld (H) \\
+\bottomrule
+\end{referenz}
+
+Eine gebaute Tabelle umfasst die Wellenlänge der Strahlen $\pm$\,\qty{1.5}{\nano\metre} und ihren
+$\sigma$-Bereich plus \param{sigma\_margin}, mindestens vier Stützstellen je Achse. Strahlen, deren
+Ordnung evaneszent ist oder die außerhalb der Tabelle bzw. nahe einer Rayleigh-Anomalie liegen,
+entfallen mit einer Protokollzeile. Alle Ordnungen behalten die Kohärenz des einfallenden Bündels.
+
+Hält der Block eine Konfiguration, zeigt sein Dialog zusätzlich deren Zahlen:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{5.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Gruppe & Feld & Zeiger in die Konfiguration \\
+\midrule
+\endhead
+\gui{Grating} & \gui{Period x} (2D auch \gui{Period z}), \si{\micro\metre} & \code{/config/period\_um/x} \\
+\gui{Grating} & \gui{Fourier orders Nx ($-$N … N)} (2D auch Nz) & \code{/config/truncation/Nx} \\
+\gui{Layers} & \gui{Layer $i$ (<Typ>): thickness}, \si{\micro\metre} & \code{/config/layers/<i-1>/thickness\_um} \\
+\gui{Layers} & \gui{Layer $i$ (<Typ>): lamella edges}, \si{\micro\metre} & \code{/config/layers/<i-1>/breakpoints\_um} \\
+\gui{Materials} & \gui{<Name>: n} bzw. \gui{<Name>: n, k} & \code{/config/materials/<Name>/n} \\
+\bottomrule
+\end{referenz}
+
+\subsection{Schichtstapel: fg.stack}
+
+\enquote{Layer stack (FourierGrating, exact per ray): coating, filter, mirror layers}. Licht, das auf
+einer Seite eintritt, verlässt den Stapel reflektiert auf derselben und transmittiert auf der
+anderen Seite. Licht von hinten sieht den Stapel umgedreht.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}X}
+\toprule
+Anschluss & Richtung, Art & Bedeutung \\
+\midrule
+\endhead
+\code{front\_in} & Eingang, Licht (R, H) & Licht auf die Vorderseite (Superstrat, in Richtung
+  \param{normal}) \\
+\code{front\_out} & Ausgang, Licht (R, H) & Licht, das die Vorderseite verlässt \\
+\code{back\_in} & Eingang, Licht (R, H) & Licht auf die Rückseite (Substrat) \\
+\code{back\_out} & Ausgang, Licht (R, H) & Licht, das die Rückseite verlässt \\
+\bottomrule
+\end{referenz}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}X}
+\toprule
+Parameter & Typ / Standard & Bedeutung \\
+\midrule
+\endhead
+\param{fouriergrating} & Datei; leer & Konfiguration mit nur homogenen Schichten, vom Substrat (hinten)
+  nach oben zum Superstrat (vorn); \gui{Check workflow} übernimmt sie in \param{config} \\
+\param{config} & Daten; \code{\{\}} & die Konfiguration, die der Block hält \\
+\param{point} & Punkt; (0, 0, 0) \si{\milli\metre} & Lage der Ebene des Stapels \\
+\param{normal} & Punkt; (0, 0, 1) & zur Vorderseite (Superstrat) \\
+\param{field\_threshold} (\gui{Field path}) & Zahl; $10^{-10}$ & wie bei \block{fg.grating} \\
+\param{field\_transfer} (\gui{Field path}) & Auswahl; \code{exact} & wie bei \block{fg.grating} \\
+\param{field\_grid\_max} (\gui{Field path}) & Ganzzahl; 1024 & wie bei \block{fg.grating} \\
+\bottomrule
+\end{referenz}
+
+Beleuchtung, Abbruch und Periode der Konfiguration setzt der Block selbst ($N = 0$, 1D). Der
+Stapel ist ein dünnes Element: die seitliche Versetzung im Stapel (höchstens Dicke $\times
+\tan\theta$) entfällt.

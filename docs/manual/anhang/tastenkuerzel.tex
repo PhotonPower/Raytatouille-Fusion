@@ -1,0 +1,305 @@
+\chapter{Tastenkürzel und Mausbedienung}\label{kap:tastenkuerzel}
+\sloppy % lange Befehls-Aufforderungen in Schreibmaschinenschrift umbrechen
+\index{Tastenkürzel}
+
+Dieser Anhang fasst alle Tastenkürzel, Maus- und Trackpad-Gesten von \produkt{} zusammen,
+gegliedert nach Bereichen. Die Angaben sind dem Programmcode entnommen. Wo eine Funktion im
+Handbuch ausführlich beschrieben ist, verweist die Tabelle auf das Kapitel.
+
+\section{Strg und Cmd, Alt und Option}\label{sec:strg-cmd}
+\index{Cmd-Taste}\index{Strg-Taste}
+
+Das Handbuch schreibt Tastenkürzel in der Form von Windows und Linux, also mit \keys{Strg}.
+Unter \textbf{macOS} verwenden Sie statt \keys{Strg} die \textbf{Befehlstaste} (Cmd): Aus
+\keys{Strg+S} wird \keys{Cmd+S}, aus \keys{Strg}+\maus{Klick} wird \keys{Cmd}+\maus{Klick}. Das
+gilt für Menükürzel ebenso wie für die Auswahl mit der Maus und das Zoomen mit
+\keys{Strg}+Scrollen. Die Taste \keys{Alt} heißt auf dem Mac \keys{Option}; \keys{Shift} ist die
+Umschalttaste. Die Rücktaste (auf dem Mac mit \enquote{delete} beschriftet) löscht wie
+\keys{Entf} die Auswahl.
+
+Die Menüs zeigen neben jedem Eintrag das auf Ihrem System gültige Kürzel an. Die Einträge, die
+in den Tabellen mit \enquote{Systemstandard} markiert sind, verwenden die Standardkürzel des
+Betriebssystems; sie können sich zwischen Windows, macOS und Linux geringfügig unterscheiden --
+maßgeblich ist dann die Anzeige im Menü.
+
+\begin{hinweis}
+Einbuchstabige Kürzel wie \keys{H} oder \keys{Z}, \keys{E} wirken, solange eine Ansicht (oder
+ein anderes Element des Hauptfensters außer einem Textfeld) den Tastaturfokus hat. Steht der
+Cursor in der Befehlszeile oder in einem Eingabefeld, werden die Buchstaben ganz normal
+eingegeben.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------
+\section{Datei}\label{sec:tk-datei}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.16\linewidth}X}
+\toprule
+Kürzel & Menü & Bemerkung & Wirkung \\
+\midrule\endhead
+\keys{Strg+N} & \menu{File,New} & Systemstandard & Neues, leeres Dokument. \\
+\keys{Strg+O} & \menu{File,Open…} & Systemstandard & Dokument oder STEP-Datei öffnen. \\
+\keys{Strg+I} & \menu{File,Import STEP…} & & STEP-Datei zum Dokument hinzufügen. \\
+\keys{Strg+S} & \menu{File,Save} & Systemstandard & Dokument speichern. \\
+\keys{Strg+Shift+S} & \menu{File,Save As…} & Systemstandard & Unter neuem Namen speichern. \\
+\keys{Strg+Q} & \menu{File,Quit} & Systemstandard & Programm beenden (auf dem Mac im
+  Programmmenü). \\
+-- & \menu{File,Export STEP…} & & ohne Kürzel \\
+-- & \menu{File,Export STL…} & & ohne Kürzel \\
+\bottomrule
+\end{referenz}
+
+Einzelheiten zu den Dateiformaten: Kapitel~\ref{kap:dateien}.
+
+% ---------------------------------------------------------------------------
+\section{Bearbeiten}\label{sec:tk-bearbeiten}
+
+\begin{referenz}{l>{\raggedright\arraybackslash}p{0.27\linewidth}X}
+\toprule
+Kürzel & Menü & Wirkung \\
+\midrule\endhead
+\keys{Strg+Z} & \menu{Edit,Undo} & Letzten Schritt rückgängig machen (Systemstandard). \\
+\keys{Strg+Shift+Z} & \menu{Edit,Redo} & Rückgängig gemachten Schritt wiederholen
+  (Systemstandard; unter Windows ist üblicherweise auch \keys{Strg+Y} belegt). \\
+\keys{Entf}, Rücktaste & \menu{Edit,Delete} & Ausgewählte Objekte löschen (rückgängig
+  machbar). Einzelne Flächen, Kanten und Ecken lassen sich nicht löschen. \\
+\keys{Strg+A} & \menu{Edit,Select All} & Alle sichtbaren Objekte auswählen. \\
+\keys{Strg+G} & \menu{Edit,Group…} & Auswahl gruppieren (Kapitel~\ref{kap:organisieren}). \\
+\keys{Strg+Shift+G} & \menu{Edit,Ungroup} & Gruppe auflösen. \\
+\keys{H} & \menu{Edit,Hide} & Ausgewählte Objekte ausblenden (auch Knopf in der
+  Ansichts-Werkzeugleiste). \\
+-- & \menu{Edit,Isolate selected} & Nur die Auswahl anzeigen; ohne Kürzel. \\
+\keys{Shift+H} & \menu{Edit,Unhide} & Mit Hide oder Isolate ausgeblendete Objekte wieder
+  anzeigen. Layer und Kontrollkästchen im Modellbaum behalten ihren Zustand. \\
+-- & \menu{Edit,Show all} & Alles anzeigen, auch ausgeschaltete Layer und Modellbaum-Einträge;
+  ohne Kürzel. \\
+\keys{Esc} & \menu{Edit,Select None / Cancel} & Der Reihe nach: laufenden Befehl abbrechen,
+  sonst laufenden Plugin-Auftrag abbrechen, sonst Auswahl aufheben. \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------
+\section{Ansicht und Navigation}\label{sec:tk-ansicht}
+\index{Navigation}
+
+\subsection{Tasten}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Kürzel & Wirkung \\
+\midrule\endhead
+\keys{Z}, dann \keys{E} & \gui{Zoom extents}: das ganze Modell in der aktiven Ansicht
+  einpassen. \\
+\keys{Z}, dann \keys{S} & \gui{Zoom selected}: die ausgewählten Elemente füllen die aktive
+  Ansicht; ohne Auswahl wie Zoom extents. \\
+\keys{Leertaste} & aktive Ansicht maximieren bzw.\ wieder das $2 \times 2$-Raster zeigen. \\
+\keys{Shift}+\maus{Klick} auf \gui{Wireframe}, \gui{Surfaces}, \gui{Shaded}, \gui{Zoom
+  extents} oder \gui{Zoom selected} (Werkzeugleiste) & wirkt auf alle vier Ansichten statt nur
+  auf die aktive. \\
+\bottomrule
+\end{referenz}
+
+Die Darstellungsmodi und die Docks haben keine Tastenkürzel; Sie erreichen sie über die
+Werkzeugleiste und das Menü \menu{View}.
+
+\subsection{Maus}
+
+\begin{referenz}{p{0.3\linewidth}p{0.3\linewidth}X}
+\toprule
+Aktion & Ansicht Perspective & Ansichten Front, Left, Top \\
+\midrule\endhead
+Drehen (Orbit) & \maus{rechts ziehen} oder \keys{Alt}+\maus{links ziehen} & -- (kein Drehen) \\
+Verschieben (Pan) & \maus{mittlere Taste ziehen} oder \keys{Shift}+\maus{rechts ziehen} &
+  \maus{mittlere Taste ziehen}, \maus{rechts ziehen} oder \keys{Alt}+\maus{links ziehen} \\
+Zoomen zum Cursor & \maus{Mausrad} & \maus{Mausrad} \\
+Zoom extents & \maus{Doppelklick mit der mittleren Taste} & ebenso \\
+Ansichtsmenü & \maus{Klick auf den Ansichtstitel} oben links & ebenso \\
+\bottomrule
+\end{referenz}
+
+Das Ansichtsmenü bietet die Standardansichten Front, Left, Top und Perspective, den Schalter
+\gui{Perspective projection}, \gui{Zoom extents}, \gui{Zoom selected} und
+\gui{Maximize / restore  (Space)}. Die Ansicht, in die Sie zuletzt geklickt haben, ist die
+\emph{aktive} Ansicht. Ausführlich: Kapitel~\ref{kap:navigation}.
+
+\subsection{Trackpad}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Geste & Wirkung \\
+\midrule\endhead
+\maus{Zwei-Finger-Scrollen} & Ansicht verschieben (Pan). \\
+\keys{Strg}+\maus{Zwei-Finger-Scrollen} & zoomen zum Cursor. \\
+\maus{Aufziehen/Zusammenziehen} (Pinch) & zoomen zum Cursor. \\
+\maus{Doppeltippen mit zwei Fingern} & Zoom extents (Smart Zoom, macOS). \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------
+\section{Auswahl}\label{sec:tk-auswahl}
+\index{Auswahl}
+
+Diese Bedienung gilt, solange kein Befehl einen Punkt erwartet. Während der Punkteingabe setzt
+ein Linksklick stattdessen einen Punkt.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\maus{Klick} auf ein Objekt & Objekt auswählen (ersetzt die Auswahl). \\
+\maus{Klick} ins Leere & Auswahl aufheben. \\
+\keys{Shift}+\maus{Klick} & Objekt zur Auswahl hinzufügen. \\
+\keys{Strg}+\maus{Klick} & Objekt aus der Auswahl entfernen. \\
+\keys{Strg+Shift}+\maus{Klick} & einzelne Fläche, Kante oder Ecke eines Objekts umschalten
+  (Teilelement-Auswahl). Mit gehaltenem \keys{Strg+Shift} hebt die Hervorhebung unter dem
+  Cursor das Teilelement hervor. \\
+\maus{links ziehen} von links nach rechts & Fensterauswahl: Objekte, die ganz im Rechteck
+  liegen. \\
+\maus{links ziehen} von rechts nach links & Kreuzungsauswahl: auch Objekte, die das Rechteck
+  berühren. \\
+\keys{Shift} / \keys{Strg} beim Rechteck & Objekte hinzufügen bzw.\ entfernen. \\
+\keys{Strg+A} & alle sichtbaren Objekte auswählen. \\
+\keys{Esc} & Auswahl aufheben (wenn weder ein Befehl noch ein Plugin-Auftrag läuft). \\
+\bottomrule
+\end{referenz}
+
+Die Reihenfolge, in der Sie Objekte auswählen, ist für einige Befehle wichtig (z.\,B.\
+Boolean difference, Loft, Sweep, Trim); siehe Abschnitt~\ref{sec:auswahlbefehle}. Im Modellbaum
+gelten die üblichen Listenregeln: \keys{Shift}+\maus{Klick} wählt einen Bereich,
+\keys{Strg}+\maus{Klick} einzelne Einträge.
+
+% ---------------------------------------------------------------------------
+\section{Befehle und Befehlszeile}\label{sec:tk-befehle}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+Tippen in einer Ansicht & Die Zeichen gehen in die Befehlszeile (Befehlsnamen, Koordinaten,
+  Zahlen). \\
+\keys{Enter} & Eingabe der Befehlszeile ausführen; bei leerer Zeile den laufenden Befehl
+  beenden oder, wenn keiner läuft, den letzten Befehl wiederholen. \\
+\maus{Rechtsklick} (ohne Ziehen) in einer Ansicht & laufenden Befehl beenden (wie
+  \keys{Enter}). \\
+\keys{Esc} & laufenden Befehl abbrechen. \\
+\keys{L}, \keys{Enter} & Befehl Line (Tooltip-Kürzel \enquote{L}, zugleich Alias \code{l}). \\
+\keys{C}, \keys{Enter} & Befehl Circle (centre, radius). \\
+\keys{M}, \keys{Enter} & Befehl Move. \\
+\keys{Entf} & Werkzeug Delete: Auswahl löschen. \\
+\keys{F8} & Ortho ein/aus (Knopf \gui{Ortho} in der Statusleiste). \\
+\maus{Klick} auf einen Werkzeugknopf & Befehl starten. \\
+\maus{Klick} auf eine Gruppenüberschrift der Werkzeugspalte & Gruppe auf- oder zuklappen. \\
+\bottomrule
+\end{referenz}
+
+Die Werkzeug-Kürzel \keys{L}, \keys{C} und \keys{M} sind keine eigenständigen Tastenbelegungen:
+Der Buchstabe wird -- wie jedes in einer Ansicht getippte Zeichen -- in die Befehlszeile
+geschrieben und mit \keys{Enter} als Alias ausgeführt. Alle Befehle mit Namen und Aliassen
+stehen in Anhang~\ref{kap:befehle}; die Eingabe von Punkten und Zahlen beschreibt
+Abschnitt~\ref{sec:punkteingabe}.
+
+% ---------------------------------------------------------------------------
+\section{Objektfang}\label{sec:tk-fang}
+
+Diese Eingaben wirken, während ein Befehl einen Punkt erwartet (Abschnitt~\ref{sec:objektfang}).
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\keys{F3} & Objektfang insgesamt ein/aus (Knopf \gui{Snap} in der Statusleiste). \\
+\keys{Tab} & nächster Fangkandidat unter dem Cursor. \\
+\keys{Shift+Tab} & vorheriger Fangkandidat. \\
+\keys{Alt} gedrückt halten & Fang unterdrücken. \\
+\keys{Alt}+\maus{Klick} (ohne Ziehen) & freien Punkt ohne Fang setzen. \\
+\keys{Alt}+\maus{links ziehen} & Ansicht drehen (Perspective) bzw.\ verschieben, auch während
+  der Punkteingabe. \\
+\maus{Klick} auf \gui{Point}, \gui{End}, \gui{Corner}, \gui{Int}, \gui{Cen}, \gui{Quad},
+  \gui{Mid}, \gui{Edge}, \gui{Near}, \gui{Grid} & einzelne Fangart ein/aus (Statusleiste). \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------
+\section{Node-Editor}\label{sec:tk-node-editor}
+\index{Node-Editor!Bedienung}
+
+Der Node-Editor (Dock \gui{Node workflow}, Kapitel~\ref{kap:workflow}) wird wie die
+CAD-Ansichten bedient. Die Tasten wirken, solange der Editor den Tastaturfokus hat; \keys{Z},
+\keys{E}, \keys{Z}, \keys{S} und \keys{Pos1} gehören dann dem Editor und nicht den CAD-Ansichten.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\keys{Z}, dann \keys{E} oder \keys{Pos1} & alle Blöcke einpassen. \\
+\keys{Z}, dann \keys{S} & ausgewählte Blöcke einpassen (ohne Auswahl: alle). \\
+\keys{Esc} & eine Ebene aus einer geöffneten Gruppe zurück; während der Aufnahme eines Zweigs
+  (\gui{New branch}): Aufnahme abbrechen. Sonst wirkt \keys{Esc} wie im Hauptfenster. \\
+\maus{Mausrad} & zoomen zum Cursor. \\
+\keys{Strg}+\maus{Scrollen}, \maus{Pinch} & zoomen zum Cursor (Trackpad). \\
+\maus{Zwei-Finger-Scrollen} & verschieben (Trackpad). \\
+\maus{Doppeltippen mit zwei Fingern} & alle Blöcke einpassen. \\
+\maus{mittlere Taste ziehen}, \maus{rechts ziehen} oder \keys{Alt}+\maus{links ziehen} &
+  verschieben. \\
+\maus{Doppelklick mit der mittleren Taste} & alle Blöcke einpassen. \\
+\maus{Rechtsklick} (ohne Ziehen) & Kontextmenü des Blocks, der Verbindung oder der freien
+  Fläche unter dem Cursor (auch mit der Kontextmenü-Taste der Tastatur). \\
+\maus{Klick} auf einen Block & Block auswählen; \maus{Ziehen} verschiebt ihn. \\
+\maus{links ziehen} auf freier Fläche & Auswahlrechteck für Blöcke. \\
+\maus{Ziehen} von einem Anschluss zu einem anderen & Verbindung herstellen. \\
+\maus{Doppelklick} auf einen Block & Anzeige-Block: sein Fenster öffnen; Gruppe: hinein
+  wechseln; sonst: Parameter bearbeiten. \\
+\maus{Klick} auf den Ebenennamen oben links & eine Ebene aus der Gruppe zurück. \\
+\bottomrule
+\end{referenz}
+
+Blöcke, Verbindungen und Varianten löschen Sie über das Kontextmenü (\gui{Delete block},
+\gui{Delete link}, \gui{Delete connection}). Die Taste \keys{Entf} hat im Node-Editor keine
+eigene Funktion; sie wirkt auf die Auswahl im CAD-Modell (\menu{Edit,Delete}).
+
+In der Zweigliste neben dem Editor öffnet ein \maus{Doppelklick} auf einen Schritt die Auswahl
+seines Kanals.
+
+% ---------------------------------------------------------------------------
+\section{Bildfenster}\label{sec:tk-bild}
+\index{Bildfenster}
+
+Für das Fenster \gui{Image} und die Fenster der Anzeige-Blöcke mit Bildern:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\maus{Mausrad} & zoomen zum Cursor (höchstens bis auf wenige Bildpunkte, nicht über das ganze
+  Bild hinaus). \\
+\maus{links ziehen} & verschieben. \\
+\maus{Doppelklick} & ganzes Bild zeigen. \\
+Maus über dem Bild & Koordinaten und Wert des Bildpunkts unter dem Cursor werden angezeigt. \\
+Kontrollkästchen \gui{log} & logarithmische Farbskala. \\
+\bottomrule
+\end{referenz}
+
+% ---------------------------------------------------------------------------
+\section{Plot und Tabelle}\label{sec:tk-plot}
+
+Die Fenster \gui{Plot} und \gui{Table} sowie die Plot-Fenster der Anzeige-Blöcke sind reine
+Anzeigen: Sie haben keine Tastenkürzel und keine Mausgesten zum Zoomen oder Verschieben. Die
+Tabelle ist nicht editierbar. Welche Kurven sichtbar sind, steuern Sie im Dock \gui{Results}
+(Kapitel~\ref{kap:plugins}).
+
+% ---------------------------------------------------------------------------
+\section{Weitere Mausbedienung in den Docks}\label{sec:tk-docks}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{0.38\linewidth}X}
+\toprule
+Eingabe & Wirkung \\
+\midrule\endhead
+\maus{Doppelklick} auf die Spalte \gui{Colour} im Dock \gui{Layers} & Farbe des Layers
+  wählen. \\
+\maus{Rechtsklick} im Dock \gui{Model} & Kontextmenü: \gui{Group selection…}, \gui{Ungroup},
+  \gui{Hide}, \gui{Isolate}, \gui{Unhide}, \gui{Show all}. \\
+\maus{Rechtsklick} im Dock \gui{Results} & Kontextmenü der Ergebnisse. \\
+\maus{Doppelklick} auf einen Listeneintrag in einem Plugin-Formular & Eintrag bearbeiten. \\
+\bottomrule
+\end{referenz}
+
+\fussy

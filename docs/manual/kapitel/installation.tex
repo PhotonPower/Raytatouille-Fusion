@@ -1,0 +1,541 @@
+\chapter{Installation und erster Start}\label{kap:installation}
+\index{Installation}
+
+Die Installation hat zwei Teile: das Programm selbst, das mit allen mitgelieferten Plugins
+in einem Paket kommt, und eine Python-Umgebung, in der die Plugins rechnen. Das Programm
+allein genügt zum Modellieren, Betrachten und Konvertieren von Geometrie; für Berechnungen
+brauchen Sie zusätzlich die Python-Umgebung (\autoref{sec:python-umgebung}).
+
+Die Installationspakete stehen auf der Seite der Veröffentlichungen (\enquote{Releases}) des
+Projekts:
+\begin{lstlisting}
+https://github.com/PhotonPower/Raytatouille-Fusion/releases
+\end{lstlisting}
+
+\section{Systemvoraussetzungen}\label{sec:systemvoraussetzungen}
+\index{Systemvoraussetzungen}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{5.4cm}X}
+\toprule
+\textbf{System} & \textbf{Paket} & \textbf{Hinweise} \\
+\midrule
+\endhead
+macOS 14 (Sonoma) oder neuer, Apple Silicon und Intel &
+  \datei{RaytatouilleFusion-<Version>-macos-universal.dmg} &
+  Ein Programm für beide Prozessorarten (\enquote{universal}). Nicht signiert, siehe
+  \autoref{sec:inst-macos}. Grafik über Metal. \\
+Windows 11 (64 Bit) &
+  \datei{RaytatouilleFusion-<Version>-win64-setup.exe} &
+  Installationsprogramm; installiert für alle Benutzer des Rechners. Grafik über
+  Direct3D~11. \\
+AlmaLinux 10 / Red Hat Enterprise Linux 10 (x86\_64) &
+  \datei{raytatouille-fusion-<Version>-<Release>.x86\_64.rpm} &
+  Nutzt die Qt-6-Pakete der Distribution. Grafik über OpenGL (Vulkan wählbar). Läuft unter
+  Wayland und X11. \\
+\bottomrule
+\end{referenz}
+
+Weitere Voraussetzungen:
+
+\begin{itemize}
+  \item \textbf{Grafik:} eine Grafikkarte bzw.\ ein Grafiktreiber mit Unterstützung für die
+    genannte Schnittstelle. In virtuellen Maschinen hilft gegebenenfalls OpenGL
+    (\autoref{sec:umgebungsvariablen}).
+  \item \textbf{Python} für die Plugins: Version~3.10 oder neuer ist Pflicht -- ältere
+    Versionen meldet \gui{Check environment} als \enquote{too old}. Empfohlen werden die
+    Versionen~3.10 bis~3.13, am besten~3.13; für sie liegen die Rechenkerne als fertig
+    übersetzte Pakete (\enquote{Wheels}) für Windows, Linux und macOS bereit, sodass kein
+    Compiler nötig ist.
+  \item \textbf{Internet} beim Einrichten der Python-Umgebung (die Pakete kommen aus dem
+    Python Package Index, PyPI) und für die Update-Prüfung. Das Programm selbst arbeitet
+    ohne Netz und sendet von sich aus nichts.
+  \item \textbf{Arbeitsspeicher und Prozessor:} Zum Modellieren genügt ein üblicher
+    Arbeitsplatzrechner. Rechnungen der Plugins (Kamerabilder mit vielen Strahlen, Path
+    Tracing, Wellenoptik) profitieren von vielen Prozessorkernen und viel Arbeitsspeicher;
+    der Workflow behält Zwischenergebnisse bis zu \SI{1}{GB}.
+\end{itemize}
+
+\section{Installation unter macOS}\label{sec:inst-macos}
+\index{Installation!macOS}\index{macOS}
+
+\begin{schritte}
+  \item Laden Sie die Datei \datei{RaytatouilleFusion-<Version>-macos-universal.dmg}
+    herunter und öffnen Sie sie mit einem Doppelklick. Es erscheint ein Fenster
+    \enquote{Raytatouille Fusion} mit dem Programm \datei{RaytatouilleFusion} und einer
+    Verknüpfung zum Ordner \datei{Applications} (Programme).
+  \item Ziehen Sie \datei{RaytatouilleFusion} auf \datei{Applications}.
+  \item Werfen Sie das Disk-Image aus (Papierkorb-Symbol neben dem Laufwerk im Finder).
+  \item Öffnen Sie das Programm beim \textbf{ersten} Mal nicht per Doppelklick, sondern mit
+    \maus{Rechtsklick} (oder \keys{Ctrl}-Klick) auf das Programm im Ordner Programme
+    $\to$ \gui{Öffnen}, und bestätigen Sie die Rückfrage mit \gui{Öffnen}.
+\end{schritte}
+
+\begin{hinweis}
+Das Programm ist bewusst nicht von Apple signiert und notarisiert. macOS warnt deshalb beim
+ersten Start, dass der Entwickler nicht überprüft werden kann. Bietet der Dialog keinen Knopf
+zum Öffnen an, gehen Sie in die \gui{Systemeinstellungen} $\to$ \gui{Datenschutz \&
+Sicherheit}; dort steht unten eine Meldung zu \enquote{RaytatouilleFusion} mit dem Knopf
+\gui{Dennoch öffnen}. Diese Freigabe ist nur einmal nötig; danach startet das Programm normal
+per Doppelklick, aus dem Launchpad oder über Spotlight.
+\end{hinweis}
+
+\paragraph{Wo liegt was?} Im Ordner Programme (\datei{/Applications}) liegt das Programm als
+ein einziges Programmpaket. Darin liegen auch die mitgelieferten Plugins und das Python-Paket
+\code{nfcad}, über das die Plugins mit dem Programm sprechen. Die ausführbare Datei für den
+Start aus dem Terminal ist
+\begin{lstlisting}
+/Applications/RaytatouilleFusion.app/Contents/MacOS/RaytatouilleFusion
+\end{lstlisting}
+
+\paragraph{Update.} Ziehen Sie die neue Version ebenso nach \datei{Applications} und lassen
+Sie die alte ersetzen. Einstellungen und Plugin-Umgebung bleiben erhalten.
+
+\section{Installation unter Windows 11}\label{sec:inst-windows}
+\index{Installation!Windows}\index{Windows}
+
+\begin{schritte}
+  \item Laden Sie \datei{RaytatouilleFusion-<Version>-win64-setup.exe} herunter und starten Sie
+    die Datei.
+  \item Windows fragt nach Administratorrechten, weil das Programm für alle Benutzer nach
+    \datei{C:\textbackslash Program Files\textbackslash Raytatouille Fusion} installiert
+    wird. Bestätigen Sie.
+  \item Erscheint die Meldung \enquote{Der Computer wurde durch Windows geschützt}
+    (Microsoft Defender SmartScreen)\index{SmartScreen}, klicken Sie auf \gui{Weitere
+    Informationen} und dann auf \gui{Trotzdem ausführen}. Die Warnung erscheint, weil das
+    Installationsprogramm nicht signiert ist.
+  \item Folgen Sie dem (englischsprachigen) Assistenten: Lizenz (MIT) annehmen und, falls
+    gefragt, Zielordner und Startmenü-Ordner bestätigen. Auf der Seite mit den zusätzlichen
+    Aufgaben können Sie mit \gui{Create a desktop shortcut} ein Symbol auf dem Desktop
+    anlegen lassen.
+  \item Auf der letzten Seite startet \gui{Launch Raytatouille Fusion} das Programm direkt.
+\end{schritte}
+
+Das Installationsprogramm
+\begin{itemize}
+  \item legt einen Eintrag \gui{Raytatouille Fusion} im Startmenü an (und auf Wunsch auf dem
+    Desktop),
+  \item verknüpft die Dateiendungen \datei{.rttf} und \datei{.nfcad} mit dem Programm, sodass
+    ein Doppelklick auf ein Dokument es öffnet (\autoref{sec:kommandozeile}),
+  \item installiert das Programm als \datei{bin\textbackslash RaytatouilleFusion.exe} und die
+    mitgelieferten Plugins unter \datei{python\textbackslash plugins} im Zielordner.
+\end{itemize}
+
+\paragraph{Update.} Führen Sie einfach das Installationsprogramm der neuen Version aus. Es
+erkennt die vorhandene Installation und ersetzt sie; das gilt auch für eine Installation des
+Vorgängers \enquote{Nurbforge CAD}.
+
+\section{Installation unter AlmaLinux und RHEL 10}\label{sec:inst-linux}
+\index{Installation!Linux}\index{Linux}
+
+Installieren Sie das RPM-Paket mit \code{dnf}; es holt die benötigten Qt-6-Pakete der
+Distribution (\code{qt6-qtbase-gui}, \code{qt6-qtsvg}) automatisch dazu und empfiehlt
+\code{python3}:
+
+\begin{lstlisting}
+sudo dnf install ./raytatouille-fusion-*.rpm
+\end{lstlisting}
+
+Das Paket installiert
+\begin{itemize}
+  \item das Programm \datei{/usr/bin/RaytatouilleFusion},
+  \item einen Eintrag im Anwendungsmenü (\gui{Raytatouille Fusion}, Kategorie Grafik /
+    Technik) mit Symbol und AppStream-Metadaten,
+  \item die mitgelieferten Plugins unter \datei{/usr/share/raytatouille-fusion/python}.
+\end{itemize}
+
+Starten Sie das Programm aus dem Anwendungsmenü oder im Terminal mit dem
+Befehl \code{RaytatouilleFusion}. Das Paket hieß früher \code{nurbforge-cad}; es wird beim
+Installieren ersetzt.
+
+\begin{tipp}
+Das Programm läuft unter Wayland und X11. Gibt es unter Wayland Darstellungsprobleme,
+erzwingen Sie X11 mit \code{QT\_QPA\_PLATFORM=xcb RaytatouilleFusion}.
+\end{tipp}
+
+\paragraph{Update.} Installieren Sie das neue Paket ebenso:
+\begin{lstlisting}
+sudo dnf upgrade ./raytatouille-fusion-*.rpm
+\end{lstlisting}
+
+\section{Die Python-Umgebung für die Plugins}\label{sec:python-umgebung}
+\index{Python-Umgebung}
+
+\subsection{Warum eine eigene Python-Umgebung?}
+
+Die Plugins sind Python-Programme. Sie werden vom CAD-Programm als eigene Prozesse mit
+\emph{Ihrem} Python-Interpreter gestartet und brauchen dort die Rechenkerne als
+Python-Pakete. Mitgeliefert werden nur die Plugins selbst und das kleine Paket \code{nfcad},
+nicht aber Python und die Rechenkerne. Das hat zwei Vorteile: Sie können die Rechenkerne
+unabhängig vom Programm aktualisieren, und Sie können dieselbe Umgebung auch in eigenen
+Skripten verwenden.
+
+Die Plugins brauchen zusammen die folgenden Pakete (sie stehen in den Dateien
+\datei{plugin.json} der Plugins unter \param{requires}):
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{4.2cm}X}
+\toprule
+\textbf{Paket (pip-Name)} & \textbf{Mindestversion} & \textbf{gebraucht von} \\
+\midrule
+\endhead
+\code{numpy} & -- & allen Plugins und \code{nfcad} \\
+\code{raytatouille} & 0.9 & Raytracer, Workflow \\
+\code{rtt-fusion} (Import \code{rtt\_fusion}) & 0.2 & Raytracer, Workflow \\
+\code{photonpower-fieldtracing} (Import \code{fieldtracing}) & 0.2 & Raytracer \\
+\code{fouriergrating} & 0.18 & FourierGrating \\
+\code{scipy} & -- & FourierGrating \\
+\code{pathtracer} & 0.3 & Path Tracer, Automotive Lighting \\
+\bottomrule
+\end{referenz}
+
+\subsection{Schritt 1: Python installieren}
+
+Installieren Sie einmalig ein Python ab Version~3.10, empfohlen~3.13:
+
+\begin{description}
+  \item[Windows:] Installationsprogramm von \url{https://www.python.org/downloads/}. Setzen Sie
+    im ersten Bild des Installers das Häkchen bei \gui{Add python.exe to PATH}.
+  \item[macOS:] Installationspaket von python.org oder über Homebrew:
+\begin{lstlisting}
+brew install python@3.13
+\end{lstlisting}
+  \item[AlmaLinux/RHEL:] \code{sudo dnf install python3.12} (oder eine andere angebotene
+    Version ab 3.10).
+\end{description}
+
+\begin{hinweis}
+\textbf{Welcher Python-Interpreter wird benutzt?} Das Programm nimmt der Reihe nach:
+\begin{enumerate}
+  \item den unter \menu{Plugins,Settings...} eingetragenen Interpreter,
+  \item sonst den aus der Umgebungsvariablen \code{NFCAD\_PYTHON},
+  \item sonst das erste \code{python3} oder \code{python} im Suchpfad (\code{PATH}); unter
+    Windows \code{python}, \code{py} oder \code{python3}, wobei die Platzhalter des
+    Microsoft Store (unter \datei{\textbackslash WindowsApps\textbackslash}) übersprungen
+    werden -- sie würden nur den Store öffnen.
+\end{enumerate}
+Unter macOS sieht ein aus dem Finder gestartetes Programm nicht unbedingt denselben
+Suchpfad wie das Terminal; tragen Sie den Interpreter im Zweifel ausdrücklich ein. Am
+sichersten ist eine eigene virtuelle Umgebung, wie sie der nächste Schritt anlegt.
+\end{hinweis}
+
+\subsection{Schritt 2: Umgebung anlegen mit \enquote{Create environment...}}
+\label{sec:create-environment}\index{Create environment}
+
+Das Programm legt auf Knopfdruck eine virtuelle Umgebung (\enquote{venv}) an und installiert
+alle Pakete, die die geladenen Plugins brauchen:
+
+\begin{schritte}
+  \item Wählen Sie \menu{Plugins,Settings...}. Es öffnet sich der Dialog \gui{Plugin
+    settings} (\autoref{fig:plugin-settings}).
+  \item Prüfen Sie das Feld \gui{Python interpreter}. Es muss auf das in Schritt~1
+    installierte Python zeigen (mit dem Knopf \gui{...} daneben können Sie eine Datei
+    auswählen). Dieses Python dient nur als Vorlage für die neue Umgebung.
+  \item Klicken Sie auf \gui{Create environment...}. Ein Dateidialog \gui{New Python
+    environment (folder)} fragt nach dem Ordner der neuen Umgebung. Vorgeschlagen wird der
+    Ordner \datei{python-env} im Datenordner des Programms (\autoref{sec:einstellungen}).
+    Der Ordner darf noch \emph{nicht} existieren; sonst erscheint \enquote{\dots{} exists
+    already -- choose a new folder.}
+  \item Das Programm führt nun zwei Schritte aus und schreibt ihre Ausgabe in das Textfeld
+    darunter: zuerst \code{python -m venv <Ordner>} (\enquote{Creating \dots{} from \dots}),
+    dann \code{pip install} mit allen benötigten Paketen (\enquote{Installing numpy, \dots}).
+    Das kann einige Minuten dauern. Der Dialog bleibt dabei bedienbar.
+  \item Am Ende steht \enquote{Done -- the new interpreter is set above (applied with OK).}
+    Das Feld \gui{Python interpreter} zeigt jetzt den Interpreter der neuen
+    Umgebung: \datei{bin/python} im gewählten Ordner, unter Windows
+    \datei{Scripts\textbackslash python.exe}.
+  \item Klicken Sie auf \gui{Check environment}. Im Textfeld sollte die Python-Version mit
+    \enquote{ok} und vor jedem Paket ein Häkchen (\checkmark) stehen.
+  \item Bestätigen Sie den Dialog mit \gui{OK}. Erst dann wird der neue Interpreter
+    übernommen; die Plugins werden neu gestartet.
+\end{schritte}
+
+\abbildung[0.85\linewidth]{plugin-settings.png}{Der Dialog \gui{Plugin settings}
+(\menu{Plugins,Settings...}) mit dem Interpreter, den Knöpfen für die Umgebung, dem Bericht
+von \gui{Check environment}, den Plugin-Ordnern und dem Entwicklermodus. Die Aufnahme stammt
+aus einer Entwicklungsumgebung; Pfade und Pakete sehen bei Ihnen anders aus.}{fig:plugin-settings}
+
+\begin{warnung}
+Wenn Sie den Dialog mit \gui{Cancel} schließen, wird der neue Interpreter \emph{nicht}
+übernommen, obwohl die Umgebung angelegt ist. Öffnen Sie den Dialog dann erneut, tragen Sie
+den Interpreter der Umgebung ein (\gui{...}) und bestätigen Sie mit \gui{OK}.
+\end{warnung}
+
+Schlägt die Installation der Pakete fehl (\enquote{Installing the packages failed -- see
+above; Check environment shows what is missing.}), wird der Interpreter der neuen Umgebung
+trotzdem eingetragen. Häufige Ursachen sind eine fehlende Internetverbindung, ein
+Proxy oder eine Python-Version, für die es noch keine fertigen Pakete gibt. Beheben Sie die
+Ursache und installieren Sie die fehlenden Pakete wie im nächsten Abschnitt beschrieben nach.
+
+\subsection{Umgebung prüfen mit \enquote{Check environment}}
+\label{sec:check-environment}\index{Check environment}
+
+\gui{Check environment} startet den Interpreter, der \emph{gerade im Feld} steht (auch wenn
+er noch nicht mit \gui{OK} übernommen ist), und sucht die Pakete, die die Plugins brauchen.
+Der Bericht hat diese Form:
+
+\begin{lstlisting}
+Python 3.13.1  ok
+v numpy  2.3.4
+v raytatouille>=0.9  0.9.2
+x pathtracer>=0.3  ModuleNotFoundError: No module named 'pathtracer'
+
+Install the missing packages with:
+"/Users/anna/python-env/bin/python" -m pip install "pathtracer>=0.3"
+\end{lstlisting}
+
+(Im Programm stehen statt \code{v} und \code{x} ein Häkchen bzw.\ ein Kreuz; Versionen und
+Pfade sind Beispiele.) Die erste Zeile nennt die Python-Version; statt \enquote{ok} steht
+dort ein Fehler, wenn der Interpreter nicht startet (\enquote{\dots{} cannot be started}) oder
+zu alt ist (\enquote{Python 3.9.6 is too old (3.10 or newer needed)}). Für jedes Paket folgt
+eine Zeile mit der Anforderung und der gefundenen Version bzw.\ dem Fehler -- auch eine zu
+alte Version wird gemeldet (\enquote{version 0.8.1 installed, >=0.9 needed}). Fehlt etwas,
+steht am Ende der vollständige \code{pip}-Befehl, den Sie in ein Terminal (Windows:
+Eingabeaufforderung oder PowerShell) kopieren können.
+
+\subsection{Eine eigene Umgebung verwenden}
+
+Sie können auch eine bereits vorhandene Umgebung benutzen, etwa eine \code{conda}-Umgebung
+oder ein venv, in dem Sie Ihre eigenen Skripte entwickeln:
+
+\begin{schritte}
+  \item Installieren Sie die Pakete dort selbst, z.\,B.:
+\begin{lstlisting}
+python -m pip install numpy scipy "raytatouille>=0.9" "rtt-fusion>=0.2" "photonpower-fieldtracing>=0.2" "fouriergrating>=0.18" "pathtracer>=0.3"
+\end{lstlisting}
+  \item Tragen Sie unter \menu{Plugins,Settings...} im Feld \gui{Python interpreter} den
+    vollständigen Pfad des Interpreters dieser Umgebung ein.
+  \item Prüfen Sie mit \gui{Check environment} und bestätigen Sie mit \gui{OK}.
+\end{schritte}
+
+Pakete, die nur einzelne Plugins brauchen, können Sie weglassen, wenn Sie diese Plugins nicht
+verwenden; die übrigen Plugins laufen trotzdem.
+
+\begin{tipp}
+Ein Rechenkern lässt sich jederzeit getrennt aktualisieren:
+\code{"<Interpreter>" -m pip install --upgrade raytatouille}. Danach \menu{Plugins,Reload
+plugins} wählen, damit die Plugins mit der neuen Version neu starten.
+\end{tipp}
+
+Die übrigen Elemente des Dialogs \gui{Plugin settings} -- installierte Plugins, weitere
+Plugin-Ordner, vertrauenswürdige Herausgeber, Entwicklermodus und die Liste
+\gui{Problems} -- beschreibt \autoref{kap:plugin-verwaltung}.
+
+\section{Der erste Start}\label{sec:erster-start}
+\index{erster Start}
+
+Beim ersten Start öffnet sich das Hauptfenster in einer Größe von $1440 \times 900$ Pixeln
+mit einem leeren Dokument \enquote{Untitled}:
+
+\begin{itemize}
+  \item links die Werkzeugspalte (\gui{Tools}) mit etwa einem Zehntel der Fensterbreite,
+  \item in der Mitte die vier Ansichten Front, Top, Left und Perspective,
+  \item rechts oben das Dock \gui{Properties} mit \enquote{Nothing selected}, darunter
+    die Docks \gui{Layers}, \gui{Model}, \gui{Results} und \gui{Plugin} als Reiter,
+  \item unten die Befehlszeile mit dem Text \enquote{Command:} und die Statusleiste.
+\end{itemize}
+
+Gleichzeitig lädt das Programm die mitgelieferten Plugins und startet jedes mit dem
+eingestellten Python-Interpreter. Solange ein Plugin startet, steht in seinem Untermenü im
+Menü \menu{Plugins} \enquote{(starting \dots)}. Ist die Python-Umgebung noch nicht
+eingerichtet, scheitert der Start; das Untermenü zeigt dann \enquote{(not running -- see the
+plugin log)}, und die Fehlermeldung steht im Dock \gui{Plugin log} (\menu{View,Plugin log})
+und in der Statusleiste. Das ist beim allerersten Start normal: Richten Sie die Umgebung wie
+in \autoref{sec:create-environment} beschrieben ein.
+
+\paragraph{Ein kurzer Funktionstest.}
+\begin{schritte}
+  \item Wählen Sie \menu{Help,About Raytatouille Fusion} (auf dem Mac steht der Eintrag im
+    Programmmenü \gui{Raytatouille Fusion} ganz links in der Menüleiste). Das Fenster nennt die Programmversion, die Version des
+    NURBS-Kerns Nurbforge mit dem Ergebnis seines Selbsttests (\enquote{self-test passed})
+    und die Qt-Version.
+  \item Wählen Sie \menu{Plugins,Settings...} $\to$ \gui{Check environment}. Alle Zeilen
+    sollten ein Häkchen haben.
+  \item Öffnen Sie ein Beispiel (\autoref{sec:beispiele}), etwa \datei{demo-parts.step} --
+    zwölf Volumenkörper erscheinen in allen vier Ansichten.
+\end{schritte}
+
+\begin{hinweis}
+Hat das Programm beim vorigen Mal einen Absturzbericht geschrieben, erscheint direkt nach dem
+Start ein Hinweis darauf (\autoref{sec:absturzberichte}).
+\end{hinweis}
+
+\section{Updates}\label{sec:updates}
+\index{Updates}
+
+Das Programm sucht \emph{nicht} von selbst nach Updates. Wählen Sie dazu im Menü
+\menu{Help} den Eintrag \gui{Check for updates...}. Das Programm fragt dann
+
+\begin{itemize}
+  \item bei GitHub nach der neuesten veröffentlichten Version von \produkt{} und
+  \item für jedes Plugin, das in seiner \datei{plugin.json} eine Update-Adresse angibt, dort
+    nach dessen neuester Version.
+\end{itemize}
+
+Während der Abfrage steht \enquote{Checking for updates \dots} in der Statusleiste. Danach
+zeigt ein Fenster \gui{Updates} je Eintrag eine Zeile:
+
+\begin{itemize}
+  \item \enquote{Raytatouille Fusion 1.0.0 is up to date} -- nichts zu tun;
+  \item \enquote{\textbf{Raytatouille Fusion}: 1.1.0 available (installed 1.0.0) --
+    download} -- ein Klick auf \gui{download} öffnet die Seite der neuen Version im Browser;
+  \item \enquote{\dots: check failed (\dots)} -- die Abfrage ist gescheitert, etwa ohne
+    Internetverbindung.
+\end{itemize}
+
+Installiert wird das Update von Hand, wie in den Abschnitten zu den einzelnen Systemen
+beschrieben. Bei der Abfrage übermittelt das Programm nur seine Versionsnummer (in der
+Kennung \enquote{RaytatouilleFusion/<Version>}).
+
+Die Rechenkerne in der Python-Umgebung werden davon nicht erfasst; sie aktualisieren Sie mit
+\code{pip} (siehe Tipp in \autoref{sec:python-umgebung}).
+
+\section{Absturzberichte}\label{sec:absturzberichte}
+\index{Absturzbericht}
+
+Stürzt das Programm ab, schreibt es einen Absturzbericht \emph{auf Ihren Rechner}. Es wird
+nichts verschickt. Der Bericht ist eine Textdatei mit
+einem Namen der Form\\ \datei{crash-<Datum>-<Uhrzeit>-<Prozessnummer>.txt} im Ordner \datei{crash-reports} des
+Datenordners (\autoref{sec:einstellungen}) und enthält:
+
+\begin{itemize}
+  \item Programmversion, Startzeit (UTC), Betriebssystem und Prozessorarchitektur,
+  \item die Ursache (z.\,B.\ \enquote{SIGSEGV (invalid memory access)} oder
+    \enquote{std::terminate (uncaught exception)}),
+  \item den Aufrufstapel (\enquote{Backtrace}) zum Zeitpunkt des Absturzes.
+\end{itemize}
+
+Beim nächsten Start meldet ein Fenster: \enquote{Raytatouille Fusion closed unexpectedly last
+time. A crash report was saved on this computer (it is not sent anywhere)} mit dem Pfad des
+Berichts. \gui{Show report} öffnet die Datei, \gui{OK} schließt den Hinweis. Jeder Bericht wird
+nur einmal gemeldet.
+
+Wenn Sie den Fehler melden möchten, legen Sie den Bericht einer Meldung auf
+\url{https://github.com/PhotonPower/Raytatouille-Fusion/issues} bei und beschreiben Sie, was Sie
+zuletzt getan haben. Der Bericht enthält keine Modelldaten.
+
+\begin{hinweis}
+Abstürze eines Plugins sind keine Abstürze des Programms: Das Plugin läuft in einem eigenen
+Python-Prozess. Seine Fehlermeldung steht im Dock \gui{Plugin log}, das sich bei einer
+fehlgeschlagenen Rechnung von selbst öffnet.
+\end{hinweis}
+
+\section{Wo Einstellungen und Daten gespeichert werden}\label{sec:einstellungen}
+\index{Einstellungen}\index{Datenordner}
+
+Das Programm merkt sich seine Einstellungen über das Beenden hinaus und auch über Updates
+hinweg. Gespeichert werden:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.2cm}X}
+\toprule
+\textbf{Einstellung} & \textbf{Inhalt} \\
+\midrule
+\endhead
+Fenstergröße und Anordnung der Docks & beim Beenden gespeichert. Kommt mit einer neuen
+  Version ein neues Dock hinzu, wird die alte Anordnung einmal verworfen, damit kein Dock
+  verborgen bleibt. \\
+Werkzeugspalte & welche Gruppen auf- oder zugeklappt sind \\
+Fang & welche Fangarten eingeschaltet sind und ob der Fang insgesamt an ist
+  (\gui{Snap}, \keys{F3}) \\
+Plugins & Python-Interpreter, weitere Plugin-Ordner, Entwicklermodus, die unter
+  \menu{Plugins,Show in the side panels} ausgeblendeten Plugins \\
+\bottomrule
+\end{referenz}
+
+\emph{Nicht} in den Einstellungen, sondern im Dokument stehen die Parameter der Plugins, der
+Workflow, die Darstellung der Ebenen usw.\ (\autoref{kap:dateien}).
+
+\paragraph{Ablageorte.} Die Einstellungen liegen an der für das System üblichen Stelle; der
+\emph{Datenordner} enthält Absturzberichte, installierte Plugins und die vorgeschlagene
+Python-Umgebung.
+
+\begin{description}
+  \item[macOS] Einstellungen:
+\begin{lstlisting}
+~/Library/Preferences/io.github.photonpower.Raytatouille Fusion.plist
+\end{lstlisting}
+    Datenordner:
+\begin{lstlisting}
+~/Library/Application Support/PhotonPower/Raytatouille Fusion
+\end{lstlisting}
+  \item[Windows] Einstellungen in der Registrierung unter
+\begin{lstlisting}
+HKEY_CURRENT_USER\Software\PhotonPower\Raytatouille Fusion
+\end{lstlisting}
+    Datenordner:
+\begin{lstlisting}
+%APPDATA%\PhotonPower\Raytatouille Fusion
+\end{lstlisting}
+  \item[Linux] Einstellungen:
+\begin{lstlisting}
+~/.config/PhotonPower/Raytatouille Fusion.conf
+\end{lstlisting}
+    Datenordner:
+\begin{lstlisting}
+~/.local/share/PhotonPower/Raytatouille Fusion
+\end{lstlisting}
+\end{description}
+
+Im Datenordner liegen:
+\begin{itemize}
+  \item \datei{crash-reports} -- die Absturzberichte,
+  \item \datei{plugins} -- mit \menu{Plugins,Install plugin...} installierte Plugins
+    (\autoref{kap:plugin-verwaltung}),
+  \item \datei{python-env} -- die mit \gui{Create environment...} angelegte Umgebung, sofern
+    Sie den vorgeschlagenen Ordner übernommen haben.
+\end{itemize}
+
+\paragraph{Übernahme aus Nurbforge CAD.} Beim ersten Start übernimmt \produkt{} einmalig die
+Einstellungen des Vorgängers \enquote{Nurbforge CAD} (Fensteranordnung, Werkzeugspalte, Fang,
+Plugin-Einstellungen). Bereits vorhandene eigene Einstellungen werden dabei nicht
+überschrieben.
+
+\paragraph{Zurücksetzen.} Um mit den Werkseinstellungen zu beginnen -- etwa wenn ein Dock
+verschwunden ist und sich über das Menü \menu{View} nicht zurückholen lässt --, beenden Sie
+das Programm und löschen die Einstellungsdatei (unter Windows den Registrierungsschlüssel).
+Der Datenordner bleibt davon unberührt.
+
+\section{Deinstallation}\label{sec:deinstallation}
+\index{Deinstallation}
+
+\begin{description}
+  \item[macOS:] Ziehen Sie \datei{RaytatouilleFusion} aus dem Ordner Programme in den
+    Papierkorb.
+  \item[Windows:] \gui{Einstellungen} $\to$ \gui{Apps} $\to$ \gui{Installierte Apps} $\to$
+    Eintrag \gui{Raytatouille Fusion} $\to$ \gui{Deinstallieren}. Dabei werden auch die
+    Verknüpfungen der Dateiendungen \datei{.rttf} und \datei{.nfcad} entfernt.
+  \item[Linux:] \code{sudo dnf remove raytatouille-fusion}.
+\end{description}
+
+Ihre Einstellungen, der Datenordner (mit Absturzberichten, installierten Plugins und einer
+dort angelegten Python-Umgebung) und natürlich Ihre Dokumente bleiben erhalten. Wollen Sie
+alles entfernen, löschen Sie zusätzlich die in \autoref{sec:einstellungen} genannten Orte
+sowie eine an anderer Stelle angelegte Python-Umgebung (einfach deren Ordner).
+
+\section{Umgebungsvariablen für Sonderfälle}\label{sec:umgebungsvariablen}
+\index{Umgebungsvariablen}
+
+Für den Normalbetrieb sind keine Umgebungsvariablen nötig. In Sonderfällen helfen diese:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.4cm}X}
+\toprule
+\textbf{Variable} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\code{NFCAD\_RHI\_BACKEND} & Grafikschnittstelle der Ansichten: \code{opengl}, \code{vulkan},
+  \code{metal}, \code{d3d11} oder \code{d3d12}. Voreingestellt sind Metal (macOS),
+  Direct3D~11 (Windows) und OpenGL (Linux). Nützlich bei Treiberproblemen, z.\,B.\
+  \code{opengl} in virtuellen Maschinen oder \code{vulkan} unter Linux. \\
+\code{NFCAD\_PYTHON} & Python-Interpreter der Plugins, falls unter \menu{Plugins,Settings...}
+  keiner eingetragen ist. \\
+\code{NFCAD\_PLUGIN\_PATH} & zusätzliche Plugin-Ordner (mehrere getrennt durch \code{:},
+  unter Windows durch \code{;}). \\
+\code{NFCAD\_DEVELOPER\_MODE} & mit dem Wert \code{1}: Entwicklermodus, lädt auch nicht
+  signierte Plugins (\autoref{kap:plugin-verwaltung}). \\
+\code{QT\_QPA\_PLATFORM} & unter Linux \code{xcb} erzwingt X11 statt Wayland. \\
+\bottomrule
+\end{referenz}
+
+Beispiel unter Windows (PowerShell):
+\begin{lstlisting}
+$env:NFCAD_RHI_BACKEND = "d3d12"
+& "C:\Program Files\Raytatouille Fusion\bin\RaytatouilleFusion.exe"
+\end{lstlisting}

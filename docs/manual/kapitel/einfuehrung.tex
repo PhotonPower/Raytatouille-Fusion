@@ -1,0 +1,281 @@
+\chapter{Einführung}\label{kap:einfuehrung}
+\index{Raytatouille Fusion}
+
+Dieses Handbuch beschreibt \produkt{} in der Version \version. Es richtet sich an
+Anwenderinnen und Anwender aus Optik und Physik, die Geometrie modellieren oder einlesen und
+darauf optische Berechnungen ausführen wollen -- Strahlverfolgung, Wellenoptik, Beugung an
+Gittern, Lichttransport in Szenen und Scheinwerfern. Programmierkenntnisse sind für die
+Arbeit mit dem Programm nicht nötig; nur das Einrichten der Python-Umgebung für die Plugins
+verlangt einige Schritte im Dateisystem, die in \autoref{kap:installation} genau beschrieben
+sind.
+
+\section{Was ist Raytatouille Fusion?}\label{sec:was-ist}
+
+\produkt{} ist ein CAD-Programm für den Schreibtisch, das zwei Aufgaben verbindet:
+
+\begin{enumerate}
+  \item \textbf{Geometrie bearbeiten.} Das Programm ist die Bedienoberfläche
+    (\enquote{Frontend}) für den NURBS-Kern \textbf{Nurbforge}\index{Nurbforge}. Alle Kurven,
+    Flächen und Körper werden darin \emph{exakt} als NURBS (nicht-uniforme rationale
+    B-Splines) gespeichert: mit Grad, Knotenvektor, Kontrollpunkten und Gewichten. Zur Anzeige
+    werden sie in Dreiecke zerlegt (tesselliert); diese Näherung dient nur dem Bildschirm und
+    dem STL-Export, gerechnet und gespeichert wird immer mit der exakten Geometrie.
+  \item \textbf{Optisch rechnen.} Über Plugins werden Rechenkerne angebunden. Sie lesen das
+    Modell, rechnen und zeigen ihre Ergebnisse direkt am Modell: Strahlen als Linien,
+    Felder und Bestrahlungsstärken farbig auf den Flächen, Bilder in einem eigenen Fenster,
+    Kurven in einem Diagramm, Tabellen in einer Tabellenansicht.
+\end{enumerate}
+
+Mit dem Programm ausgeliefert werden fünf Plugins, die auf die folgenden Rechenkerne
+zugreifen:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.2cm}X}
+\toprule
+\textbf{Rechenkern} & \textbf{Aufgabe} \\
+\midrule
+\endhead
+\textbf{Raytatouille}\index{Raytatouille} & Strahlverfolgung durch optische Systeme
+  (Linsen, Spiegel, Strahlteiler), Bestrahlungsstärke auf der Bildfläche, Optimierung. Wird
+  über das Plugin \plugin{Raytracer} angesprochen (\autoref{kap:raytracer}). \\
+\textbf{RTT-Fusion}\index{RTT-Fusion} & Die Verbindung von Strahlen- und Wellenoptik in einem
+  Knoten-Workflow: Systeme werden in Blöcke zerlegt, zwischen denen Licht als Strahlen oder
+  als Feld weitergegeben wird. Das Plugin \plugin{Workflow} ist die Rechenmaschine dieses
+  Workflows (\autoref{kap:workflow}). \\
+\textbf{Fieldtracing}\index{Fieldtracing} & Feldausbreitung (z.\,B.\ Debye,
+  Rayleigh--Sommerfeld) für die Verbindungen des Workflows, die Felder statt Strahlen
+  übertragen; wird vom Raytracer und vom Workflow mitbenutzt. \\
+\textbf{FourierGrating}\index{FourierGrating} & Beugung an periodischen Strukturen (RCWA,
+  differentielle Methode), Wirkungsgrade je Beugungsordnung. Plugin \plugin{FourierGrating}
+  (\autoref{kap:fouriergrating}). \\
+\textbf{Path Tracer}\index{Path Tracer} & Lichttransport auf dem CAD-Modell selbst:
+  Objekte werden zu Lichtquellen, die übrigen erhalten Materialien; Ergebnis sind
+  Bestrahlungsstärken auf den Flächen und Kamerabilder. Plugin \plugin{Path Tracer}
+  (\autoref{kap:pathtracer}); dasselbe Rechenpaket nutzt auch das Plugin
+  \plugin{Automotive Lighting} für Scheinwerfer und Signalleuchten
+  (\autoref{kap:automotive}). \\
+\bottomrule
+\end{referenz}
+
+Die Rechenkerne selbst sind Python-Pakete (\code{raytatouille}, \code{rtt-fusion},
+\code{photonpower-fieldtracing}, \code{fouriergrating}, \code{pathtracer}). Sie werden nicht mit
+dem Programm installiert, sondern in eine Python-Umgebung auf Ihrem Rechner; das Programm
+richtet diese Umgebung auf Knopfdruck ein (\autoref{sec:python-umgebung}). Die Plugins laufen
+jeweils in einem eigenen Python-Prozess. Stürzt eine Rechnung ab oder hängt sie, bleibt das
+CAD-Programm bedienbar; eine laufende Rechnung lässt sich jederzeit abbrechen.
+
+\begin{hinweis}
+\produkt{} hieß bis November 2026 \enquote{Nurbforge CAD}. Ältere Dokumente mit der Endung
+\datei{.nfcad} lassen sich weiterhin öffnen, und die Einstellungen von Nurbforge CAD werden
+beim ersten Start übernommen (\autoref{sec:einstellungen}). An einigen Stellen ist der alte
+Name noch sichtbar, etwa im Namen des Python-Pakets \code{nfcad} für Plugins oder in den
+Umgebungsvariablen \code{NFCAD\_\dots}.
+\end{hinweis}
+
+\subsection*{Was das Programm kann}
+
+\begin{itemize}
+  \item STEP-Dateien und eigene Dokumente (\datei{.rttf}) öffnen und in vier Ansichten
+    darstellen -- als Drahtmodell, mit flachen oder mit beleuchteten Flächen
+    (\autoref{kap:hauptfenster}, \autoref{kap:navigation}).
+  \item Objekte, einzelne Flächen, Kanten und Eckpunkte auswählen; ihre Eigenschaften (Grad,
+    Knoten, Länge, Fläche, Volumen) ablesen (\autoref{kap:navigation},
+    \autoref{kap:organisieren}).
+  \item Mit einem \enquote{magnetischen} Cursor zeichnen, der auf Endpunkte, Mittelpunkte,
+    Zentren, Schnittpunkte, Flächenecken und -kanten einrastet; Koordinaten eintippen
+    (\autoref{kap:modellieren}).
+  \item Kurven, Flächen (Extrusion, Rotation, Loft, Sweep, Coons, Gordon, Offsets,
+    Verrundungen) und Körper (Quader, Kugel, Zylinder, Kegel, Torus, boolesche Operationen)
+    erzeugen, transformieren und bearbeiten (\autoref{kap:modellieren}).
+  \item Modelle mit Ebenen, Gruppen und freien Attributen ordnen (\autoref{kap:organisieren}).
+  \item STEP (AP214) und STL schreiben (\autoref{kap:dateien}).
+  \item Optische Rechnungen über Plugins ausführen und die Ergebnisse mit dem Dokument
+    speichern (\autoref{kap:plugins} bis \autoref{kap:automotive}).
+\end{itemize}
+
+Das Programm läuft unter macOS (ab Version~14, Apple Silicon und Intel), Windows~11 und
+AlmaLinux bzw.\ Red Hat Enterprise Linux~10. Es zeichnet mit der jeweils nativen
+Grafikschnittstelle (Metal, Direct3D, OpenGL oder Vulkan).
+
+\section{Grundbegriffe}\label{sec:begriffe}
+
+Die folgenden Begriffe werden im ganzen Handbuch in dieser Bedeutung verwendet. Weitere
+Fachbegriffe erklärt das Glossar (\autoref{kap:glossar}).
+
+\begin{description}
+  \item[Dokument]\index{Dokument} Alles, was Sie in einem Fenster bearbeiten: die Geometrie
+    mit Ebenen, Gruppen und Attributen, die Parameter der Plugins, ein etwaiger
+    Knoten-Workflow und die gespeicherten Ergebnisse. Ein Dokument wird als eine Datei mit
+    der Endung \datei{.rttf} gespeichert (\autoref{kap:dateien}). Das Programm hat immer genau
+    ein Dokument geöffnet; ein neues oder geöffnetes Dokument ersetzt das bisherige.
+  \item[Objekt (Entität)]\index{Objekt}\index{Entität} Ein einzelnes Geometrieelement des
+    Dokuments. Es gibt fünf Arten, die im Modellbaum in der Spalte \gui{Type} stehen:
+    \begin{itemize}
+      \item \gui{Point} -- ein Punkt,
+      \item \gui{Curve} -- eine NURBS-Kurve (Linie, Polylinie, Kreis, Bogen, Spline \dots),
+      \item \gui{Surface} -- eine untrimmte NURBS-Fläche,
+      \item \gui{Trimmed surface} -- eine NURBS-Fläche, die durch Randkurven im
+        Parameterraum beschnitten ist (z.\,B.\ mit Loch),
+      \item \gui{Shell} -- eine Hülle aus mehreren zusammengenähten getrimmten Flächen
+        (B-Rep). Geschlossene Hüllen sind Volumenkörper; STEP-Dateien werden als Hüllen
+        eingelesen.
+    \end{itemize}
+    Die Begriffe Objekt und Entität sind gleichbedeutend; die Oberfläche spricht von
+    \enquote{object} oder \enquote{entity}. Jedes Objekt hat eine eindeutige Nummer (\gui{Id}),
+    optional einen Namen, gehört zu genau einer Ebene und höchstens einer Gruppe.
+  \item[Fläche (Face)]\index{Fläche} Eine einzelne getrimmte Fläche innerhalb einer Hülle.
+    Flächen sind \emph{Teilobjekte}: Sie lassen sich auswählen und ihre Eigenschaften ablesen,
+    aber nicht für sich löschen.
+  \item[Kante (Edge)]\index{Kante} Eine Randkurve einer Hülle, an der eine oder zwei Flächen
+    zusammenstoßen; ebenfalls ein Teilobjekt.
+  \item[Eckpunkt (Vertex)]\index{Eckpunkt} Ein Punkt, an dem Kanten einer Hülle enden;
+    Teilobjekt.
+  \item[Ebene (Layer)]\index{Ebene}\index{Layer} Eine Zusammenfassung von Objekten mit
+    gemeinsamem Namen, gemeinsamer Farbe und gemeinsamem Sichtbarkeitsschalter. Jedes Dokument
+    hat mindestens die Ebene \gui{Default}. Nicht zu verwechseln mit der
+    \emph{Konstruktionsebene} einer Ansicht (\autoref{sec:konstruktionsebene}), in der
+    gezeichnet wird.
+  \item[Gruppe]\index{Gruppe} Ein Knoten im Modellbaum, der Objekte und weitere Gruppen
+    enthält. Gruppen dienen der Ordnung (ein Objektiv, eine Baugruppe aus einer STEP-Datei)
+    und lassen sich gemeinsam ein- und ausblenden (\autoref{sec:gruppen}).
+  \item[Attribut]\index{Attribut} Ein frei wählbares Schlüssel-Wert-Paar an einem Objekt,
+    z.\,B.\ \code{sim.inactive = true}. Attribute werden mit dem Dokument gespeichert; Plugins
+    lesen und schreiben sie (\autoref{sec:attribute}).
+  \item[Plugin]\index{Plugin} Eine Erweiterung in Python, die einen Rechenkern anbindet. Ein
+    Plugin bringt eine Gruppe von Knöpfen in der Werkzeugspalte, eine Seite im Dock
+    \gui{Plugin} mit seinen Parametern und Aktionen und ein Untermenü im Menü \menu{Plugins}
+    mit (\autoref{kap:plugins}).
+  \item[Aktion]\index{Aktion} Eine Rechnung oder ein Arbeitsschritt eines Plugins, etwa
+    \enquote{Trace rays} oder \enquote{Camera image}. Eine Aktion läuft als \emph{Job} im
+    Hintergrund; der Fortschritt steht in der Statusleiste. Alles, was eine Aktion am Modell
+    ändert, ist \emph{ein} Rückgängig-Schritt.
+  \item[Workflow]\index{Workflow} Der Knoten-Workflow: ein Graph aus Blöcken (Quellen,
+    optische Elemente, Detektoren, Anzeigen) und Verbindungen, der ein optisches System
+    beschreibt und blockweise berechnet wird. Er gehört zum Dokument und wird im Fenster
+    \gui{Node workflow} bearbeitet (\autoref{kap:workflow}).
+  \item[Ergebnis]\index{Ergebnis} Was eine Plugin-Rechnung liefert: Strahlen (Linien), Felder
+    auf Flächen, Bilder, Kurven, Tabellen oder Balkendiagramme. Ergebnisse einer Rechnung
+    bilden einen \emph{Lauf} (\enquote{run}) im Dock \gui{Results}. Ergebnisse sind
+    Anzeigedaten, keine Geometrie -- Strahlen lassen sich aber in CAD-Kurven umwandeln
+    (\autoref{sec:dock-results}). Die neuesten Ergebnisse der Anzeigeblöcke des Workflows
+    werden mit dem Dokument gespeichert (\autoref{sec:gespeicherte-ergebnisse}).
+  \item[Befehl]\index{Befehl} Ein Zeichen- oder Modellierwerkzeug (\cmd{Line},
+    \cmd{Box}, \cmd{Move} \dots), das aus der Werkzeugspalte, per Tastenkürzel oder durch
+    Eintippen in die Befehlszeile gestartet wird (\autoref{kap:modellieren},
+    \autoref{kap:befehle}).
+  \item[Ansicht (Viewport)]\index{Ansicht} Eines der vier Zeichenfenster in der Mitte des
+    Hauptfensters (Front, Left, Top, Perspective). Die \emph{aktive} Ansicht ist die zuletzt
+    angeklickte (\autoref{sec:ansichten}).
+\end{description}
+
+\section{Aufbau des Handbuchs}\label{sec:aufbau}
+
+Das Handbuch hat drei Teile.
+
+\paragraph{Teil I -- Grundlagen.} Er führt durch die Bedienung des CAD-Programms ohne
+Plugins:
+\begin{itemize}
+  \item \autoref{kap:installation} -- Installation auf allen drei Systemen, Einrichten der
+    Python-Umgebung, erster Start, Updates, Absturzberichte, Einstellungen.
+  \item \autoref{kap:hauptfenster} -- alle Bereiche des Hauptfensters und alle Menüs.
+  \item \autoref{kap:navigation} -- Drehen, Verschieben, Zoomen, Auswählen, Ein- und
+    Ausblenden.
+  \item \autoref{kap:modellieren} -- Zeichnen und Modellieren mit Befehlen, Fang und
+    Koordinateneingabe.
+  \item \autoref{kap:organisieren} -- Ebenen, Gruppen, Modellbaum, Eigenschaften, Attribute,
+    Rückgängig machen.
+  \item \autoref{kap:dateien} -- Dokumente, STEP und STL, Beispielmodelle.
+\end{itemize}
+
+\paragraph{Teil II -- Berechnen mit Plugins.} \autoref{kap:plugins} erklärt, was alle
+Plugins gemeinsam haben; \autoref{kap:workflow} den Knoten-Workflow. Danach folgt je ein
+Kapitel für den Raytracer (\autoref{kap:raytracer}), den Path Tracer
+(\autoref{kap:pathtracer}), FourierGrating (\autoref{kap:fouriergrating}) und Automotive
+Lighting (\autoref{kap:automotive}) -- jeweils mit Beispielen zum Nachvollziehen.
+
+\paragraph{Teil III -- Anhang.} Nachschlageteil: alle Tastenkürzel
+(\autoref{kap:tastenkuerzel}), alle Befehle der Befehlszeile (\autoref{kap:befehle}), die
+Programme und Pakete (\autoref{kap:programme}), alle Parameter und Aktionen jedes Plugins
+(\autoref{kap:plugin-raytracer} bis \autoref{kap:plugin-automotive}), alle Blöcke des
+Workflows (\autoref{kap:workflow-bloecke}), die Verwaltung von Plugins
+(\autoref{kap:plugin-verwaltung}), das Dateiformat (\autoref{kap:dateiformat}), die
+Fehlersuche (\autoref{kap:fehlersuche}) und das Glossar (\autoref{kap:glossar}).
+
+Wer das Programm zum ersten Mal benutzt, liest am besten \autoref{kap:installation} bis
+\autoref{kap:navigation} der Reihe nach und probiert die Schritte dabei aus. Die übrigen
+Kapitel lassen sich unabhängig voneinander lesen.
+
+\section{Schreibweisen}\label{sec:schreibweisen}
+
+Die Oberfläche des Programms ist englisch. Menüs, Knöpfe und Felder stehen im Handbuch
+deshalb so, wie sie auf dem Bildschirm erscheinen; erklärt wird auf Deutsch.
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.6cm}X}
+\toprule
+\textbf{Schreibweise} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\menu{File,Save As...} & Ein Menübefehl: Menü \gui{File}, darin der Eintrag \gui{Save
+  As...}. Untermenüs werden ebenso aneinandergereiht. \\
+\gui{Check environment} & Beschriftung eines Bedienelements: Knopf, Feld, Kontrollkästchen,
+  Dock, Fenster oder Spaltenkopf. \\
+\keys{Strg+S} & Tastenkombination: Die Tasten werden gleichzeitig gedrückt, hier
+  \keys{Strg} und \keys{S}. \\
+\keys{Z}, dann \keys{E} & Tastenfolge: erst \keys{Z} drücken und loslassen, dann \keys{E}. \\
+\maus{rechts ziehen} & Mausgeste: hier mit gedrückter rechter Maustaste ziehen. \\
+\cmd{Line} & Ein Befehl, wie er in die Befehlszeile eingetippt werden kann. \\
+\param{rays} & Name eines Plugin-Parameters oder eines Schlüssels in einer Datei. \\
+\datei{examples/demo-parts.step} & Datei- oder Ordnername. \\
+\code{x,y,z} & Eine Eingabe, wie sie getippt wird. \\
+\plugin{Raytracer} & Name eines Plugins. \\
+\block{Camera} & Block des Knoten-Workflows. \\
+\bottomrule
+\end{referenz}
+
+\subsection*{Tasten auf dem Mac}
+\index{Mac-Tasten}\index{Cmd-Taste}
+
+Das Handbuch nennt Tastenkürzel in der Schreibweise von Windows und Linux. Auf dem Mac gilt:
+
+\begin{itemize}
+  \item \keys{Strg} entspricht der Befehlstaste \keys{Cmd} (\enquote{\textit{Command}},
+    Kleeblatt-Symbol). \keys{Strg+S} heißt auf dem Mac also \keys{Cmd+S}, \keys{Strg+Shift+Z}
+    heißt \keys{Cmd+Shift+Z}. Auch beim Auswählen mit der Maus (\keys{Strg}+Klick) ist auf dem
+    Mac \keys{Cmd} gemeint.
+  \item \keys{Alt} ist auf dem Mac die Wahltaste (\enquote{\textit{Option}}).
+  \item \keys{Shift} ist die Umschalttaste, \keys{Enter} die Eingabetaste (Return),
+    \keys{Entf} die Löschtaste nach rechts (\enquote{Delete}); \keys{Rück} ist die
+    Rückschritttaste (auf dem Mac mit \enquote{delete} beschriftet). Beide löschen die
+    Auswahl.
+\end{itemize}
+
+In den Menüs zeigt das Programm die Tastenkürzel in der Schreibweise des jeweiligen Systems
+an, auf dem Mac also mit den Symbolen für Cmd, Shift und Option.
+
+\begin{tipp}
+Die Tastenkürzel ohne Zusatztaste (\keys{H}, \keys{Leertaste}, \keys{Z}, dann \keys{E} \dots)
+wirken, solange eine Ansicht oder ein Dock den Fokus hat, nicht aber, während Sie in ein
+Eingabefeld oder die Befehlszeile schreiben. Alle anderen Buchstaben, die Sie in einer Ansicht
+tippen, landen in der Befehlszeile (\autoref{sec:befehlszeile}).
+\end{tipp}
+
+\subsection*{Kästen}
+
+Im Text stehen drei Arten von Kästen:
+
+\begin{hinweis}
+Ergänzende Informationen, die man kennen sollte, um ein Verhalten zu verstehen.
+\end{hinweis}
+
+\begin{tipp}
+Abkürzungen und Arbeitsweisen, die Zeit sparen.
+\end{tipp}
+
+\begin{warnung}
+Stellen, an denen Daten verloren gehen können oder ein Ergebnis falsch werden kann.
+\end{warnung}
+
+\subsection*{Maßeinheiten}
+
+Alle Längen im CAD-Modell sind Millimeter; das Dokumentformat speichert die Einheit
+\code{mm}. Plugins können für ihre eigenen Parameter andere Einheiten verwenden (etwa
+Mikrometer für Wellenlängen); sie stehen dann bei dem jeweiligen Parameter.

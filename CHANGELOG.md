@@ -7,6 +7,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **User manual (German, LaTeX and PDF)**: `docs/manual/handbuch.pdf`, about 390 pages – installation,
+  main window, navigation, modelling with every command, layers and groups, files, plugins, the
+  node workflow, the Raytracer, Path Tracer, FourierGrating and Automotive Lighting plugins; appendices
+  with all keyboard shortcuts, every command of the command line, the programs' command-line options
+  and environment variables, a parameter reference per plugin, every workflow block, plugin
+  management, the file format, troubleshooting and a glossary. Source in `docs/manual/` (`make`).
 - **The plugins ship with the application** (Windows installer, macOS DMG, RPM): Raytracer,
   Workflow, FourierGrating, Path Tracer and Automotive Lighting are installed with it and load
   without a signature, as part of the installation (ADR 0009, addendum). A plugin folder of one's

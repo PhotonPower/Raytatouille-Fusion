@@ -1,0 +1,366 @@
+\chapter{Plugin-Verwaltung}\label{kap:plugin-verwaltung}\index{Plugin-Verwaltung}
+
+Dieser Anhang beschreibt, woher \produkt{} seine Plugins nimmt, wie Sie Plugin-Pakete
+installieren und entfernen, wie die Signaturprüfung arbeitet, was ein Plugin in seiner
+\datei{plugin.json} an Python-Paketen verlangt und wie die Update-Prüfung funktioniert. Die
+Bedienung der Plugins selbst beschreibt Kapitel~\ref{kap:plugins}.
+
+% ---------------------------------------------------------------------------
+\section{Plugin-Ordner}\label{sec:verwaltung-ordner}\index{Plugin-Ordner}
+
+Ein Plugin ist ein Ordner, der eine Datei \datei{plugin.json} enthält. Die Anwendung durchsucht
+mehrere \emph{Plugin-Ordner}; jeder Unterordner eines Plugin-Ordners mit einer
+\datei{plugin.json} ist ein Plugin. Die Ordner werden in dieser Reihenfolge durchsucht:
+
+\begin{enumerate}
+  \item der \textbf{Ordner für installierte Plugins} (Abschnitt~\ref{sec:verwaltung-installiert}),
+  \item die \textbf{weiteren Plugin-Ordner} aus \menu{Plugins,Settings…}
+        (\gui{Further plugin folders}),
+  \item die Ordner aus der Umgebungsvariablen \code{NFCAD\_PLUGIN\_PATH} (mehrere Ordner durch
+        \code{:} getrennt, unter Windows durch \code{;}),
+  \item in einer Entwicklungsversion, wenn sonst kein Ordner eingestellt ist, die Ordner
+        \datei{python/examples} und \datei{python/plugins} des Quellcodes,
+  \item zuletzt der \textbf{Ordner der mitgelieferten Plugins}
+        (Abschnitt~\ref{sec:verwaltung-mitgeliefert}).
+\end{enumerate}
+
+Jede Plugin-Kennung (\code{id}) darf nur einmal geladen werden. Findet die Anwendung eine
+Kennung ein zweites Mal, gilt der zuerst gefundene Ordner:
+
+\begin{itemize}
+  \item Ein installiertes Plugin hat Vorrang vor einem gleichnamigen in einem anderen Ordner.
+  \item Ein Plugin in einem eigenen Ordner \emph{ersetzt} das mitgelieferte Plugin gleicher
+        Kennung – ohne Meldung. So können Sie eine neuere Version eines mitgelieferten Plugins
+        verwenden.
+  \item Kommt eine Kennung in zwei anderen Ordnern vor, wird nur die erste geladen, und
+        \gui{Problems:} im Einstellungsdialog meldet \code{plugin id '…' is used twice}.
+\end{itemize}
+
+\menu{Plugins,Reload plugins} sucht alle Ordner neu ab, beendet alle Plugin-Prozesse und startet
+die gefundenen Plugins neu.
+
+\subsection{Der Ordner für installierte Plugins}\label{sec:verwaltung-installiert}
+
+\gui{Install plugin…} installiert in den Unterordner \datei{plugins} des Datenordners der
+Anwendung, je Plugin in einen Ordner mit seiner Kennung (\datei{plugins/<id>}). Der
+Einstellungsdialog zeigt den genauen Pfad unter \gui{Installed plugins (Plugins $\to$ Install
+plugin…):}. Typisch ist:
+
+\begin{referenz}{@{}lX@{}}
+\toprule
+\textbf{System} & \textbf{Ordner} \\
+\midrule
+\endhead
+macOS & \datei{\textasciitilde/Library/Application Support/PhotonPower/Raytatouille Fusion/plugins} \\
+Windows & \datei{\%APPDATA\%\textbackslash PhotonPower\textbackslash Raytatouille Fusion\textbackslash plugins} \\
+Linux & \datei{\textasciitilde/.local/share/PhotonPower/Raytatouille Fusion/plugins} \\
+\bottomrule
+\end{referenz}
+
+Die Umgebungsvariable \code{NFCAD\_PLUGIN\_INSTALL\_DIR} legt einen anderen Ordner fest.
+
+\subsection{Mitgelieferte Plugins}\label{sec:verwaltung-mitgeliefert}\index{mitgelieferte Plugins}
+
+Die Plugins \plugin{Raytracer}, \plugin{Workflow}, \plugin{FourierGrating}, \plugin{Path
+Tracer} und \plugin{Automotive Lighting} werden mit der Anwendung installiert (Windows-Installer,
+macOS-Disk-Image, RPM). Sie liegen neben dem Python-Paket \code{nfcad} der Anwendung:
+
+\begin{referenz}{@{}lX@{}}
+\toprule
+\textbf{System} & \textbf{Ordner (relativ zum Programm)} \\
+\midrule
+\endhead
+macOS & \datei{RaytatouilleFusion.app/Contents/Resources/python/plugins} \\
+Windows & \datei{<Installationsordner>\textbackslash python\textbackslash plugins} \\
+Linux & \datei{<prefix>/share/raytatouille-fusion/python/plugins} \\
+\bottomrule
+\end{referenz}
+
+Mitgelieferte Plugins werden \emph{ohne Signatur} geladen: Sie kommen aus demselben Installer und
+liegen im selben schreibgeschützten Ordner wie das Programm; eine Signatur würde nichts bezeugen,
+was die Installation nicht schon bezeugt. Als mitgeliefert gelten nur diese festen Orte relativ
+zum Programm – weder eine Einstellung noch eine Umgebungsvariable kann einen anderen Ordner dazu
+machen. Eine Entwicklungsversion, die direkt aus dem Quellcode läuft, hat keinen solchen Ordner.
+
+Mitgelieferte Plugins lassen sich nicht mit \gui{Uninstall plugin} entfernen; nehmen Sie ein
+Plugin, das Sie nicht brauchen, stattdessen mit \menu{Plugins,Show in the side panels} aus den
+Seitenleisten (Abschnitt~\ref{sec:plugin-seitenleisten}).
+
+% ---------------------------------------------------------------------------
+\section{Plugin-Pakete installieren und entfernen}\label{sec:verwaltung-installieren}\index{nfplugin@\texttt{.nfplugin}}
+
+Plugins werden als \emph{Plugin-Paket} mit der Endung \datei{.nfplugin} weitergegeben – ein
+ZIP-Archiv des Plugin-Ordners mit seiner Signaturdatei.
+
+\subsection{Installieren}
+
+\begin{schritte}
+  \item Wählen Sie \menu{Plugins,Install plugin…} und im Dateidialog
+        (\gui{Plugin packages (*.nfplugin)}) das Paket. Alternativ übergeben Sie die
+        \datei{.nfplugin}-Datei beim Start als Datei-Argument (Anhang~\ref{kap:programme}),
+        z.\,B.\ indem Sie sie im Dateimanager mit der Anwendung öffnen.
+  \item Die Anwendung beendet alle Plugin-Prozesse, prüft das Paket und seine Signatur, entpackt
+        es in den Ordner für installierte Plugins und lädt alle Plugins neu.
+  \item Ein Meldungsfenster \gui{Install plugin} bestätigt: \code{… installed.} bzw.\ bei einer
+        schon installierten Version \code{… updated from 0.1.0 to 0.2.0.}
+  \item Fehlen in der Python-Umgebung Pakete, die das Plugin verlangt, nennt die Meldung sie mit
+        dem fertigen Befehl: \code{Missing Python packages – install them with: …}.
+\end{schritte}
+
+Während ein Plugin-Job läuft, ist keine Installation möglich (\gui{A plugin job is still
+running}).
+
+\paragraph{Prüfungen beim Installieren.} Das Paket wird abgelehnt, wenn
+
+\begin{itemize}
+  \item es kein lesbares ZIP-Archiv ist (\code{… is not a plugin package}),
+  \item es mehr als 5000 Dateien enthält, eine Datei größer als 64~MB ist oder alles zusammen
+        entpackt mehr als 256~MB groß wäre (\code{too many files in the package},
+        \code{package too large}),
+  \item ein Pfad im Archiv absolut ist, \code{..} enthält, einen Laufwerksbuchstaben oder einen
+        Rückwärtsschrägstrich hat oder ein symbolischer Link ist
+        (\code{invalid path in the package: …}),
+  \item die \datei{plugin.json} weder ganz oben noch im einzigen Ordner der obersten Ebene liegt
+        (\code{the package has no plugin.json}),
+  \item die \datei{plugin.json} fehlerhaft ist (Abschnitt~\ref{sec:verwaltung-manifest}),
+  \item die Signatur fehlt oder ungültig ist und der Entwicklermodus aus ist
+        (\code{… – only signed plugins can be installed (unsigned ones in developer mode)}).
+\end{itemize}
+
+Im Entwicklermodus wird ein unsigniertes Paket installiert; die Meldung ergänzt
+\code{Not signed (…) – it only loads in developer mode.}
+
+Eine installierte ältere (oder gleiche) Version wird vollständig ersetzt.
+
+\subsection{Entfernen}
+
+\menu{Plugins,Uninstall plugin} listet alle geladenen Plugins mit Name und Version. Wählen Sie ein
+installiertes Plugin und bestätigen Sie die Frage \gui{Remove the plugin …?}. Der Ordner des
+Plugins wird gelöscht, die Plugins werden neu geladen; die Statuszeile meldet
+\code{… removed}.
+
+Plugins aus anderen Ordnern (eigene Plugin-Ordner, mitgelieferte Plugins) stehen ausgegraut mit
+dem Zusatz \gui{– from a plugin folder} in der Liste. Der Tooltip nennt den Ordner, aus dem sie
+kommen. Solche Plugins entfernen Sie, indem Sie den Ordner unter \menu{Plugins,Settings…}
+austragen oder löschen.
+
+% ---------------------------------------------------------------------------
+\section{Die Beschreibungsdatei plugin.json}\label{sec:verwaltung-manifest}\index{plugin.json@\texttt{plugin.json}}
+
+Jedes Plugin beschreibt sich in einer JSON-Datei \datei{plugin.json}, z.\,B.\ der Raytracer:
+
+\begin{lstlisting}
+{
+  "id": "raytracer",
+  "name": "Raytracer",
+  "version": "0.1.0",
+  "api": 1,
+  "entry": "raytracer_plugin:RaytracerPlugin",
+  "requires": ["numpy", "raytatouille>=0.9", "rtt_fusion>=0.2 (rtt-fusion)",
+               "fieldtracing>=0.2 (photonpower-fieldtracing)"],
+  "description": "Raytatouille: load optical systems, trace rays, ..."
+}
+\end{lstlisting}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}X@{}}
+\toprule
+\textbf{Feld} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\code{id} & Kennung, Pflicht. Nur Kleinbuchstaben, Ziffern, \code{\_}, \code{-} und \code{.},
+  beginnend mit Buchstabe oder Ziffer, höchstens 64 Zeichen. Benennt den Ordner eines
+  installierten Plugins und die Parameter des Plugins im Dokument. \\
+\code{name} & Anzeigename (ohne Angabe: die Kennung). \\
+\code{version} & Version, z.\,B.\ \code{0.1.0}; für Installation und Update-Prüfung. \\
+\code{api} & Version der Plugin-Schnittstelle; diese Ausgabe unterstützt nur \code{1}. Ein
+  anderer Wert führt zu \code{plugin API … is not supported (this version: 1)}. \\
+\code{entry} & Pflicht: Python-Modul und Klasse des Plugins, \code{modul:Klasse}. \\
+\code{requires} & Benötigte Python-Pakete (Abschnitt~\ref{sec:verwaltung-requires}). \\
+\code{description} & Beschreibung; erscheint im Plugin-Dock und als Tooltip im Menü. \\
+\code{update\_url} & Optional: Adresse für die Update-Prüfung
+  (Abschnitt~\ref{sec:verwaltung-updates}). \\
+\bottomrule
+\end{referenz}
+
+Fehlt \code{id} oder \code{entry}, meldet der Einstellungsdialog unter \gui{Problems:}
+\code{plugin.json needs 'id' and 'entry'}; eine ungültige Kennung
+\code{plugin id '…':} \code{use lower-case letters, digits, '\_', '-', '.'}.
+
+\subsection{Python-Anforderungen}\label{sec:verwaltung-requires}\index{Python-Anforderungen}
+
+Jeder Eintrag in \code{requires} hat die Form
+
+\begin{lstlisting}
+importname [>= version | == version] [(pip-name)]
+\end{lstlisting}
+
+\begin{itemize}
+  \item \textbf{Importname}: der Name, unter dem Python das Paket importiert,
+        z.\,B.\ \code{fieldtracing}.
+  \item \textbf{Version} (optional): \code{>=} verlangt mindestens, \code{==} genau diese
+        Version. Verglichen wird numerisch Teil für Teil; ein Zusatz wie \code{-rc1} zählt
+        weniger als die Version ohne Zusatz.
+  \item \textbf{pip-Name} in Klammern (optional): der Name des Pakets für \code{pip}, wenn er
+        vom Importnamen abweicht, z.\,B.\ \code{fieldtracing>=0.2 (photonpower-fieldtracing)}
+        oder \code{rtt\_fusion>=0.2 (rtt-fusion)}.
+\end{itemize}
+
+Diese Angaben nutzen \gui{Check environment} (es importiert das Paket unter dem Importnamen und
+liest seine Version), \gui{Create environment…} und die Meldung nach einer Installation (beide
+installieren mit dem pip-Namen). Pakete mit Versionsangabe setzt der angezeigte \code{pip}-Befehl
+in Anführungszeichen, z.\,B.\ \code{"photonpower-fieldtracing>=0.2"}. Ein Eintrag, der nicht in
+diese Form passt, erscheint als \code{invalid requirement}. Zusätzlich verlangt die Anwendung
+immer \code{numpy}, weil ihr Python-Paket \code{nfcad} es für die Datenübergabe braucht.
+
+Die Python-Version muss 3.10 oder neuer sein.
+
+% ---------------------------------------------------------------------------
+\section{Signaturen}\label{sec:verwaltung-signaturen}\index{Signatur}
+
+Plugins sind Python-Code, der mit Ihren Rechten läuft. Deshalb lädt \produkt{} außer den
+mitgelieferten nur Plugins, die vom Herausgeber signiert sind. Es gibt genau \emph{einen}
+vertrauenswürdigen Herausgeber – den Inhaber des Projekts; sein öffentlicher Schlüssel ist in die
+Anwendung eingebaut (im Einstellungsdialog als \gui{Trusted publisher key: ed25519:…}). Es gibt
+keine Möglichkeit, zur Laufzeit weitere Schlüssel hinzuzufügen, auch nicht über Einstellungen oder
+Umgebungsvariablen; ein neuer Schlüssel braucht eine neue Version der Anwendung. Ist kein
+Schlüssel eingebaut, steht dort \gui{Trusted publisher: none built in – signed plugins cannot be
+loaded …}.
+
+\subsection{Was wird signiert?}
+
+\begin{itemize}
+  \item Verfahren: Ed25519 (RFC 8032) mit der Bibliothek Monocypher; Dateiprüfsummen SHA-256.
+  \item Signiert werden \emph{alle} Dateien des Plugin-Ordners einschließlich Unterordnern –
+        außer der Datei \datei{SIGNATURE} selbst, \datei{.pyc}-Dateien, Ordnern
+        \datei{\_\_pycache\_\_} und Dateien oder Ordnern, deren Name mit einem Punkt beginnt.
+  \item Signierter Text: die Zeile \code{nfcad-plugin-signature v1}, gefolgt von einer Zeile
+        \textit{SHA-256}~\textit{Pfad} je Datei, nach Pfad sortiert (Pfade relativ mit
+        \code{/}).
+  \item Die Datei \datei{SIGNATURE} (JSON) neben der \datei{plugin.json} enthält die Dateiliste mit
+        Prüfsummen, den öffentlichen Schlüssel des Unterzeichners und die Signatur. Die
+        \datei{plugin.json} muss zu den signierten Dateien gehören.
+\end{itemize}
+
+\subsection{Was passiert beim Laden?}
+
+Die Anwendung kopiert \emph{genau die signierten Dateien} in einen privaten temporären Ordner,
+berechnet dabei die Prüfsummen der geschriebenen Bytes und vergleicht sie mit der Signatur. Das
+Plugin läuft dann aus dieser Kopie. Dateien, die nach der Prüfung im Plugin-Ordner hinzukommen oder
+geändert werden, werden also nie ausgeführt. Die Kopien werden beim nächsten Neuladen entfernt.
+
+Mögliche Ergebnisse der Prüfung (Anzeige unter \gui{Problems:} im Einstellungsdialog bzw.\ beim
+Installieren):
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.38\linewidth}X@{}}
+\toprule
+\textbf{Meldung} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\code{not signed} & Keine Datei \datei{SIGNATURE}. \\
+\code{signed with an unknown key (…)} & Signiert, aber nicht vom eingebauten Herausgeber. \\
+\code{modified after signing: …} & Eine signierte Datei wurde geändert. \\
+\code{signed file missing: …} & Eine signierte Datei fehlt. \\
+\code{plugin.json is not signed} & Die Beschreibungsdatei gehört nicht zu den signierten
+  Dateien. \\
+\code{SIGNATURE is malformed}, \code{cannot read SIGNATURE} & Signaturdatei beschädigt bzw.\
+  größer als 4~MB. \\
+\code{invalid path in SIGNATURE: …} & Ein Pfad verlässt den Plugin-Ordner. \\
+\code{signature does not match} & Die Signatur passt nicht zu den Dateien. \\
+\bottomrule
+\end{referenz}
+
+Ein solches Plugin wird nicht geladen:
+\code{…: not signed – not loaded (only signed plugins; unsigned ones in developer mode)}.
+
+\begin{warnung}
+Eine Signatur beweist, \emph{wer} ein Plugin geschrieben hat und dass es unverändert ist. Sie
+beweist nicht, dass es harmlos ist – Plugins laufen ohne Sandbox mit Ihren Rechten.
+\end{warnung}
+
+\subsection{Der Entwicklermodus}\label{sec:verwaltung-entwicklermodus}\index{Entwicklermodus}
+
+Wer ein eigenes Plugin schreibt, kann es nicht mit dem Schlüssel des Herausgebers signieren. Dafür
+gibt es den Entwicklermodus:
+
+\begin{itemize}
+  \item Einschalten: \menu{Plugins,Settings…} $\to$ \gui{Developer mode: also load unsigned
+        plugins} oder Umgebungsvariable \code{NFCAD\_DEVELOPER\_MODE=1} (dann ist das
+        Kontrollkästchen gesperrt).
+  \item Wirkung: Unsignierte Plugins und Plugins mit ungültiger Signatur werden geladen –
+        direkt aus ihrem Ordner, nicht aus einer geprüften Kopie. Änderungen am Code wirken nach
+        \menu{Plugins,Reload plugins}.
+  \item Kennzeichnung: Diese Plugins heißen überall \textit{Name}~\gui{[unsigned]} bzw.\
+        \textit{Name}~\gui{[signature invalid]}; \gui{Problems:} meldet
+        \code{… – loaded because developer mode is on}. Rechts in der Statuszeile steht dauerhaft
+        das rote Banner \gui{DEVELOPER MODE – unsigned plugins allowed}.
+  \item Unsignierte Pakete lassen sich im Entwicklermodus auch installieren.
+\end{itemize}
+
+Schalten Sie den Entwicklermodus nach dem Entwickeln wieder aus.
+
+\subsection{Signieren (für Herausgeber)}
+
+Signiert wird mit dem Werkzeug \code{nfcad-plugin} auf dem Rechner des Herausgebers; der geheime
+Schlüssel (32 Byte, Dateirechte 0600) gelangt nie ins Repository. Nach jeder Änderung am Plugin
+muss neu signiert werden. Die Befehle beschreibt Anhang~\ref{sec:programme-nfcad-plugin}.
+
+\begin{lstlisting}
+nfcad-plugin keygen ~/.raytatouille-fusion/publisher.key   # einmal
+nfcad-plugin sign   mein_plugin ~/.raytatouille-fusion/publisher.key
+nfcad-plugin verify mein_plugin
+nfcad-plugin pack   mein_plugin          # -> <id>-<version>.nfplugin
+\end{lstlisting}
+
+Wer den geheimen Schlüssel besitzt, kann Plugins veröffentlichen, die jede Installation lädt.
+Geht er verloren, müssen alle Plugins mit einem neuen Schlüssel neu signiert und eine neue Version
+der Anwendung mit dem neuen öffentlichen Schlüssel ausgeliefert werden.
+
+% ---------------------------------------------------------------------------
+\section{Python-Umgebung der Plugins}\label{sec:verwaltung-python}
+
+\produkt{} bringt kein eigenes Python mit. Alle Plugins laufen mit \emph{einem} Interpreter, den
+Sie unter \menu{Plugins,Settings…} wählen (Abschnitt~\ref{sec:plugin-einstellungen}); er braucht
+die Pakete aller geladenen Plugins. Die Anwendung startet jedes Plugin als
+
+\begin{lstlisting}
+python -m nfcad.host --server 127.0.0.1:<port> --plugin <ordner>
+\end{lstlisting}
+
+mit dem Paket \code{nfcad} der Anwendung im Suchpfad. Das Plugin verbindet sich über TCP auf der
+lokalen Schnittstelle und weist sich mit einem zufälligen Schlüssel aus, den die Anwendung ihm in
+der Umgebung übergibt; andere Programme auf dem Rechner werden abgewiesen. Große Datenmengen werden
+als temporäre Dateien übergeben, die die Anwendung einliest und löscht.
+
+Wechseln Sie den Interpreter, werden alle Plugin-Prozesse beendet und mit dem neuen Interpreter
+neu gestartet.
+
+% ---------------------------------------------------------------------------
+\section{Update-Prüfung}\label{sec:verwaltung-updates}\index{Update-Pruefung@Update-Prüfung}
+
+\menu{Help,Check for updates…} prüft – nur wenn Sie es wählen, nie von selbst –,
+
+\begin{itemize}
+  \item ob es eine neuere Version von \produkt{} gibt (letzte Veröffentlichung auf GitHub,
+        \code{PhotonPower/Raytatouille-Fusion}) und
+  \item für jedes geladene Plugin mit einem Feld \code{update\_url} in seiner
+        \datei{plugin.json}, ob dort eine neuere Version angeboten wird.
+\end{itemize}
+
+Die Statuszeile zeigt währenddessen \gui{Checking for updates …}. Das Ergebnis erscheint im
+Fenster \gui{Updates}, je Zeile:
+
+\begin{itemize}
+  \item \textit{Name}: \textit{neu} \code{available (installed} \textit{alt}\code{) – download}
+        mit einem Link zur Download-Seite bzw.\ zum Paket,
+  \item \textit{Name}~\textit{Version}~\code{is up to date},
+  \item \textit{Name}~\textit{Version}\code{: check failed (…)} bei einem Netzwerkfehler.
+\end{itemize}
+
+Die Adresse in \code{update\_url} muss ein JSON-Dokument der Form
+\code{\{"version": "1.2.0", "url": "<Download-Seite oder .nfplugin>"\}} liefern. Die Anfragen
+senden keine persönlichen Daten; als Kennung dient nur \code{RaytatouilleFusion/}\textit{Version}.
+Jede Anfrage hat 15~Sekunden Zeit. Ein heruntergeladenes Paket installieren Sie anschließend mit
+\menu{Plugins,Install plugin…}; die Anwendung lädt selbst nichts herunter.
+
+Die mitgelieferten Plugins haben kein \code{update\_url}; sie werden mit neuen Versionen der
+Anwendung aktualisiert.

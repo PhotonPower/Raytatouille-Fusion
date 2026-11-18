@@ -1,0 +1,822 @@
+\chapter{Das Raytracer-Plugin (Raytatouille)}\label{kap:raytracer}
+\index{Raytracer}\index{Raytatouille}
+
+Das Plugin \plugin{Raytracer} verbindet \produkt{} mit dem optischen Rechenkern
+\emph{Raytatouille}. Raytatouille beschreibt ein optisches System vollständig in einer Datei
+(\datei{.rtt.json}): Flächen mit ihren exakten Formen, Gläser, Blenden, Felder,
+Wellenlängen, Strahlengänge (\emph{Paths}) und auf Wunsch eine Optimierungsaufgabe. Das Plugin
+lädt ein solches System, zeichnet jede optische Fläche als NURBS-Fläche in das CAD-Modell,
+verfolgt Strahlen, berechnet die Bestrahlungsstärke auf der Bildfläche, optimiert das System mit
+Live-Aktualisierung der Geometrie und schreibt das Ergebnis wieder als \datei{.rtt.json}.
+
+Dieses Kapitel beschreibt die Arbeit mit dem Plugin aus Anwendersicht. Die vollständige
+Referenz aller Aktionen, Parameter, Ergebnisse und Attribute finden Sie in
+\autoref{kap:plugin-raytracer}. Wie Plugins allgemein eingerichtet und bedient werden, steht in
+\autoref{kap:plugins}; der Node-Workflow, in dem das Plugin Blöcke anbietet, in
+\autoref{kap:workflow}.
+
+\abbildung[0.95\linewidth]{raytracer.png}{Das Raytracer-Plugin: ein Singlet mit
+Strahlenbündel in allen vier Ansichten, rechts das Panel \gui{Plugin} mit den Parametern der
+Gruppe \gui{System} und den Aktionsknöpfen, unten in der Statuszeile die Meldung der letzten
+Aktion.}{fig:raytracer-uebersicht}
+
+\section{Grundidee: Das optische System ist maßgeblich}\label{sec:rt-grundidee}
+
+Beim Raytracer gilt ein einfacher Grundsatz: \textbf{Maßgeblich ist das optische System, nicht
+die Zeichnung.} Die NURBS-Flächen im CAD-Modell werden aus den exakten Flächen des Systems
+abgeleitet -- nie umgekehrt. Strahlen werden immer auf den exakten Flächen von Raytatouille
+verfolgt, nicht auf den gezeichneten NURBS. Die Zeichnung dient zur Anschauung, zur Kontrolle der
+Lage im Raum und als Träger der Ergebnisse (Strahlen, Bestrahlungsstärke als Farbe auf der
+Bildfläche).
+
+Daraus folgt:
+\begin{itemize}
+  \item Wenn Sie eine gezeichnete Linsenfläche mit den CAD-Werkzeugen verschieben oder
+    verformen, ändert das die Rechnung nicht. Optische Daten (Radien, Dicken, Gläser) ändern Sie
+    in der \datei{.rtt.json}-Datei oder -- wenn ein Node-Workflow das System enthält -- im Dialog
+    \gui{Parameters…} der Blöcke (\autoref{sec:rt-workflow}).
+  \item Jede Aktion, die das System ändert (Laden, Optimieren), zeichnet die betroffenen
+    Flächen neu.
+  \item Es gibt zwei mögliche Quellen des Systems: die geladene Datei (\gui{System file}) oder
+    den Node-Workflow des Dokuments. Sobald ein Workflow das System enthält, ist \emph{er}
+    maßgeblich (\autoref{sec:rt-workflow}).
+\end{itemize}
+
+\section{Voraussetzungen}\label{sec:rt-voraussetzungen}
+
+Das Plugin wird mit der Anwendung ausgeliefert. Es braucht im Python-Interpreter der Plugins
+(\menu{Plugins,Settings…}) folgende Pakete; die Namen stehen so in der Datei
+\datei{plugin.json} des Plugins:
+
+\begin{referenz}{@{}l l >{\raggedright\arraybackslash}X@{}}
+\toprule
+Import-Name & pip-Paket & Wofür \\
+\midrule\endhead
+\code{numpy} & \code{numpy} & Zahlenfelder (immer nötig) \\
+\code{raytatouille} ($\geq$ 0.9) & \code{raytatouille} & der optische Rechenkern: Laden, Strahlen, Bestrahlungsstärke, Optimierung \\
+\code{rtt\_fusion} ($\geq$ 0.2) & \code{rtt-fusion} & Node-Workflow: \gui{New Raytatouille system}, \gui{Workflow from system}, Blöcke \code{rtt.*} \\
+\code{fieldtracing} ($\geq$ 0.2) & \code{photonpower-fieldtracing} & Felder (Darstellung H) in Verbindungen des Workflows \\
+\bottomrule
+\end{referenz}
+
+\gui{Check environment} in \menu{Plugins,Settings…} zeigt, was fehlt, mit dem passenden
+\code{pip install}-Befehl; \gui{Create environment…} legt eine neue Umgebung an und installiert
+numpy und die Pakete aller geladenen Plugins (siehe \autoref{kap:installation} und
+\autoref{kap:plugins}).
+
+\begin{hinweis}
+Fehlt \code{raytatouille}, startet das Plugin trotzdem; erst eine Aktion meldet dann:
+\enquote{\texttt{The Python package 'raytatouille' is not installed in the plugin's Python
+environment. Plugins $\to$ Settings… $\to$ Check environment shows how to install it.}}
+Fehlt nur \code{rtt\_fusion}, funktionieren Laden, Strahlen, Kamerabild, Optimieren und
+Speichern; nur die Workflow-Aktionen melden einen Fehler. Ohne \code{fieldtracing} kann der
+Workflow nur mit Strahlen (Darstellung R) rechnen.
+\end{hinweis}
+
+Für die Bestrahlungsstärke braucht das Plugin eine Raytatouille-Version mit der Funktion
+\code{rt.analysis.irradiance\_map}. Bei einer zu alten Version meldet es: \enquote{\texttt{The
+irradiance needs a newer Raytatouille (rt.analysis.irradiance\_map, \#379).}}
+
+\section{Das Raytracer-Panel}\label{sec:rt-panel}
+\index{Raytracer!Panel}
+
+Wählen Sie im Dock \gui{Plugin} oben in der Auswahlliste den Eintrag \gui{Raytracer}. Das Panel
+zeigt die Beschreibung des Plugins, darunter die Parameter in vier Gruppen und darunter die
+Aktionsknöpfe. Dieselben Aktionen stehen im Menü \menu{Plugins,Raytracer} und als Knöpfe in der
+Gruppe \gui{Raytracer} der Werkzeugspalte (dort mit den ersten drei Buchstaben, z.\,B.
+\gui{Loa} für \gui{Load system}).
+
+\begin{description}
+  \item[\gui{System}] Systemdatei, Glaskataloge, Zeichentoleranz.
+  \item[\gui{Trace}] Auswahl der Strahlengänge, Felder und Wellenlängen, Zahl der gezeichneten
+    Strahlen, Einfärbung, schnelle Bestrahlungsstärke.
+  \item[\gui{Camera image}] Strahlenzahl und Pixel des Kamerabilds.
+  \item[\gui{Optimise}] Zieldatei für \gui{Save system}.
+\end{description}
+
+Die Aktionen sind:
+
+\begin{referenz}{@{}l >{\raggedright\arraybackslash}X@{}}
+\toprule
+Aktion & Kurzbeschreibung \\
+\midrule\endhead
+\gui{Load system} & liest die \datei{.rtt.json} und zeichnet sie (ersetzt eine früher geladene Zeichnung) \\
+\gui{Trace rays} & Strahlen entlang der Strahlengänge als Linien; auf Wunsch schnelle Bestrahlungsstärke \\
+\gui{Camera image} & Bestrahlungsstärke auf der letzten Fläche jedes Strahlengangs mit vielen Strahlen als Bild \\
+\gui{Optimise} & Optimierer von Raytatouille; die Flächen werden nach jeder Iteration neu gezeichnet \\
+\gui{Save system} & schreibt das System als \datei{.rtt.json} \\
+\gui{New Raytatouille system} & neues System ohne Datei im Node-Workflow: Quelle, Blende, Detektor \\
+\gui{Workflow from system} & Node-Workflow aus dem geladenen System \\
+\gui{Update drawing} & zeichnet das System des Node-Workflows jetzt \\
+\gui{Follow the workflow} & zeichnet, was eine Änderung im Workflow geändert hat (läuft automatisch) \\
+\gui{Section $\to$ group} & nur im Kontextmenü eines Blocks \code{rtt.section} im Node-Workflow \\
+\bottomrule
+\end{referenz}
+
+Die Parameterwerte werden \textbf{mit dem Dokument gespeichert} (pro Plugin). Eine Änderung
+eines Parameters markiert das Dokument als geändert, ist aber kein Rückgängig-Schritt.
+\gui{Reset parameters} unten im Panel setzt alle Parameter auf ihre Standardwerte zurück -- also
+auch die Systemdatei und die Liste der Glaskataloge.
+
+Jede Aktion läuft im Hintergrund; der Fortschritt steht in der Statuszeile, und \keys{Esc} oder
+\gui{Cancel} bricht ab. Nach dem Ende steht eine kurze Zusammenfassung in der Statuszeile;
+ausführlichere Hinweise (z.\,B. welche Glaskataloge geladen wurden) schreibt das Plugin in das
+Dock \gui{Plugin log}. Alle Änderungen einer Aktion am Modell bilden \textbf{einen}
+Rückgängig-Schritt.
+
+\section{Ein optisches System laden}\label{sec:rt-laden}
+\index{Raytracer!System laden}\index{rtt.json@\texttt{.rtt.json}}
+
+\subsection{Die Systemdatei}
+
+Ein Raytatouille-System ist eine JSON-Datei mit der Endung \datei{.rtt.json}. Das Plugin
+bringt ein kleines Beispiel mit, \datei{examples/singlet\_optim.rtt.json} im Ordner des Plugins:
+eine Einzellinse aus einem Glas mit konstantem Brechungsindex 1{,}5168, die auf eine Brennweite
+von \SI{100}{\milli\metre} und minimalen RMS-Fleck optimiert werden soll. An ihm lässt sich der
+Aufbau einer Systemdatei gut ablesen:
+
+\begin{lstlisting}
+{
+  "schema_version": "0.9.0",
+  "name": "Singlet to optimize: EFL 100 mm and minimal RMS spot, ...",
+  "units": {"length": "mm", "wavelength": "um"},
+  "wavelengths": [ {"um": 0.5876, "reference": true} ],
+  "aperture": {"type": "epd", "value": 10.0},
+  "fields": { "points": [ {} ] },
+  "root": {
+    "type": "assembly", "name": "system",
+    "children": [
+      { "type": "stop", "name": "stop",
+        "surfaces": [ {"id": "STO",
+                       "aperture": {"type": "circular", "radius": 5.0}} ] },
+      { "type": "lens", "name": "L1",
+        "pose": {"position": [0.0, 0.0, 5.0]},
+        "material": "CONST:1.5168",
+        "surfaces": [ ... "radius": {"value": 103.36, "variable": true} ... ] },
+      { "type": "detector", "name": "image", ... "surfaces": [ {"id": "IMG"} ] }
+    ]
+  },
+  "paths": [ {"name": "main", "events": "auto"} ],
+  "optimization": {
+    "operands":   [ {"type": "efl", "path": "main", "target": 100.0,
+                     "weight": 10000.0} ],
+    "generators": [ {"type": "rms_spot", "path": "main"} ]
+  }
+}
+\end{lstlisting}
+
+Die wichtigsten Teile:
+\begin{itemize}
+  \item \param{wavelengths}: die Wellenlängen in \si{\micro\metre}, eine davon die
+    Referenzwellenlänge.
+  \item \param{aperture}: die Apertur des Systems (hier: Eintrittspupillendurchmesser
+    \SI{10}{\milli\metre}).
+  \item \param{fields}: die Feldpunkte (hier einer auf der Achse).
+  \item \param{root}: der Baum aus Baugruppen (\code{assembly}) und Elementen (Blende, Linse,
+    Detektor, \dots) mit ihren Flächen. Jede Fläche hat eine eindeutige \param{id}
+    (\code{STO}, \code{L1.S1}, \dots).
+  \item \param{paths}: die Strahlengänge mit Namen (hier \code{main}). Ein System kann mehrere
+    haben, z.\,B. die beiden Arme eines Interferometers.
+  \item \param{optimization}: was der Optimierer anstrebt; Werte mit
+    \code{\dq{}variable\dq{}: true} sind Variablen der Optimierung.
+\end{itemize}
+Das Format selbst gehört zu Raytatouille und ist dort beschrieben; dieses Handbuch beschreibt
+nur, wie \produkt{} damit umgeht.
+
+\subsection{Schritt für Schritt}
+
+\begin{schritte}
+  \item Öffnen Sie das Dock \gui{Plugin} und wählen Sie \gui{Raytracer}.
+  \item Klicken Sie in der Gruppe \gui{System} neben \gui{System file} auf den Knopf zur
+    Dateiauswahl und wählen Sie die \datei{.rtt.json}-Datei. Der Dateidialog zeigt
+    \enquote{Raytatouille system (*.rtt.json *.json)}.
+  \item Wenn das System Gläser aus Katalogen verwendet: Fügen Sie die Kataloge unter
+    \gui{Glass catalogues} hinzu oder legen Sie sie neben die Systemdatei
+    (\autoref{sec:rt-glaskataloge}).
+  \item Klicken Sie auf \gui{Load system}.
+\end{schritte}
+
+Das Plugin lädt die Glaskataloge, liest und übersetzt (\enquote{kompiliert}) das System und
+zeichnet jede Fläche. In der Statuszeile erscheint der Name des Systems und die Zahl der Flächen,
+z.\,B. \enquote{\texttt{Singlet to optimize: … : 4 surfaces}}. Enthält das Dokument noch keine
+Geometrie, zoomt die Anwendung alle Ansichten auf das Ergebnis.
+
+\gui{Load system} \textbf{ersetzt} eine früher geladene Zeichnung: Alle Objekte, die das Plugin
+gezeichnet hat (erkennbar an den Attributen \param{rtt.surface} oder \param{rtt.rim}), und alle
+Gruppen, deren Name mit \enquote{\texttt{Raytatouille: }} beginnt, werden zuerst entfernt.
+Andere Objekte des Dokuments -- etwa eine Fassung, die Sie selbst konstruiert haben -- bleiben
+unberührt.
+
+\subsection{Was gezeichnet wird}
+
+\begin{itemize}
+  \item \textbf{Jede optische Fläche} wird eine NURBS-Fläche, benannt nach ihrer \param{id}
+    (z.\,B. \code{L1.S1}). Die Begrenzung (Apertur) ist eine exakte Trimmkurve: Kreis oder Ellipse,
+    gegebenenfalls mit Loch in der Mitte; Rechtecke brauchen keine Trimmkurve.
+  \item \textbf{Linsenränder}: Bei Linsen mit zwei Flächen und kreisförmigen Aperturen gleichen
+    Radius wird der Rand als Regelfläche zwischen den beiden Randkurven gezeichnet. Diese
+    Objekte heißen \enquote{\textit{Element} edge} (bei mehreren \enquote{edge 2} usw.).
+  \item \textbf{Die Aperturblende} erscheint als Ring.
+  \item \textbf{Die Bildfläche} (Detektor) hat in vielen Systemen keine eigene Apertur. Dann
+    bestimmt das Plugin ihre Größe aus einer kurzen Probe-Strahlverfolgung: aus der Ausdehnung des
+    Flecks plus \SI{25}{\percent} Rand, mindestens aber \SI{5}{\percent} des größten
+    Aperturradius des Systems -- ein scharfer Fokus ergäbe sonst eine Fläche, die neben dem
+    System nicht zu sehen wäre.
+\end{itemize}
+
+\subsection{Zeichengenauigkeit}\label{sec:rt-toleranz}
+\index{Zeichentoleranz}
+
+Der Parameter \gui{Drawing tolerance} (Standard \SI{0.0001}{\milli\metre} =
+\SI{0.1}{\micro\metre}) legt fest, wie weit die gezeichnete NURBS-Fläche höchstens von der
+optischen Fläche abweichen darf. Er betrifft \emph{nur die Zeichnung}; Strahlen laufen immer
+auf den exakten Flächen.
+
+\begin{itemize}
+  \item \textbf{Rotationssymmetrische Flächen} (Kegelschnitte, Asphären, Axicon, Q-Typ) mit
+    kreisförmiger Apertur werden als Rotationsflächen gezeichnet: Das Profil wird entlang
+    seiner Bogenlänge interpoliert, sodass auch steile, fast halbkugelförmige Linsen so genau
+    gezeichnet werden wie flache.
+  \item \textbf{Andere Formen}, rechteckige oder elliptische Aperturen und Bildflächen werden
+    als bikubische B-Spline-Flächen über der lokalen x-y-Ebene gezeichnet; das Kontrollnetz wird
+    verfeinert, bis die Toleranz eingehalten ist (6, 10, 18, 34 oder 66 Kontrollpunkte je
+    Richtung).
+  \item \textbf{Ebenen} sind exakt.
+\end{itemize}
+
+Die tatsächliche Abweichung jeder Fläche steht in ihrem Attribut \param{rtt.nurbs\_error\_mm}
+(sichtbar im Dock \gui{Properties}, wenn Sie die Fläche auswählen). Flächen, die die Toleranz
+überschreiten -- typisch bei nicht glatten Formen wie der Spitze eines Axicons --, nennt das
+Plugin im \gui{Plugin log}: \enquote{\texttt{drawn with more than the tolerance (non-smooth
+shapes such as the axicon tip): …}}.
+
+\begin{tipp}
+Eine größere Toleranz (z.\,B. \SI{0.001}{\milli\metre}) macht das Zeichnen großer Systeme
+schneller und die Flächen leichter, ohne die Rechnung zu verändern. Eine kleinere lohnt sich
+nur, wenn Sie die gezeichneten Flächen weiterverwenden, z.\,B. als STEP für die Konstruktion einer
+Fassung exportieren.
+\end{tipp}
+
+\section{Der Modellbaum des Systems}\label{sec:rt-modellbaum}
+\index{Modellbaum!Raytracer}
+
+Das Plugin legt im Dock \gui{Model} eine Gruppenstruktur an, die dem Baum des Systems folgt:
+
+\begin{itemize}
+  \item eine oberste Gruppe \enquote{\texttt{Raytatouille: }\textit{Name}} -- \textit{Name} ist
+    der Name des Systems aus der Datei oder, wenn dieser fehlt, der Dateiname ohne Endung; ein
+    aus dem Workflow gezeichnetes System heißt \enquote{\textit{Name} (workflow)};
+  \item darunter je eine Gruppe pro Baugruppe (\code{assembly}) und pro Element (Linse, Blende,
+    Spiegel, Detektor, \dots), benannt nach dem \param{name} des Knotens, sonst nach seinem Typ;
+  \item in der Gruppe eines Elements dessen Flächen und Linsenränder.
+\end{itemize}
+
+So können Sie mit den Kontrollkästchen des Modellbaums einzelne Linsen oder ganze Baugruppen
+ausblenden, etwa um in ein Objektiv hineinzusehen. Ausblenden ändert die Rechnung nicht.
+
+Jede gezeichnete Fläche trägt Attribute, die Sie im Dock \gui{Properties} sehen:
+
+\begin{referenz}{@{}l >{\raggedright\arraybackslash}X@{}}
+\toprule
+Attribut & Bedeutung \\
+\midrule\endhead
+\param{rtt.surface} & \param{id} der Fläche im System \\
+\param{rtt.location} & Ort der Fläche im Systembaum (JSON-Pfad, z.\,B. \code{/root/children/1/surfaces/0}) \\
+\param{rtt.kind} & Art der Fläche laut Raytatouille (z.\,B. Blende, Detektor) \\
+\param{rtt.shape} & Form der Fläche laut Raytatouille \\
+\param{rtt.nurbs\_error\_mm} & größte Abweichung der Zeichnung in mm \\
+\param{rtt.anchor} & nur an der ersten Fläche: Anker des Systems \\
+\param{rtt.revision} & nur am Anker: Nummer des Systemstands (\autoref{sec:rt-undo}) \\
+\param{rtt.file} & nur am Anker: Pfad der geladenen Datei \\
+\param{rtt.workflow} & nur am Anker, wenn das System aus dem Workflow stammt: Kennung seines Stands \\
+\param{rtt.rim} & an Linsenrändern: Name des Elements \\
+\bottomrule
+\end{referenz}
+
+\begin{warnung}
+Ändern oder löschen Sie diese Attribute nicht von Hand. Das Plugin erkennt seine Zeichnung und
+den aktuellen Systemstand an ihnen. Fehlt der Anker, lädt das Plugin bei der nächsten Aktion die
+Systemdatei neu.
+\end{warnung}
+
+\section{Glaskataloge}\label{sec:rt-glaskataloge}
+\index{Glaskatalog}\index{AGF}
+
+Gläser wie \code{N-BK7} oder \code{N-SF6} kommen aus Glaskatalogen im AGF-Format
+(\datei{*.agf}). Ein Material mit konstantem Brechungsindex (\code{CONST:1.5168} im Beispiel)
+braucht keinen Katalog.
+
+\subsection{Woher das Plugin die Kataloge nimmt}
+
+Bei jedem Laden verwendet das Plugin, in dieser Reihenfolge und ohne Doppelte:
+\begin{enumerate}
+  \item die Dateien der Liste \gui{Glass catalogues} im Panel (Gruppe \gui{System});
+  \item alle Dateien \datei{*.agf} im Ordner der Systemdatei;
+  \item alle Dateien \datei{*.agf} im Unterordner \datei{catalogs} neben der Systemdatei;
+  \item Kataloge, die im Node-Workflow des Dokuments gespeichert sind, soweit keine Datei sie
+    liefert (siehe unten).
+\end{enumerate}
+
+Nach dem Laden nennt das \gui{Plugin log} alle verwendeten Kataloge in einer Zeile wie
+\enquote{\texttt{glass catalogues: SCHOTT.agf, OHARA.agf}}; gespeicherte Kataloge tragen den
+Zusatz \enquote{\texttt{(stored)}}. Ein Katalog, der sich nicht lesen lässt, wird mit seiner
+Fehlermeldung im Log genannt (\enquote{\texttt{catalogue …: …}}) und übersprungen; die anderen
+werden trotzdem geladen.
+
+\subsection{Kataloge hinzufügen und entfernen}
+
+\begin{schritte}
+  \item Klicken Sie unter \gui{Glass catalogues} auf \gui{Add…}.
+  \item Wählen Sie eine oder mehrere AGF-Dateien (der Filter zeigt \enquote{Glass catalogues
+    (*.agf *.AGF)}, wahlweise \enquote{All files (*)}).
+  \item Zum Entfernen markieren Sie einen Eintrag und klicken auf \gui{Remove}.
+  \item Laden Sie das System neu (\gui{Load system}), damit die geänderte Liste gilt.
+\end{schritte}
+
+\subsection{Kataloge im Dokument}
+
+Die Liste \gui{Glass catalogues} ist ein Parameter des Panels und wird daher mit dem Dokument
+gespeichert -- allerdings nur als Liste von \emph{Pfaden}. Damit ein Dokument auch auf einem
+anderen Rechner ohne die AGF-Dateien rechnet, speichert der Node-Workflow die Kataloge selbst:
+Das Panel des Raytracers ist die \emph{eine} Stelle, an der Sie Kataloge angeben. Der Workflow
+übernimmt die dort gelisteten Kataloge (und die \datei{*.agf} neben der Systemdatei) und legt
+ihren Inhalt bei der nächsten Prüfung oder Rechnung (\gui{Check workflow}, \gui{Run workflow})
+im Quellblock des Systems ab. Danach rechnet die \datei{.rttf}-Datei ohne die AGF-Dateien, und
+auch das Raytracer-Panel verwendet die gespeicherten Kataloge, wenn eine Datei fehlt.
+
+\begin{tipp}
+Wenn Sie ein Dokument weitergeben wollen, das Gläser aus Katalogen verwendet: Legen Sie mit
+\gui{Workflow from system} einen Workflow an, führen Sie einmal \gui{Check workflow} aus und
+speichern Sie das Dokument. Die Kataloge reisen dann im Dokument mit.
+\end{tipp}
+
+\subsection{Typische Fehler mit Katalogen}
+
+Fehlt ein Glas, bricht \gui{Load system} mit einer Meldung der Form \enquote{\textit{Datei}
+\texttt{cannot be used:} \textit{Fehler von Raytatouille}} ab. Erwähnt die Fehlermeldung einen
+Katalog, ergänzt das Plugin den Hinweis \enquote{\texttt{Glass catalogues: put the *.agf files
+next to the system file or list them under Glass catalogues.}} Prüfen Sie dann:
+\begin{itemize}
+  \item ob der Katalog, aus dem das Glas stammt, in der Liste oder neben der Systemdatei liegt;
+  \item ob das Log den Katalog als geladen nennt -- wenn nicht, steht dort der Grund;
+  \item ob der Glasname in der Systemdatei genau so im Katalog steht.
+\end{itemize}
+
+\section{Quelle: Felder, Wellenlängen und Apertur}\label{sec:rt-quelle}
+
+Was in das System hineinleuchtet, legt die Systemdatei fest: die Feldpunkte (\param{fields}),
+die Wellenlängen (\param{wavelengths}) mit ihrer Referenzwellenlänge und ihren Gewichten, die
+Apertur (\param{aperture}) und die Lage des Objekts (im Unendlichen oder in endlichem Abstand).
+Im Node-Workflow erscheinen diese Einstellungen im Quellblock \block{rtt.source}; dessen
+\gui{Parameters…} zeigt sie zum Bearbeiten (\autoref{sec:rt-workflow}).
+
+Im Panel wählen Sie für \gui{Trace rays} und \gui{Camera image} nur aus, \emph{welche} Felder und
+Wellenlängen gerechnet werden:
+
+\begin{description}
+  \item[\gui{Field}] \code{0} rechnet alle Feldpunkte; \code{1}, \code{2}, \dots{} nur den
+    ersten, zweiten, \dots{} Feldpunkt des Systems.
+  \item[\gui{Wavelengths}] \code{all} rechnet alle Wellenlängen des Systems, \code{reference}
+    nur die Referenzwellenlänge.
+\end{description}
+
+Die Strahlen starten auf einem hexapolaren Raster über der Pupille: ein Strahl in der Mitte und
+Ringe mit 6, 12, 18, \dots{} Strahlen. Deshalb sind nur bestimmte Strahlenzahlen möglich --
+1, 7, 19, 37, 61, 91, 127, \dots{} (allgemein $1 + 3r(r+1)$ bei $r$ Ringen). Das Plugin nimmt
+die Ringzahl, deren Strahlenzahl der eingestellten am nächsten liegt, mindestens aber einen
+Ring.
+
+\section{Strahlen verfolgen}\label{sec:rt-strahlen}
+\index{Raytracer!Strahlen verfolgen}\index{Strahlengang}
+
+\gui{Trace rays} verfolgt Strahlen entlang der Strahlengänge des Systems und zeichnet sie als
+Linien in die Ansichten.
+
+\begin{schritte}
+  \item Laden Sie ein System (\autoref{sec:rt-laden}).
+  \item Stellen Sie in der Gruppe \gui{Trace} ein:
+    \begin{itemize}
+      \item \gui{Paths}: die Namen der Strahlengänge, durch Kommas getrennt, z.\,B.
+        \code{reference, sample}. Leer: alle Strahlengänge des Systems.
+      \item \gui{Field} und \gui{Wavelengths} wie in \autoref{sec:rt-quelle}.
+      \item \gui{Rays (drawn)}: Strahlen je Feld und Wellenlänge (Standard 127, höchstens
+        20\,000).
+      \item \gui{Colour by}: Einfärbung nach \code{wavelength}, \code{field} oder \code{path}.
+    \end{itemize}
+  \item Klicken Sie auf \gui{Trace rays}.
+\end{schritte}
+
+\subsection{Ergebnis}
+
+Im Dock \gui{Results} entsteht ein neuer Lauf \enquote{\texttt{Trace }\textit{Datei}}
+(\textit{Datei} ist der Name der Systemdatei bis zum ersten Punkt, z.\,B. \code{Trace
+singlet\_optim}). Er enthält für jeden Strahlengang einen Linien-Satz \enquote{\texttt{Rays
+}\textit{Pfad}}, den Sie einzeln ein- und ausblenden können. Jeder Strahl ist eine Polylinie von
+Fläche zu Fläche; ein Strahl, der unterwegs verloren geht (vignettiert, Totalreflexion, \dots),
+endet dort.
+
+Die Einfärbung:
+\begin{referenz}{@{}l l >{\raggedright\arraybackslash}X@{}}
+\toprule
+\gui{Colour by} & Farbskala & Wert \\
+\midrule\endhead
+\code{wavelength} & viridis & Wellenlänge in nm \\
+\code{field} & plasma & Nummer des Feldpunkts (1, 2, \dots) \\
+\code{path} & coolwarm & Nummer des Strahlengangs (1 bis Zahl der Strahlengänge) \\
+\bottomrule
+\end{referenz}
+
+Die Statuszeile meldet für jeden Strahlengang, wie viele der gezeichneten Strahlen sein Ende
+erreichen, z.\,B. \enquote{\texttt{rays reaching the end of the path – main: 217/217}}. Weniger
+als alle bedeutet Vignettierung oder andere Verluste.
+
+\begin{tipp}
+Einzelne Strahlen lassen sich in CAD-Kurven umwandeln, etwa um daran zu messen oder sie zu
+exportieren: Rechtsklick auf den Linien-Satz im Dock \gui{Results}, \gui{Convert to CAD
+curves…}, dann im Dialog \enquote{Every n-th ray} angeben, jeder wievielte Strahl übernommen
+wird.
+\end{tipp}
+
+\subsection{Mehrere Strahlengänge}
+
+Systeme mit Strahlteilern -- etwa ein Interferometer -- haben mehrere Strahlengänge. Ohne Angabe
+unter \gui{Paths} verfolgt \gui{Trace rays} alle; jeder Strahlengang bekommt seinen eigenen
+Linien-Satz. Ein unbekannter Name führt zu der Meldung \enquote{\texttt{Unknown path …. Paths of
+this system: …}}, die die vorhandenen Namen aufzählt. Scheitert bei mehreren Strahlengängen einer,
+werden die übrigen trotzdem verfolgt; die Statuszeile nennt den fehlgeschlagenen
+(\enquote{\texttt{not traced: …}}), das Log den Grund.
+
+\subsection{Gefaltete und gekippte Strahlengänge}\label{sec:rt-gefaltet}
+\index{Strahlengang!gefaltet}
+
+Das Zielen der Strahlen in Raytatouille (\emph{ray aiming}) braucht einen rotationssymmetrischen
+Strahlengang. Für gefaltete oder gekippte Strahlengänge (Strahlteiler, Interferometer wie ein
+Linnik) startet das Plugin die Strahlen selbst: auf demselben hexapolaren Raster über der
+Blendenöffnung, parallel entlang der Feldwinkel (Objekt im Unendlichen) oder von den
+Objektpunkten aus (Objekt in endlichem Abstand). Das ist exakt, wenn die Aperturblende die
+\emph{erste} Fläche des Strahlengangs ist, wie bei einer Beleuchtungsblende. Sonst meldet das
+Plugin: \enquote{\texttt{Raytatouille cannot aim rays into this path (…). The plugin can start
+them itself only when the aperture stop is the first surface of the path.}}
+
+Diese eigenen Startstrahlen gibt es nur für Feldwinkel bei unendlichem Objekt und für
+Objekthöhen bei endlichem Objekt; für andere Feldtypen erscheint eine entsprechende Meldung.
+
+\section{Bestrahlungsstärke auf der Bildfläche}\label{sec:rt-bestrahlung}
+\index{Bestrahlungsstärke!Raytracer}\index{Kamerabild!Raytracer}
+
+Das Plugin berechnet die Bestrahlungsstärke auf der \emph{letzten Fläche} jedes Strahlengangs,
+in der Regel der Bildfläche. Die Rechnung übernimmt Raytatouille: Jede Zelle eines Rasters
+erhält das auftreffende Strahlgewicht pro projizierter Zellfläche. Das Ergebnis ist relativ
+(Einheit \code{W/mm\textsuperscript{2} (rel.)}), die Gewichte der Wellenlängen aus dem System
+werden berücksichtigt. Strahlengänge, die auf derselben Fläche enden, werden addiert --
+inkohärent, also ohne Interferenz.
+
+Es gibt zwei Wege:
+
+\subsection{Schnelle Bestrahlungsstärke mit \gui{Trace rays}}
+
+Ist in der Gruppe \gui{Trace} \gui{Quick irradiance} eingeschaltet (Standard: aus), berechnet
+\gui{Trace rays} zusätzlich eine grobe Bestrahlungsstärke mit wenigen Strahlen:
+\gui{Rays (quick irradiance)} (Standard 5\,000 je Feld und Wellenlänge) auf einem Raster von
+\gui{Quick irradiance grid} Zellen an der langen Seite (Standard 128). Das Ergebnis erscheint als
+Farbe auf der Fläche (\enquote{\texttt{Irradiance }\textit{Fläche}} im Lauf), mit Farbleiste in
+den Ansichten. Die Statuszeile nennt den Spitzenwert, z.\,B. \enquote{\texttt{irradiance on IMG
+(peak 1.5e+06)}}.
+
+\subsection{Kamerabild mit \gui{Camera image}}
+
+Für ein glattes, aussagekräftiges Bild verwenden Sie \gui{Camera image}. Es verfolgt viele
+Strahlen und zeigt das Ergebnis als Bild im Fenster \gui{Image}.
+
+\begin{schritte}
+  \item Wählen Sie in der Gruppe \gui{Trace} die Strahlengänge, Felder und Wellenlängen
+    (dieselben Parameter wie für \gui{Trace rays}).
+  \item Stellen Sie in der Gruppe \gui{Camera image} ein:
+    \begin{itemize}
+      \item \gui{Rays per field and wavelength} (Standard 200\,000, von 1\,000 bis
+        50\,000\,000). Die Rechenzeit wächst linear mit der Strahlenzahl.
+      \item \gui{Pixels (long side)} (Standard 512). Die Pixel sind quadratisch; der Sensor ist
+        die Apertur der Fläche (bzw. die vom Plugin bestimmte Größe der Bildfläche).
+      \item \gui{Also on the surface in 3D} (Standard: an): das Bild zusätzlich als Farbe auf der
+        Fläche in den Ansichten.
+    \end{itemize}
+  \item Klicken Sie auf \gui{Camera image}.
+\end{schritte}
+
+Das Fenster \gui{Image} zeigt \enquote{\texttt{Camera image }\textit{Fläche}} mit Achsen in mm,
+Farbleiste und dem Wert unter dem Mauszeiger. \gui{log} schaltet auf eine logarithmische Skala
+um -- nützlich, um schwaches Streulicht neben einem hellen Fleck zu sehen. Das Mausrad zoomt,
+Ziehen verschiebt, ein Doppelklick zeigt das ganze Bild. Die Beschreibung des Bildes nennt die
+Fläche, die Zahl der Strahlen, die beteiligten Strahlengänge, Felder und Wellenlängen, die
+Pixelzahl und die Pixelgröße in \si{\micro\metre}.
+
+\begin{hinweis}
+Strahlen, die nicht gezählt werden -- außerhalb des Rasters, vignettiert oder nicht bis zur
+Fläche gelangt --, listet das \gui{Plugin log} je Fläche und Strahlengang auf
+(\enquote{\texttt{rays not counted – outside the grid: …, vignetted: …, not reached: …}}).
+Viele Strahlen \enquote{outside the grid} bedeuten meist, dass die Bildfläche kleiner ist als
+der Fleck.
+\end{hinweis}
+
+\subsection{Einschränkungen}
+
+\begin{itemize}
+  \item Die Bestrahlungsstärke wird nur auf \textbf{ebenen} letzten Flächen abgebildet. Auf einer
+    gekrümmten Rotationsfläche meldet das Log \enquote{\texttt{irradiance on …: curved surface of
+    revolution – not mapped yet}}. Endet keiner der Strahlengänge auf einer gezeichneten ebenen
+    Fläche, bricht \gui{Camera image} mit \enquote{\texttt{No camera image: none of the paths
+    ends on a drawn plane surface.}} ab.
+  \item Ändert das letzte Ereignis eines Strahlengangs das Strahlgewicht (z.\,B. eine
+    reflektierende oder absorbierende letzte Fläche), rechnet das Plugin mit aufgezeichneten
+    Strahlwegen, deren Speicherbedarf mit der Strahlenzahl wächst, und begrenzt die Rechnung auf
+    80 Pupillenringe (etwa 19\,400 Strahlen je Feld und Wellenlänge). Das Log weist darauf hin.
+\end{itemize}
+
+\section{Optimieren mit Live-Aktualisierung}\label{sec:rt-optimieren}
+\index{Optimierung!Raytracer}\index{Gütefunktion}
+
+\gui{Optimise} startet den Optimierer von Raytatouille mit den Variablen und der Gütefunktion
+(\emph{merit function}) des Systems. Was optimiert wird, steht in der Systemdatei: Werte mit
+\code{\dq{}variable\dq{}: true} sind Variablen; der Abschnitt \param{optimization} nennt Zielgrößen
+(\param{operands}, z.\,B. eine Brennweite mit Ziel und Gewicht) und weitere Beiträge zur
+Gütefunktion (\param{generators}, z.\,B. der RMS-Fleck). Im Panel gibt es dafür keine
+Parameter.
+
+\begin{schritte}
+  \item Laden Sie das System.
+  \item Öffnen Sie das Dock \gui{Plot}, um den Verlauf zu verfolgen.
+  \item Klicken Sie auf \gui{Optimise}.
+  \item Beobachten Sie die Ansichten: Nach jeder angenommenen Iteration werden die geänderten
+    Flächen und Linsenränder neu gezeichnet. Im Dock \gui{Plot} wächst die Kurve
+    \enquote{\texttt{Merit function}} ($\log_{10}\varphi$ über der Iteration); die Statuszeile
+    zeigt \enquote{\texttt{iteration }$k$\texttt{: }$\varphi$\texttt{ = …}}.
+  \item Warten Sie das Ende ab -- oder brechen Sie mit \keys{Esc} ab. Der Abbruch endet mit dem
+    letzten angenommenen Stand.
+\end{schritte}
+
+Am Ende meldet die Statuszeile den Status des Optimierers, die Zahl der Iterationen und den
+Endwert der Gütefunktion, in der Form \enquote{\textit{Status} \texttt{after }\textit{n}\texttt{ iterations, }$\varphi$\texttt{ = …}}. Der Lauf heißt im Dock \gui{Results} \enquote{\texttt{Optimisation}}.
+
+Das optimierte System ist ein neuer \emph{Systemstand}. Alle folgenden Aktionen
+(\gui{Trace rays}, \gui{Camera image}, \gui{Save system}) verwenden ihn. Die ganze Optimierung ist
+ein Rückgängig-Schritt: \menu{Edit,Undo} stellt Zeichnung \emph{und} System von vorher wieder her
+(\autoref{sec:rt-undo}).
+
+\begin{warnung}
+Der optimierte Stand lebt im Plugin-Prozess. Er wird nicht in die Systemdatei geschrieben, bis
+Sie \gui{Save system} wählen. Wird das Plugin neu gestartet oder das Dokument später wieder
+geöffnet, lädt das Plugin bei der nächsten Aktion die Systemdatei von der Platte -- also den
+\emph{nicht} optimierten Stand -- und zeichnet sie neu. Speichern Sie ein Optimierungsergebnis
+deshalb immer mit \gui{Save system}, oder arbeiten Sie mit einem Node-Workflow, der das Ergebnis
+im Dokument hält (\autoref{sec:rt-workflow}).
+\end{warnung}
+
+\section{Das System speichern}\label{sec:rt-speichern}
+
+\gui{Save system} schreibt das aktuelle System als \datei{.rtt.json}:
+\begin{itemize}
+  \item an den Ort in \gui{Save as} (Gruppe \gui{Optimise}; der Dateidialog fragt nach einem
+    Speicherort für \enquote{Raytatouille system (*.rtt.json)}),
+  \item oder, wenn \gui{Save as} leer ist, neben die geladene Datei. Ihr Name endet dann
+    auf \datei{.optimised.rtt.json} statt auf \datei{.rtt.json}: Aus der Datei
+    \datei{lens.rtt.json} wird \datei{lens.optimised.rtt.json}.
+\end{itemize}
+Die Statuszeile meldet \enquote{\texttt{saved …}} mit dem vollständigen Pfad.
+
+Enthält das Dokument einen Node-Workflow mit dem System, exportiert \gui{Save system} das System
+des Workflows -- einschließlich aller dort gemachten Änderungen.
+
+\section{Rückgängig machen}\label{sec:rt-undo}
+\index{Rückgängig!Raytracer}
+
+Jede Aktion des Plugins ist in \produkt{} \textbf{ein} Rückgängig-Schritt (\keys{Strg+Z}),
+auch wenn sie abgebrochen wird oder fehlschlägt. Damit auch das optische System -- nicht nur
+die Zeichnung -- dem Rückgängig-Machen folgt, nummeriert das Plugin jeden Systemstand und
+speichert die Nummer im Attribut \param{rtt.revision} der ersten Fläche. Macht
+\menu{Edit,Undo} eine Optimierung rückgängig, stellt die Anwendung auch dieses Attribut wieder
+her, und die nächste Aktion rechnet wieder mit dem System \emph{vor} der Optimierung.
+\menu{Edit,Redo} stellt den optimierten Stand wieder her.
+
+Mit einem Node-Workflow wird statt der Revisionsnummer die Kennung des Workflow-Stands
+(\param{rtt.workflow}) verwendet; eine Optimierung, die ihr Ergebnis in den Workflow schreibt,
+wird zusammen mit ihrer Zeichnung rückgängig gemacht.
+
+\section{Der Raytracer im Node-Workflow}\label{sec:rt-workflow}
+\index{Node-Workflow!Raytracer}
+
+Der Node-Workflow (\autoref{kap:workflow}) stellt ein optisches System als Blöcke und
+Verbindungen dar und kann darin Strahlen und Felder rechnen, Gitter anderer Plugins einbinden und
+Kamerabilder in Anzeigeblöcken zeigen. Der Raytracer spielt dabei drei Rollen:
+
+\begin{enumerate}
+  \item Er \textbf{erzeugt Workflows} aus einem System (\gui{Workflow from system}) oder neu
+    (\gui{New Raytatouille system}).
+  \item Er \textbf{zeichnet} das System, das der Workflow beschreibt, und hält die Zeichnung
+    aktuell (\gui{Follow the workflow}, \gui{Update drawing}).
+  \item Er ist \textbf{Block-Anbieter}: Die Raytatouille-Blöcke (\code{rtt.*}) werden in seinem
+    Prozess berechnet.
+\end{enumerate}
+
+\subsection{Workflow aus einem System}
+
+\begin{schritte}
+  \item Laden Sie ein System mit \gui{Load system}.
+  \item Wählen Sie \gui{Workflow from system}.
+  \item Das Fenster \gui{Node workflow} öffnet sich mit den Blöcken: einer Quelle
+    (\block{rtt.source}), Abschnitten (\block{rtt.section}, z.\,B. ein Objektiv),
+    Spiegeln, Strahlteilern, Detektoren -- und je Strahlengang des Systems einem
+    \emph{Zweig} (\emph{branch}).
+\end{schritte}
+
+Die Statuszeile meldet die Zahl der Blöcke, Verbindungen und Zweige. Gab es schon einen Workflow
+desselben Systems, übernimmt \gui{Workflow from system} Ihre Änderungen daran: Positionen der
+Blöcke, stummgeschaltete Blöcke, Parameter, ersetzte Blöcke (mit ihren Anschlüssen),
+hinzugefügte Blöcke und Verbindungen, Darstellungen (Transport) der Verbindungen und eigene
+Zweige. Die Meldung nennt, was übernommen wurde (\enquote{\texttt{kept …}}).
+
+\subsection{Ein neues System ohne Datei}
+
+\gui{New Raytatouille system} legt ein System direkt im Workflow an: eine Quelle mit
+Standardeinstellungen (mm/\si{\micro\metre}, d-Linie, Eintrittspupille \SI{4}{\milli\metre},
+ein Feldpunkt auf der Achse -- änderbar im \gui{Parameters…} der Quelle), eine Blende, einen
+Detektor und den Zweig \code{main}. Dazwischen fügen Sie Teile aus der Bibliothek ein
+(\gui{Add block}: \emph{Raytatouille mirror}, \emph{beam splitter}, \emph{lens},
+\emph{detector}), verbinden ihre Anschlüsse und zeichnen den Zweig neu auf. Ein solches System
+wird gezeichnet, gerechnet und gespeichert wie ein importiertes. \menu{Edit,Undo} bringt den
+vorherigen Workflow zurück.
+
+\subsection{Der Workflow ist maßgeblich}
+
+Sobald der Workflow das System enthält, ist er für den Raytracer maßgeblich:
+\begin{itemize}
+  \item \gui{Trace rays}, \gui{Camera image} und \gui{Optimise} rechnen mit dem System, das der
+    Workflow beschreibt; die Glaskataloge reisen mit.
+  \item \gui{Parameters…} eines Raytatouille-Blocks zeigt je Element einen Reiter mit den
+    exakten Daten (Radien, Kegelschnittkonstanten, Aperturen, Lagen der Flächen, Gläser,
+    Wechselwirkungen), Längen in mm, Winkel in Grad; die Eigenschaft \enquote{variable} eines
+    Werts ist ein Kontrollkästchen. Nur die Werte, die Sie ändern, werden zurückgeschrieben.
+  \item Kurz nach jeder Änderung im Workflow zeichnet das Plugin das System neu
+    (\gui{Follow the workflow} -- die Anwendung startet diese Aktion selbst, wenn das Plugin
+    gerade nichts rechnet). Ein halb eingegebener Wert wartet einfach auf die nächste Änderung;
+    Probleme stehen im Log (\enquote{\texttt{drawing not updated: …}}).
+  \item \gui{Update drawing} zeichnet sofort. Vor jeder Rechnung wird ohnehin neu gezeichnet,
+    wenn sich der Workflow geändert hat. Ohne Workflow meldet die Aktion \enquote{\texttt{No
+    node workflow with a system – Workflow from system makes one.}}
+  \item \gui{Optimise} schreibt sein Ergebnis in die Blöcke des Workflows.
+  \item \gui{Save system} exportiert das System des Workflows als \datei{.rtt.json}.
+\end{itemize}
+
+Ohne Workflow arbeitet das Plugin wie in den vorigen Abschnitten mit der geladenen Datei.
+
+\begin{hinweis}
+Ein Workflow aus einer älteren Version, dessen Blöcke die Systemdaten noch nicht enthalten, gilt
+nicht als maßgeblich; das Plugin rechnet dann mit der Systemdatei. Führen Sie einmal
+\gui{Workflow from system} aus, um die Daten in den Workflow zu übernehmen.
+\end{hinweis}
+
+\subsection{Abschnitt in eine Gruppe zerlegen}
+
+Ein Block \block{rtt.section} fasst mehrere Elemente einer Baugruppe zusammen, z.\,B. ein ganzes
+Objektiv. Im Kontextmenü eines solchen Blocks bietet der Raytracer \gui{Section $\to$ group}
+an: Der Abschnitt wird eine Gruppe mit einem Block je Element (Linsengruppe, Blende, \dots), jeder
+mit seinen Daten und seinem Teil jedes Durchgangs. Das Licht bleibt dasselbe; die Aktion ist ein
+Rückgängig-Schritt. Ein Doppelklick öffnet die Gruppe. Danach können Sie z.\,B. eine Variante der
+Gruppe anlegen und darin eine Linsengruppe durch eine ideale Linse ersetzen (siehe
+\autoref{kap:workflow}).
+
+\subsection{Raytatouille-Blöcke}
+
+Der Raytracer liefert dem Workflow die Blocktypen \code{rtt.*}: Quelle, Abschnitt, Spiegel,
+Strahlteiler, Detektor und die neuen Teile \code{rtt.part.*} (Spiegel, Strahlteiler, Linse,
+Blende, Detektor). Die Workflow-Maschine (Plugin \plugin{Workflow}) fragt den Raytracer nach
+diesen Typen und lässt sie in seinem Prozess berechnen; jeder Lauf wird einmal mit dem ganzen
+Graphen vorbereitet (System aus den Daten der Blöcke, Glaskataloge der Quelle). Die Tabelle aller
+Blocktypen mit Anschlüssen und Parametern steht in \autoref{sec:ref-rt-bloecke}.
+
+\subsection{Felder statt Strahlen (Darstellung H)}\label{sec:rt-felder}
+\index{Fieldtracing}\index{Darstellung H}
+
+Jede Verbindung des Workflows trägt Licht in einer \emph{Darstellung}: \textbf{R} für Strahlen,
+\textbf{H} für Felder. Felder rechnet das Paket \code{fieldtracing}; ist es im Python der Plugins
+installiert, kann der Planer des Workflows Verbindungen als H planen bzw. eine auf H festgelegte
+Verbindung ausführen. Ohne \code{fieldtracing} stehen nur Strahlen zur Verfügung.
+
+Felder braucht man dort, wo Strahlen nicht genügen, vor allem in der Nähe eines Fokus. Das Panel
+des Plugins \plugin{Workflow} enthält dazu \gui{Field accuracy $\boldsymbol{\varepsilon}$ (H links)} (die erlaubte
+Abweichung einer Feldausbreitung relativ zur Spitzenamplitude, Standard 0{,}02) und \gui{Wave
+optics near a focus (automatic)} (Standard: an): Eine Kamera an einer Verbindung auf
+\enquote{auto} prüft, ob sich die Strahlen in ihrer Nähe kreuzen oder fokussieren, und rechnet
+dann ab der letzten Fläche mit Feldern. Nach dem Lauf zeigt die Verbindung, was verwendet wurde,
+z.\,B. \textbf{R$\to$H}. Einzelheiten stehen in \autoref{kap:workflow}.
+
+\section{Typische Arbeitsabläufe}\label{sec:rt-ablaeufe}
+
+\subsection{Eine Einzellinse optimieren}\label{sec:rt-ablauf-singlet}
+
+Das mitgelieferte Beispiel zeigt den ganzen Ablauf in wenigen Minuten.
+
+\begin{schritte}
+  \item \menu{File,New} -- ein leeres Dokument.
+  \item Panel \gui{Raytracer}: \gui{System file} $\to$
+    \datei{examples/singlet\_optim.rtt.json} aus dem Ordner des Plugins.
+  \item \gui{Load system}. Es erscheinen Blende (Ring), Linse \code{L1} mit Rand und die
+    Bildfläche \code{IMG}. Der Modellbaum enthält \enquote{Raytatouille: Singlet to optimize: …}.
+  \item \gui{Trace rays} mit den Standardwerten: 127 Strahlen. Der Fokus liegt noch neben der
+    Bildfläche.
+  \item Dock \gui{Plot} öffnen, \gui{Optimise}. Die Linsenradien und der Abstand der Bildfläche
+    ändern sich live; die Gütefunktion fällt.
+  \item Noch einmal \gui{Trace rays}: Die Strahlen treffen sich jetzt auf der Bildfläche.
+  \item \gui{Camera image}: das Fleckbild auf \code{IMG} im Fenster \gui{Image}. Schalten Sie
+    \gui{log} ein, um den Rand des Flecks zu sehen.
+  \item \gui{Save system}: Das Ergebnis liegt als \datei{singlet\_optim.optimised.rtt.json} neben
+    der Ausgangsdatei.
+  \item Gefällt das Ergebnis nicht: \keys{Strg+Z} macht die Optimierung rückgängig, Zeichnung und
+    System sind wieder im Ausgangszustand.
+\end{schritte}
+
+\subsection{Ein Objektiv mit Katalogglas analysieren}
+
+\begin{schritte}
+  \item Legen Sie die AGF-Kataloge in den Ordner der Systemdatei oder in seinen Unterordner
+    \datei{catalogs} -- oder fügen Sie sie unter \gui{Glass catalogues} hinzu.
+  \item \gui{Load system}; prüfen Sie im \gui{Plugin log}, welche Kataloge geladen wurden.
+  \item \gui{Trace rays} mit \gui{Field} = \code{0}, \gui{Wavelengths} = \code{all},
+    \gui{Colour by} = \code{field}: Die Bündel der Feldpunkte sind unterscheidbar.
+  \item Für die Farbfehler: \gui{Colour by} = \code{wavelength} und \gui{Field} = \code{1}
+    (nur der Achspunkt).
+  \item \gui{Camera image} mit \gui{Field} = \code{2} zeigt das Fleckbild nur des zweiten
+    Feldpunkts; mit \gui{Wavelengths} = \code{reference} nur bei der Referenzwellenlänge.
+  \item Blenden Sie im Modellbaum vordere Linsen aus, um die Strahlen im Inneren zu sehen.
+\end{schritte}
+
+\subsection{Ein Interferometer mit mehreren Strahlengängen}
+
+\begin{schritte}
+  \item Laden Sie das System. Die Statuszeile von \gui{Trace rays} nennt jeden Strahlengang mit
+    seinen Strahlen.
+  \item \gui{Colour by} = \code{path}: Jeder Arm hat seine Farbe; im Dock \gui{Results} lässt
+    sich jeder Arm einzeln ein- und ausblenden.
+  \item \gui{Paths} = \textit{Name eines Arms}: nur dieser Arm.
+  \item \gui{Camera image}: Arme, die auf derselben Fläche enden, werden addiert (inkohärent).
+    Interferenz zwischen den Armen berechnet der Node-Workflow (\autoref{kap:workflow}).
+  \item Meldet das Plugin, dass es nicht in einen Strahlengang zielen kann, prüfen Sie, ob die
+    Aperturblende die erste Fläche dieses Strahlengangs ist (\autoref{sec:rt-gefaltet}).
+\end{schritte}
+
+\subsection{Ein System im Workflow aufbauen und weitergeben}
+
+\begin{schritte}
+  \item \gui{New Raytatouille system} -- oder ein vorhandenes System laden und \gui{Workflow
+    from system}.
+  \item Im Fenster \gui{Node workflow} Teile einfügen und verbinden; mit \gui{Parameters…} ihre
+    Lage und Daten eingeben. Die CAD-Ansichten zeigen nach jeder Änderung das neue System.
+  \item \gui{Check workflow} (Plugin \plugin{Workflow}): Der Workflow prüft das System und
+    speichert die Glaskataloge im Dokument.
+  \item \gui{Run workflow} rechnet die Anzeigeblöcke; \gui{Trace rays} und \gui{Camera image}
+    im Raytracer-Panel rechnen mit demselben System.
+  \item Dokument speichern (\keys{Strg+S}). Die \datei{.rttf}-Datei enthält das System, die
+    Kataloge und die letzten Ergebnisse der Anzeigeblöcke; sie rechnet auch auf einem anderen
+    Rechner ohne die AGF-Dateien.
+  \item Wer das System in Raytatouille selbst weiterbearbeiten will, bekommt es mit
+    \gui{Save system} als \datei{.rtt.json}.
+\end{schritte}
+
+\section{Fehlerbilder und Abhilfe}\label{sec:rt-fehler}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.38\linewidth} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Meldung oder Beobachtung & Ursache und Abhilfe \\
+\midrule\endhead
+\texttt{Choose the optical system first: …} & Kein \gui{System file} gewählt. Datei wählen, dann \gui{Load system}. \\
+\texttt{The system file does not exist: …} & Datei verschoben oder gelöscht (z.\,B. Dokument von einem anderen Rechner). Pfad neu wählen. \\
+\textit{Datei} \texttt{cannot be used: …} & Raytatouille kann das System nicht übersetzen, häufig wegen eines fehlenden Glases. Kataloge prüfen (\autoref{sec:rt-glaskataloge}); sonst die Fehlermeldung von Raytatouille lesen. \\
+\texttt{The Python package 'raytatouille' is not installed …} & Paket im Python der Plugins installieren (\gui{Check environment}). \\
+\texttt{The irradiance needs a newer Raytatouille …} & Raytatouille aktualisieren. \\
+\texttt{Unknown path …} & Name unter \gui{Paths} falsch geschrieben; die Meldung nennt die vorhandenen. \\
+\texttt{Raytatouille cannot aim rays into this path …} & Gefalteter oder gekippter Strahlengang, dessen erste Fläche nicht die Aperturblende ist (\autoref{sec:rt-gefaltet}). \\
+\texttt{No camera image: none of the paths ends on a drawn plane surface.} & Die letzte Fläche ist gekrümmt oder nicht gezeichnet. Eine ebene Bildfläche ins System aufnehmen. \\
+Kamerabild fast leer, viele Strahlen \enquote{outside the grid} & Die Bildfläche ist kleiner als der Fleck. Apertur der Bildfläche im System vergrößern. \\
+Fleck im Kamerabild kleiner als ein Pixel & \gui{Pixels (long side)} erhöhen oder die Bildfläche mit kleinerer Apertur definieren. \\
+Kamerabild verrauscht & \gui{Rays per field and wavelength} erhöhen. \\
+Nach dem Öffnen eines Dokuments ist das Optimierungsergebnis weg & Der optimierte Stand war nur im Plugin-Prozess; das Plugin hat die Datei neu geladen. Vor dem Schließen \gui{Save system} wählen oder mit Workflow arbeiten. \\
+\texttt{The node workflow needs the Python package rtt\_fusion …} & \code{rtt-fusion} im Python der Plugins installieren. \\
+\texttt{A new system needs a newer RTT-Fusion …}, \texttt{Section $\to$ group needs a newer RTT-Fusion …} & RTT-Fusion aktualisieren. \\
+\texttt{The system of the node workflow is not valid: …} & Ein Wert im Workflow ergibt kein gültiges System. Letzte Änderung prüfen oder mit \keys{Strg+Z} zurücknehmen. \\
+\texttt{Section $\to$ group needs a node workflow made from a system …} & Zuerst \gui{Workflow from system}. \\
+Ein Element ist im CAD als inaktiv markiert, wird aber trotzdem gerechnet & Das Attribut \param{sim.inactive} wird vom Raytracer noch nicht ausgewertet; das Log nennt solche Elemente (\enquote{\texttt{marked inactive in CAD but still traced …}}). \\
+\bottomrule
+\end{referenz}
+
+\section{Grenzen}\label{sec:rt-grenzen}
+
+\begin{itemize}
+  \item Elemente lassen sich noch nicht für die Rechnung abschalten. Objekte mit dem
+    Attribut \param{sim.inactive} (im Modellbaum grau dargestellt) werden trotzdem gerechnet
+    und nur im Log genannt.
+  \item Optische Parameter (Radien, Dicken) lassen sich nicht über die CAD-Geometrie bearbeiten,
+    sondern nur in der Systemdatei oder im Node-Workflow.
+  \item Die Bestrahlungsstärke wird nur auf ebenen letzten Flächen abgebildet.
+  \item Die Ergebnisse der Panel-Aktionen (Strahlen, Kamerabilder, Optimierungskurve) werden
+    nicht im Dokument gespeichert; gespeichert werden die Ergebnisse der Anzeigeblöcke des
+    Node-Workflows.
+\end{itemize}
