@@ -76,6 +76,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   direction – instead of spreads across and up and down.
 
 ### Fixed
+- **Workflow: blocks that cannot be computed are no longer offered.** *Add block* listed planned
+  types without an evaluator (`analysis.camera_image`, `biooptomd.layer`, and before RTT-Fusion
+  0.2.1 `fusion.convert`); a run with one stopped with `exec.no_evaluator`. The library now holds
+  only types this installation can compute (plus those the workflow already uses), and *Check
+  workflow* warns on each block without an evaluator (`check.no_evaluator`).
 - **Windows (and Linux under a light system theme): the menu bar and other texts were dark on
   dark.** The dark style sheet coloured only some widgets; the rest took the light system palette.
   The application now uses a dark palette everywhere: Fusion with the colours of `dark.qss` on
