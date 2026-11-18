@@ -444,13 +444,13 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     l.starts = read_array<std::uint32_t>(args["starts"], arrayDir());
     l.values = read_array<float>(args["values"], arrayDir());
     if (l.starts.empty() && !l.points.empty()) l.starts = {0, static_cast<std::uint32_t>(l.pointCount())};
-    if (l.starts.back() > l.pointCount()) throw std::runtime_error("polyline starts beyond the points");
+    if (!l.starts.empty() && l.starts.back() > l.pointCount()) throw std::runtime_error("polyline starts beyond the points");
     l.colormap = results::colormap_from_name(args["colormap"].toString());
     l.unit = args["unit"].toString();
     l.on_top = args["on_top"].toBool(true);
     l.range = range_of(args);
     return static_cast<qint64>(results_->addLines(static_cast<results::ResultId>(args["set"].toInteger()),
-                                                  args["name"].toString(), std::move(l)));
+                                                  args["name"].toString(), std::move(l), args["key"].toString()));
   }
   if (method == QLatin1String("results.field")) {
     results::FaceField f;

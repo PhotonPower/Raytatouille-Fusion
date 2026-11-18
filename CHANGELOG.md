@@ -23,6 +23,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   aware, with a legend); `plugin.json` may list further types under `"previews"`
   (docs/plugin-api.md, "Block previews"). A future kernel (e.g. FEM) draws its mesh's section the
   same way.
+- **Saving results.** *Results* dock: *Save run…* (a folder named after the run, one file per
+  result) and *Save…* for one result, also as a button under the tree; *Image* window: *Save…* →
+  *Image as PNG…* (one pixel per value, colour map and log scale as shown), *View with axes as
+  PNG…*, *Values as CSV…*. Images and fields as PNG and CSV (a grid, `numpy.loadtxt` reads it),
+  curves, tables, bars and rays as CSV (docs/plugins.md, "Saving results").
+- **Plugin API: `ctx.lines(..., key=...)`** – a drawing that replaces the earlier line items with
+  that key.
 - **User manual (German, LaTeX and PDF)**: `docs/manual/handbuch.pdf`, about 390 pages – installation,
   main window, navigation, modelling with every command, layers and groups, files, plugins, the
   node workflow, the Raytracer, Path Tracer, FourierGrating and Automotive Lighting plugins; appendices
@@ -116,6 +123,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   direction – instead of spreads across and up and down.
 
 ### Fixed
+- **Path Tracer: *Show camera* drew the new camera over the old one.** The drawing now replaces
+  the previous one (keyed line result `pathtracer:camera`).
 - **Extrude: a typed distance went along +Z in every view.** It now follows the normal of the
   construction plane of the view one works in (Front: −Y, Left: −X), as the prompt says.
 - **Right-click with no running command repeats the last command** in the views (like Enter on an

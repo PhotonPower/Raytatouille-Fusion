@@ -24,6 +24,8 @@ import pt_scene  # noqa: E402
 import pt_setup  # noqa: E402
 
 _SURFACES = ["surface", "trimmed_surface", "shell"]
+#: result key of the camera drawing: drawn again, it replaces the one before
+CAMERA_KEY = "pathtracer:camera"
 
 _MATERIAL = {
     "name": Param.text("", label="Name"),
@@ -383,7 +385,8 @@ class PathTracerPlugin(Plugin):
         points = [apex, c[0], apex, c[1], apex, c[2], apex, c[3], c[0], c[1], c[2], c[3], c[0]]
         starts = [0, 2, 4, 6, 8, 13]
         run = ctx.result_set("Camera")
-        ctx.lines(run, "Viewing pyramid", np.asarray(points), starts, np.zeros(len(points)), colormap="grey")
+        ctx.lines(run, "Viewing pyramid", np.asarray(points), starts, np.zeros(len(points)), colormap="grey",
+                  key=CAMERA_KEY)  # replaces the camera drawn before
         return "Camera drawn"
 
     @action("Show light paths", description="Draws some paths of the light from the sources – to check where "

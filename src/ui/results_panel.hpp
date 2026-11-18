@@ -5,6 +5,7 @@
 
 #include "results/result_types.hpp"
 
+class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 
@@ -22,20 +23,28 @@ class QTableWidget;
 namespace nfcad::ui {
 
 /// Right dock "Results": result sets (one per run) and their items with visibility check boxes;
-/// context menu: delete a run, convert rays to CAD curves (docs/plugins.md, P2 / D6).
+/// context menu: save a run or a result (PNG / CSV), delete a run, convert rays to CAD curves
+/// (docs/plugins.md, P2 / D6).
 class ResultsPanel : public QWidget {
   Q_OBJECT
  public:
   ResultsPanel(results::ResultStore* store, document::Document* doc, QWidget* parent = nullptr);
 
+ signals:
+  /// Files were written (a message for the status bar).
+  void saved(const QString& message);
+
  private:
   void rebuild();
   void onItemChanged(QTreeWidgetItem* item, int column);
   void showContextMenu(const QPoint& pos);
+  /// Asks where and saves a run (row of a set: a folder) or a result (PNG / CSV).
+  void save(QTreeWidgetItem* row);
 
   results::ResultStore* store_;
   document::Document* doc_;
   QTreeWidget* tree_ = nullptr;
+  QPushButton* save_ = nullptr;
   bool rebuilding_ = false;
 };
 

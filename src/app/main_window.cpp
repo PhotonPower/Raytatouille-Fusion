@@ -399,7 +399,10 @@ void MainWindow::createPanels() {
   tabifyDockWidget(layers, model);
   auto* results = new QDockWidget(tr("Results"), this);
   results->setObjectName(QStringLiteral("resultsDock"));
-  results->setWidget(new ui::ResultsPanel(results_, doc_, results));
+  auto* results_panel = new ui::ResultsPanel(results_, doc_, results);
+  connect(results_panel, &ui::ResultsPanel::saved, this,
+          [this](const QString& message) { statusBar()->showMessage(message, 8000); });
+  results->setWidget(results_panel);
   addDockWidget(Qt::RightDockWidgetArea, results);
   tabifyDockWidget(model, results);
   model->raise();

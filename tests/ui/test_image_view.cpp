@@ -1,7 +1,11 @@
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFile>
 #include <QImage>
+#include <QRegularExpression>
+#include <QTemporaryDir>
 #include <QTest>
+#include <QToolButton>
 #include <QWheelEvent>
 
 #include "results/result_store.hpp"
@@ -72,6 +76,36 @@ class TestImageView : public QObject {
     if (const QByteArray dir = qgetenv("NFCAD_SNAPSHOT_DIR"); !dir.isEmpty()) {
       zoomed.save(QString::fromLocal8Bit(dir) + QStringLiteral("/image_view_zoomed.png"));
     }
+  }
+
+  void savesImageViewAndValues() {
+    results::ResultStore store;
+    ui::ImageView view(&store);
+    view.resize(500, 420);
+    QVERIFY(!view.findChild<QToolButton*>()->isEnabled());  // nothing to save
+    QVERIFY(!view.saveTo(ui::ImageView::SaveWhat::Pixels, QStringLiteral("unused.png")));
+    results::Image im = spot(64, 48);
+    im.values[1] = 1.0F;  // dark in linear scale, visible in log scale
+    store.addImage(store.createSet(QStringLiteral("run")), QStringLiteral("CAM"), std::move(im));
+    QVERIFY(view.findChild<QToolButton*>()->isEnabled());
+    QTemporaryDir dir;
+    const QString pixels = dir.filePath(QStringLiteral("cam.png"));
+    const QString shown = dir.filePath(QStringLiteral("view.png"));
+    const QString values = dir.filePath(QStringLiteral("cam.csv"));
+    QVERIFY(view.saveTo(ui::ImageView::SaveWhat::Pixels, pixels));
+    QVERIFY(view.saveTo(ui::ImageView::SaveWhat::View, shown));
+    QVERIFY(view.saveTo(ui::ImageView::SaveWhat::Values, values));
+    QCOMPARE(QImage(pixels).size(), QSize(64, 48));  // one pixel per value
+    QVERIFY(QImage(shown).width() > 64);             // the canvas with axes
+    QFile csv(values);
+    QVERIFY(csv.open(QIODevice::ReadOnly));
+    const QStringList lines = QString::fromUtf8(csv.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    QCOMPARE(lines.filter(QRegularExpression(QStringLiteral("^[^#]"))).size(), 48);
+    // the log scale as shown: a faint pixel is lighter than in linear scale
+    view.setLogScale(true);
+    const QString log = dir.filePath(QStringLiteral("log.png"));
+    QVERIFY(view.saveTo(ui::ImageView::SaveWhat::Pixels, log));
+    QVERIFY(QImage(log).pixelColor(1, 47).lightness() > QImage(pixels).pixelColor(1, 47).lightness() + 20);
   }
 
   void showsColoursAsTheyAre() {

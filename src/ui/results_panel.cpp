@@ -1,8 +1,13 @@
 #include "ui/results_panel.hpp"
 
+#include <QFileDialog>
+#include <QDir>
+#include <QFileInfo>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QMenu>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollBar>
@@ -16,6 +21,7 @@
 #include <limits>
 
 #include "document/document.hpp"
+#include "results/result_export.hpp"
 #include "results/result_store.hpp"
 
 namespace nfcad::ui {
@@ -52,6 +58,15 @@ ResultsPanel::ResultsPanel(results::ResultStore* store, document::Document* doc,
   tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
   tree_->setContextMenuPolicy(Qt::CustomContextMenu);
   layout->addWidget(tree_);
+  save_ = new QPushButton(tr("Save…"), this);
+  save_->setToolTip(tr("Save the chosen run (a folder of PNG and CSV files) or result (PNG or CSV)"));
+  save_->setEnabled(false);
+  layout->addWidget(save_);
+  connect(save_, &QPushButton::clicked, this, [this] {
+    if (QTreeWidgetItem* row = tree_->currentItem()) save(row);
+  });
+  connect(tree_, &QTreeWidget::currentItemChanged, this,
+          [this](QTreeWidgetItem* row) { save_->setEnabled(row != nullptr); });
   connect(tree_, &QTreeWidget::itemChanged, this, &ResultsPanel::onItemChanged);
   connect(tree_, &QTreeWidget::customContextMenuRequested, this, &ResultsPanel::showContextMenu);
   connect(store_, &results::ResultStore::changed, this, &ResultsPanel::rebuild);
@@ -104,9 +119,13 @@ void ResultsPanel::showContextMenu(const QPoint& pos) {
   QMenu menu(this);
   if (item->data(0, kSetRole).isValid()) {
     const auto id = item->data(0, kSetRole).toULongLong();
+    menu.addAction(tr("Save run…"), this, [this, item] { save(item); });
     menu.addAction(tr("Delete run"), this, [this, id] { store_->removeSet(id); });
-  } else if (const results::ResultItem* r = store_->item(item->data(0, kItemRole).toULongLong());
-             r != nullptr && r->kind == results::ResultItem::Kind::Lines) {
+  } else if (const results::ResultItem* r = store_->item(item->data(0, kItemRole).toULongLong()); r != nullptr) {
+    menu.addAction(tr("Save…"), this, [this, item] { save(item); });
+  }
+  if (const results::ResultItem* r = store_->item(item->data(0, kItemRole).toULongLong());
+      r != nullptr && r->kind == results::ResultItem::Kind::Lines) {
     const auto lines = r->lines;
     menu.addAction(tr("Convert to CAD curves…"), this, [this, lines] {
       bool ok = false;
@@ -120,6 +139,42 @@ void ResultsPanel::showContextMenu(const QPoint& pos) {
     });
   }
   if (!menu.isEmpty()) menu.exec(tree_->viewport()->mapToGlobal(pos));
+}
+
+void ResultsPanel::save(QTreeWidgetItem* row) {
+  QString error;
+  if (row->data(0, kSetRole).isValid()) {
+    const results::ResultSet* set = store_->set(row->data(0, kSetRole).toULongLong());
+    if (set == nullptr) return;
+    const QString parent = QFileDialog::getExistingDirectory(this, tr("Save run %1 into folder").arg(set->name));
+    if (parent.isEmpty()) return;
+    // a folder named after the run, so its files stay together
+    const QString dir = QDir(parent).filePath(results::file_name_for(set->name, QStringLiteral("x")).chopped(2));
+    const QStringList files = results::save_set(*set, dir, &error);
+    if (files.isEmpty() && !error.isEmpty()) {
+      QMessageBox::warning(this, tr("Save run"), error);
+    } else {
+      emit saved(tr("%n file(s) written to %1", nullptr, static_cast<int>(files.size())).arg(QDir::toNativeSeparators(dir)));
+    }
+    return;
+  }
+  const results::ResultItem* item = store_->item(row->data(0, kItemRole).toULongLong());
+  if (item == nullptr) return;
+  QStringList filters;
+  for (const QString& f : results::save_formats(*item)) {
+    filters << (f == QLatin1String("png") ? tr("PNG image (*.png)") : tr("CSV values (*.csv)"));
+  }
+  QString chosen;
+  QString path = QFileDialog::getSaveFileName(this, tr("Save %1").arg(item->name),
+                                              results::file_name_for(item->name, results::save_formats(*item).front()),
+                                              filters.join(QStringLiteral(";;")), &chosen);
+  if (path.isEmpty()) return;
+  if (QFileInfo(path).suffix().isEmpty()) path += chosen.contains(QLatin1String("png")) ? QStringLiteral(".png") : QStringLiteral(".csv");
+  if (!results::save_item(*item, path, &error)) {
+    QMessageBox::warning(this, tr("Save result"), error);
+  } else {
+    emit saved(tr("Saved %1").arg(QDir::toNativeSeparators(path)));
+  }
 }
 
 // ------------------------------------------------------------------------------ plot

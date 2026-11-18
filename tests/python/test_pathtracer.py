@@ -978,6 +978,7 @@ class FakeCad:
     def __init__(self, entities, params, selection=()):
         self.model, self.params, self.selection = entities, params, list(selection)
         self.fields, self.images, self.tables, self.line_sets, self.sets, self.logs = [], [], [], [], [], []
+        self.line_kw = []
 
     def entities(self, ids=None, selection=False):
         return [e for e in self.model if not selection or e["id"] in self.selection]
@@ -1014,6 +1015,7 @@ class FakeCad:
     def lines(self, run, name, points, starts, line_values, **kw):
         assert len(points) == len(line_values) == starts[-1]
         self.line_sets.append((name, len(starts) - 1))
+        self.line_kw.append(kw)
 
 
 plugin = PathTracerPlugin()
@@ -1131,6 +1133,7 @@ except UserError as e:
 p.update(export="", samples=20_000)
 assert plugin.show_paths(cad) == "20 light paths" and plugin.show_camera(cad) == "Camera drawn"
 assert cad.line_sets == [("Light paths", 20), ("Viewing pyramid", 5)]
+assert cad.line_kw[-1]["key"] == "pathtracer:camera" and "key" not in cad.line_kw[0]   # the camera replaces itself
 cad.selection = [12, 13]
 plugin.clear(cad)
 assert plain[1]["attributes"] == {} and plain[2]["attributes"] == {}

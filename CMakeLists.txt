@@ -61,6 +61,7 @@ add_library(nfcad_core STATIC
   src/results/colormap.cpp
   src/results/result_store.cpp
   src/results/result_io.cpp
+  src/results/result_export.cpp
   src/snap/snap_engine.cpp
   src/snap/snap_types.cpp
   src/support/crash_handler.cpp
