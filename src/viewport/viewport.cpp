@@ -563,7 +563,6 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
   if (drag_ != Drag::None) {
     const bool click = !drag_moved_;
     drag_ = Drag::None;
-    if (!point_input_ && click && event->button() == Qt::RightButton) emit rightClicked();
     if (point_input_) {
       setCursor(Qt::CrossCursor);
       if (click && event->button() == Qt::RightButton) emit pointInputFinished();
@@ -574,6 +573,8 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
       }
     } else {
       unsetCursor();
+      // last: the receiver may start a command (point input on) – this click must not finish it
+      if (click && event->button() == Qt::RightButton) emit rightClicked();
     }
     return;
   }
