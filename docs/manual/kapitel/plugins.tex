@@ -1,0 +1,813 @@
+\chapter{Plugins}\label{kap:plugins}
+
+\produkt{} ist zunächst ein CAD-Programm: Sie zeichnen, modellieren, importieren und
+exportieren Geometrie. Die eigentlichen Berechnungen – Strahlverfolgung, Lichttransport,
+Beugung an Gittern, Scheinwerferauslegung – stecken in eigenständigen
+\emph{Rechenkernen}\index{Rechenkern}. Ein \emph{Plugin}\index{Plugin} verbindet einen solchen
+Kern mit der Anwendung: Es liest das CAD-Modell, nimmt Ihre Parameter entgegen, startet die
+Rechnung und gibt die Ergebnisse so zurück, dass Sie sie direkt am Modell sehen – Strahlen als
+Linien, Bestrahlungsstärken als Farbe auf Flächen, Kurven in einem Diagramm, Bilder in einem
+eigenen Fenster.
+
+Dieses Kapitel beschreibt alles, was für \emph{alle} Plugins gleich ist: das Plugin-Dock mit
+seinen Eingabefeldern, das Starten und Abbrechen von Rechnungen, die Darstellung der
+Ergebnisse, das Rückgängigmachen eines Plugin-Laufs und die Einrichtung der
+Python-Umgebung. Die einzelnen mitgelieferten Plugins haben eigene Kapitel (Überblick in
+Abschnitt~\ref{sec:plugins-mitgeliefert}); den Node-Workflow, in dem mehrere Plugins
+zusammenarbeiten, beschreibt Kapitel~\ref{kap:workflow}. Wie Plugins installiert, signiert und
+aktualisiert werden, steht in Anhang~\ref{kap:plugin-verwaltung}.
+
+% ---------------------------------------------------------------------------
+\section{Was ist ein Plugin?}\label{sec:plugins-konzept}
+
+Ein Plugin ist ein Ordner mit einer Beschreibungsdatei \datei{plugin.json} und Python-Code.
+Die Anwendung startet jedes geladene Plugin in einem \emph{eigenen Python-Prozess}
+\index{Plugin-Prozess} und spricht mit ihm über eine lokale Verbindung. Das hat für Sie
+mehrere Vorteile:
+
+\begin{itemize}
+  \item Stürzt eine Rechnung ab oder hängt sie, bleibt \produkt{} bedienbar; nur die Aktion
+        des betroffenen Plugins endet mit einer Fehlermeldung.
+  \item Eine laufende Rechnung lässt sich immer abbrechen (Abschnitt~\ref{sec:plugin-jobs}).
+  \item Jedes Plugin nutzt die Python-Pakete Ihrer Umgebung (z.\,B.\ \code{numpy},
+        \code{raytatouille}); die Anwendung selbst bringt kein Python mit
+        (Abschnitt~\ref{sec:plugin-einstellungen}).
+  \item Große Datenmengen (Millionen Strahlen, Bilder) werden nicht über die Verbindung
+        kopiert, sondern als temporäre Dateien übergeben.
+\end{itemize}
+
+Ein Plugin kann der Anwendung Folgendes hinzufügen:
+
+\begin{description}
+  \item[Aktionen] Befehle wie \gui{Trace rays} oder \gui{Camera image}. Sie erscheinen als
+        Knöpfe im Plugin-Dock, im Menü \menu{Plugins} unter dem Namen des Plugins und als
+        Werkzeuge in einer eigenen Gruppe der Werkzeugspalte (links).
+  \item[Parameter] Eingabefelder im Plugin-Dock (Abschnitt~\ref{sec:plugin-dock}). Die Werte
+        werden \emph{mit dem Dokument} gespeichert.
+  \item[Ergebnisse] Strahlen, Felder auf Flächen, Kurven, Bilder, Tabellen und
+        Balkendiagramme (Abschnitt~\ref{sec:plugin-ergebnisse}).
+  \item[Geometrie] Neue oder geänderte Objekte im Modell, z.\,B.\ die Flächen eines geladenen
+        optischen Systems. Alle Änderungen eines Laufs bilden einen einzigen Rückgängig-Schritt
+        (Abschnitt~\ref{sec:plugin-undo}).
+  \item[Blöcke für den Node-Workflow] Bausteine, die im Fenster \gui{Node workflow}
+        verschaltet werden (Kapitel~\ref{kap:workflow}).
+  \item[Aktionen an Blöcken] Befehle, die nur im Kontextmenü bestimmter Workflow-Blöcke
+        stehen, z.\,B.\ \gui{Section $\to$ group} des Raytracers.
+\end{description}
+
+\begin{hinweis}
+Ein Plugin läuft mit Ihren Benutzerrechten. Die Signaturprüfung
+(Anhang~\ref{kap:plugin-verwaltung}) stellt sicher, \emph{von wem} ein Plugin stammt und dass
+es unverändert ist – sie ist keine Sandbox. Installieren Sie nur Plugins aus vertrauenswürdiger
+Quelle.
+\end{hinweis}
+
+\subsection{Start der Plugins}
+
+Beim Programmstart und nach jedem Neuladen (\menu{Plugins,Reload plugins}) sucht die Anwendung
+die Plugins in den Plugin-Ordnern (Anhang~\ref{sec:verwaltung-ordner}) und startet jedes
+gefundene Plugin sofort. Erst wenn sich das Plugin gemeldet hat, kennt die Anwendung seine
+Aktionen und Parameter. Bis dahin steht im Untermenü des Plugins und im Plugin-Dock
+\gui{(starting …)} bzw.\ \gui{starting …}. Lässt sich das Plugin nicht starten – meist fehlt
+ein Python-Paket oder der Python-Interpreter ist falsch eingestellt –, steht dort
+\gui{(not running – see the plugin log)}, und die Ursache steht im Dock \gui{Plugin log}
+(Abschnitt~\ref{sec:plugin-log}).
+
+% ---------------------------------------------------------------------------
+\section{Das Menü \enquote{Plugins}}\label{sec:plugins-menue}
+
+Das Menü \menu{Plugins} steht in der Menüleiste vor \menu{Help}. Es enthält:
+
+\begin{referenz}{@{}lX@{}}
+\toprule
+\textbf{Eintrag} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\gui{Settings…} & Dialog \gui{Plugin settings}: Python-Interpreter, Plugin-Ordner,
+  Umgebung prüfen oder anlegen, Entwicklermodus (Abschnitt~\ref{sec:plugin-einstellungen}). \\
+\gui{Install plugin…} & Ein Plugin-Paket (\datei{.nfplugin}) installieren
+  (Anhang~\ref{sec:verwaltung-installieren}). \\
+\gui{Uninstall plugin} & Untermenü mit allen geladenen Plugins (Name und Version). Nur
+  installierte Plugins lassen sich hier entfernen; Plugins aus einem Plugin-Ordner sind
+  ausgegraut mit dem Zusatz \gui{– from a plugin folder}, der Tooltip nennt den Ordner. \\
+\gui{Reload plugins} & Alle Plugins beenden und neu laden, z.\,B.\ nach dem Installieren
+  eines Python-Pakets. \\
+\gui{Show in the side panels} & Untermenü mit einem Häkchen je Plugin: welche Plugins in der
+  Werkzeugspalte und im Plugin-Dock erscheinen (Abschnitt~\ref{sec:plugin-seitenleisten}). \\
+\textit{Name des Plugins} & Je Plugin ein Untermenü mit seinen Aktionen; der Tooltip zeigt
+  die Beschreibung des Plugins. \\
+\bottomrule
+\end{referenz}
+
+Sind keine Plugins geladen, steht im Menü der ausgegraute Eintrag
+\gui{(no plugins loaded – see Settings)}.
+
+Plugins, die im Entwicklermodus ohne gültige Signatur geladen wurden, erscheinen überall mit
+einem Zusatz in eckigen Klammern, z.\,B.\ \gui{Raytracer [unsigned]} oder
+\gui{… [signature invalid]} (Anhang~\ref{sec:verwaltung-signaturen}).
+
+% ---------------------------------------------------------------------------
+\section{Das Plugin-Dock}\label{sec:plugin-dock}\index{Plugin-Dock}
+
+Das Dock \gui{Plugin} liegt rechts als Reiter neben \gui{Results} (und den Reitern
+\gui{Layers} und \gui{Model}); ein- und ausblenden können Sie es im Menü \menu{View}. Es
+zeigt immer \emph{ein} Plugin:
+
+\begin{enumerate}
+  \item Oben eine Auswahlliste mit allen Plugins, die in den Seitenleisten gezeigt werden.
+  \item Darunter die Beschreibung des gewählten Plugins (grau).
+  \item Das \emph{Parameterformular}: Eingabefelder, oft in beschriftete Gruppen
+        (Rahmen) aufgeteilt. Fährt der Mauszeiger über ein Feld, erklärt ein Tooltip den
+        Parameter.
+  \item Unten die \emph{Aktionsknöpfe} des Plugins und – sofern es Parameter hat – der flache
+        Knopf \gui{Reset parameters}.
+\end{enumerate}
+
+\abbildung[0.95\linewidth]{raytracer.png}{Hauptfenster mit dem Raytracer-Plugin: rechts unten
+das Plugin-Dock mit Auswahlliste, Beschreibung, Parametern und Aktionsknöpfen; in allen vier
+Ansichten die gezeichneten Strahlen und die Farbskala der Bestrahlungsstärke; links die
+Werkzeuggruppe des Plugins (Aufnahme im Entwicklermodus, daher \enquote{[unsigned]} und das
+rote Banner)}{fig:plugins-dock}
+
+Ist kein Plugin geladen, steht im Dock \gui{No plugins – see Plugins $\to$ Settings…}. Haben Sie
+alle Plugins aus den Seitenleisten genommen, steht dort
+\gui{All plugins are hidden – see Plugins $\to$ Show in the side panels}.
+
+\subsection{Parameterwerte und Dokument}
+
+Die Werte des Formulars gehören zum \emph{Dokument}: Sie werden je Plugin in der
+\datei{.rttf}-Datei gespeichert (Abschnitt \code{plugins}, siehe
+Anhang~\ref{kap:dateiformat}) und beim Öffnen wieder eingesetzt. So rechnet ein Dokument nach
+dem Öffnen mit genau den Einstellungen, mit denen es gespeichert wurde. Jede Änderung eines
+Werts markiert das Dokument als geändert, ist aber \emph{kein} Rückgängig-Schritt.
+
+\gui{Reset parameters} setzt alle Parameter des gezeigten Plugins auf die Standardwerte des
+Plugins zurück. Manche Aktionen setzen selbst Parameter, z.\,B.\ wenn ein Plugin eine
+Konfigurationsdatei lädt; das Formular zeigt die neuen Werte dann sofort.
+
+Ist das Dock schmal, rückt jedes Eingabefeld unter seine Beschriftung, damit nichts
+abgeschnitten wird.
+
+\subsection{Die Feldtypen}\label{sec:plugin-parameter}\index{Parameterformular}
+
+Welche Felder erscheinen, legt das Plugin fest. Die Anwendung kennt die folgenden Feldtypen:
+
+\begin{referenz}{@{}p{0.2\linewidth}p{0.3\linewidth}X@{}}
+\toprule
+\textbf{Typ} & \textbf{Aussehen} & \textbf{Bedienung} \\
+\midrule
+\endhead
+Zahl & Drehfeld mit Einheit (z.\,B.\ \code{0.0001000 mm}) &
+  Wert tippen oder mit den Pfeilen ändern. Dezimaltrennzeichen ist immer der \emph{Punkt}
+  (wie in der Befehlszeile), unabhängig von der Spracheinstellung des Systems. Das Plugin kann
+  Grenzen, Schrittweite und Nachkommastellen vorgeben (Standard: vier Nachkommastellen). \\
+Ganzzahl & Drehfeld, ggf.\ mit Einheit & wie Zahl, ohne Nachkommastellen. \\
+Ja/Nein & Kontrollkästchen & anklicken. \\
+Auswahl & Auswahlliste & einen der vorgegebenen Einträge wählen. \\
+Text & einzeiliges Textfeld & frei tippen. \\
+Datei & Textfeld mit Knopf \gui{…} & Pfad tippen oder mit \gui{…} (Tooltip
+  \gui{Choose a file}) im Dateidialog wählen. Ein leeres Feld zeigt grau
+  \gui{choose a file with …}. Bei Ausgabedateien öffnet \gui{…} einen Speichern-Dialog. \\
+Dateiliste & Liste mit \gui{Add…} und \gui{Remove} & \gui{Add…} öffnet den Dateidialog,
+  in dem Sie \emph{mehrere} Dateien auf einmal wählen können; eine Datei, die schon in der
+  Liste steht, wird nicht doppelt aufgenommen. Die Liste zeigt die Dateinamen, der Tooltip
+  den vollen Pfad. \gui{Remove} entfernt die markierten Einträge (Mehrfachauswahl mit
+  \keys{Shift} oder \keys{Strg}). \\
+Zahlenliste & Textfeld & Zahlen durch Kommas getrennt, Dezimalpunkt, z.\,B.\
+  \code{486.1, 587.6, 656.3}. Eine ungültige Eingabe bekommt einen roten Rahmen. \\
+Punkt & drei Felder \code{x}, \code{y}, \code{z} und Knopf \gui{Pick} & Koordinaten tippen
+  (drei Nachkommastellen) oder mit \gui{Pick} in einer Ansicht klicken
+  (Abschnitt~\ref{sec:plugin-punkt}). \\
+Objekt & Name(n), Knöpfe \gui{Use selection} und \gui{$\times$} & übernimmt Objekte aus
+  der aktuellen Auswahl (Abschnitt~\ref{sec:plugin-objekt}). \\
+Liste von Einträgen & Liste mit \gui{Add}, \gui{Edit…}, \gui{Remove}, \gui{$\uparrow$},
+  \gui{$\downarrow$} & geordnete Einträge, jeder ein kleines Formular, z.\,B.\ die Schichten
+  eines Gitters (Abschnitt~\ref{sec:plugin-liste}). \\
+Tabelle & Tabelle mit \gui{Add row} und \gui{Remove row} & direkt in den Zellen bearbeiten
+  (Abschnitt~\ref{sec:plugin-tabelle}). \\
+JSON & mehrzeiliges Textfeld & beliebige Daten im JSON-Format; ungültiger Text bekommt
+  einen roten Rahmen. \\
+\bottomrule
+\end{referenz}
+
+\begin{warnung}
+Solange ein Feld rot markiert ist (Zahlenliste, Tabellenzelle oder JSON-Text ungültig), tut
+ein Klick auf einen Aktionsknopf des Plugins \emph{nichts}. Korrigieren Sie zuerst die rote
+Eingabe. Erst gültige Eingaben werden übernommen; bis dahin gilt der letzte gültige Wert.
+\end{warnung}
+
+\subsubsection{Einen Punkt picken}\label{sec:plugin-punkt}
+
+Punkt-Parameter (z.\,B.\ ein Ursprung oder Zielpunkt) können Sie direkt im Modell abgreifen:
+
+\begin{schritte}
+  \item Klicken Sie neben dem Punkt-Parameter auf \gui{Pick}. Die Befehlszeile zeigt
+        \gui{Pick a point for the plugin parameter (snaps active, Esc cancels)}.
+  \item Klicken Sie in einer beliebigen Ansicht auf den gewünschten Punkt. Die Objektfänge
+        sind aktiv wie beim Zeichnen (Kapitel~\ref{kap:modellieren}): Endpunkte, Mittelpunkte,
+        Zentren usw.\ werden gefangen, \keys{Tab} wechselt zwischen Fangkandidaten.
+        Statt zu klicken, können Sie die Koordinaten auch in die Befehlszeile tippen.
+  \item Die Felder \code{x}, \code{y}, \code{z} übernehmen den Punkt.
+\end{schritte}
+
+Mit \keys{Esc} brechen Sie das Picken ab; die alten Werte bleiben.
+
+\subsubsection{Objekte aus der Auswahl übernehmen}\label{sec:plugin-objekt}
+
+Objekt-Parameter verweisen auf Objekte des Modells, etwa einen Detektor oder die Körper einer
+Gitterschicht. Das Plugin legt fest, welche Objektarten erlaubt sind (Punkt, Kurve, Fläche,
+getrimmte Fläche, Körper/Shell) und ob ein oder mehrere Objekte gemeint sind.
+
+\begin{schritte}
+  \item Wählen Sie die Objekte in einer Ansicht oder im Modellbaum aus. Teilelemente (einzelne
+        Flächen, Kanten, Eckpunkte eines Körpers) zählen nicht.
+  \item Klicken Sie auf \gui{Use selection}. Das Feld zeigt nun die Namen der übernommenen
+        Objekte (ohne Namen: \code{\#}\textit{Nummer}). Bei einem Parameter für ein einzelnes
+        Objekt wird das erste passende Objekt der Auswahl genommen.
+\end{schritte}
+
+Passt kein Objekt der Auswahl, meldet die Statuszeile
+\gui{Select suitable objects first (…)} mit den erlaubten Arten. \gui{$\times$} leert das
+Feld (Anzeige \gui{---}). Wird ein übernommenes Objekt später gelöscht, zeigt das Feld
+\code{\#}\textit{Nummer}~\gui{(missing)}.
+
+\subsubsection{Listen von Einträgen}\label{sec:plugin-liste}
+
+Strukturierte Parameter – etwa der Schichtaufbau eines Gitters, Materialien oder die Terme einer
+Zielfunktion – erscheinen als Liste. Jede Zeile ist ein Eintrag, beschriftet mit seiner Nummer
+und einem kennzeichnenden Feld, z.\,B.\ \code{1. homogeneous}.
+
+\begin{itemize}
+  \item \gui{Add} öffnet den Dialog \gui{Edit entry} mit den Standardwerten eines neuen
+        Eintrags; \gui{OK} hängt ihn am Ende an.
+  \item \gui{Edit…} (oder ein Doppelklick auf den Eintrag) öffnet den markierten Eintrag im
+        selben Dialog. Der Dialog ist wieder ein Formular mit allen Feldtypen – auch Listen
+        und Tabellen in Listen sind möglich.
+  \item \gui{Remove} löscht den markierten Eintrag.
+  \item \gui{$\uparrow$} und \gui{$\downarrow$} verschieben ihn um eine Position.
+\end{itemize}
+
+Der Dialog lässt sich mit \gui{OK} erst schließen, wenn kein Feld darin rot markiert ist.
+
+\subsubsection{Tabellen}\label{sec:plugin-tabelle}
+
+Tabellen-Parameter (z.\,B.\ die Lamellen einer Gitterschicht oder die Elemente einer
+Streuscheibe) bearbeiten Sie direkt in den Zellen. Die Spaltenköpfe nennen Größe und Einheit.
+\gui{Add row} hängt eine Zeile mit Standardwerten an, \gui{Remove row} löscht die Zeile mit
+dem Cursor. Eine Zelle, die in einer Zahlenspalte keine (ganze) Zahl enthält oder in einer
+Auswahlspalte keinen erlaubten Wert, wird rot hinterlegt und blockiert die Aktionen.
+
+% ---------------------------------------------------------------------------
+\section{Aktionen und Jobs}\label{sec:plugin-jobs}\index{Job}
+
+Eine \emph{Aktion} ist ein Befehl eines Plugins. Sie starten sie auf drei gleichwertigen
+Wegen:
+
+\begin{itemize}
+  \item mit dem Knopf im Plugin-Dock,
+  \item im Menü \menu{Plugins,\textit{Plugin},\textit{Aktion}},
+  \item mit dem Werkzeug in der Gruppe des Plugins in der Werkzeugspalte (der Tooltip nennt
+        die Aktion).
+\end{itemize}
+
+Die Aktion erhält die aktuellen Parameterwerte und die aktuelle Auswahl. Während sie läuft,
+spricht man von einem \emph{Job}:
+
+\begin{itemize}
+  \item Die Statuszeile zeigt rechts einen Fortschrittsbalken und den Knopf \gui{Cancel}, links
+        den Text \textit{Plugin}\code{:} \textit{Aktion}~\code{…} und danach die Meldungen, die
+        das Plugin während der Rechnung schickt.
+  \item Die Aktionsknöpfe im Plugin-Dock sind gesperrt (\gui{Reset parameters} bleibt
+        bedienbar).
+  \item Es läuft immer nur \emph{ein} Plugin-Job. Starten Sie einen zweiten, meldet die
+        Statuszeile \gui{A plugin job is still running}.
+  \item Die Anwendung bleibt bedienbar: Sie können drehen, zoomen, Ergebnisse ein- und
+        ausblenden. Ändert eine Aktion das Modell laufend (z.\,B.\ eine Optimierung), sehen Sie
+        die Änderungen sofort.
+\end{itemize}
+
+\subsection{Abbrechen}\label{sec:plugin-abbrechen}\index{Abbrechen}
+
+Sie brechen einen Job mit \gui{Cancel} in der Statuszeile oder mit \keys{Esc} ab. Die Taste
+\keys{Esc} (\menu{Edit,Select None / Cancel}) wirkt in dieser Reihenfolge: Läuft ein
+Zeichenbefehl, wird er abgebrochen; sonst, wenn ein Plugin-Job läuft, dieser; sonst wird die
+Auswahl aufgehoben.
+
+Das Plugin erhält die Bitte, aufzuhören, und beendet seine Rechnung an der nächsten geeigneten
+Stelle (z.\,B.\ nach dem nächsten Iterationsschritt). Reagiert es nicht innerhalb von
+\emph{5~Sekunden}, beendet die Anwendung den Plugin-Prozess; das Log meldet dann
+\gui{the plugin did not stop – terminating its process}. Das Plugin wird bei der nächsten
+Aktion neu gestartet.
+
+\begin{hinweis}
+Auch ein abgebrochener Lauf bildet einen Rückgängig-Schritt: Was bis zum Abbruch am Modell
+geändert wurde, bleibt erhalten und lässt sich mit \keys{Strg+Z} zurücknehmen
+(Abschnitt~\ref{sec:plugin-undo}).
+\end{hinweis}
+
+\subsection{Ende eines Jobs}
+
+Nach dem Lauf meldet die Statuszeile:
+
+\begin{referenz}{@{}p{0.42\linewidth}X@{}}
+\toprule
+\textbf{Meldung} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\textit{Plugin}\code{: done} oder \textit{Plugin}\code{:} \textit{Text} & Erfolg; den Text
+  liefert das Plugin, z.\,B.\ eine Zusammenfassung. Die Meldung verschwindet nach acht
+  Sekunden. \\
+\textit{Plugin}\code{: cancelled} & Der Job wurde abgebrochen. \\
+\textit{Plugin}\code{ failed:} \textit{Grund} & Fehler. Das Dock \gui{Plugin log} öffnet
+  sich mit den Einzelheiten (bei Programmfehlern mit dem Python-Traceback). \\
+\bottomrule
+\end{referenz}
+
+Fehler, die Sie selbst beheben können – keine Systemdatei gewählt, eine fehlende Eingabe,
+eine nicht lesbare Datei –, zeigt die Anwendung stattdessen als Meldungsfenster mit einem
+verständlichen Text, ohne Traceback.
+
+Hat ein Lauf in ein \emph{leeres} Dokument Objekte eingefügt (z.\,B.\ das erste Laden eines
+optischen Systems), zoomt die Anwendung anschließend alle Ansichten auf das Ergebnis.
+
+\subsection{Das Plugin-Log}\label{sec:plugin-log}\index{Plugin-Log}
+
+Das Dock \gui{Plugin log} liegt unten als Reiter neben \gui{Plot}; zu Beginn ist es
+ausgeblendet (\menu{View,Plugin log}). Es sammelt alle Meldungen der Plugins, jede Zeile mit
+der Plugin-Kennung in eckigen Klammern, z.\,B.\ \code{[raytracer] …}. Dort finden Sie:
+
+\begin{itemize}
+  \item ausführliche Protokolle der Rechnungen (Anzahl Strahlen, verwendete Verfahren,
+        Rauschen, Warnungen),
+  \item Fehlermeldungen mit Traceback,
+  \item Startprobleme eines Plugins, z.\,B.\ ein fehlendes Python-Paket,
+  \item die Meldung, wenn ein Plugin-Prozess unerwartet endet:
+        \code{plugin '}\textit{Name}\code{' stopped (exit code} \textit{n}\code{)}
+        mit den letzten Ausgaben des Prozesses.
+\end{itemize}
+
+Das Log behält die letzten 5000 Zeilen.
+
+% ---------------------------------------------------------------------------
+\section{Ergebnisse}\label{sec:plugin-ergebnisse}\index{Ergebnis}
+
+Jeder Lauf einer Aktion kann einen \emph{Ergebnissatz}\index{Ergebnissatz} (engl.\ run) anlegen,
+z.\,B.\ \enquote{Trace 1}, und darin beliebig viele Ergebnisse ablegen. Es gibt sechs Arten:
+
+\begin{referenz}{@{}p{0.2\linewidth}p{0.17\linewidth}X@{}}
+\toprule
+\textbf{Art} & \textbf{Typ-Spalte} & \textbf{Darstellung} \\
+\midrule
+\endhead
+Strahlen / Linien & \gui{Rays / lines} & Viele farbige Polylinien in allen Ansichten, z.\,B.\
+  Strahlen, eingefärbt nach Wellenlänge, Feld oder Pfad. \\
+Feld auf Fläche & \gui{Field on face} & Eine Werteverteilung (oder ein Farbbild) als Textur auf
+  einer Fläche des Modells, z.\,B.\ die Bestrahlungsstärke auf einem Detektor. \\
+Kurve & \gui{Curve} & x/y-Kurve im Dock \gui{Plot}, z.\,B.\ der Verlauf der Zielfunktion
+  einer Optimierung; kann während der Rechnung wachsen. \\
+Bild & \gui{Image} & 2D-Bild mit physikalischen Achsen im Fenster \gui{Image}, z.\,B.\ ein
+  Kamerabild. \\
+Tabelle & \gui{Table} & Tabelle im Dock \gui{Table}, z.\,B.\ die Beugungseffizienzen je
+  Ordnung. \\
+Balken & \gui{Bars} & Balkendiagramm im Dock \gui{Plot}. \\
+\bottomrule
+\end{referenz}
+
+\subsection{Das Results-Dock}\label{sec:results-dock}\index{Results-Dock}
+
+Das Dock \gui{Results} (rechts, Reiter neben \gui{Model}) listet alle Ergebnissätze als Baum
+mit den Spalten \gui{Result} und \gui{Type}. Ein Ergebnissatz zeigt in der Spalte \gui{Type}
+die Kennung des Plugins, das ihn angelegt hat; darunter stehen seine Ergebnisse mit ihrer Art.
+
+\begin{itemize}
+  \item \textbf{Ein- und ausblenden:} Das Kontrollkästchen vor einem Ergebnissatz blendet alle
+        seine Ergebnisse ein oder aus, das Kästchen vor einem Ergebnis nur dieses. So lassen sich
+        z.\,B.\ die Strahlen eines Arms eines Interferometers ausblenden.
+  \item \textbf{Löschen:} Rechtsklick auf einen Ergebnissatz $\to$ \gui{Delete run}.
+  \item \textbf{Strahlen in CAD-Kurven umwandeln:} Rechtsklick auf ein Linien-Ergebnis
+        $\to$ \gui{Convert to CAD curves…} (Abschnitt~\ref{sec:strahlen-kurven}).
+  \item Der Tooltip eines Linien-Ergebnisses nennt die Zahl der Polylinien.
+\end{itemize}
+
+\begin{hinweis}
+Ergebnisse sind Anzeigedaten und gehören nicht zum Modell: Sie werden nicht gefangen, nicht
+ausgewählt und – mit einer Ausnahme – nicht mit dem Dokument gespeichert. Die Ausnahme sind die
+Ergebnisse der Anzeigeblöcke des Node-Workflows; sie stehen nach dem Öffnen im Ergebnissatz
+\gui{Saved results} (Abschnitt~\ref{sec:workflow-gespeichert}).
+\end{hinweis}
+
+\subsection{Strahlen in den Ansichten}
+
+Linien-Ergebnisse werden standardmäßig \emph{über} dem Modell gezeichnet, also ohne
+Verdeckung – Strahlen im Inneren einer Linse bleiben so sichtbar. Ein Plugin kann für ein
+Linien-Ergebnis auch die normale Verdeckung wählen. Ein verlorener Strahl endet dort, wo er das
+System verlässt oder abgeschattet wird. Trägt ein Linien-Ergebnis Werte (z.\,B.\ die
+Wellenlänge), wird es über eine Farbskala eingefärbt, sonst einfarbig.
+
+\subsubsection{Strahlen als CAD-Kurven}\label{sec:strahlen-kurven}
+
+Strahlen sind Anzeigedaten; zum Messen oder Konstruieren brauchen Sie echte Kurven:
+
+\begin{schritte}
+  \item Rechtsklick auf das Linien-Ergebnis im Dock \gui{Results} $\to$
+        \gui{Convert to CAD curves…}.
+  \item Der Dialog \gui{Convert to curves} fragt \gui{Every n-th ray (of N):}. Vorgeschlagen
+        wird ein Wert, der etwa 50 Kurven ergibt.
+  \item Nach \gui{OK} entstehen Polylinien mit den Namen \code{Ray 0}, \code{Ray 5}, … –
+        höchstens 2000 Stück. Ein verlorener Strahl endet an seinem letzten gültigen Punkt.
+\end{schritte}
+
+Die neuen Kurven sind normale CAD-Objekte (fangbar, messbar, exportierbar) und bilden einen
+Rückgängig-Schritt \enquote{Rays to curves}.
+
+\subsection{Felder auf Flächen und Farbskalen}\label{sec:felder-farbskalen}\index{Farbskala}
+
+Ein Feld auf einer Fläche ist ein Raster von Werten über den normierten Flächenparametern
+$(u, v)$ einer Fläche (bei Körpern einer bestimmten Teilfläche). Die Anwendung färbt die Werte
+über eine \emph{Farbskala} und legt das Ergebnis als Textur auf die Fläche. Im Darstellungsmodus
+\gui{Shaded} wird die Textur beleuchtet, in \gui{Surfaces} und \gui{Wireframe} flach gezeigt.
+Ein Plugin kann statt Werten auch ein fertiges Farbbild auf die Fläche legen.
+
+In jeder Ansicht erscheint unten rechts eine \emph{Legende} mit Name, Einheit, Farbbalken und
+Minimum/Maximum (Abbildung~\ref{fig:plugins-dock}). Sie gilt für das erste sichtbare Feld
+mit Werten; gibt es keines, für das erste sichtbare, nach Werten gefärbte Linien-Ergebnis.
+Blenden Sie Ergebnisse im Dock \gui{Results} aus, um die Legende eines anderen zu sehen.
+
+Die Anwendung kennt fünf Farbskalen; welche verwendet wird, bestimmt das Plugin:
+
+\begin{referenz}{@{}lX@{}}
+\toprule
+\textbf{Name} & \textbf{Verlauf und typische Verwendung} \\
+\midrule
+\endhead
+\code{viridis} & dunkelviolett $\to$ blau $\to$ grün $\to$ gelb; gleichmäßig wahrgenommene
+  Helligkeit, allgemeiner Standard (auch für unbekannte Namen). \\
+\code{inferno} & schwarz $\to$ violett $\to$ rot $\to$ hellgelb; Standard für Felder und
+  Bilder (Intensitäten, Bestrahlungsstärken). \\
+\code{plasma} & dunkelblau $\to$ violett $\to$ orange $\to$ gelb. \\
+\code{coolwarm} & blau $\to$ hellgrau $\to$ rot; für Werte mit Vorzeichen (Abweichungen). \\
+\code{grey} & schwarz $\to$ weiß (auch \code{gray}). \\
+\bottomrule
+\end{referenz}
+
+Der Wertebereich der Farbskala ist entweder vom Plugin vorgegeben oder reicht vom kleinsten
+zum größten Wert der Daten.
+
+\subsection{Das Plot-Dock}\label{sec:plot-dock}\index{Plot-Dock}
+
+Das Dock \gui{Plot} liegt unten und erscheint von selbst mit der ersten Kurve. Es zeigt alle
+sichtbaren Kurven in einem gemeinsamen Diagramm, jede in einer eigenen Farbe, mit einer Legende
+(Namen) oben links und Teilstrichen an beiden Achsen; unter der x-Achse steht die Beschriftung
+der ersten Kurve. Lücken in einer Kurve (ungültige Werte) werden nicht verbunden. Kurven, die ein
+Plugin während der Rechnung verlängert (z.\,B.\ die Zielfunktion je Iteration), wachsen
+live.
+
+Ist keine Kurve sichtbar, aber ein Balkendiagramm, zeigt das Dock das neueste Balkendiagramm
+mit Titel, y-Beschriftung und den Beschriftungen unter den Balken. Ohne beides steht dort
+\gui{No curves (e.g. the merit function of an optimisation)}.
+
+\begin{tipp}
+Um nur die Kurven eines Laufs zu sehen, blenden Sie die anderen Ergebnissätze im Dock
+\gui{Results} aus.
+\end{tipp}
+
+\subsection{Das Table-Dock}\label{sec:table-dock}
+
+Tabellen erscheinen im Dock \gui{Table} (unten), das sich mit der ersten Tabelle öffnet. Gibt
+es mehrere sichtbare Tabellen, wählen Sie oben in einer Auswahlliste, welche gezeigt wird; eine
+neu hinzugekommene Tabelle wird automatisch gezeigt. Zahlen stehen rechtsbündig; Gleitkommazahlen
+schreibt das Plugin mit zehn signifikanten Stellen. Die Spaltenbreiten lassen sich mit der Maus
+ändern.
+
+\subsection{Das Image-Fenster}\label{sec:image-fenster}\index{Image-Fenster}
+
+Zweidimensionale Bilder – etwa das Kamerabild des Raytracers oder des Path Tracers – zeigt das
+Fenster \gui{Image}. Es öffnet sich \emph{schwebend} in der Mitte des Hauptfensters, sobald ein
+neues Bild ankommt. Wie jedes Dock können Sie es an einer Seite andocken, indem Sie seine
+Titelleiste dorthin ziehen; \menu{View,Image} blendet es ein und aus.
+
+\begin{description}
+  \item[Auswahl] Gibt es mehrere Bilder, wählen Sie oben in der Liste
+        (\enquote{\textit{Ergebnissatz} – \textit{Bild}}). Ein neues Bild kommt automatisch
+        nach vorn; sonst bleibt Ihre Wahl.
+  \item[Achsen] Das Bild hat physikalische Achsen (z.\,B.\ in mm) mit Teilstrichen und
+        Beschriftungen; oben steht der Titel. Die Pixel bleiben auch vergrößert scharfkantig
+        (keine Glättung).
+  \item[Farbbalken] Rechts zeigt ein Farbbalken die Farbskala mit größtem und kleinstem Wert
+        und darunter die Einheit.
+  \item[log] Das Kontrollkästchen \gui{log} schaltet auf eine logarithmische Farbskala um
+        (Tooltip: \gui{Logarithmic colour scale (faint light next to a bright spot)}). Sie
+        reicht vom Spitzenwert vier Dekaden nach unten, höchstens bis zum kleinsten positiven
+        Wert; der Farbbalken ist dann in Zehnerpotenzen beschriftet (\code{1e-2.0} usw.).
+  \item[Ablesen] Unter dem Bild steht die Position des Mauszeigers und der Wert dort,
+        z.\,B.\ \code{x 0.0123  y -0.0040   1.52e+03 W/mm$^2$}. Außerhalb des Bildes steht dort
+        die Beschreibung des Bildes (z.\,B.\ Zahl der Strahlen).
+  \item[Zoomen und Verschieben] Das Mausrad zoomt um den Mauszeiger (bis auf etwa vier Pixel
+        Breite), Ziehen mit der linken Maustaste verschiebt den Ausschnitt, ein Doppelklick
+        zeigt wieder das ganze Bild.
+\end{description}
+
+\paragraph{Farbbilder.} Ein Plugin kann ein Bild auch in Farbe liefern (z.\,B.\ das
+Kamerabild des Path Tracers bei mehreren Wellenlängen). Es wird so gezeigt, wie es ist – ohne
+Farbskala, ohne Farbbalken; \gui{log} ist dann ausgegraut. Die Ablesung unter dem Bild zeigt
+weiterhin den Zahlenwert, den das Plugin zum Bild mitgeliefert hat.
+
+Ohne Bild zeigt das Fenster \gui{No image – e.g. Raytracer $\to$ Camera image}.
+
+\begin{hinweis}
+Die Bilder und Kurven der Anzeigeblöcke des Node-Workflows erscheinen nicht im allgemeinen
+Image-Fenster bzw.\ Plot-Dock, sondern in einem eigenen Fenster je Anzeigeblock
+(Abschnitt~\ref{sec:workflow-anzeigen}).
+\end{hinweis}
+
+\subsection{Ausprobieren ohne Plugin: Demo-Ergebnisse}
+
+Um die Ergebnisdarstellung kennenzulernen, brauchen Sie kein Plugin: Wählen Sie eine Fläche
+oder einen Körper und rufen Sie \menu{Help,Demo results on the selected object} auf. Es
+entsteht ein Ergebnissatz \gui{Demo run} mit Strahlen (\gui{Rays}, in nm eingefärbt), einem
+Feld auf dem gewählten Objekt (\gui{Irradiance}, W/m$^2$) und einer Kurve (\gui{Merit} über
+\gui{iteration}). Ohne Auswahl meldet die Statuszeile \gui{Select a surface or solid first}.
+
+% ---------------------------------------------------------------------------
+\section{Rückgängig machen eines Plugin-Laufs}\label{sec:plugin-undo}\index{Rueckgaengig@Rückgängig}
+
+Alles, was ein Lauf am \emph{Modell} ändert, bildet \emph{einen} Rückgängig-Schritt, benannt
+nach dem Plugin:
+
+\begin{itemize}
+  \item neu eingefügte und gelöschte Objekte,
+  \item geänderte Geometrie (auch wenn sie während einer Optimierung live viele Male ersetzt
+        wurde – zurückgenommen wird auf den Zustand vor dem Lauf),
+  \item geänderte Attribute,
+  \item neu angelegte und gelöschte Gruppen des Modellbaums,
+  \item Änderungen am Node-Workflow, die das Plugin vornimmt (z.\,B.\ \gui{Workflow from system},
+        \gui{New Raytatouille system}, \gui{Section $\to$ group} oder das Zurückschreiben einer
+        Optimierung in die Blöcke); reine Prüfergebnisse (Diagnosen, Plan) zählen nicht dazu.
+\end{itemize}
+
+Das gilt auch für abgebrochene oder fehlgeschlagene Läufe. Mit \menu{Edit,Undo}
+(\keys{Strg+Z}) nehmen Sie den ganzen Lauf zurück, mit \menu{Edit,Redo}
+(\keys{Strg+Shift+Z}) stellen Sie ihn wieder her. Ein Lauf, der das Modell nicht ändert
+(z.\,B.\ eine reine Berechnung mit Ergebnissen), erzeugt keinen Rückgängig-Schritt.
+
+\begin{hinweis}
+Nicht rückgängig gemacht werden: Ergebnisse (löschen Sie sie im Dock \gui{Results}) und
+Änderungen der Parameterwerte im Plugin-Dock. Manche Plugins merken sich zusätzlich den Stand
+ihrer eigenen Daten; der Raytracer etwa rechnet nach einem Rückgängig mit dem System vor der
+Optimierung weiter (Kapitel~\ref{kap:raytracer}).
+\end{hinweis}
+
+% ---------------------------------------------------------------------------
+\section{Plugin-Einstellungen}\label{sec:plugin-einstellungen}\index{Plugin-Einstellungen}
+
+\menu{Plugins,Settings…} öffnet den Dialog \gui{Plugin settings}. Hier legen Sie fest, mit
+welchem Python die Plugins laufen und wo sie gesucht werden.
+
+\abbildung[0.8\linewidth]{plugin-settings.png}{Der Dialog \gui{Plugin settings} (Aufnahme aus
+einer Entwicklungsumgebung): Interpreter, Umgebungsprüfung, Plugin-Ordner,
+Entwicklermodus und Problemliste}{fig:plugins-einstellungen}
+
+\begin{referenz}{@{}p{0.3\linewidth}X@{}}
+\toprule
+\textbf{Element} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\gui{Python interpreter:} & Pfad zum Python-Programm, mit dem alle Plugins laufen; \gui{…}
+  öffnet einen Dateidialog. Es muss Python 3.10 oder neuer sein. \\
+\gui{nfcad package:} & Wo die Anwendung ihr Python-Paket \code{nfcad} gefunden hat (die
+  Verbindung zwischen Anwendung und Plugins); \gui{not found} deutet auf eine beschädigte
+  Installation. \\
+\gui{Check environment} & Prüft den Interpreter im Feld (auch vor \gui{OK}) und die Pakete,
+  die die geladenen Plugins brauchen; Ergebnis im Textfeld darunter. \\
+\gui{Create environment…} & Legt eine neue virtuelle Umgebung (venv) an und installiert alle
+  benötigten Pakete hinein. \\
+\gui{Installed plugins (…):} & Der Ordner, in den \gui{Install plugin…} installiert (nur
+  Anzeige, Text markierbar). \\
+\gui{Further plugin folders} & Weitere Ordner; jeder Unterordner mit einer
+  \datei{plugin.json} ist ein Plugin. \gui{Add folder…} fügt einen hinzu, \gui{Remove}
+  entfernt den markierten. \\
+\gui{Trusted publisher key:} & Der eingebaute öffentliche Schlüssel, dessen Signaturen
+  akzeptiert werden (Anhang~\ref{sec:verwaltung-signaturen}). \\
+\gui{Developer mode: also load unsigned plugins} & Entwicklermodus
+  (Abschnitt~\ref{sec:plugin-entwicklermodus}). \\
+\gui{Problems:} & Erscheint nur, wenn es beim Laden Probleme gab (orange): nicht geladene oder
+  unsignierte Plugins, doppelte Kennungen, fehlerhafte \datei{plugin.json}. \\
+\bottomrule
+\end{referenz}
+
+Mit \gui{OK} übernimmt die Anwendung Interpreter, Ordner und Entwicklermodus und lädt alle
+Plugins neu. Ein geänderter Interpreter beendet die laufenden Plugin-Prozesse.
+
+\subsection{Welches Python wird verwendet?}\label{sec:python-suche}
+
+Solange Sie keinen Interpreter eingetragen haben, sucht die Anwendung in dieser Reihenfolge:
+
+\begin{enumerate}
+  \item den Inhalt der Umgebungsvariablen \code{NFCAD\_PYTHON}
+        (Anhang~\ref{kap:programme}),
+  \item in einer Entwicklungsversion die \datei{.venv} des Quellcode-Ordners,
+  \item unter Windows \code{python}, \code{py} und \code{python3} im Suchpfad – die Platzhalter
+        des Microsoft Store (Ordner \datei{WindowsApps}) werden übersprungen, weil sie nur den
+        Store öffnen; unter macOS und Linux \code{python3} und \code{python},
+  \item zuletzt einfach \code{python3}.
+\end{enumerate}
+
+Ein im Dialog eingetragener Interpreter hat immer Vorrang.
+
+\subsection{Umgebung prüfen}\label{sec:umgebung-pruefen}
+
+\gui{Check environment} startet den Interpreter im Feld und versucht, jedes Paket zu
+importieren, das die geladenen Plugins in ihrer \datei{plugin.json} verlangen (dazu immer
+\code{numpy}). Das Ergebnis sieht etwa so aus:
+
+\begin{lstlisting}[escapeinside={(*}{*)}]
+Python 3.11.15  ok
+(*\checkmark*) numpy  2.4.6
+(*\checkmark*) raytatouille>=0.9  <Version>
+(*$\times$*) fouriergrating>=0.18  ModuleNotFoundError: No module named 'fouriergrating'
+
+Install the missing packages with:
+"/Users/.../python-env/bin/python" -m pip install "fouriergrating>=0.18"
+\end{lstlisting}
+
+Die erste Zeile nennt die Python-Version; ist sie älter als 3.10, steht dort
+\code{Python 3.9.6 is too old (3.10 or newer needed)}. Jede weitere Zeile zeigt ein Paket mit
+\checkmark{} (vorhanden, mit Version) oder $\times$ (fehlt, mit der Fehlermeldung des Imports
+oder \code{version … installed, >=… needed}). Am Ende steht – falls etwas fehlt – der
+fertige \code{pip}-Befehl zum Kopieren. Pakete, deren pip-Name vom Importnamen abweicht, nennt
+der Befehl mit dem pip-Namen (z.\,B.\ \code{photonpower-fieldtracing} für das Modul
+\code{fieldtracing}). Lässt sich der Interpreter nicht starten, steht dort
+\code{… cannot be started}.
+
+\subsection{Umgebung anlegen}\label{sec:umgebung-anlegen}\index{Python-Umgebung}
+
+Der einfachste Weg zu einer funktionierenden Umgebung:
+
+\begin{schritte}
+  \item Installieren Sie einmal ein Python (3.10 oder neuer) für Ihr System
+        (Kapitel~\ref{kap:installation}).
+  \item Tragen Sie dieses Python unter \gui{Python interpreter:} ein (oder lassen Sie den
+        gefundenen Interpreter stehen).
+  \item Klicken Sie auf \gui{Create environment…}. Ein Dialog \gui{New Python environment
+        (folder)} fragt nach einem \emph{neuen} Ordner; vorgeschlagen wird
+        \datei{python-env} im Datenordner der Anwendung. Existiert der Ordner schon, bricht der
+        Vorgang mit \code{… exists already – choose a new folder.} ab.
+  \item Die Anwendung legt mit dem Interpreter im Feld eine venv an und installiert darin mit
+        \code{pip} \code{numpy} und alle Pakete, die die geladenen Plugins verlangen
+        (\code{raytatouille}, \code{rtt-fusion}, \code{photonpower-fieldtracing},
+        \code{fouriergrating}, \code{scipy}, \code{pathtracer}). Die Ausgaben erscheinen
+        laufend im Textfeld. Das dauert je nach Internetverbindung einige Minuten.
+  \item Am Ende steht \code{Done – the new interpreter is set above (applied with OK).} Der
+        Interpreter der neuen Umgebung steht jetzt im Feld.
+  \item Klicken Sie auf \gui{OK}. Die Plugins werden mit der neuen Umgebung neu geladen.
+  \item Zur Kontrolle: \menu{Plugins,Settings…} $\to$ \gui{Check environment} sollte nur
+        \checkmark{} zeigen.
+\end{schritte}
+
+Schlägt die Installation der Pakete fehl (z.\,B.\ ohne Internetverbindung), steht dort
+\begin{quote}\raggedright
+\code{Installing the packages failed – see above; Check environment shows what is missing.}
+\end{quote}
+Der neue Interpreter wird trotzdem eingetragen; holen Sie die fehlenden Pakete später mit dem
+von \gui{Check environment} angezeigten Befehl nach (Anhang~\ref{sec:programme-python}).
+
+\subsection{Der Entwicklermodus}\label{sec:plugin-entwicklermodus}\index{Entwicklermodus}
+
+Normalerweise lädt die Anwendung nur Plugins, die mitgeliefert oder vom Herausgeber signiert
+sind. Der \emph{Entwicklermodus} lädt zusätzlich unsignierte Plugins und solche mit ungültiger
+Signatur – gedacht für Plugin-Entwickler, die ihr eigenes Plugin ausprobieren. Sie schalten ihn
+mit dem Kontrollkästchen \gui{Developer mode: also load unsigned plugins} ein (Tooltip:
+\gui{Unsigned plugins run Python code that nobody has vouched for. Only for plugins you are
+developing.}) oder mit der Umgebungsvariablen \code{NFCAD\_DEVELOPER\_MODE=1}; im zweiten Fall
+ist das Kästchen ausgegraut und trägt den Zusatz \gui{(on through NFCAD\_DEVELOPER\_MODE)}.
+
+Solange der Entwicklermodus an ist, steht rechts in der Statuszeile das rote Banner
+\gui{DEVELOPER MODE – unsigned plugins allowed}; unsignierte Plugins tragen den Zusatz
+\gui{[unsigned]} bzw.\ \gui{[signature invalid]}. Einzelheiten:
+Anhang~\ref{sec:verwaltung-entwicklermodus}.
+
+% ---------------------------------------------------------------------------
+\section{Plugins aus den Seitenleisten nehmen}\label{sec:plugin-seitenleisten}
+
+Nutzen Sie ein Plugin selten, können Sie es aus der Werkzeugspalte und dem Plugin-Dock nehmen,
+ohne es zu deinstallieren:
+
+\begin{schritte}
+  \item Öffnen Sie \menu{Plugins,Show in the side panels}.
+  \item Entfernen Sie das Häkchen vor dem Plugin (Tooltip: \gui{Tool box group and Plugin panel;
+        the actions stay in this menu}).
+\end{schritte}
+
+Die Werkzeuggruppe des Plugins verschwindet, und das Plugin fehlt in der Auswahlliste des
+Plugin-Docks. Das Plugin bleibt aber geladen: Seine Aktionen stehen weiter im Menü
+\menu{Plugins}, es liefert weiter Blöcke für den Node-Workflow, und Aktionen an Blöcken bleiben
+im Kontextmenü des Node-Editors. Die Einstellung gilt für die Anwendung (nicht je Dokument) und
+bleibt über einen Neustart erhalten. Ein erneutes Häkchen holt das Plugin zurück.
+
+\begin{tipp}
+Das Plugin \plugin{Workflow} brauchen Sie meist nur über seine beiden Aktionen
+\gui{Check workflow} und \gui{Run workflow} und seine Bildeinstellungen. Wenn Sie den
+Node-Workflow nicht nutzen, können Sie es hier aus den Seitenleisten nehmen.
+\end{tipp}
+
+% ---------------------------------------------------------------------------
+\section{Die mitgelieferten Plugins}\label{sec:plugins-mitgeliefert}\index{mitgelieferte Plugins}
+
+Mit \produkt{} werden fünf Plugins installiert. Sie liegen im schreibgeschützten
+Programmordner und werden ohne Signaturprüfung geladen, weil sie Teil der Installation sind
+(Anhang~\ref{sec:verwaltung-mitgeliefert}). Ihre Python-Pakete installiert
+\gui{Create environment…} (Abschnitt~\ref{sec:umgebung-anlegen}).
+
+\begin{referenz}{@{}p{0.2\linewidth}p{0.13\linewidth}p{0.12\linewidth}X@{}}
+\toprule
+\textbf{Plugin} & \textbf{Kennung} & \textbf{Version} & \textbf{Benötigte Python-Pakete} \\
+\midrule
+\endhead
+\plugin{Raytracer} & \code{raytracer} & 0.1.0 & \code{numpy}, \code{raytatouille>=0.9},
+  \code{rtt\_fusion>=0.2} (pip: \code{rtt-fusion}), \code{fieldtracing>=0.2}
+  (pip: \code{photonpower-fieldtracing}) \\
+\plugin{Workflow} & \code{workflow} & 0.1.0 & \code{numpy}, \code{rtt\_fusion>=0.2},
+  \code{raytatouille>=0.9} \\
+\plugin{FourierGrating} & \code{fg} & 0.1.0 & \code{numpy}, \code{scipy},
+  \code{fouriergrating>=0.18} \\
+\plugin{Path Tracer} & \code{pathtracer} & 0.1.0 & \code{numpy}, \code{pathtracer>=0.3} \\
+\plugin{Automotive Lighting} & \code{al} & 0.22.0 & \code{numpy}, \code{pathtracer>=0.3} \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Raytracer.} Verbindet den Strahlverfolger \emph{Raytatouille}. Er lädt optische
+Systeme aus \datei{.rtt.json}-Dateien (\gui{Load system}) und zeichnet ihre Flächen als exakte
+NURBS-Flächen, verfolgt Strahlen und zeigt sie als Linien (\gui{Trace rays}), berechnet mit
+vielen Strahlen ein Kamerabild (\gui{Camera image}), optimiert das System mit live
+aktualisierten Flächen (\gui{Optimise}) und speichert es (\gui{Save system}). Außerdem macht er
+aus einem System einen Node-Workflow (\gui{Workflow from system}, \gui{New Raytatouille
+system}), liefert die Raytatouille-Blöcke \code{rtt.*} und hält im Feld \gui{Glass catalogues}
+die Glaskataloge für alle Rechnungen. Kapitel~\ref{kap:raytracer},
+Anhang~\ref{kap:plugin-raytracer}.
+
+\paragraph{Workflow.} Die Rechenmaschine des Node-Workflows. Sie prüft den Workflow
+(\gui{Check workflow}), plant, in welcher Darstellung das Licht über jede Verbindung läuft, und
+rechnet, was die Anzeigeblöcke zeigen sollen (\gui{Run workflow}). Ihr Panel enthält die
+Bildeinstellungen (Strahlen, Pixel, Bildfenster, Gauß-Beleuchtung, Feldgenauigkeit, Wellenoptik
+nahe einem Fokus). Sie kennt selbst keinen Rechenkern, sondern lässt die Blöcke von den Plugins
+rechnen, die sie liefern. Kapitel~\ref{kap:workflow}, Anhang~\ref{kap:workflow-bloecke}.
+
+\paragraph{FourierGrating.} Beugung an periodischen Strukturen (RCWA, differentielle Methode).
+Im Panel beschreiben Sie Struktur, Materialien, Schichten und Einfall; \gui{Solve} zeigt die
+Effizienz jeder Ordnung als Tabelle und Balken, \gui{Scan} Effizienzen über Wellenlänge,
+Winkel oder Polarisation als Kurven, \gui{Near field} das Feld im Gitter als Bilder,
+\gui{Optimise} findet Schichtdicken, Stützstellen oder Perioden für eine Zielfunktion. Dazu
+kommen das Laden und Speichern von Konfigurationen, Schichten aus CAD-Körpern und die Blöcke
+\code{fg.grating} und \code{fg.stack} für den Node-Workflow. Kapitel~\ref{kap:fouriergrating},
+Anhang~\ref{kap:plugin-fouriergrating}.
+
+\paragraph{Path Tracer.} Lichttransport direkt auf dem CAD-Modell: Objekte werden zu
+Lichtquellen, die übrigen bekommen Materialien (diffus, Spiegel, glänzend, Glas, Metall,
+Mattglas, Absorber, Detektor). \gui{Irradiance} legt die Bestrahlungsstärke als Textur auf die
+Flächen, \gui{Camera image} berechnet das Bild einer Kamera – mit Light Tracing, Path Tracing,
+bidirektionalem Path Tracing oder Photon Mapping. Mit dem Paket \code{pathtracer} rechnet es in
+C++ auf allen Prozessorkernen. Kapitel~\ref{kap:pathtracer},
+Anhang~\ref{kap:plugin-pathtracer}.
+
+\paragraph{Automotive Lighting.} Scheinwerfer und Signalleuchten für Glühlampen: der
+facettierte Reflektor eines Klarglas-Scheinwerfers, dessen Facetten die Hell-Dunkel-Grenze
+bilden, und die Streuscheibe vor einem Paraboloid. Das Plugin erzeugt Reflektor und Lampe als
+NURBS-Flächen, zeigt Wendelbilder und Lichtverteilung mit den Prüfpunkten nach UN/ECE R112 und
+optimiert Streuscheiben; die Lichtverteilung lässt sich auch mit dem Rechenkern des Path Tracers
+strahlverfolgen. Kapitel~\ref{kap:automotive}, Anhang~\ref{kap:plugin-automotive}.
+
+% ---------------------------------------------------------------------------
+\section{Typische Probleme}\label{sec:plugins-probleme}
+
+\begin{referenz}{@{}p{0.36\linewidth}X@{}}
+\toprule
+\textbf{Beobachtung} & \textbf{Ursache und Abhilfe} \\
+\midrule
+\endhead
+Im Plugin-Dock steht \gui{not running – see the plugin log}. &
+  Das Plugin ließ sich nicht starten. Öffnen Sie \menu{View,Plugin log}: Meist fehlt ein
+  Paket (\code{ModuleNotFoundError}) oder der Interpreter ist falsch. Prüfen Sie mit
+  \gui{Check environment} und installieren Sie das Fehlende, dann
+  \menu{Plugins,Reload plugins}. \\
+Ein Klick auf eine Aktion bewirkt nichts. &
+  Ein Feld im Formular ist rot markiert (Zahlenliste, Tabelle, JSON). Korrigieren Sie es. \\
+\gui{A plugin job is still running} &
+  Es läuft noch ein Job, eventuell eines anderen Plugins. Warten Sie oder brechen Sie mit
+  \keys{Esc} ab. \\
+Ein Meldungsfenster mit einem Text des Plugins erscheint. &
+  Ein Fehler, den Sie beheben können (fehlende Datei, falsche Eingabe); der Text sagt, was zu
+  tun ist. \\
+\textit{Plugin} \code{failed: …} und das Log öffnet sich. &
+  Ein Programmfehler oder ein Problem des Rechenkerns; der Traceback steht im Log. Hängen Sie
+  ihn an eine Fehlermeldung an. \\
+Das Plugin fehlt in Dock und Werkzeugspalte, steht aber im Menü. &
+  Es ist unter \menu{Plugins,Show in the side panels} abgewählt. \\
+Ein eigenes Plugin wird nicht geladen; unter \gui{Problems:} steht \code{not signed}. &
+  Nur signierte Plugins werden geladen; zum Entwickeln den Entwicklermodus einschalten. \\
+Der Abbruch dauert einige Sekunden. &
+  Das Plugin bricht erst an der nächsten geeigneten Stelle ab; nach 5~s wird sein Prozess
+  beendet. \\
+\bottomrule
+\end{referenz}
+
+Weitere Fehlerbilder sammelt Anhang~\ref{kap:fehlersuche}.

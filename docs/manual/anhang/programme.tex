@@ -1,0 +1,309 @@
+\chapter{Programme und Kommandozeile}\label{kap:programme}\index{Kommandozeile}
+
+Dieser Anhang beschreibt die Aufrufe der Programme von \produkt{}, alle Umgebungsvariablen, die
+die Anwendung und ihre Plugins auswerten, und die Python-Befehle, mit denen Sie die Umgebung der
+Plugins von Hand einrichten.
+
+% ---------------------------------------------------------------------------
+\section{RaytatouilleFusion}\label{sec:programme-app}
+
+Das Hauptprogramm heißt \code{RaytatouilleFusion}. Es liegt
+
+\begin{referenz}{@{}lX@{}}
+\toprule
+\textbf{System} & \textbf{Programmdatei} \\
+\midrule
+\endhead
+Windows & \datei{C:\textbackslash Program Files\textbackslash Raytatouille Fusion\textbackslash
+  bin\textbackslash RaytatouilleFusion.exe} (Standard-Installationsordner) \\
+macOS & \datei{RaytatouilleFusion.app/Contents/MacOS/RaytatouilleFusion} \\
+AlmaLinux/RHEL & \datei{/usr/bin/RaytatouilleFusion} \\
+\bottomrule
+\end{referenz}
+
+\subsection{Aufruf}
+
+\begin{lstlisting}
+RaytatouilleFusion [Optionen] [Datei]
+\end{lstlisting}
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.33\linewidth}X@{}}
+\toprule
+\textbf{Option} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\code{-h}, \code{--help} & Gibt eine Kurzhilfe mit allen Optionen aus und beendet das Programm
+  (unter Windows auch \code{-?}). \\
+\code{-v}, \code{--version} & Gibt die Versionsnummer aus und beendet das Programm. \\
+\code{--display-mode} \textit{Modus} & Darstellungsmodus aller vier Ansichten beim Start:
+  \code{wireframe}, \code{surfaces} oder \code{shaded} (Groß-/Kleinschreibung egal; jeder andere
+  Wert wirkt wie \code{shaded}). \\
+\code{--benchmark} \textit{Bilder} & Messlauf: öffnet die Datei, wartet auf die Tessellierung,
+  dreht die Perspektivansicht für die angegebene Zahl von Bildern, gibt die Zeiten aus und
+  beendet sich. \\
+\textit{Datei} & Wird nach dem Start geöffnet (siehe unten). \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Das Datei-Argument.} Je nach Endung macht das Programm mit der Datei:
+
+\begin{itemize}
+  \item \datei{.rttf} (und \datei{.nfcad} aus der Zeit vor Version 1.0): Das Dokument wird
+        geöffnet, mit Workflow, Plugin-Parametern und gespeicherten Ergebnissen.
+  \item \datei{.step}, \datei{.stp} (auch groß geschrieben): Die STEP-Datei wird als neues
+        Dokument eingelesen (im Hintergrund; Fehler werden nach dem Lesen gemeldet).
+  \item \datei{.nfplugin}: Das Plugin-Paket wird installiert, wie mit
+        \menu{Plugins,Install plugin…} (Anhang~\ref{sec:verwaltung-installieren}).
+\end{itemize}
+
+Nur das erste Datei-Argument wird ausgewertet. Lässt sich ein Dokument nicht öffnen, zeigt das
+Programm eine Fehlermeldung, schreibt \code{cannot open …} auf die Standardfehlerausgabe und
+beendet sich mit dem Rückgabewert~1.
+
+Unter Windows verknüpft der Installer die Endungen \datei{.rttf} und \datei{.nfcad} mit der
+Anwendung, unter Linux trägt der Desktop-Eintrag die Anwendung für STEP-Dateien ein; ein
+Doppelklick im Dateimanager ruft dann \code{RaytatouilleFusion} mit der Datei als Argument auf.
+
+\paragraph{Beispiele.}
+
+\begin{lstlisting}
+RaytatouilleFusion --version
+RaytatouilleFusion --display-mode wireframe examples/demo-parts.step
+RaytatouilleFusion examples/pathtracer/prism.rttf
+RaytatouilleFusion ~/Downloads/meinplugin-0.2.0.nfplugin
+\end{lstlisting}
+
+Unter macOS rufen Sie das Programm im Paket auf oder öffnen eine Datei mit \code{open}:
+
+\begin{lstlisting}
+/Applications/RaytatouilleFusion.app/Contents/MacOS/RaytatouilleFusion --version
+open -a RaytatouilleFusion datei.rttf
+\end{lstlisting}
+
+\subsection{Messlauf (Benchmark)}\label{sec:programme-benchmark}
+
+\begin{lstlisting}
+RaytatouilleFusion --benchmark 300 demo.step
+\end{lstlisting}
+
+lädt \datei{demo.step}, wartet, bis alle Flächen tesselliert sind, dreht die Perspektivansicht
+300 Bilder lang und schreibt zwei Zeilen auf die Standardausgabe, etwa:
+
+\begin{lstlisting}
+loaded: 400 entities, 504320 triangles in 2.50 s (read + tessellate)
+orbit: 300 frames in 5.00 s = 60.0 fps (view 1024x768)
+\end{lstlisting}
+
+Danach beendet sich das Programm. Das Fenster muss sichtbar sein; die Bildrate ist durch die
+Bildschirmsynchronisation begrenzt. Ein passendes Testmodell erzeugt \code{make\_demo\_model}
+(Abschnitt~\ref{sec:programme-demo}).
+
+% ---------------------------------------------------------------------------
+\section{nfcad-plugin: Schlüssel, Signaturen, Pakete}\label{sec:programme-nfcad-plugin}\index{nfcad-plugin@\texttt{nfcad-plugin}}
+
+\code{nfcad-plugin} ist das Werkzeug für Plugin-Herausgeber und -Entwickler: Es erzeugt
+Schlüsselpaare, signiert und prüft Plugin-Ordner und packt sie zu \datei{.nfplugin}-Paketen. Es
+gehört nicht zu den Installationspaketen, sondern entsteht beim Übersetzen aus dem Quellcode im
+Ordner \datei{build/<preset>/tools/} (z.\,B.\ \datei{build/release/tools/nfcad-plugin}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.42\linewidth}X@{}}
+\toprule
+\textbf{Befehl} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\code{keygen} \textit{Schlüsseldatei} & Erzeugt ein neues Schlüsselpaar. Der geheime Schlüssel
+  (32 Byte) wird in die Datei geschrieben (Rechte 0600; eine vorhandene Datei wird nicht
+  überschrieben: \code{… exists – not overwritten}). Auf die Standardausgabe kommt die Zeile
+  \code{ed25519:<base64>  publisher} für \datei{keys/trusted-publishers.txt}. \\
+\code{pubkey} \textit{Schlüsseldatei} & Gibt die Zeile des öffentlichen Schlüssels zu einem
+  geheimen Schlüssel aus. \\
+\code{sign} \textit{Plugin-Ordner} \textit{Schlüsseldatei} & Signiert alle Dateien des Ordners
+  und schreibt \datei{SIGNATURE}; Ausgabe \code{signed} \textit{n} \code{files of …}. \\
+\code{verify} \textit{Plugin-Ordner} [\code{ed25519:}\textit{Schlüssel} …] & Prüft die Signatur
+  gegen die eingebauten Herausgeberschlüssel oder die angegebenen. Ausgabe
+  \code{…: valid (}\textit{n} \code{files, ed25519:…)} bzw.\ der Grund des Fehlschlags
+  (Anhang~\ref{sec:verwaltung-signaturen}). \\
+\code{pack} \textit{Plugin-Ordner} [\textit{Datei}\code{.nfplugin}] & Packt den Ordner mit
+  \datei{SIGNATURE} zu einem Paket; ohne Dateinamen \textit{id}\code{-}\textit{version}\code{.nfplugin}.
+  Im Archiv liegt alles in einem Ordner mit der Plugin-Kennung. Ist der Ordner nicht gültig
+  signiert, meldet es \code{note: … – installs only in developer mode}, packt aber trotzdem.
+  Ausgabe \code{wrote …}. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Rückgabewerte.} 0 bei Erfolg, 1 bei einem Fehler (Meldung auf der
+Standardfehlerausgabe), 2 bei falschem Aufruf; dann erscheint die Kurzhilfe:
+
+\begin{lstlisting}
+usage: nfcad-plugin keygen <key-file> | pubkey <key-file> | sign <plugin-dir> <key-file> |
+       verify <plugin-dir> [ed25519:<key> ...] | pack <plugin-dir> [<file>.nfplugin]
+\end{lstlisting}
+
+\paragraph{Ablauf für eine Veröffentlichung.}
+
+\begin{lstlisting}
+T=build/release/tools/nfcad-plugin
+$T keygen ~/.raytatouille-fusion/publisher.key    # einmal; Zeile in keys/trusted-publishers.txt
+$T sign   mein_plugin ~/.raytatouille-fusion/publisher.key
+$T verify mein_plugin
+$T pack   mein_plugin                            # -> meinplugin-0.2.0.nfplugin
+\end{lstlisting}
+
+Nach jeder Änderung an einer Datei des Plugins muss neu signiert werden. Bewahren Sie den
+geheimen Schlüssel außerhalb jedes Repositorys auf und sichern Sie ihn.
+
+% ---------------------------------------------------------------------------
+\section{make\_demo\_model: Testmodell erzeugen}\label{sec:programme-demo}\index{make\_demo\_model@\texttt{make\_demo\_model}}
+
+Auch \code{make\_demo\_model} entsteht nur beim Übersetzen (\datei{build/<preset>/tools/}) und
+gehört nicht zu den Installationspaketen. Es schreibt ein STEP-Modell aus einem Raster von
+Körpern – Platten mit Bohrung (Boolesche Differenz, getrimmte Flächen mit Löchern), Kugeln, Tori,
+Kegelstümpfe und Zylinder im Abstand von 30~mm – für Darstellungstests und den Messlauf.
+
+\begin{lstlisting}
+make_demo_model ausgabe.step [nx ny]
+\end{lstlisting}
+
+\textit{nx} und \textit{ny} sind die Zahl der Körper in x und y (Standard $12 \times 12$; beide
+müssen angegeben werden). Die Ausgabe nennt Körper und Flächen, z.\,B.\
+\code{demo.step: 400 shells, 1200 faces} für $20 \times 20$. Das Beispiel
+\datei{examples/demo-parts.step} entstand mit \code{make\_demo\_model examples/demo-parts.step 4 3}.
+Rückgabewerte: 0 Erfolg, 1 Fehler, 2 ohne Dateinamen.
+
+% ---------------------------------------------------------------------------
+\section{Umgebungsvariablen}\label{sec:programme-umgebung}\index{Umgebungsvariable}
+
+Die folgenden Umgebungsvariablen wertet \produkt{} aus. Für den normalen Gebrauch brauchen Sie
+keine davon; Einstellungen im Dialog \menu{Plugins,Settings…} sind vorzuziehen.
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.33\linewidth}X@{}}
+\toprule
+\textbf{Variable} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\code{NFCAD\_PYTHON} & Python-Interpreter der Plugins, wenn im Einstellungsdialog keiner
+  eingetragen ist (Abschnitt~\ref{sec:python-suche}). \\
+\code{NFCAD\_PLUGIN\_PATH} & Weitere Plugin-Ordner, getrennt durch \code{:} (Windows: \code{;});
+  sie kommen zu den Ordnern aus dem Einstellungsdialog hinzu
+  (Anhang~\ref{sec:verwaltung-ordner}). \\
+\code{NFCAD\_PLUGIN\_INSTALL\_DIR} & Ordner für installierte Plugins statt
+  \datei{<Datenordner>/plugins}. \\
+\code{NFCAD\_PYTHONPATH} & Ordner, der das Python-Paket \code{nfcad} enthält, statt des
+  mitgelieferten (für Entwickler). \\
+\code{NFCAD\_DEVELOPER\_MODE} & \code{1} schaltet den Entwicklermodus ein; das Kontrollkästchen im
+  Dialog ist dann gesperrt (Anhang~\ref{sec:verwaltung-entwicklermodus}). \\
+\code{NFCAD\_RHI\_BACKEND} & Grafikschnittstelle der Ansichten: \code{opengl}, \code{vulkan},
+  \code{metal}, \code{d3d11} oder \code{d3d12}. Standard ist Metal unter macOS, Direct3D~11
+  unter Windows und OpenGL unter Linux. Hilfreich z.\,B.\ in virtuellen Maschinen (OpenGL) oder
+  bei Grafikproblemen. \\
+\bottomrule
+\end{referenz}
+
+Zwei weitere Variablen setzt die Anwendung selbst für jeden Plugin-Prozess; Sie setzen sie nie
+von Hand:
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.33\linewidth}X@{}}
+\toprule
+\textbf{Variable} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\code{NFCAD\_TOKEN} & Geheimer Schlüssel, mit dem sich der Plugin-Prozess bei der Anwendung
+  ausweist (nicht auf der Kommandozeile, damit andere Programme ihn nicht sehen). \\
+\code{NFCAD\_ARRAY\_DIR} & Privater temporärer Ordner, in dem das Plugin große Datenmengen
+  (Strahlen, Felder, Bilder) als Dateien an die Anwendung übergibt. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Beispiele.}
+
+\begin{lstlisting}
+# macOS / Linux: Plugins mit einem bestimmten Python, OpenGL statt Metal/Vulkan
+NFCAD_PYTHON=$HOME/venvs/rtf/bin/python NFCAD_RHI_BACKEND=opengl RaytatouilleFusion
+
+# Windows (Eingabeaufforderung): eigener Plugin-Ordner und Entwicklermodus
+set NFCAD_PLUGIN_PATH=C:\Users\me\plugins
+set NFCAD_DEVELOPER_MODE=1
+"C:\Program Files\Raytatouille Fusion\bin\RaytatouilleFusion.exe"
+\end{lstlisting}
+
+% ---------------------------------------------------------------------------
+\section{Die Python-Umgebung von Hand einrichten}\label{sec:programme-python}\index{pip}
+
+\gui{Create environment…} (Abschnitt~\ref{sec:umgebung-anlegen}) erledigt alles mit einem Klick.
+Wenn Sie lieber selbst eine Umgebung anlegen – etwa in einem bestimmten Ordner, mit conda oder
+mit einer eigenen Version eines Rechenkerns –, gehen Sie so vor.
+
+\subsection{Virtuelle Umgebung anlegen}
+
+Python 3.10 oder neuer ist nötig.
+
+\begin{lstlisting}
+# macOS / Linux
+python3 -m venv ~/rtf-env
+~/rtf-env/bin/python -m pip install --upgrade pip
+
+# Windows
+py -m venv %USERPROFILE%\rtf-env
+%USERPROFILE%\rtf-env\Scripts\python.exe -m pip install --upgrade pip
+\end{lstlisting}
+
+\subsection{Pakete der mitgelieferten Plugins installieren}
+
+Die Pakete und Mindestversionen stammen aus den \datei{plugin.json}-Dateien der Plugins
+(Abschnitt~\ref{sec:plugins-mitgeliefert}); \code{rtt\_fusion} und \code{fieldtracing} heißen für
+\code{pip} \code{rtt-fusion} und \code{photonpower-fieldtracing}:
+
+\begin{lstlisting}
+~/rtf-env/bin/python -m pip install numpy scipy "raytatouille>=0.9" "rtt-fusion>=0.2" \
+    "photonpower-fieldtracing>=0.2" "fouriergrating>=0.18" "pathtracer>=0.3"
+\end{lstlisting}
+
+Brauchen Sie nur einzelne Plugins, genügen deren Pakete:
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.25\linewidth}X@{}}
+\toprule
+\textbf{Plugin} & \textbf{pip-Pakete} \\
+\midrule
+\endhead
+Raytracer & \code{numpy "raytatouille>=0.9" "rtt-fusion>=0.2" "photonpower-fieldtracing>=0.2"} \\
+Workflow & \code{numpy "rtt-fusion>=0.2" "raytatouille>=0.9"} \\
+FourierGrating & \code{numpy scipy "fouriergrating>=0.18"} \\
+Path Tracer & \code{numpy "pathtracer>=0.3"} \\
+Automotive Lighting & \code{numpy "pathtracer>=0.3"} \\
+\bottomrule
+\end{referenz}
+
+Ohne \code{photonpower-fieldtracing} rechnet der Node-Workflow nur mit Strahlen (R); Felder (H)
+sind dann nicht verfügbar.
+
+\subsection{Umgebung eintragen und prüfen}
+
+\begin{schritte}
+  \item \menu{Plugins,Settings…} öffnen und unter \gui{Python interpreter:} den Interpreter der
+        Umgebung eintragen, z.\,B.\ \datei{\textasciitilde/rtf-env/bin/python}, unter Windows
+        \datei{python.exe} im Unterordner \datei{Scripts} der Umgebung.
+  \item \gui{Check environment} klicken; alle Zeilen sollten \checkmark{} zeigen.
+  \item Mit \gui{OK} übernehmen; die Plugins starten neu.
+\end{schritte}
+
+Fehlt später ein Paket, zeigt \gui{Check environment} den passenden Befehl, etwa
+
+\begin{lstlisting}
+"/Users/me/rtf-env/bin/python" -m pip install "fouriergrating>=0.18"
+\end{lstlisting}
+
+Kopieren Sie ihn in ein Terminal, führen Sie ihn aus und laden Sie die Plugins neu
+(\menu{Plugins,Reload plugins}).
+
+\subsection{Nützliche Prüfbefehle}
+
+\begin{lstlisting}
+# Welche Version ist installiert?
+~/rtf-env/bin/python -m pip show raytatouille
+
+# Lässt sich ein Paket importieren?
+~/rtf-env/bin/python -c "import rtt_fusion, fieldtracing; print('ok')"
+
+# Ein Paket auf die neueste Version bringen
+~/rtf-env/bin/python -m pip install --upgrade pathtracer
+\end{lstlisting}

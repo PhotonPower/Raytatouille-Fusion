@@ -1,0 +1,390 @@
+\chapter{Navigieren, Auswählen, Ein- und Ausblenden}\label{kap:navigation}
+\index{Navigation}
+
+Dieses Kapitel beschreibt, wie Sie sich in den vier Ansichten bewegen, wie Sie Objekte und
+Teilobjekte auswählen und wie Sie Objekte vorübergehend ausblenden. Diese Handgriffe brauchen
+Sie bei jeder Arbeit; es lohnt sich, sie an einem Beispielmodell auszuprobieren:
+Öffnen Sie dazu \datei{examples/demo-parts.step} (\autoref{sec:beispiele}).
+
+\section{Die aktive Ansicht}\label{sec:aktive-ansicht}
+
+Jede Mausaktion wirkt in der Ansicht, in der sie stattfindet. Ein Klick (mit einer
+beliebigen Maustaste) macht eine Ansicht außerdem zur \emph{aktiven Ansicht}: Sie erhält einen
+hervorgehobenen Rahmen, und die Statusleiste zeigt \enquote{Active view: \dots}. Auf die aktive
+Ansicht wirken
+
+\begin{itemize}
+  \item die Darstellungsmodi aus Werkzeugleiste und Menü \menu{View},
+  \item \gui{Zoom extents} und \gui{Zoom selected} (Knopf, Menü und Tastenfolge),
+  \item das Maximieren mit der \keys{Leertaste}.
+\end{itemize}
+
+Mit gedrückter \keys{Shift}-Taste wirken die Knöpfe der Werkzeugleiste stattdessen auf alle
+vier Ansichten.
+
+\section{Drehen, Verschieben, Zoomen}\label{sec:orbit-pan-zoom}
+\index{Orbit}\index{Pan}\index{Zoom}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{5.2cm}X}
+\toprule
+\textbf{Aktion} & \textbf{Maus / Tasten} & \textbf{Hinweise} \\
+\midrule
+\endhead
+Drehen (Orbit) & \maus{rechts ziehen} oder \keys{Alt}+\maus{links ziehen} & nur in der
+  perspektivischen Ansicht; in den anderen Ansichten verschieben diese Gesten. \\
+Verschieben (Pan) & \maus{mittlere Taste ziehen}, \keys{Shift}+\maus{rechts ziehen} & in
+  allen Ansichten; in den Parallelansichten auch \maus{rechts ziehen} und
+  \keys{Alt}+\maus{links ziehen}. \\
+Zoomen am Cursor & \maus{Mausrad} & Der Punkt unter dem Mauszeiger bleibt stehen. Eine Raste
+  ändert den Maßstab um etwa \SI{15}{\percent}. \\
+Alles zeigen (Zoom extents) & \keys{Z}, dann \keys{E}; \maus{Doppelklick mit der mittleren
+  Taste}; Knopf \gui{Zoom extents} & Doppelklick wirkt auf die angeklickte Ansicht, Taste und
+  Knopf auf die aktive; \keys{Shift}+Knopf auf alle. \\
+Auswahl zeigen (Zoom selected) & \keys{Z}, dann \keys{S}; Knopf \gui{Zoom selected} & ohne
+  Auswahl wie Zoom extents. \\
+Maximieren / zurück & \keys{Leertaste} & aktive Ansicht. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Drehen.} Gedreht wird wie auf einem Drehteller: Seitliches Ziehen dreht um die
+senkrechte $Z$-Achse, Ziehen nach oben oder unten kippt die Blickrichtung. Die Kamera kippt
+dabei nie über den Pol, sodass $Z$ immer nach oben zeigt. Drehpunkt ist die Mitte der Ansicht;
+verschieben Sie das Modell also zuerst so, dass der interessierende Teil in der Mitte liegt,
+oder benutzen Sie \gui{Zoom selected}, das die Auswahl in die Mitte rückt.
+
+\paragraph{Verschieben.} Das Modell folgt dem Mauszeiger genau, unabhängig vom Zoom. Während
+des Ziehens zeigt der Mauszeiger eine geschlossene Hand.
+
+\paragraph{Zoomen.} Das Mausrad vergrößert bzw.\ verkleinert um den Punkt unter dem
+Mauszeiger. Zeigen Sie also auf das Detail, das Sie vergrößern wollen, und drehen Sie das
+Rad.
+
+\begin{tipp}
+Wer viel mit der Maus arbeitet: \maus{mittlere Taste} zum Verschieben, \maus{rechte Taste}
+zum Drehen, \maus{Mausrad} zum Zoomen, \maus{Doppelklick mittlere Taste} für alles. Mit einem
+Mac-Trackpad sind die Gesten des nächsten Abschnitts bequemer.
+\end{tipp}
+
+\subsection{Trackpad}\label{sec:trackpad}
+\index{Trackpad}
+
+Auf dem Mac versteht das Programm die üblichen Trackpad-Gesten:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{6.0cm}X}
+\toprule
+\textbf{Geste} & \textbf{Wirkung} \\
+\midrule
+\endhead
+mit zwei Fingern wischen & verschieben \\
+zwei Finger auseinander- oder zusammenziehen (Pinch) & zoomen am Cursor \\
+\keys{Cmd} + mit zwei Fingern wischen & zoomen am Cursor \\
+mit zwei Fingern doppelt tippen & alles zeigen (Zoom extents) \\
+\keys{Alt} + klicken und ziehen & drehen (perspektivische Ansicht) \\
+\keys{Shift} + Sekundärklick und ziehen & verschieben \\
+\bottomrule
+\end{referenz}
+
+Unter Windows und Linux hängt das Verhalten eines Touchpads vom Treiber ab: Meldet er das
+Wischen mit zwei Fingern als Geste, verschiebt es die Ansicht wie auf dem Mac, sonst zoomt es
+wie ein Mausrad; mit \keys{Strg} zoomt es immer.
+
+\subsection{Alles zeigen: Zoom extents}\label{sec:zoom-extents}
+\index{Zoom extents}
+
+\gui{Zoom extents} stellt den Zoom so ein, dass alle sichtbaren Objekte in die Ansicht passen;
+ausgeblendete zählen nicht mit. Ist nichts sichtbar, zeigt die Ansicht einen Bereich von
+rund $\pm\SI{10}{mm}$ um den Ursprung. Nach dem
+Öffnen einer Datei und nach dem Ende einer Plugin-Rechnung, die ein leeres Dokument gefüllt
+hat, führt das Programm \gui{Zoom extents} in allen Ansichten selbst aus.
+
+\gui{Zoom selected} tut dasselbe für die Auswahl -- ganze Objekte, aber auch einzelne Flächen,
+Kanten oder Eckpunkte (\autoref{sec:teilobjekte}). Für einen einzelnen Punkt oder ein sehr
+kleines Element zeigt die Ansicht eine Umgebung von etwa \SI{2}{\percent} der Modellgröße um
+das Element. Ohne Auswahl wirkt \gui{Zoom selected} wie \gui{Zoom extents}.
+
+\begin{hinweis}
+Die Tastenfolgen \keys{Z}, \keys{E} und \keys{Z}, \keys{S} drücken Sie nacheinander, nicht
+gleichzeitig: erst \keys{Z} loslassen, dann \keys{E} bzw.\ \keys{S}.
+\end{hinweis}
+
+\subsection{Eine Ansicht maximieren}\label{sec:maximieren}
+\index{Maximieren}
+
+Die \keys{Leertaste} vergrößert die aktive Ansicht auf die ganze Fläche der vier Ansichten;
+ein zweiter Druck stellt das Raster $2 \times 2$ wieder her. Dasselbe bewirkt der Eintrag
+\gui{Maximize / restore (Space)} im Ansichtsmenü. Klicken Sie also zuerst in die Ansicht, die
+Sie groß sehen wollen, und drücken Sie dann die \keys{Leertaste}.
+
+\subsection{Das Ansichtsmenü}\label{sec:ansichtsmenue}
+\index{Ansichtsmenü}
+
+Ein Klick mit der linken Maustaste auf die Kopfzeile einer Ansicht (\enquote{Front (XZ)
+$\cdot$ Shaded $\blacktriangledown$}) öffnet ihr Ansichtsmenü:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.8cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Front (XZ)}, \gui{Left (YZ)}, \gui{Top (XY)}, \gui{Perspective} & Macht aus dieser
+  Ansicht die gewählte Standardansicht, mit deren Blickrichtung, Projektion und
+  Konstruktionsebene. Die aktuelle ist abgehakt. Der Zoom wird dabei auf die Umgebung des
+  Ursprungs zurückgesetzt; wählen Sie danach \gui{Zoom extents}. \\
+\gui{Perspective projection} & Schaltet zwischen perspektivischer Projektion (Häkchen) und
+  Parallelprojektion um. So lässt sich z.\,B.\ die perspektivische Ansicht parallel
+  darstellen, um Maße ohne Verzerrung zu vergleichen. Die Kopfzeile zeigt die Abweichung vom
+  Standard als \enquote{(parallel)} bzw.\ \enquote{(perspective)}. \\
+\gui{Zoom extents} & ganzes Modell in dieser Ansicht. \\
+\gui{Zoom selected} & Auswahl in dieser Ansicht. \\
+\gui{Maximize / restore (Space)} & diese Ansicht maximieren bzw.\ zurück zum Raster. \\
+\bottomrule
+\end{referenz}
+
+\begin{hinweis}
+Gedreht werden kann nur in einer Ansicht vom Typ \gui{Perspective} -- auch dann, wenn sie
+auf Parallelprojektion geschaltet ist. Eine Ansicht \gui{Front}, \gui{Left} oder \gui{Top}
+bleibt auch mit perspektivischer Projektion in ihrer Blickrichtung. Wer zwei frei drehbare
+Ansichten braucht, stellt eine zweite Ansicht auf \gui{Perspective}.
+\end{hinweis}
+
+\section{Die Konstruktionsebene}\label{sec:konstruktionsebene}
+\index{Konstruktionsebene}
+
+Jede Ansicht hat eine \emph{Konstruktionsebene}: die Ebene, in der Punkte liegen, die Sie
+mit der Maus ohne Fang setzen, und auf die sich Eingaben wie \code{x,y} oder Winkel beziehen.
+Sie geht immer durch den Ursprung:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{2.6cm}X}
+\toprule
+\textbf{Ansicht} & \textbf{Ebene} & \textbf{Achsen der Ebene (rechts / oben)} \\
+\midrule
+\endhead
+\gui{Front} & $XZ$ & $X$ / $Z$ \\
+\gui{Left} & $YZ$ & $-Y$ / $Z$ \\
+\gui{Top} & $XY$ & $X$ / $Y$ \\
+\gui{Perspective} & $XY$ & $X$ / $Y$ \\
+\bottomrule
+\end{referenz}
+
+Die Konstruktionsebene ist als Raster dargestellt. Sein Linienabstand ist eine Zehnerpotenz
+(\dots, \SI{0.1}{mm}, \SI{1}{mm}, \SI{10}{mm}, \dots), und zwar die kleinste, bei der die
+Linien noch mindestens etwa 12 Pixel auseinanderliegen; jede zehnte Linie ist kräftiger.
+Beim Zoomen wechselt der Abstand also in Zehnerschritten. Die beiden Achsen der Ebene sind im
+Raster farbig hervorgehoben (X rot, Y grün, Z blau).
+
+Die Koordinaten in der Statusleiste zeigen den Punkt der Konstruktionsebene unter dem
+Mauszeiger -- in der Ansicht, über der sich der Zeiger gerade befindet. Rastet der Cursor auf
+einen Fangpunkt ein, zeigt sie dessen Raumkoordinaten. Welche Ansicht beim Zeichnen benutzt
+wird und wie sich Punkte in andere Höhen bringen lassen, beschreibt
+\autoref{kap:modellieren}.
+
+\begin{tipp}
+Ein Punkt in der perspektivischen Ansicht ohne Fang liegt immer in der Ebene $Z=0$. Um auf
+einer anderen Höhe zu zeichnen, benutzen Sie den Fang auf vorhandene Geometrie, tippen die
+Koordinaten ein oder zeichnen in der Ansicht \gui{Front} bzw.\ \gui{Left}.
+\end{tipp}
+
+\section{Auswählen}\label{sec:auswahl}
+\index{Auswahl}
+
+Die meisten Arbeitsschritte wirken auf die \emph{Auswahl}: Löschen, Transformieren,
+Gruppieren, Ausblenden, Exportieren, viele Befehle und viele Plugin-Aktionen. Ausgewählte
+Objekte werden gelb dargestellt; das Dock \gui{Properties} zeigt ihre Eigenschaften, und im
+Modellbaum sind ihre Zeilen markiert.
+
+\subsection{Mit der Maus}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{5.2cm}X}
+\toprule
+\textbf{Aktion} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\maus{Klick} auf ein Objekt & wählt es aus; die bisherige Auswahl wird ersetzt. \\
+\maus{Klick} ins Leere & hebt die Auswahl auf. \\
+\keys{Shift}+\maus{Klick} & fügt das Objekt zur Auswahl hinzu. \\
+\keys{Strg}+\maus{Klick} & nimmt das Objekt aus der Auswahl heraus. \\
+\keys{Strg+Shift}+\maus{Klick} & wählt eine einzelne Fläche, Kante oder einen Eckpunkt aus
+  bzw.\ wieder ab (Teilobjekt, \autoref{sec:teilobjekte}). \\
+\maus{links ziehen} nach rechts & Fensterauswahl: alle Objekte, die ganz im Rechteck liegen
+  (\autoref{sec:rechteckauswahl}). \\
+\maus{links ziehen} nach links & Kreuzen: alle Objekte, die im Rechteck liegen oder es
+  berühren. \\
+\bottomrule
+\end{referenz}
+
+Auf dem Mac steht \keys{Strg} für \keys{Cmd} (\autoref{sec:schreibweisen}).
+
+\paragraph{Treffgenauigkeit.} Kurven, Kanten und Punkte werden getroffen, wenn der
+Mauszeiger höchstens 6 Pixel daneben liegt. Liegen mehrere Elemente unter dem Zeiger, haben
+Punkte Vorrang vor Kurven und Kanten und diese vor Flächen. In den Darstellungen
+\gui{Surfaces} und \gui{Shaded} lassen sich Kurven, die hinter Flächen liegen, nicht
+auswählen; schalten Sie dafür auf \gui{Wireframe}. Im Modus \gui{Wireframe} wählen Sie eine
+Fläche, indem Sie eine ihrer Isolinien anklicken.
+
+\paragraph{Klick oder Rechteck?} Bewegen Sie die Maus bei gedrückter linker Taste um mehr als
+4 Pixel, wird aus dem Klick ein Auswahlrechteck. Ein leicht verwackelter Klick bleibt also
+ein Klick.
+
+\paragraph{Während eines Befehls.} Wartet ein Befehl auf einen Punkt (der Mauszeiger ist dann
+ein Fadenkreuz), setzt ein Linksklick einen Punkt und wählt nichts aus. Wählen Sie deshalb
+die Objekte, auf die ein Befehl wirken soll, \emph{bevor} Sie ihn starten.
+
+\subsection{Über Menü und Tastatur}
+
+\begin{itemize}
+  \item \menu{Edit,Select All} (\keys{Strg+A}) wählt alle sichtbaren Objekte aus.
+    Ausgeblendete Objekte bleiben unausgewählt.
+  \item \menu{Edit,Select None / Cancel} (\keys{Esc}) hebt die Auswahl auf -- aber nur, wenn
+    kein Befehl und keine Plugin-Rechnung läuft; sonst bricht \keys{Esc} zuerst diese ab.
+  \item Im Modellbaum (Dock \gui{Model}) wählt ein Klick auf eine Zeile das Objekt aus, ein
+    Klick auf eine Gruppe alle Objekte darin, auch in Untergruppen. \keys{Shift}- und
+    \keys{Strg}-Klick erweitern die Markierung im Baum wie in einer Dateiliste
+    (\autoref{sec:modellbaum}).
+\end{itemize}
+
+\subsection{Teilobjekte: Flächen, Kanten, Eckpunkte}\label{sec:teilobjekte}
+\index{Teilobjekt}
+
+Eine Hülle (\gui{Shell}) besteht aus Flächen, die an Kanten zusammenstoßen, und Eckpunkten,
+an denen Kanten enden. Diese Teilobjekte lassen sich einzeln auswählen, etwa um die Fläche
+einer Linse zu untersuchen, eine Kante zu vermessen oder einem Plugin eine bestimmte Fläche
+anzugeben.
+
+\begin{schritte}
+  \item Halten Sie \keys{Strg+Shift} gedrückt und bewegen Sie den Mauszeiger über das Objekt.
+    Statt des ganzen Objekts leuchtet jetzt die Fläche, Kante oder der Eckpunkt unter dem
+    Zeiger cyan auf; die Statusleiste nennt es, z.\,B.\ \enquote{part\_1\_2 $\cdot$ Shell
+    $\cdot$ edge 7}.
+  \item Klicken Sie. Das Teilobjekt wird gelb und ausgewählt. Ein weiterer
+    \keys{Strg+Shift}-Klick auf ein anderes Teilobjekt fügt es hinzu, ein
+    \keys{Strg+Shift}-Klick auf ein ausgewähltes nimmt es wieder heraus.
+  \item Das Dock \gui{Properties} zeigt bei genau einem ausgewählten Teilobjekt dessen
+    Eigenschaften: bei einer Fläche Grad, Kontrollnetz, Knoten, Trimmung, Löcher und
+    Flächeninhalt, bei einer Kante deren Kurvendaten, Länge und an wie vielen Flächen sie
+    anliegt, bei einem Eckpunkt seine Position (\autoref{sec:eigenschaften}).
+\end{schritte}
+
+Die Nummern (\enquote{face 3}, \enquote{edge 7}, \enquote{vertex 2}) zählen die Teilobjekte
+innerhalb der Hülle ab null.
+
+\begin{hinweis}
+Teilobjekte lassen sich nicht für sich löschen oder verschieben; \gui{Delete} meldet dann
+\enquote{Faces, edges and vertices cannot be deleted on their own}. Befehle, die ganze Objekte
+erwarten, übergehen ausgewählte Teilobjekte. \gui{Zoom selected} dagegen berücksichtigt sie.
+Das Auswahlrechteck wählt immer ganze Objekte.
+\end{hinweis}
+
+\subsection{Rechteckauswahl: Fenster und Kreuzen}\label{sec:rechteckauswahl}
+\index{Rechteckauswahl}\index{Fensterauswahl}\index{Kreuzen}
+
+Ziehen Sie mit der linken Maustaste ein Rechteck auf. Die Richtung entscheidet, was ausgewählt
+wird:
+
+\begin{description}
+  \item[Von links nach rechts -- Fenster.] Der Rahmen ist durchgezogen und blau. Ausgewählt
+    werden nur Objekte, die \emph{vollständig} im Rechteck liegen.
+  \item[Von rechts nach links -- Kreuzen.] Der Rahmen ist gestrichelt und grün. Ausgewählt
+    werden alle Objekte, die im Rechteck liegen \emph{oder} es berühren.
+\end{description}
+
+Ob nach oben oder unten gezogen wird, spielt keine Rolle. Die Zusatztasten wirken wie beim
+Klick: Ohne Zusatztaste ersetzt das Rechteck die Auswahl, mit \keys{Shift} fügt es hinzu, mit
+\keys{Strg} nimmt es heraus.
+
+\begin{tipp}
+Um aus einer dichten Baugruppe ein inneres Teil zu greifen, ziehen Sie ein Fenster (links
+nach rechts) eng um das Teil: Die umgebenden Teile ragen über das Rechteck hinaus und werden
+nicht ausgewählt. Um dagegen schnell alles in einer Gegend zu erfassen, kreuzen Sie (rechts
+nach links).
+\end{tipp}
+
+\subsection{Hervorhebung}\label{sec:hervorhebung}
+\index{Hervorhebung}
+
+\begin{itemize}
+  \item \textbf{Cyan}: das Objekt unter dem Mauszeiger -- es würde mit einem Klick ausgewählt.
+    Mit gedrückter \keys{Strg+Shift}-Taste das Teilobjekt unter dem Zeiger. Gleichzeitig nennt
+    die Statusleiste Name und Art des Objekts (\enquote{Entity 12 $\cdot$ Curve}, wenn es keinen
+    Namen hat).
+  \item \textbf{Gelb}: ausgewählte Objekte und Teilobjekte. Flächen werden dabei gelblich
+    eingefärbt, Kanten und Kurven ganz gelb gezeichnet.
+\end{itemize}
+
+Die Vorschau in Cyan zeigt also vor dem Klick, was der Klick bewirken wird -- achten Sie bei
+dicht liegenden Kanten darauf, bevor Sie klicken.
+
+\section{Ein- und Ausblenden}\label{sec:ausblenden}
+\index{Ausblenden}\index{Hide}\index{Isolate}
+
+Ausgeblendete Objekte sind unsichtbar, lassen sich nicht auswählen und nicht fangen. Sie
+bleiben aber im Dokument und werden mit ihm gespeichert. Das ist praktisch, um in einer
+Baugruppe an innen liegende Teile zu kommen oder um Hilfsgeometrie aus dem Weg zu räumen.
+
+Sichtbarkeit wird an drei Stellen geschaltet; ein Objekt ist nur sichtbar, wenn alle drei es
+zulassen:
+
+\begin{enumerate}
+  \item am \textbf{Objekt} selbst -- mit \gui{Hide}, \gui{Isolate} oder dem Kontrollkästchen
+    in seiner Zeile im Modellbaum,
+  \item an jeder \textbf{Gruppe}, in der es liegt -- Kontrollkästchen der Gruppe im
+    Modellbaum (\autoref{sec:gruppen}),
+  \item an seiner \textbf{Ebene} -- Kontrollkästchen im Dock \gui{Layers}
+    (\autoref{sec:ebenen}).
+\end{enumerate}
+
+Die Befehle dazu stehen im Menü \menu{Edit}, in der Werkzeugleiste und im Kontextmenü des
+Modellbaums:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{1.8cm}X}
+\toprule
+\textbf{Befehl} & \textbf{Taste} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Hide} & \keys{H} & Blendet die ausgewählten Objekte aus und hebt ihre Auswahl auf. Die
+  Statusleiste meldet \enquote{\textit{n} object(s) hidden -- Unhide (Shift+H) shows them
+  again}; ohne Auswahl \enquote{Hide: select objects first}. \\
+\gui{Isolate selected} (Modellbaum: \gui{Isolate}) & -- & Blendet alle \emph{anderen} Objekte
+  aus und zeigt die ausgewählten. Alle Gruppen werden dabei eingeschaltet, damit der Weg zu den
+  isolierten Objekten frei ist; die Ebenen bleiben, wie sie sind. \\
+\gui{Unhide} & \keys{Shift+H} & Zeigt alle Objekte wieder, die einzeln ausgeblendet waren
+  (durch \gui{Hide}, \gui{Isolate} oder ihr Kontrollkästchen). Gruppen und Ebenen behalten
+  ihre Schalter. Meldung \enquote{\textit{n} object(s) shown again} bzw.\ \enquote{Unhide: no
+  hidden objects}. \\
+\gui{Show all} & -- & Schaltet alles ein: alle Objekte, alle Gruppen und alle Ebenen. \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Warum hebt Hide die Auswahl auf?} Damit nichts Unsichtbares ausgewählt bleibt: Ein
+anschließendes \gui{Delete} oder \gui{Move} würde sonst auf Objekte wirken, die man nicht
+sieht.
+
+\paragraph{Beispiel: an ein inneres Teil herankommen.}
+\begin{schritte}
+  \item Wählen Sie die Teile aus, die im Weg sind (Klick, \keys{Shift}+Klick oder
+    Kreuzen-Rechteck).
+  \item Drücken Sie \keys{H}. Die Teile verschwinden.
+  \item Arbeiten Sie am inneren Teil.
+  \item Drücken Sie \keys{Shift+H}. Die Teile sind wieder da.
+\end{schritte}
+
+\paragraph{Beispiel: nur ein Teil betrachten.}
+\begin{schritte}
+  \item Wählen Sie das Teil aus.
+  \item \menu{Edit,Isolate selected}. Alles andere verschwindet.
+  \item \keys{Z}, \keys{E} -- die Ansicht zeigt jetzt das Teil groß.
+  \item \keys{Shift+H} holt die übrigen Teile zurück.
+\end{schritte}
+
+\begin{hinweis}
+\gui{Unhide} und das Kontrollkästchen im Modellbaum wirken auf dieselbe Eigenschaft des
+Objekts. Ist ein Objekt trotz \gui{Unhide} unsichtbar, ist seine Gruppe oder seine Ebene
+ausgeschaltet -- prüfen Sie die Kontrollkästchen in \gui{Model} und \gui{Layers}, oder wählen
+Sie \gui{Show all}.
+\end{hinweis}
+
+\begin{warnung}
+Ein- und Ausblenden ist kein Bearbeitungsschritt: Es lässt sich nicht mit \gui{Undo}
+rückgängig machen und markiert das Dokument nicht als geändert. Der Zustand wird aber beim
+nächsten Speichern mitgespeichert. Ausgeblendete Objekte werden beim Export ohne Auswahl
+nicht mitgeschrieben (\autoref{sec:step-export}).
+\end{warnung}

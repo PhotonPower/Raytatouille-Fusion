@@ -7,6 +7,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **User manual (German, LaTeX and PDF)**: `docs/manual/handbuch.pdf`, about 390 pages – installation,
+  main window, navigation, modelling with every command, layers and groups, files, plugins, the
+  node workflow, the Raytracer, Path Tracer, FourierGrating and Automotive Lighting plugins; appendices
+  with all keyboard shortcuts, every command of the command line, the programs' command-line options
+  and environment variables, a parameter reference per plugin, every workflow block, plugin
+  management, the file format, troubleshooting and a glossary. Source in `docs/manual/` (`make`).
 - **The plugins ship with the application** (Windows installer, macOS DMG, RPM): Raytracer,
   Workflow, FourierGrating, Path Tracer and Automotive Lighting are installed with it and load
   without a signature, as part of the installation (ADR 0009, addendum). A plugin folder of one's
@@ -91,6 +97,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   reason ("Fillet: radius 5 too large for these curves", "Split: the point is at an end of the
   curve") instead of only "Input not accepted – <prompt>"; the kernel's function names are not
   shown.
+- **Workflow: blocks that cannot be computed are no longer offered.** *Add block* listed planned
+  types without an evaluator (`analysis.camera_image`, `biooptomd.layer`, and before RTT-Fusion
+  0.2.1 `fusion.convert`); a run with one stopped with `exec.no_evaluator`. The library now holds
+  only types this installation can compute (plus those the workflow already uses), and *Check
+  workflow* warns on each block without an evaluator (`check.no_evaluator`).
 - **Windows (and Linux under a light system theme): the menu bar and other texts were dark on
   dark.** The dark style sheet coloured only some widgets; the rest took the light system palette.
   The application now uses a dark palette everywhere: Fusion with the colours of `dark.qss` on

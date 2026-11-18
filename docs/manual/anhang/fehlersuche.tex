@@ -1,0 +1,127 @@
+\chapter{Fehlersuche}\label{kap:fehlersuche}
+\index{Fehlersuche}
+
+Dieser Anhang sammelt Probleme, die in der Praxis vorkommen, mit ihrer Ursache und der
+Abhilfe. Die meisten Probleme betreffen nicht das CAD-Programm selbst, sondern die
+Python-Umgebung, in der die Plugins rechnen. Eine erste Diagnose liefert fast immer
+\menu{Plugins,Settings...} $\to$ \gui{Check environment}.
+
+\section{Installation und Start}
+
+\paragraph{macOS: \enquote{Die App kann nicht geöffnet werden, da der Entwickler nicht
+verifiziert werden kann}.}
+Die App ist nicht signiert. Öffnen Sie sie beim ersten Mal mit \maus{Rechtsklick} $\to$
+\gui{Öffnen} oder erlauben Sie sie unter \gui{Systemeinstellungen} $\to$ \gui{Datenschutz \&
+Sicherheit}. Danach startet sie normal (\autoref{kap:installation}).
+
+\paragraph{Windows: SmartScreen warnt vor dem Installationsprogramm.}
+Auch das Installationsprogramm ist nicht signiert. Wählen Sie \gui{Weitere Informationen}
+$\to$ \gui{Trotzdem ausführen}.
+
+\paragraph{Windows: Menüleiste und Beschriftungen sind kaum lesbar.}
+In Versionen vor dem 18.\,11.\,2026 erschien unter Windows mit hellem Systemdesign dunkle
+Schrift auf dunklem Grund. Installieren Sie eine aktuelle Version; sie verwendet unabhängig
+vom Systemdesign eine dunkle Farbpalette.
+
+\paragraph{Nach dem Start fehlen die Plugins in der Werkzeugspalte.}
+\begin{itemize}
+  \item Unter \menu{Plugins,Settings...} steht unten, welche Plugins aus welchem Grund nicht
+    geladen wurden.
+  \item Plugins aus eigenen Ordnern werden nur geladen, wenn sie signiert sind oder der
+    Entwicklermodus eingeschaltet ist (\autoref{kap:plugin-verwaltung}). Die mitgelieferten
+    Plugins brauchen keine Signatur.
+  \item Ein Plugin kann über \menu{Plugins,Show in the side panels} ausgeblendet sein; seine
+    Aktionen stehen dann nur im Menü \menu{Plugins}.
+\end{itemize}
+
+\section{Python-Umgebung}\index{Python-Umgebung}
+
+\paragraph{\enquote{cannot start Python (\dots)}.}
+Der eingetragene Interpreter existiert nicht oder lässt sich nicht starten. Tragen Sie unter
+\menu{Plugins,Settings...} einen gültigen Interpreter ein oder legen Sie mit
+\gui{Create environment...} eine neue Umgebung an.
+
+\paragraph{Windows: Ein Klick auf \gui{Create environment...} öffnet den Microsoft Store
+oder scheitert sofort.}
+Unter Windows gibt es Platzhalter \datei{python.exe} im Ordner \datei{WindowsApps}, die nur
+den Store öffnen. Die Anwendung überspringt sie, findet dann aber womöglich gar kein Python.
+Installieren Sie Python von \url{https://www.python.org/downloads/} und setzen Sie dabei den
+Haken \gui{Add python.exe to PATH}. Empfohlen ist Python~3.13, weil es dafür von allen
+Rechenpaketen fertige Pakete gibt.
+
+\paragraph{\gui{Check environment} zeigt rote Kreuze.}
+Unter der Liste steht der \code{pip}-Befehl, der die fehlenden Pakete installiert. Kopieren Sie
+ihn in ein Terminal (Windows: Eingabeaufforderung) und führen Sie ihn aus. Danach erneut
+\gui{Check environment}. Eine Zeile wie \enquote{version 0.1.0 installed, >=0.2 needed} heißt,
+dass ein Paket zu alt ist; dann hilft \code{pip install -U} mit dem Paketnamen.
+
+\paragraph{\code{pip} versucht zu kompilieren und scheitert.}
+Für die gewählte Python-Version gibt es kein fertiges Paket (Wheel). Das passiert vor allem bei
+sehr neuen Python-Versionen. Verwenden Sie Python~3.10 bis 3.13. Ohne Compiler installieren
+\code{rtt-fusion} und \code{photonpower-fieldtracing} sich aus dem Quellpaket ohne ihre
+C++-Teile; sie rechnen dann richtig, aber deutlich langsamer.
+
+\paragraph{\enquote{ModuleNotFoundError: No module named \dots} im Log.}
+Ein Paket fehlt in der Umgebung, die das Plugin benutzt. Prüfen Sie, ob unter
+\menu{Plugins,Settings...} wirklich die Umgebung eingetragen ist, in die Sie installiert
+haben -- es ist leicht, in ein anderes Python zu installieren als das, mit dem die Plugins
+laufen. Am sichersten ist der vollständige Pfad des Interpreters:
+\begin{lstlisting}
+"<Umgebung>\Scripts\python.exe" -m pip install <paket>      (Windows)
+<Umgebung>/bin/python -m pip install <paket>                (macOS, Linux)
+\end{lstlisting}
+
+\section{Rechnen}
+
+\paragraph{Der Workflow bricht mit einer Meldung über Glaskataloge ab.}
+Die Meldung lautet etwa \enquote{the system's glasses come from the glass catalogue(s) \dots,
+which are not loaded \dots; add the .agf file under Glass catalogues in the Raytracer panel and
+run again}. Das optische System verwendet Gläser aus einem AGF-Katalog, der weder lesbar noch
+im Dokument gespeichert ist -- typisch, wenn eine Datei auf einem anderen Rechner geöffnet
+wird. Tragen Sie die \datei{.agf}-Datei im Raytracer-Panel unter \gui{Glass catalogues} ein und
+starten Sie \gui{Check workflow} oder \gui{Run workflow}. Der Katalog wird dann im Dokument
+gespeichert, und die Datei rechnet künftig auch ohne ihn (\autoref{kap:raytracer}).
+
+\paragraph{Ein Anzeigeblock meldet \enquote{dark -- the light focuses into less than a pixel}.}
+Das Licht trifft die Kamera in einem Fleck, der kleiner als ein Pixel ist; das Bild bleibt
+schwarz. Verkleinern Sie das Bildfeld der Kamera, erhöhen Sie die Auflösung, oder stellen
+Sie die Verbindung auf Felder (H) bzw. \code{auto}, damit der Workflow in Fokusnähe mit
+Feldern statt Strahlen rechnet (\autoref{kap:workflow}).
+
+\paragraph{Eine Berechnung dauert sehr lange.}
+\begin{itemize}
+  \item Fortschritt und Zwischenschritte stehen im Log des Plugin-Docks. Mit \keys{Esc}
+    brechen Sie ab.
+  \item Prüfen Sie, ob die C++-Teile der Rechenpakete installiert sind (Pakete von PyPI für
+    Python~3.10--3.13 enthalten sie).
+  \item Weniger Strahlen bzw.\ Abtastwerte und eine kleinere Bildauflösung verkürzen die
+    Rechnung oft drastisch, ohne das Ergebnis qualitativ zu ändern.
+  \item Im Workflow werden unveränderte Blöcke nicht neu berechnet. Ändern Sie nur, was nötig
+    ist, und speichern Sie das Dokument: Die Ergebnisse der Anzeigeblöcke werden mitgespeichert
+    und beim nächsten Öffnen nicht neu berechnet.
+\end{itemize}
+
+\paragraph{\enquote{plugin '\dots' stopped (exit code \dots)}.}
+Der Python-Prozess des Plugins ist beendet worden, zum Beispiel durch einen Fehler in einem
+Rechenpaket oder zu wenig Arbeitsspeicher. Das Programm selbst läuft weiter; nur diese Aktion
+ist verloren. Die Zeilen davor im Log nennen meist die Ursache. Beim nächsten Aufruf startet
+das Plugin neu.
+
+\section{Dateien}
+
+\paragraph{Eine Datei lässt sich nicht öffnen: neuere Version.}
+Die Datei wurde mit einer neueren Version des Programms gespeichert, deren Format diese Version
+nicht kennt. Aktualisieren Sie das Programm (\menu{Help,Check for updates...}).
+
+\paragraph{STEP-Import: Flächen fehlen oder sind offen.}
+Beim Import werden die Flächen zu Körpern vernäht. Liegen Kanten im Ausgangsmodell zu weit
+auseinander, bleiben sie offen. Prüfen Sie das Modell im Ausgangsprogramm, oder exportieren Sie
+es dort mit höherer Genauigkeit (\autoref{kap:dateien}).
+
+\section{Absturz}\index{Absturzbericht}
+
+Stürzt das Programm ab, schreibt es einen Absturzbericht auf diesen Rechner -- es wird nichts
+verschickt. Beim nächsten Start weist es darauf hin. Hängen Sie den Bericht an, wenn Sie das
+Problem auf
+\url{https://github.com/PhotonPower/Raytatouille-Fusion/issues} melden, und beschreiben Sie,
+was Sie gerade getan haben.

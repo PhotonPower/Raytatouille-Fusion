@@ -1,0 +1,656 @@
+\chapter{Das Hauptfenster}\label{kap:hauptfenster}
+\index{Hauptfenster}
+
+Dieses Kapitel stellt alle Bereiche des Hauptfensters vor und beschreibt jeden Menüeintrag.
+Wie man sich in den Ansichten bewegt und Objekte auswählt, steht in
+\autoref{kap:navigation}; Zeichnen und Modellieren in \autoref{kap:modellieren}.
+
+\section{Überblick}\label{sec:fenster-ueberblick}
+
+\abbildung[\linewidth]{main-window-shaded.png}{Das Hauptfenster mit dem Beispielmodell
+\datei{demo-parts.step} in der Darstellung \gui{Shaded}. Links die Werkzeugspalte, in der Mitte
+die vier Ansichten, oben die Werkzeugleiste, rechts die Docks \gui{Properties} und
+\gui{Model}, unten Befehlszeile und Statusleiste.}{fig:hauptfenster}
+
+Das Hauptfenster (\autoref{fig:hauptfenster}) besteht aus diesen Bereichen:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{2.4cm}X}
+\toprule
+\textbf{Bereich} & \textbf{Lage} & \textbf{Zweck} \\
+\midrule
+\endhead
+Menüleiste & oben & \menu{File}, \menu{Edit}, \menu{View}, \menu{Plugins}, \menu{Help}
+  (\autoref{sec:menues}); auf dem Mac in der Menüleiste am oberen Bildschirmrand. \\
+Werkzeugleiste \gui{View} & oben & Darstellungsmodi, Zoom, Ein- und Ausblenden
+  (\autoref{sec:werkzeugleiste}). \\
+Werkzeugspalte \gui{Tools} & links & alle Befehle in aufklappbaren Gruppen, dazu je eine
+  Gruppe pro Plugin (\autoref{sec:werkzeugspalte}). \\
+Vier Ansichten & Mitte & Front, Top, Left und Perspective (\autoref{sec:ansichten}). \\
+Docks & rechts, unten oder frei & \gui{Properties}, \gui{Layers}, \gui{Model},
+  \gui{Results}, \gui{Plugin}, \gui{Plot}, \gui{Table}, \gui{Image}, \gui{Plugin log},
+  \gui{Node workflow} (\autoref{sec:docks}). \\
+Befehlszeile & unten & Befehle und Koordinaten eintippen (\autoref{sec:befehlszeile}). \\
+Statusleiste & ganz unten & Meldungen, Cursorkoordinaten, aktive Ansicht, Fortschritt von
+  Rechnungen, \gui{Ortho} und Fangschalter (\autoref{sec:statusleiste}). \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Fenstertitel.} Der Titel nennt den Dateinamen des Dokuments (\enquote{Untitled}
+für ein neues) und den Programmnamen, z.\,B.\ \enquote{optik.rttf -- Raytatouille Fusion}.
+Hat das Dokument ungespeicherte Änderungen, erscheint ein Sternchen hinter dem Namen (auf dem
+Mac ein Punkt im roten Schließknopf).
+
+\paragraph{Anordnung merken.} Größe und Lage des Fensters sowie die Anordnung aller Docks
+speichert das Programm beim Beenden und stellt sie beim nächsten Start wieder her
+(\autoref{sec:einstellungen}).
+
+\section{Das dunkle Design}\label{sec:design}
+\index{dunkles Design}
+
+\produkt{} verwendet unabhängig von der Einstellung des Betriebssystems ein dunkles Design:
+dunkelgraue Flächen, helle Schrift und einen blauen Hervorhebungston. Unter macOS ist das die
+native dunkle Darstellung des Systems, unter Windows und Linux der Qt-Stil \enquote{Fusion}
+mit einer eigenen dunklen Farbpalette, damit auch Menüs, Dialoge und Beschriftungen gut
+lesbar sind. Die Ansichten haben einen dunklen Hintergrund; die perspektivische Ansicht ist
+etwas heller als die drei Parallelansichten.
+
+Die Farben im Modell haben eine feste Bedeutung:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.2cm}X}
+\toprule
+\textbf{Farbe} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+Ebenenfarbe (Standard hellgrau) & normale Objekte; die Farbe kommt von der Ebene oder vom
+  Objekt selbst (\autoref{sec:ebenen}). \\
+Gelb & ausgewählte Objekte und Teilobjekte. \\
+Cyan & das Objekt bzw.\ Teilobjekt unter dem Mauszeiger (Vorschau der Auswahl). \\
+Orange & Gummiband: Vorschau dessen, was ein laufender Befehl erzeugen wird. \\
+Grün & Fangsymbol am Cursor (\autoref{kap:modellieren}). \\
+Rot, Grün, Blau & die Achsen X, Y und Z -- im Achsenkreuz unten links jeder Ansicht und
+  als Achsen der Konstruktionsebene im Raster. \\
+Blauer Rahmen, durchgezogen / grüner Rahmen, gestrichelt & Auswahlrechteck als Fenster bzw.\
+  als Kreuzen (\autoref{sec:rechteckauswahl}). \\
+\bottomrule
+\end{referenz}
+
+\section{Die Werkzeugspalte}\label{sec:werkzeugspalte}
+\index{Werkzeugspalte}
+
+Die Werkzeugspalte am linken Rand (Dock \gui{Tools}) enthält alle Zeichen-, Modellier- und
+Analysebefehle als Knöpfe, geordnet in Gruppen. Sie nimmt beim ersten Start etwa ein Zehntel
+der Fensterbreite ein (mindestens 96 Pixel); ihre Breite lässt sich am Rand zu den Ansichten
+mit der Maus ändern. Die Knöpfe ordnen sich dann in so vielen Spalten an, wie hineinpassen.
+
+\paragraph{Gruppen ein- und ausklappen.} Jede Gruppe hat eine Kopfzeile mit Pfeil und
+Namen. Ein Klick darauf klappt die Gruppe zu ($\triangleright$) oder auf
+($\triangledown$). Es können beliebig viele Gruppen gleichzeitig offen sein; welche offen
+sind, merkt sich das Programm. Anfangs sind \gui{Draw} und \gui{Curves} sowie die Gruppen der
+Plugins aufgeklappt, alle übrigen zugeklappt.
+
+\paragraph{Tooltips.} Hält man den Mauszeiger über einen Knopf, erscheint ein Tooltip mit dem
+vollen Namen des Befehls und, falls vorhanden, einem Kürzel, z.\,B.\ \enquote{Line (L)}; die
+Statusleiste zeigt den Namen ebenfalls. Die Knöpfe tragen derzeit kurze Textkürzel statt
+Symbolen (\gui{Pt} für Point, \gui{Ln} für Line \dots).
+
+Die Kürzel \keys{L} (Line), \keys{C} (Circle) und \keys{M} (Move) im Tooltip sind die
+Kurzformen der Befehle für die Befehlszeile: Tippen Sie in einer Ansicht \keys{L} und drücken
+Sie \keys{Enter} -- der Buchstabe landet in der Befehlszeile, \keys{Enter} startet den Befehl.
+Jeder Befehl hat eine solche Kurzform (\autoref{kap:befehle}).
+
+\paragraph{Befehl starten.} Ein Klick auf einen Knopf startet den Befehl. Die Befehlszeile
+zeigt dann, welche Eingabe erwartet wird (\autoref{sec:befehlszeile}). Ein laufender Befehl wird
+durch einen neuen ersetzt.
+
+Die festen Gruppen und ihre Befehle (Einzelheiten zu jedem Befehl in
+\autoref{kap:modellieren} und \autoref{kap:befehle}):
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.2cm}X}
+\toprule
+\textbf{Gruppe} & \textbf{Befehle (Knopfbeschriftung: Name; in Klammern das Kürzel aus dem
+  Tooltip)} \\
+\midrule
+\endhead
+\gui{Draw} & Pt: Point, Ln: Line (\code{l}), PL: Polyline, Rec: Rectangle, Pol: Polygon \\
+\gui{Curves} & Ci: Circle (centre, radius) (\code{c}), C3: Circle (3 points), Arc: Arc, Hx:
+  Helix, Sp: Interpolated spline, Off: Offset curve, Fil: Fillet curves \\
+\gui{Surfaces} & Pln: Plane, Ext: Extrude, Rev: Revolve, Lft: Loft, Sw1: Sweep 1 rail, Sw2:
+  Sweep 2 rails, Cns: Coons patch, Gor: Gordon surface, OfS: Offset surface, FiS: Fillet
+  surfaces, Cap: Cap planar holes \\
+\gui{Solids} & Box, Sph: Sphere, Cyl: Cylinder, Con: Cone, Tor: Torus, $\cup$: Boolean
+  union, $-$: Boolean difference, $\cap$: Boolean intersection \\
+\gui{Transform} & Mv: Move (\code{m}), Cp: Copy, Rot: Rotate, Scl: Scale, Mir: Mirror, ArL:
+  Linear array, ArG: Grid array, ArP: Polar array \\
+\gui{Edit} & Trm: Trim, Spl: Split, Jn: Join, Exp: Explode, Del: Delete (\keys{Entf}) \\
+\gui{Analyze} & Dst: Distance, Ang: Angle, Crv: Curvature, Are: Area, Vol: Volume / mass
+  properties, Chk: Intersection check \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Gruppen der Plugins.} Unter den festen Gruppen folgt für jedes geladene Plugin eine
+Gruppe mit seinem Namen, deren Knöpfe die Aktionen des Plugins starten. Die Knöpfe tragen die
+ersten drei Buchstaben der Aktion; der Tooltip nennt den vollen Namen. Dieselben Aktionen
+stehen im Untermenü des Plugins im Menü \menu{Plugins} und als Knöpfe im Dock \gui{Plugin}.
+Mit \menu{Plugins,Show in the side panels} lässt sich die Gruppe eines Plugins ausblenden
+(\autoref{sec:menu-plugins}).
+
+\paragraph{Spalte schließen, verschieben, zurückholen.} Die Werkzeugspalte ist ein Dock: Sie
+lässt sich an ihrer Titelleiste an den rechten Fensterrand ziehen oder mit dem Schließknopf
+ausblenden. \menu{View,Tools} holt sie zurück.
+
+\section{Die vier Ansichten}\label{sec:ansichten}
+\index{Ansicht}
+
+Die Mitte des Fensters teilen sich vier Ansichten im Raster $2 \times 2$:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{1.8cm}>{\raggedright\arraybackslash}p{3.3cm}X}
+\toprule
+\textbf{Ansicht} & \textbf{Lage} & \textbf{Blickrichtung} & \textbf{Bildschirm rechts / oben;
+  Projektion} \\
+\midrule
+\endhead
+\gui{Front (XZ)} & oben links & entlang $+Y$ & $X$ / $Z$; parallel \\
+\gui{Top (XY)} & oben rechts & entlang $-Z$ (von oben) & $X$ / $Y$; parallel \\
+\gui{Left (YZ)} & unten links & entlang $+X$ (von der $-X$-Seite) & $-Y$ / $Z$; parallel \\
+\gui{Perspective} & unten rechts & schräg von vorn rechts oben, aus Richtung $(+X, -Y, +Z)$ &
+  $Z$ zeigt nach oben; perspektivisch \\
+\bottomrule
+\end{referenz}
+
+\paragraph{Kopfzeile.} Oben links in jeder Ansicht steht ihr Titel, z.\,B.\ \enquote{Top
+(XY) $\cdot$ Shaded $\blacktriangledown$}: der Name der Ansicht, der Darstellungsmodus und ein
+Pfeil. Weicht die Projektion vom Standard der Ansicht ab, steht dahinter \enquote{(parallel)}
+bzw.\ \enquote{(perspective)}. Ein Klick auf die Kopfzeile öffnet das Ansichtsmenü
+(\autoref{sec:ansichtsmenue}): andere Standardansicht, Projektion umschalten, Zoom und
+Maximieren.
+
+\paragraph{Achsenkreuz und Raster.} Unten links zeigt jede Ansicht ein Achsenkreuz mit den
+Achsen X (rot), Y (grün) und Z (blau). Im Hintergrund liegt das Raster der
+Konstruktionsebene, dessen Linienabstand sich dem Zoom anpasst
+(\autoref{sec:konstruktionsebene}).
+
+\paragraph{Aktive Ansicht.} Die zuletzt angeklickte Ansicht ist \emph{aktiv}; sie hat einen
+hervorgehobenen Rahmen, und die Statusleiste nennt sie (\enquote{Active view: Perspective}).
+Darstellungsmodus, Zoom und Maximieren aus Werkzeugleiste und Menü wirken auf die aktive
+Ansicht. Beim Start ist die perspektivische Ansicht aktiv.
+
+\paragraph{Größe der Ansichten.} Die Trennlinien zwischen den Ansichten lassen sich mit der
+Maus verschieben; die senkrechte Trennlinie bleibt dabei in beiden Reihen gleich.
+\keys{Leertaste} vergrößert die aktive Ansicht auf die ganze Fläche und stellt beim
+nächsten Druck das Raster wieder her (\autoref{sec:maximieren}).
+
+\paragraph{Farblegende.} Zeigen Ergebnisse Werte farbig an -- ein Feld auf einer Fläche oder
+nach einer Größe gefärbte Strahlen --, erscheint in den Ansichten eine Farblegende mit dem
+Namen des Ergebnisses, der Farbskala, dem Wertebereich und der Einheit. Sie gilt für das
+erste sichtbare Ergebnis dieser Art.
+
+\subsection{Darstellungsmodi}\label{sec:darstellungsmodi}
+\index{Darstellungsmodus}
+
+Jede Ansicht hat ihren eigenen Darstellungsmodus:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.2cm}X}
+\toprule
+\textbf{Modus} & \textbf{Darstellung} \\
+\midrule
+\endhead
+\gui{Wireframe} & Drahtmodell: Kurven, Kanten und Isolinien der Flächen, keine gefüllten
+  Flächen. Alles ist sichtbar, auch was hinten liegt. Flächen werden über ihre Isolinien
+  ausgewählt. \\
+\gui{Surfaces} & Flächen in ihrer Farbe ohne Beleuchtung, mit Kanten. Verdeckte Kurven und
+  Kanten sind nicht sichtbar und nicht wählbar. \\
+\gui{Shaded} & Beleuchtete Flächen (zwei Lichter am Betrachter, Rückseiten dunkler) mit
+  Kanten. Am besten für die räumliche Wirkung. \\
+\bottomrule
+\end{referenz}
+
+\abbildung[0.9\linewidth]{main-window-wireframe.png}{Dasselbe Modell wie in
+\autoref{fig:hauptfenster} in der Darstellung \gui{Wireframe}: Kanten und Isolinien, keine
+Flächen.}{fig:wireframe}
+
+Umschalten: Klick auf \gui{Wireframe}, \gui{Surfaces} oder \gui{Shaded} in der Werkzeugleiste
+oder im Menü \menu{View}. Das wirkt auf die aktive Ansicht; mit gedrückter \keys{Shift}-Taste
+geklickt auf alle vier Ansichten. Der Modus der aktiven Ansicht ist in der Werkzeugleiste
+eingedrückt. Beim Start sind alle Ansichten im Modus \gui{Shaded}; mit der Option
+\code{-{}-display-mode} lässt sich ein anderer Startmodus wählen (\autoref{sec:kommandozeile}).
+
+\begin{tipp}
+Der Darstellungsmodus beeinflusst auch das Auswählen und den Fang: In \gui{Surfaces} und
+\gui{Shaded} verdecken Flächen, was hinter ihnen liegt. Um eine verdeckte Kante zu treffen,
+schalten Sie die Ansicht auf \gui{Wireframe}.
+\end{tipp}
+
+\section{Die Werkzeugleiste}\label{sec:werkzeugleiste}
+\index{Werkzeugleiste}
+
+Die Werkzeugleiste \gui{View} unter der Menüleiste ist fest und enthält:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{2.6cm}X}
+\toprule
+\textbf{Knopf} & \textbf{Taste} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Wireframe} & -- & Drahtmodell in der aktiven Ansicht; \keys{Shift}+Klick: alle
+  Ansichten. \\
+\gui{Surfaces} & -- & flache Flächen mit Kanten; \keys{Shift}+Klick: alle Ansichten. \\
+\gui{Shaded} & -- & beleuchtete Flächen mit Kanten; \keys{Shift}+Klick: alle Ansichten. \\
+\gui{Zoom extents} & \keys{Z}, dann \keys{E} & Das ganze Modell füllt die aktive Ansicht;
+  \keys{Shift}+Klick: alle Ansichten (\autoref{sec:zoom-extents}). \\
+\gui{Zoom selected} & \keys{Z}, dann \keys{S} & Die ausgewählten Objekte, Flächen, Kanten oder
+  Punkte füllen die aktive Ansicht; ohne Auswahl wie \gui{Zoom extents}. \keys{Shift}+Klick:
+  alle Ansichten. \\
+\gui{Hide} & \keys{H} & blendet die ausgewählten Objekte aus und hebt ihre Auswahl auf
+  (\autoref{sec:ausblenden}). \\
+\gui{Unhide} & \keys{Shift+H} & zeigt alle mit \gui{Hide} oder \gui{Isolate} ausgeblendeten
+  Objekte wieder. \\
+\bottomrule
+\end{referenz}
+
+Die Tooltips der Knöpfe nennen Wirkung und Tastenkürzel.
+
+\section{Die Docks}\label{sec:docks}
+\index{Dock}
+
+Docks sind Teilfenster, die am Rand des Hauptfensters andocken. Jedes Dock lässt sich
+
+\begin{itemize}
+  \item an seiner Titelleiste an einen anderen Rand ziehen,
+  \item auf ein anderes Dock ziehen, sodass beide als Reiter übereinander liegen (unten im
+    Dock erscheinen dann Reiter zum Umschalten),
+  \item mit dem Knopf neben dem Schließknopf vom Fenster lösen (\enquote{schwebend}) und mit
+    einem Doppelklick auf die Titelleiste wieder andocken,
+  \item mit dem Schließknopf schließen und über das Menü \menu{View} wieder öffnen.
+\end{itemize}
+
+Anfangs sind die Docks so angeordnet: rechts oben \gui{Properties}, darunter als Reiter
+\gui{Layers}, \gui{Model}, \gui{Results} und \gui{Plugin} (\gui{Model} vorn). \gui{Plot},
+\gui{Table}, \gui{Plugin log} und \gui{Node workflow} liegen unten und sind zunächst
+verborgen; \gui{Image} ist ein schwebendes Fenster, ebenfalls zunächst verborgen. Diese Docks
+erscheinen von selbst, sobald sie etwas zu zeigen haben.
+
+\subsection{Properties}\label{sec:dock-properties}
+
+Zeigt die Eigenschaften der Auswahl: bei einem einzelnen Objekt Ebene, Id, Typ und die
+geometrischen Daten (Grad, Kontrollpunkte, Knoten, Länge, Fläche, Volumen \dots) sowie seine
+Attribute; bei mehreren Objekten, wie viele welcher Art ausgewählt sind. Mit \gui{Add
+attribute...} werden freie Attribute angelegt. Ausführlich in \autoref{sec:eigenschaften}.
+
+\subsection{Layers}
+
+Die Ebenen des Dokuments mit Sichtbarkeit, Name und Farbe; \gui{New layer} legt eine Ebene
+an, \gui{Move selection here} verschiebt die Auswahl auf die markierte Ebene. Ausführlich in
+\autoref{sec:ebenen}.
+
+\subsection{Model}
+
+Der Modellbaum: Gruppen und Objekte mit Name und Typ, mit Kontrollkästchen für die
+Sichtbarkeit. Ein Klick wählt aus (in beide Richtungen: Auswahl in der Ansicht markiert die
+Zeile), das Kontextmenü gruppiert und blendet aus. Ausführlich in \autoref{sec:modellbaum}.
+
+\subsection{Results}\label{sec:dock-results}
+\index{Ergebnis}
+
+Hier stehen die Ergebnisse der Plugin-Rechnungen. Jede Rechnung erzeugt einen \emph{Lauf} (eine
+Zeile oberster Ebene, in der Spalte \gui{Type} steht, woher er kommt); darunter die einzelnen
+Ergebnisse mit ihrer Art:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.0cm}X}
+\toprule
+\textbf{Art (\gui{Type})} & \textbf{Anzeige} \\
+\midrule
+\endhead
+\gui{Rays / lines} & Linien in den Ansichten, z.\,B.\ Strahlen; der Tooltip nennt die Zahl
+  der Polylinien. \\
+\gui{Field on face} & farbige Werte auf einer Fläche (Bestrahlungsstärke, Feld), mit
+  Farblegende. \\
+\gui{Curve} & Kurve im Dock \gui{Plot}. \\
+\gui{Bars} & Balkendiagramm im Dock \gui{Plot}. \\
+\gui{Image} & Bild im Fenster \gui{Image}. \\
+\gui{Table} & Tabelle im Dock \gui{Table}. \\
+\bottomrule
+\end{referenz}
+
+Die Kontrollkästchen schalten einen ganzen Lauf oder einzelne Ergebnisse sichtbar oder
+unsichtbar. Das \maus{Kontextmenü} (Rechtsklick)
+\begin{itemize}
+  \item auf einem Lauf: \gui{Delete run} entfernt den Lauf mit allen Ergebnissen;
+  \item auf einem Linien-Ergebnis: \gui{Convert to CAD curves...} fragt
+    \enquote{Every n-th ray (of \dots)} -- jeder wievielte Strahl übernommen werden soll --
+    und legt die Strahlen als Kurven im Dokument an (ein Rückgängig-Schritt \enquote{Rays to
+    curves}). So werden Strahlen zu Geometrie, die gespeichert, exportiert und als
+    Fangpunkte benutzt werden kann.
+\end{itemize}
+
+Ergebnisse sind keine Geometrie und werden nicht als solche gespeichert. Die neuesten
+Ergebnisse der Anzeigeblöcke des Workflows speichert das Programm aber mit dem Dokument; nach
+dem Öffnen stehen sie im Lauf \enquote{Saved results} (\autoref{sec:gespeicherte-ergebnisse}).
+Ein neues oder geöffnetes Dokument leert das Dock.
+
+\subsection{Plugin}\label{sec:dock-plugin}
+
+Die Bedienseite der Plugins. Oben wählt eine Auswahlliste das Plugin; darunter stehen seine
+Beschreibung, seine Parameter in einem Formular und die Knöpfe seiner Aktionen. Parameter
+werden mit dem Dokument gespeichert. \gui{Reset parameters} setzt alle Parameter des Plugins
+auf die Standardwerte zurück. Während eine Aktion läuft, sind die Aktionsknöpfe gesperrt.
+Rot markierte Felder enthalten ungültige Werte; solange es solche gibt, startet keine Aktion.
+Läuft ein Plugin nicht, steht statt der Knöpfe \enquote{not running -- see the plugin log}.
+Ausführlich in \autoref{kap:plugins}.
+
+\subsection{Plot}\label{sec:dock-plot}
+
+Ein Diagramm für Kurven und Balken aus den Ergebnissen, etwa den Verlauf der Gütefunktion
+einer Optimierung, der während der Rechnung wächst. Achsen mit Beschriftung, die Namen der
+Kurven als Legende oben links. Das Dock erscheint unten, sobald die erste Kurve vorliegt;
+ohne Kurven steht \enquote{No curves (e.g.\ the merit function of an optimisation)} darin.
+
+\subsection{Table}
+
+Tabellen aus den Ergebnissen, z.\,B.\ die Wirkungsgrade der Beugungsordnungen eines Gitters.
+Gibt es mehrere, wählt eine Auswahlliste oben die angezeigte; eine neue Tabelle wird
+automatisch angezeigt. Die Zellen sind nicht editierbar; Spaltenbreiten lassen sich ziehen.
+Das Dock erscheint mit der ersten Tabelle und steht nicht im Menü \menu{View}; geschlossen
+öffnet es sich mit der nächsten neuen Tabelle wieder.
+
+\subsection{Image}\label{sec:dock-image}
+\index{Image-Fenster}
+
+Das Fenster \gui{Image} zeigt Bilder aus den Rechnungen, etwa das Kamerabild des Raytracers
+oder des Path Tracers. Es öffnet sich beim ersten Bild als schwebendes Fenster in der Mitte des
+Hauptfensters und lässt sich wie jedes Dock andocken.
+
+\begin{itemize}
+  \item Achsen in physikalischen Einheiten, eine Farbskala am Rand.
+  \item \gui{log}: logarithmische Farbskala, um schwaches Licht neben einem hellen Fleck zu
+    sehen. Bei Farbbildern (z.\,B.\ Echtfarben-Bild mehrerer Wellenlängen) gibt es keine
+    Skala; \gui{log} ist dann gesperrt.
+  \item Unter dem Bild steht der Wert unter dem Mauszeiger (\enquote{x \dots{} y \dots{}} mit
+    Wert und Einheit); ohne Mauszeiger eine Beschreibung des Bildes.
+  \item \maus{Mausrad}: Zoom am Mauszeiger; \maus{Ziehen mit der linken Maustaste}:
+    verschieben; \maus{Doppelklick}: wieder das ganze Bild.
+  \item Gibt es mehrere Bilder, wählt eine Auswahlliste oben das angezeigte (\enquote{Lauf --
+    Bild}). Ein neues Bild kommt automatisch nach vorn.
+\end{itemize}
+
+\subsection{Plugin log}
+
+Die Textausgabe aller Plugins, jede Zeile mit der Kennung des Plugins in eckigen Klammern,
+z.\,B.\ \enquote{[raytracer] \dots}. Hier stehen Hinweise der Rechnungen und, wenn etwas schief
+geht, die Fehlermeldung mit dem Python-Aufrufstapel. Das Dock liegt als Reiter neben
+\gui{Plot} und öffnet sich von selbst, wenn eine Rechnung mit einem Fehler endet. Fehler, die
+Sie selbst beheben können (falsche Eingabe, fehlende Auswahl), meldet das Plugin stattdessen
+in einem Hinweisfenster. Das Protokoll behält die letzten 5000 Zeilen.
+
+\subsection{Node workflow}
+
+Das Fenster des Knoten-Workflows: links der Node-Editor mit Blöcken und Verbindungen, rechts
+die Liste \gui{Branches} mit den Zweigen und darunter \gui{Steps}. Es erscheint, sobald ein
+Dokument einen Workflow hat oder ein Plugin einen anlegt, und öffnet sich auch über
+\menu{View,Node workflow}. Während einer Rechnung lautet der Titel \enquote{Node workflow --
+running}. Anzeigeblöcke öffnen mit einem Doppelklick eigene Fenster \enquote{Display: \dots}
+mit ihrem Bild oder Diagramm. Die Bedienung beschreibt \autoref{kap:workflow}.
+
+\begin{hinweis}
+Solange das Fenster \gui{Node workflow} den Tastaturfokus hat, wirken die Navigationstasten
+(\keys{Z}, \keys{E} usw.) auf den Node-Editor und nicht auf die CAD-Ansichten.
+\end{hinweis}
+
+\section{Die Befehlszeile}\label{sec:befehlszeile}
+\index{Befehlszeile}
+
+Die Befehlszeile ist das Eingabefeld unter den Ansichten. Ohne laufenden Befehl zeigt sie
+grau \enquote{Command:}. Sie nimmt vier Arten von Eingaben an, jeweils mit \keys{Enter}
+abgeschlossen:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{3.0cm}X}
+\toprule
+\textbf{Eingabe} & \textbf{Beispiel} & \textbf{Wirkung} \\
+\midrule
+\endhead
+Befehlsname oder Kurzform & \code{line}, \code{l}, \code{box} & startet den Befehl
+  (\autoref{kap:befehle}). Unbekannte Namen meldet die Statusleiste: \enquote{Unknown command
+  \dots}. \\
+Punkt & \code{10,20,0}\newline \code{@5,0,0}\newline \code{25<30} & Koordinaten absolut, in der
+  Konstruktionsebene, relativ zum letzten Punkt oder als Abstand und Winkel
+  (\autoref{kap:modellieren}). \\
+Zahl & \code{12.5} & Länge, Radius, Anzahl usw., wo der Befehl eine Zahl erwartet; sonst eine
+  Länge in Richtung vom letzten Punkt zum Cursor. \\
+leere Eingabe & \keys{Enter} & beendet den laufenden Befehl (z.\,B.\ eine Polylinie); ohne
+  laufenden Befehl wird der letzte Befehl wiederholt. \\
+\bottomrule
+\end{referenz}
+
+Während ein Befehl läuft, steht in der Befehlszeile die Aufforderung (\enquote{Prompt}), was
+er als Nächstes erwartet, bei eingeschaltetem Ortho-Modus mit dem Zusatz
+\enquote{[Ortho]}. Sie müssen die Befehlszeile nicht anklicken: Tippen Sie in einer Ansicht
+Buchstaben oder Ziffern, wandern sie direkt in die Befehlszeile. \keys{Esc} bricht den Befehl
+ab (\enquote{\dots{} cancelled}).
+
+\begin{warnung}
+Einige Tasten sind in den Ansichten mit Funktionen belegt und gelangen deshalb \emph{nicht} in
+die Befehlszeile: \keys{H} blendet die Auswahl aus, \keys{Leertaste} maximiert die Ansicht,
+\keys{Z} leitet die Zoom-Kürzel ein. Befehle, die mit diesen Buchstaben beginnen -- etwa
+\cmd{h} bzw.\ \cmd{Helix} --, tippen Sie deshalb nach einem Klick in die Befehlszeile ein.
+\end{warnung}
+
+Die Befehlszeile ist fest angedockt und lässt sich weder schließen noch verschieben.
+
+\section{Die Statusleiste}\label{sec:statusleiste}
+\index{Statusleiste}
+
+Die Statusleiste am unteren Rand enthält links die Koordinaten und die aktive Ansicht, rechts
+die Schalter für Ortho und Fang, während einer Rechnung deren Fortschritt und gegebenenfalls
+den Hinweis auf den Entwicklermodus:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}X}
+\toprule
+\textbf{Element} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+Koordinaten & \enquote{X \dots{} Y \dots{} Z \dots}: die Position des Mauszeigers in der
+  Konstruktionsebene der Ansicht unter dem Zeiger, mit drei Nachkommastellen; rastet der
+  Cursor auf einen Fangpunkt ein, dessen Position. Außerhalb der Ansichten Striche. \\
+Aktive Ansicht & \enquote{Active view: \dots} \\
+Meldungen & erscheinen links und überdecken dabei vorübergehend Koordinaten und aktive
+  Ansicht: Meldungen der Befehle und Plugins (\enquote{Saved optik.rttf}, \enquote{12
+  entities, 16928 triangles -- 0.91 s} nach dem Laden, Fortschrittstext einer Rechnung);
+  beim Überfahren eines Objekts dessen Name, Art und ggf.\ Teilobjekt, z.\,B.\
+  \enquote{part\_0\_1 $\cdot$ Shell $\cdot$ face 3}. \\
+\gui{Ortho} & Ortho-Modus ein/aus (\keys{F8}): Punkte werden auf die Achsen der
+  Konstruktionsebene durch den letzten Punkt gezogen. \\
+\gui{Snap} & Objektfang insgesamt ein/aus (\keys{F3}). \\
+\gui{Point}, \gui{End}, \gui{Corner}, \gui{Int}, \gui{Cen}, \gui{Quad}, \gui{Mid}, \gui{Edge},
+  \gui{Near}, \gui{Grid} & die einzelnen Fangarten: Punkt, Endpunkt, Flächenecke,
+  Schnittpunkt, Zentrum, Quadrantenpunkt, Mitte, Flächenkanten, nächster Kurvenpunkt,
+  Rasterpunkt. Eingedrückt = aktiv. Anfangs sind alle außer \gui{Grid} aktiv. Einzelheiten in
+  \autoref{kap:modellieren}. \\
+Fortschrittsbalken und \gui{Cancel} & nur während einer Plugin-Rechnung sichtbar;
+  \gui{Cancel} bricht sie ab (wie \keys{Esc}). Nach dem Ende meldet die Statusleiste
+  \enquote{\textit{Plugin}: done} bzw.\ das Ergebnis, \enquote{\dots: cancelled} oder
+  \enquote{\dots{} failed: \dots}. \\
+\enquote{DEVELOPER MODE -- unsigned plugins allowed} & roter Balken ganz rechts, solange der
+  Entwicklermodus eingeschaltet ist, in dem auch nicht signierte Plugins geladen werden
+  (\autoref{kap:plugin-verwaltung}). \\
+\bottomrule
+\end{referenz}
+
+Die Schalter \gui{Snap} und die Fangarten werden gespeichert.
+
+\begin{warnung}
+Der rote Balken \enquote{DEVELOPER MODE} bedeutet, dass Python-Code ohne geprüfte Herkunft
+ausgeführt werden darf. Lassen Sie den Entwicklermodus nur eingeschaltet, wenn Sie selbst
+Plugins entwickeln.
+\end{warnung}
+
+\section{Die Menüs}\label{sec:menues}
+\index{Menü}
+
+Die Menüleiste hat fünf Menüs: \menu{File}, \menu{Edit}, \menu{View}, \menu{Plugins} und
+\menu{Help}. Auf dem Mac stehen \gui{Quit} und \gui{About Raytatouille Fusion} nicht in
+\menu{File} bzw.\ \menu{Help}, sondern -- wie dort üblich -- im Programmmenü
+\gui{Raytatouille Fusion}. Die Tastenkürzel in den folgenden Tabellen sind die unter Windows
+und Linux; zum Mac siehe \autoref{sec:schreibweisen}.
+
+\subsection{File}\label{sec:menu-file}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}p{2.4cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Kürzel} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{New} & \keys{Strg+N} & Neues, leeres Dokument mit der Ebene \gui{Default}. Fragt vorher
+  nach dem Speichern ungesicherter Änderungen. \\
+\gui{Open...} & \keys{Strg+O} & Öffnet ein Dokument (\datei{.rttf}, \datei{.nfcad}) oder eine
+  STEP-Datei (\datei{.step}, \datei{.stp}). Beides \emph{ersetzt} das aktuelle Dokument;
+  vorher wird nach dem Speichern gefragt (\autoref{sec:oeffnen-speichern}). \\
+\gui{Import STEP...} & \keys{Strg+I} & Liest eine STEP-Datei und \emph{fügt} ihren Inhalt als
+  Gruppe zum Dokument hinzu (\autoref{sec:step-import}). \\
+\gui{Save} & \keys{Strg+S} & Speichert das Dokument unter seinem Namen; ein neues Dokument
+  fragt nach dem Namen wie \gui{Save As...}. \\
+\gui{Save As...} & \keys{Strg+Shift+S}\newline (unter Windows ohne Kürzel) & Speichert unter
+  einem neuen Namen, immer als \datei{.rttf}. \\
+\gui{Export STEP...} & -- & Schreibt die ausgewählten Objekte -- ohne Auswahl alle sichtbaren --
+  als STEP (AP214); Punkte und Kurven werden nicht exportiert (\autoref{sec:step-export}). \\
+\gui{Export STL...} & -- & Schreibt die Dreiecksnetze der ausgewählten bzw.\ aller sichtbaren
+  Objekte als binäres STL (\autoref{sec:stl-export}). \\
+\gui{Quit} & \keys{Strg+Q}\newline (unter Windows \keys{Alt+F4}) & Beendet das Programm; fragt
+  vorher nach dem Speichern. Auf dem Mac im Programmmenü. \\
+\bottomrule
+\end{referenz}
+
+\subsection{Edit}\label{sec:menu-edit}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.2cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Kürzel} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Undo} & \keys{Strg+Z} & Macht den letzten Schritt rückgängig. Der Eintrag nennt den
+  Schritt, z.\,B.\ \enquote{Undo Delete 2 object(s)}; ist nichts rückgängig zu machen, ist er
+  gesperrt (\autoref{sec:undo}). \\
+\gui{Redo} & \keys{Strg+Shift+Z}\newline (Windows auch \keys{Strg+Y}) & Stellt den zuletzt
+  rückgängig gemachten Schritt wieder her. \\
+\gui{Delete} & \keys{Entf}, \keys{Rück} & Löscht die ausgewählten Objekte (ein
+  Rückgängig-Schritt). Flächen, Kanten und Eckpunkte allein lassen sich nicht löschen
+  (\enquote{Faces, edges and vertices cannot be deleted on their own}). \\
+\gui{Select All} & \keys{Strg+A} & Wählt alle sichtbaren Objekte aus. \\
+\gui{Group...} & \keys{Strg+G} & Fasst die ausgewählten Objekte zu einer neuen Gruppe
+  zusammen; fragt nach dem Namen (\autoref{sec:gruppen}). \\
+\gui{Ungroup} & \keys{Strg+Shift+G} & Löst die im Modellbaum markierte(n) Gruppe(n) auf. \\
+\gui{Hide} & \keys{H} & Blendet die ausgewählten Objekte aus und hebt ihre Auswahl auf
+  (\autoref{sec:ausblenden}). \\
+\gui{Isolate selected} & -- & Blendet alle Objekte außer den ausgewählten aus. \\
+\gui{Unhide} & \keys{Shift+H} & Zeigt alle mit \gui{Hide} oder \gui{Isolate selected}
+  ausgeblendeten Objekte wieder; Ebenen und Gruppen behalten ihre Schalter. \\
+\gui{Show all} & -- & Macht alles sichtbar: Objekte, Gruppen und Ebenen. \\
+\gui{Select None / Cancel} & \keys{Esc} & Bricht den laufenden Befehl ab; läuft keiner, die
+  laufende Plugin-Rechnung; sonst hebt es die Auswahl auf. \\
+\bottomrule
+\end{referenz}
+
+\subsection{View}\label{sec:menu-view}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{2.2cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Kürzel} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Wireframe}, \gui{Surfaces}, \gui{Shaded} & -- & Darstellungsmodus der aktiven Ansicht
+  (\autoref{sec:darstellungsmodi}); der aktuelle ist abgehakt. Mit \keys{Shift} gewählt: alle
+  Ansichten. \\
+\gui{Zoom extents} & \keys{Z}, \keys{E} & ganzes Modell in der aktiven Ansicht. \\
+\gui{Zoom selected} & \keys{Z}, \keys{S} & Auswahl füllt die aktive Ansicht. \\
+\gui{Tools} & -- & Werkzeugspalte ein/aus. \\
+\gui{Model} & -- & Dock Modellbaum ein/aus. \\
+\gui{Results} & -- & Dock Ergebnisse ein/aus. \\
+\gui{Node workflow} & -- & Fenster des Knoten-Workflows ein/aus. \\
+\gui{Image} & -- & Bildfenster ein/aus. \\
+\gui{Plot} & -- & Diagramm ein/aus. \\
+\gui{Properties} & -- & Dock Eigenschaften ein/aus. \\
+\gui{Layers} & -- & Dock Ebenen ein/aus. \\
+\gui{Plugin log} & -- & Protokoll der Plugins ein/aus. \\
+\gui{Plugin} & -- & Bedienseite der Plugins ein/aus. \\
+\bottomrule
+\end{referenz}
+
+Die Dock-Einträge sind abgehakt, solange das Dock geöffnet ist. Ein Dock, das als Reiter
+hinter einem anderen liegt, gilt als geöffnet; klicken Sie dann auf seinen Reiter.
+
+\subsection{Plugins}\label{sec:menu-plugins}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Settings...} & Dialog \gui{Plugin settings}: Python-Interpreter, Umgebung prüfen und
+  anlegen, Plugin-Ordner, Entwicklermodus (\autoref{sec:python-umgebung},
+  \autoref{kap:plugin-verwaltung}). \\
+\gui{Install plugin...} & Installiert ein Plugin-Paket (\datei{.nfplugin}). Danach meldet ein
+  Fenster das Ergebnis und gegebenenfalls fehlende Python-Pakete mit dem
+  \code{pip}-Befehl. \\
+\gui{Uninstall plugin} $\triangleright$ & Untermenü mit allen Plugins (Name und Version).
+  Mit \gui{Install plugin...} installierte lassen sich hier nach einer Rückfrage entfernen.
+  Plugins aus einem Plugin-Ordner -- auch die mitgelieferten -- sind gesperrt (\enquote{\dots{}
+  -- from a plugin folder}); der Tooltip nennt den Ordner. \\
+\gui{Reload plugins} & Beendet alle Plugin-Prozesse, liest die Plugin-Ordner neu ein und
+  startet die Plugins neu -- etwa nach einem Update eines Rechenkerns. \\
+\gui{Show in the side panels} $\triangleright$ & Ein Häkchen je Plugin: ob seine Gruppe in der
+  Werkzeugspalte und seine Seite im Dock \gui{Plugin} erscheinen. Die Aktionen bleiben im Menü
+  \menu{Plugins}. Die Wahl wird gespeichert. \\
+\textit{je Plugin ein Untermenü} $\triangleright$ & Die Aktionen des Plugins, z.\,B.\ unter
+  \gui{Raytracer} \enquote{Load system}, \enquote{Trace rays} \dots{} Der Tooltip des
+  Untermenüs zeigt die Beschreibung des Plugins. Startet das Plugin gerade, steht dort
+  \enquote{(starting \dots)}, läuft es nicht, \enquote{(not running -- see the plugin log)}. \\
+\textit{(no plugins loaded -- see Settings)} & erscheint, wenn kein einziges Plugin geladen
+  ist. \\
+\bottomrule
+\end{referenz}
+
+Aktionen, die zu einem bestimmten Block des Workflows gehören, stehen nicht hier, sondern im
+Kontextmenü dieses Blocks im Node-Editor (\autoref{kap:workflow}).
+
+\begin{hinweis}
+Es kann immer nur eine Plugin-Rechnung gleichzeitig laufen. Startet man eine zweite, meldet
+die Statusleiste \enquote{A plugin job is still running}. Ausnahme: Plugins, die dem Workflow
+folgen, zeichnen kurz nach jeder Änderung im Node-Editor neu, sofern sie gerade nichts zu tun
+haben.
+\end{hinweis}
+
+\subsection{Help}\label{sec:menu-help}
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{4.6cm}X}
+\toprule
+\textbf{Eintrag} & \textbf{Wirkung} \\
+\midrule
+\endhead
+\gui{Demo results on the selected object} & Erzeugt zu Testzwecken einen Lauf \enquote{Demo
+  run} mit Beispielergebnissen auf dem ersten ausgewählten Körper bzw.\ der ersten
+  ausgewählten Fläche: Strahlen (\enquote{Rays}) von einer Quelle über der ersten Fläche, ein
+  Feld darauf (\enquote{Irradiance}) und eine Kurve (\enquote{Merit}). Nützlich,
+  um die Ergebnisanzeige ohne Python-Umgebung auszuprobieren. Ohne geeignete Auswahl meldet
+  die Statusleiste \enquote{Select a surface or solid first}. \\
+\gui{Check for updates...} & Fragt nach neuen Versionen des Programms und der Plugins
+  (\autoref{sec:updates}). \\
+\gui{About Raytatouille Fusion} & Programmversion, Version und Selbsttest des NURBS-Kerns
+  Nurbforge, Qt-Version. Auf dem Mac im Programmmenü. \\
+\bottomrule
+\end{referenz}
+
+\subsection{Kontextmenüs}
+
+Neben der Menüleiste gibt es Kontextmenüs (Rechtsklick) an diesen Stellen:
+
+\begin{itemize}
+  \item \textbf{Kopfzeile einer Ansicht} (Linksklick): Standardansicht, Projektion, Zoom,
+    Maximieren (\autoref{sec:ansichtsmenue}).
+  \item \textbf{Modellbaum}: \gui{Group selection...}, \gui{Ungroup}, \gui{Hide},
+    \gui{Isolate}, \gui{Unhide}, \gui{Show all} (\autoref{sec:modellbaum}).
+  \item \textbf{Dock Results}: \gui{Delete run}, \gui{Convert to CAD curves...}
+    (\autoref{sec:dock-results}).
+  \item \textbf{Node-Editor}: Blöcke, Verbindungen, Gruppen und Varianten
+    (\autoref{kap:workflow}).
+\end{itemize}
+
+Ein Rechtsklick in eine Ansicht öffnet kein Menü: Mit der rechten Maustaste wird gedreht
+oder verschoben, und während ein Befehl läuft, beendet ein kurzer Rechtsklick die Eingabe wie
+\keys{Enter}.

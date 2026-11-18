@@ -1,0 +1,219 @@
+\chapter{Glossar}\label{kap:glossar}\index{Glossar}
+
+Die Begriffe sind alphabetisch nach dem deutschen Wort geordnet. In Klammern steht der Begriff,
+wie er auf der (englischen) Oberfläche erscheint, sofern es einen gibt.
+
+\begin{description}[style=nextline,leftmargin=1.5em,font=\normalfont\bfseries]
+
+\item[Aktion (action)] Ein Befehl eines Plugins, z.\,B.\ \gui{Trace rays}. Steht als Knopf im
+  Plugin-Dock, im Menü \menu{Plugins} und in der Werkzeugspalte; läuft als Job
+  (Abschnitt~\ref{sec:plugin-jobs}).
+
+\item[Anzeigeblock (display block)] Block des Node-Workflows mit Typ \code{display.*}, der ein
+  Ergebnis in einem eigenen Fenster zeigt. Nur was Anzeigeblöcke brauchen, wird gerechnet
+  (Abschnitt~\ref{sec:workflow-anzeigen}).
+
+\item[Apertur (aperture)] Die nutzbare Öffnung einer optischen Fläche, z.\,B.\ ein Kreis mit
+  Radius oder ein Rechteck; außerhalb wird Licht abgeschattet.
+
+\item[Ast (branch)] Benannter Lichtweg im Node-Workflow von einer Quelle über eine Folge von
+  Blöcken bis zu einem Detektor. Genau die Äste werden gerechnet (Abschnitt~\ref{sec:workflow-aeste}).
+
+\item[Attribut (attribute)] Freies Schlüssel-Wert-Paar an einem Objekt, z.\,B.\
+  \code{sim.inactive} oder die Material- und Quellenangaben des Path Tracers; im Dock
+  \gui{Properties} bearbeitbar.
+
+\item[Auswahl (selection)] Die markierten Objekte (gelb hervorgehoben). Viele Befehle und
+  Plugin-Aktionen arbeiten mit der Auswahl.
+
+\item[Bestrahlungsstärke (irradiance)] Auf eine Fläche treffende Strahlungsleistung je
+  Flächeneinheit, z.\,B.\ in W/m$^2$; wird als Feld auf Flächen oder als Kamerabild gezeigt.
+
+\item[Block (block, node)] Baustein des Node-Workflows: Quelle, optisches Element, Strahlteiler,
+  Detektor, Umwandlung, Auswertung, Meta- oder Anzeigeblock. Alle Typen: Anhang~\ref{kap:workflow-bloecke}.
+
+\item[Blockanbieter (provider)] Das Plugin, das einen Blocktyp liefert und rechnet, z.\,B.\
+  FourierGrating für \code{fg.grating}.
+
+\item[Cache] Speicher der Workflow-Maschine für Zwischenergebnisse früherer Läufe (bis etwa 1~GB);
+  unveränderte Blöcke werden nicht neu gerechnet (Abschnitt~\ref{sec:workflow-status}).
+
+\item[Darstellung (representation)] Die Form, in der Licht über eine Verbindung läuft:
+  R Strahlen, H hybrides Feld, G Gitterfeld, S Ebene-Wellen-Spektrum, T Tabelle, P radiometrisch
+  (Abschnitt~\ref{sec:workflow-darstellungen}).
+
+\item[Darstellungsmodus (display mode)] Wie die Ansichten das Modell zeichnen: \gui{Wireframe}
+  (Kanten und Isokurven), \gui{Surfaces} (flache Flächen mit Kanten), \gui{Shaded} (beleuchtete
+  Flächen).
+
+\item[Detektor (detector)] Fläche oder Block, auf dem das Licht gemessen wird; liefert ein Bild
+  bzw.\ ein Feld auf der Fläche.
+
+\item[Dock] Verschiebbares Teilfenster des Hauptfensters, z.\,B.\ \gui{Results}, \gui{Plugin},
+  \gui{Plot}, \gui{Node workflow}; im Menü \menu{View} ein- und ausblendbar, abreißbar und an
+  jeder Seite andockbar.
+
+\item[Dokument (document)] Alles, was in einer \datei{.rttf}-Datei gespeichert wird: Geometrie,
+  Layer, Gruppen, Attribute, Plugin-Parameter, Node-Workflow und die Ergebnisse der Anzeigen.
+
+\item[Entwicklermodus (developer mode)] Einstellung, in der auch unsignierte Plugins geladen
+  werden; erkennbar am roten Banner in der Statuszeile (Anhang~\ref{sec:verwaltung-entwicklermodus}).
+
+\item[Ergebnis, Ergebnissatz (result, run)] Anzeigedaten eines Plugin-Laufs – Strahlen, Felder,
+  Kurven, Bilder, Tabellen, Balken –, zusammengefasst je Lauf im Dock \gui{Results}
+  (Abschnitt~\ref{sec:plugin-ergebnisse}).
+
+\item[Farbskala (colour map)] Zuordnung von Zahlenwerten zu Farben: \code{viridis},
+  \code{inferno}, \code{plasma}, \code{coolwarm}, \code{grey} (Abschnitt~\ref{sec:felder-farbskalen}).
+
+\item[Feld auf Fläche (field on face)] Werteverteilung als Textur auf einer Fläche des Modells,
+  z.\,B.\ die Bestrahlungsstärke auf einem Detektor.
+
+\item[Feldpunkt (field point)] Ein Objektpunkt bzw.\ Feldwinkel eines optischen Systems, für den
+  Strahlen gerechnet werden.
+
+\item[Fingerabdruck (stamp)] Prüfsumme dessen, woraus ein Ergebnis gerechnet wurde; zeigt, ob ein
+  gespeichertes Ergebnis noch aktuell ist (Abschnitt~\ref{sec:workflow-gespeichert}).
+
+\item[Fokus (focus)] Ort, an dem sich Strahlen treffen. Dort versagt die Strahlenoptik; der
+  Workflow rechnet in der Nähe mit Feldern (Wellenoptik).
+
+\item[Getrimmte Fläche (trimmed surface)] NURBS-Fläche, deren nutzbarer Bereich durch Randkurven
+  im Parameterraum begrenzt ist, z.\,B.\ eine Fläche mit Loch.
+
+\item[Glaskatalog (glass catalogue)] Datei (\datei{*.agf}) mit den Brechzahlen realer Gläser. Wird
+  im Raytracer-Panel unter \gui{Glass catalogues} eingetragen und im Dokument gespeichert
+  (Abschnitt~\ref{sec:workflow-eingebettet}).
+
+\item[Gruppe im Modellbaum (group)] Zusammenfassung von Objekten im Dock \gui{Model}, mit
+  eigener Sichtbarkeit; z.\,B.\ eine importierte STEP-Datei.
+
+\item[Gruppe im Workflow (group)] Mehrere Blöcke, zu einem Block mit exportierten Ports und inneren
+  Ästen zusammengefasst; kann Varianten haben (Abschnitt~\ref{sec:workflow-gruppen}).
+
+\item[Hybrides Feld (H)] Darstellung des Lichts als Feld ohne Gitter, mit Amplitude, Phase und
+  deren Ableitungen; gerechnet mit Fieldtracing. Für Fokusse und Beugung.
+
+\item[Image-Fenster (Image)] Fenster für zweidimensionale Bilder mit Achsen, Farbbalken,
+  logarithmischer Skala und Zoom (Abschnitt~\ref{sec:image-fenster}).
+
+\item[Interpreter (Python interpreter)] Das Python-Programm, mit dem alle Plugins laufen; in
+  \menu{Plugins,Settings…} eingestellt.
+
+\item[Job] Eine laufende Aktion eines Plugins mit Fortschrittsbalken und \gui{Cancel}; es läuft
+  immer nur einer.
+
+\item[Kanal (channel)] Zusatz eines Schritts in einem Ast, der genauer sagt, wie das Licht einen
+  Block durchläuft: innerer Ast einer Gruppe, Geisterbild, Beugungsordnung.
+
+\item[Kategorie (category)] Art eines Blocktyps, z.\,B.\ \code{source}, \code{domain},
+  \code{splitter}, \code{detector}, \code{analysis} oder \code{meta}; bestimmt die Farbe der
+  Kopfzeile im Node-Editor.
+
+\item[Kohärenzgruppe (coherence group)] Licht, dessen Amplituden sich addieren (es kann
+  interferieren). Verschiedene Gruppen, z.\,B.\ verschiedene Feldpunkte oder Wellenlängen,
+  addieren sich als Intensitäten.
+
+\item[Layer] Ebene im Dock \gui{Layers}, der Objekte zugeordnet sind; mit Farbe und Sichtbarkeit.
+
+\item[Linienergebnis (rays / lines)] Viele farbige Polylinien, meist Strahlen; mit
+  \gui{Convert to CAD curves…} in echte Kurven umwandelbar.
+
+\item[Meta-Block] Block, der einen Teil des Workflows mit geänderten Parametern wiederholt:
+  Sweep, Wiederholungen, Optimierung (Abschnitt~\ref{sec:workflow-meta}).
+
+\item[Modellbaum (model tree)] Das Dock \gui{Model} mit Gruppen und Objekten des Dokuments.
+
+\item[Node-Workflow (node workflow)] Verschaltung von Blöcken zu einer Rechnung, in der mehrere
+  Rechenkerne zusammenarbeiten (Kapitel~\ref{kap:workflow}).
+
+\item[NURBS] Nicht-uniforme rationale B-Splines: die exakte mathematische Beschreibung der Kurven
+  und Flächen, mit der \produkt{} (über den Kern Nurbforge) arbeitet.
+
+\item[Objektfang (object snap)] Einrasten des Mauszeigers auf besondere Punkte wie Endpunkte,
+  Mittelpunkte und Zentren; auch beim Picken von Punkt-Parametern aktiv.
+
+\item[Optimierung (optimisation)] Automatisches Verändern freier Größen (Radien, Lagen,
+  Schichtdicken …), bis eine Zielfunktion minimal oder maximal ist.
+
+\item[Parameter] Eingabewert eines Plugins (im Plugin-Dock) oder eines Blocks (im Dialog
+  \gui{Parameters…}); wird mit dem Dokument gespeichert.
+
+\item[Pfad (path)] In einem Raytatouille-System eine Folge von Flächen, die das
+  Licht durchläuft; beim Import wird je Pfad ein Ast angelegt.
+
+\item[Planer (planner)] Teil der Workflow-Maschine, der für jede Verbindung die Darstellung und für
+  jeden Block die nötigen Umwandlungen wählt.
+
+\item[Plot-Dock (Plot)] Dock mit Kurven und Balkendiagrammen; erscheint mit der ersten Kurve.
+
+\item[Plugin] Erweiterung, die einen Rechenkern an \produkt{} anbindet; läuft als eigener
+  Python-Prozess (Kapitel~\ref{kap:plugins}).
+
+\item[Plugin-Dock (Plugin)] Dock mit Auswahl, Parameterformular und Aktionsknöpfen eines Plugins.
+
+\item[Plugin-Log (Plugin log)] Dock mit allen Meldungen und Fehlern der Plugins.
+
+\item[Plugin-Paket (.nfplugin)] ZIP-Archiv eines signierten Plugin-Ordners zum Installieren mit
+  \menu{Plugins,Install plugin…}.
+
+\item[Port] Stelle, an der Licht in einen Block hinein- oder aus ihm herausgeht, z.\,B.\
+  \code{front}, \code{back}; trägt Licht in beiden Richtungen.
+
+\item[Pose] Lage eines Blocks im Raum (Position und Drehung); der Daten-Eingang \code{pose}
+  verschiebt oder dreht ihn.
+
+\item[Quelle (source)] Block oder Objekt, von dem Licht ausgeht.
+
+\item[Rechenkern (kernel)] Eigenständiges Rechenprogramm bzw.\ Python-Paket, z.\,B.\
+  Raytatouille, FourierGrating, Path Tracer; über ein Plugin angebunden.
+
+\item[Rückgängig-Schritt (undo step)] Eine Änderung, die \menu{Edit,Undo} als Ganzes zurücknimmt;
+  jeder Plugin-Lauf ist einer (Abschnitt~\ref{sec:plugin-undo}).
+
+\item[Schritt (step)] Ein Glied eines Asts: Block, Port hinein, Port hinaus, ggf.\ Kanal.
+
+\item[Signatur (signature)] Kryptografischer Nachweis (Ed25519), dass ein Plugin vom Herausgeber
+  stammt und unverändert ist; Datei \datei{SIGNATURE} (Anhang~\ref{sec:verwaltung-signaturen}).
+
+\item[Sonde (probe)] Ein \code{display.beam}, das das Licht an einem beliebigen Ausgang zeigt.
+
+\item[STEP] Austauschformat für CAD-Geometrie (\datei{.step}, \datei{.stp}); \produkt{} liest und
+  schreibt es exakt.
+
+\item[Strahlteiler (beam splitter)] Element, das Licht in einen reflektierten und einen
+  durchgelassenen Teil aufteilt und zurückkehrendes Licht vereinigt.
+
+\item[Stummschalten (mute)] Einen Block vorübergehend überbrücken (\gui{Mute (bypass)}); Licht
+  geht unverändert durch.
+
+\item[Tessellierung (tessellation)] Zerlegung der exakten Flächen in Dreiecke für die Anzeige;
+  die Rechnungen nutzen weiter die exakte Geometrie.
+
+\item[Transport] Einstellung einer Verbindung, welche Darstellung sie trägt: \code{auto} (der
+  Planer wählt) oder fest \code{R}, \code{H}, \code{G}, \code{S}, \code{T}, \code{P}.
+
+\item[Umgebung (environment)] Python-Installation (meist eine venv) mit den Paketen, die die
+  Plugins brauchen (Abschnitt~\ref{sec:umgebung-anlegen}).
+
+\item[Variante (variant)] Alternative Belegung einer Gruppe im Workflow, z.\,B.\ reales Objektiv
+  oder ideale Linse; eine ist aktiv.
+
+\item[venv] Virtuelle Python-Umgebung: ein Ordner mit eigenem Interpreter und eigenen Paketen.
+
+\item[Verbindung (connection)] Ungerichtete Verbindung zweier Ports im Node-Workflow; Licht kann
+  sie in beiden Richtungen durchlaufen.
+
+\item[Verdichten (condense)] Eine Gruppe als Tabelle über ebene Wellen rechnen statt Block für
+  Block (\gui{Condensed (plane-wave tables)}).
+
+\item[Werkzeugspalte (tool column)] Spalte links mit den Werkzeuggruppen; jedes Plugin hat dort
+  eine eigene Gruppe.
+
+\item[Workflow-Maschine (workflow engine)] Das Plugin \plugin{Workflow}, das den Node-Workflow
+  prüft, plant und rechnet.
+
+\item[Zielfunktion (merit function)] Zahl, die eine Optimierung klein (oder groß) macht; ihr
+  Verlauf erscheint als Kurve im Dock \gui{Plot}.
+
+\end{description}

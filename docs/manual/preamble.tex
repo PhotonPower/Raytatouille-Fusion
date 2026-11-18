@@ -1,0 +1,86 @@
+% Präambel des Benutzerhandbuchs – gemeinsame Pakete und Makros.
+% Übersetzen mit LuaLaTeX:  latexmk -lualatex handbuch.tex   (oder: make)
+
+\usepackage{fontspec}
+\usepackage[ngerman]{babel}
+\usepackage[autostyle=true,german=quotes]{csquotes}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{xltabular}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage[locale=DE,per-mode=symbol]{siunitx}
+\usepackage[os=win]{menukeys}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{imakeidx}
+\usepackage[hidelinks,unicode,bookmarksnumbered]{hyperref}
+
+\graphicspath{{../images/}{bilder/}}
+\makeindex[intoc,columns=2,title=Stichwortverzeichnis]
+
+\KOMAoptions{parskip=half}
+\setlist{itemsep=2pt,topsep=4pt}
+\setcounter{tocdepth}{1}
+
+% ---------------------------------------------------------------- Farben
+\definecolor{rtblau}{HTML}{3D5A80}
+\definecolor{rtgelb}{HTML}{E0B040}
+\definecolor{rtgrau}{HTML}{F2F3F5}
+\definecolor{rtrot}{HTML}{B03A2E}
+\definecolor{rtgruen}{HTML}{2E7D32}
+
+% ---------------------------------------------------------------- Oberfläche
+% \gui{Text}           Beschriftung eines Bedienelements (Knopf, Feld, Dock, Fenster)
+% \menu{File,Save As...}  Menüpfad (Einträge durch Kommas getrennt)
+% \keys{Strg+Z}        Tastenkombination (Teile durch + getrennt)
+% \maus{rechts ziehen} Mausgeste
+% \cmd{Line}           Befehl der Befehlszeile (wie getippt)
+% \param{rays}         Name eines Plugin-Parameters / Schlüssel in Dateien
+% \datei{a/b.rttf}     Datei- oder Ordnername
+% \code{text}          kurzer Code / Eingabe
+% \plugin{Raytracer}   Name eines Plugins
+% \block{Camera}       Block des Node-Workflows
+\newcommand{\gui}[1]{\textsf{\bfseries #1}}
+\newcommand{\maus}[1]{\textit{#1}}
+\providecommand{\cmd}{}% menukeys defines \cmd (Mac command key); not used here
+\renewcommand{\cmd}[1]{\texttt{\textbf{#1}}\index{#1@\texttt{#1} (Befehl)}}
+\newcommand{\param}[1]{\texttt{#1}}
+\newcommand{\datei}[1]{\texttt{#1}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\plugin}[1]{\textsf{#1}}
+\newcommand{\block}[1]{\textsf{\itshape #1}}
+\newcommand{\produkt}{Raytatouille Fusion}
+\newcommand{\version}{1.0}
+
+% ---------------------------------------------------------------- Kästen
+\newtcolorbox{hinweis}{enhanced,breakable,colback=rtgrau,colframe=rtblau,boxrule=0.5pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,title={Hinweis},fonttitle=\sffamily\bfseries\small,
+  coltitle=white}
+\newtcolorbox{tipp}{enhanced,breakable,colback=rtgruen!5,colframe=rtgruen,boxrule=0.5pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,title={Tipp},fonttitle=\sffamily\bfseries\small}
+\newtcolorbox{warnung}{enhanced,breakable,colback=rtrot!5,colframe=rtrot,boxrule=0.5pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,title={Achtung},fonttitle=\sffamily\bfseries\small}
+
+% Schritt-für-Schritt-Anleitungen
+\newlist{schritte}{enumerate}{1}
+\setlist[schritte]{label=\arabic*.,leftmargin=*,itemsep=3pt}
+
+% Abbildung: \abbildung[Breite]{datei}{Unterschrift}{label}
+\newcommand{\abbildung}[4][\linewidth]{%
+  \begin{figure}[htbp]\centering\includegraphics[width=#1]{#2}\caption{#3}\label{#4}\end{figure}}
+
+% Listings für Dateien und Befehle im Terminal
+\lstdefinestyle{terminal}{basicstyle=\ttfamily\small,backgroundcolor=\color{rtgrau},
+  frame=single,framerule=0pt,breaklines=true,columns=fullflexible,keepspaces=true,
+  xleftmargin=4pt,xrightmargin=4pt,aboveskip=6pt,belowskip=6pt}
+\lstset{style=terminal}
+
+% Referenztabellen: \begin{referenz}{Spaltenformat} ... \end{referenz}  (seitenübergreifend)
+\newenvironment{referenz}[1]{\small\xltabular{\linewidth}{#1}}{\endxltabular}
