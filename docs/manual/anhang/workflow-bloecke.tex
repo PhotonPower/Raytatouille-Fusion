@@ -155,6 +155,12 @@ Ein kollimiertes Bündel ohne Raytatouille: je Feldwinkel und Wellenlänge eine 
 einer Kreisscheibe, auf einem hexapolaren Raster abgetastet. Für einfache Interferometer
 (Michelson, Linnik ohne Objektive) und Tests.
 
+Die Polarisation ist linear längs \param{polarisation} oder – mit \param{ellipticity\_deg} – elliptisch
+bzw.\ zirkular; die Strahlen tragen sie als komplexen Feldvektor durch alle Blöcke und
+Umwandlungen. Beispiel: \param{direction} \code{0, 0, 1}, \param{polarisation} \code{1, 0, 0},
+\param{ellipticity\_deg} \code{45} ergibt das Feld $(1, \mathrm{i}, 0)/\sqrt 2$, das von $x$ nach
+$y$ dreht (Zeitabhängigkeit $e^{-\mathrm{i}\omega t}$); \code{-45} dreht andersherum.
+
 \textbf{Licht:} \code{out} (aus, RHS).
 
 \textbf{Ports:} \code{out} (aus \code{out}).
@@ -171,7 +177,8 @@ einer Kreisscheibe, auf einem hexapolaren Raster abgetastet. Für einfache Inter
 \param{wavelengths\_\allowbreak{}um} & Zahlenliste & \code{0.6328} & \si{\micro\metre} & Wellenlängen. \\
 \param{field\_\allowbreak{}angles\_\allowbreak{}deg} & Zahlenliste & \code{(0.0, 0.0)} & \si{\degree} & Feldwinkel als Paare, z.\,B.\ \code{[0, 0], [1, 0]}. \\
 \param{irradiance} & Zahl & \code{1.0} & W/mm$^2$ & Bestrahlungsstärke (bei Gauß-Profil: auf der Achse). \\
-\param{polarisation} & Vektor & \code{1.0, 0.0, 0.0} & -- & Richtung des elektrischen Felds. \\
+\param{polarisation} & Vektor & \code{1.0, 0.0, 0.0} & -- & Richtung des elektrischen Felds; bei elliptischem Licht die große Halbachse $\hat p$. \\
+\param{ellipticity\_\allowbreak{}deg} & Zahl & \code{0.0} & \si{\degree}; $-45$ \dots\ 45 & Elliptizität $\chi$: 0 linear, $\pm 45$ zirkular, $\tan\chi$ = kleine/große Halbachse. Das Feld ist $\cos\chi\,\hat p + \mathrm{i}\sin\chi\,(\hat d \times \hat p)$; bei $\chi > 0$ dreht es von $\hat p$ nach $\hat d \times \hat p$ ($S_3 > 0$). \\
 \param{up} & Vektor & \code{0.0, 1.0, 0.0} & -- & Richtung der lokalen v-Achse. \\
 \param{gaussian\_\allowbreak{}waist} & Zahl & \code{0.0} & mm; $\geq$ 0.0 & 0: gleichmäßig; $> 0$: Gauß-Amplitude $\exp(-\rho^2/w^2)$ mit diesem $w$. \\
 \bottomrule

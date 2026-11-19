@@ -7,6 +7,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Workflow: elliptical and circular light from the collimated source** – the new parameter
+  *ellipticity_deg* χ of `optics.collimated_source` (−45° … 45°; 0 linear, ±45° circular) in the
+  node dialog; *polarisation* is then the major axis. The rays carry the complex field through
+  every block (RTT-Fusion 0.3.2, R31). The source's overview names its polarisation. The Workflow
+  and Raytracer plugins require `rtt_fusion>=0.3.2`.
 - **Automotive Lighting plugin**: the patterned lens of **cylinder strips** – *Lens → Structure*,
   the new default (*cells* as before). Cylinder lenses run through their sector, *Strip width*
   wide (5 mm), upright under the horizontal branch, leaning by the rise (15°) in the wedge, as the
