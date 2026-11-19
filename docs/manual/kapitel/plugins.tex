@@ -384,6 +384,9 @@ die Kennung des Plugins, das ihn angelegt hat; darunter stehen seine Ergebnisse 
         seine Ergebnisse ein oder aus, das Kästchen vor einem Ergebnis nur dieses. So lassen sich
         z.\,B.\ die Strahlen eines Arms eines Interferometers ausblenden.
   \item \textbf{Löschen:} Rechtsklick auf einen Ergebnissatz $\to$ \gui{Delete run}.
+  \item \textbf{Speichern:} Rechtsklick auf einen Ergebnissatz $\to$ \gui{Save run…} oder auf
+        ein Ergebnis $\to$ \gui{Save…}; dasselbe macht die Schaltfläche \gui{Save…} unter dem
+        Baum für die gewählte Zeile (Abschnitt~\ref{sec:ergebnisse-speichern}).
   \item \textbf{Strahlen in CAD-Kurven umwandeln:} Rechtsklick auf ein Linien-Ergebnis
         $\to$ \gui{Convert to CAD curves…} (Abschnitt~\ref{sec:strahlen-kurven}).
   \item Der Tooltip eines Linien-Ergebnisses nennt die Zahl der Polylinien.
@@ -391,7 +394,8 @@ die Kennung des Plugins, das ihn angelegt hat; darunter stehen seine Ergebnisse 
 
 \begin{hinweis}
 Ergebnisse sind Anzeigedaten und gehören nicht zum Modell: Sie werden nicht gefangen, nicht
-ausgewählt und – mit einer Ausnahme – nicht mit dem Dokument gespeichert. Die Ausnahme sind die
+ausgewählt und – mit einer Ausnahme – nicht mit dem Dokument gespeichert (wohl aber auf Wunsch als Dateien,
+Abschnitt~\ref{sec:ergebnisse-speichern}). Die Ausnahme sind die
 Ergebnisse der Anzeigeblöcke des Node-Workflows; sie stehen nach dem Öffnen im Ergebnissatz
 \gui{Saved results} (Abschnitt~\ref{sec:workflow-gespeichert}).
 \end{hinweis}
@@ -419,6 +423,46 @@ Strahlen sind Anzeigedaten; zum Messen oder Konstruieren brauchen Sie echte Kurv
 
 Die neuen Kurven sind normale CAD-Objekte (fangbar, messbar, exportierbar) und bilden einen
 Rückgängig-Schritt \enquote{Rays to curves}.
+
+\subsubsection{Zeichnungen, die sich ersetzen}
+
+Ein Plugin kann einem Linien-Ergebnis einen \emph{Schlüssel} geben. Ein neues Linien-Ergebnis
+mit demselben Schlüssel ersetzt dann das frühere: Dessen Linien verschwinden, und ein
+Ergebnissatz, der dadurch leer wird, verschwindet mit. So zeichnet \gui{Show camera} des Path
+Tracers nach einer Änderung der Kameraparameter die Kamera neu, statt eine zweite darüber zu legen.
+
+\subsection{Ergebnisse speichern}\label{sec:ergebnisse-speichern}\index{Ergebnis!speichern}\index{CSV}\index{PNG}
+
+Ergebnisse lassen sich als Dateien speichern -- Bilder als PNG, Zahlen als CSV (Komma als
+Trennzeichen, Punkt als Dezimalzeichen, UTF-8, Gleitkommazahlen mit neun signifikanten Stellen,
+\code{nan} für ungültige Werte):
+
+\begin{referenz}{@{}p{0.2\linewidth}X@{}}
+\toprule
+\textbf{Art} & \textbf{Dateien} \\
+\midrule
+\endhead
+Bild & PNG: ein Bildpunkt je Wert, mit der Farbskala (lineare Skala; im Image-Fenster wie
+  angezeigt, auch logarithmisch), ein Farbbild in seinen Farben. CSV: Kommentarzeilen mit
+  \code{\#} (Name, Einheit, Ausdehnung, Achsen), dann eine Zeile je Bildzeile von $y_0$ aufwärts,
+  eine Spalte je $x$ -- \code{numpy.loadtxt(datei, delimiter=",")} liest das als Feld
+  [Zeile, Spalte]. \\
+Feld auf Fläche & PNG mit der Farbskala über $(u, v)$, $v$ nach oben; CSV wie ein Bild, eine
+  Zeile je $v$, eine Spalte je $u$. \\
+Kurve & CSV: Kopfzeile mit den Achsbeschriftungen, dann \code{x,y} je Zeile. \\
+Tabelle & CSV: Spaltenköpfe, dann die Zeilen. \\
+Balken & CSV: \code{label,}\textit{y-Beschriftung}, dann ein Balken je Zeile. \\
+Strahlen / Linien & CSV: \code{polyline,x,y,z} (und \code{value}, wenn die Punkte Werte tragen),
+  ein Punkt je Zeile; \code{nan}, wo ein Strahl verloren ging. \\
+\bottomrule
+\end{referenz}
+
+\gui{Save…} auf einem Ergebnis fragt nach dem Dateinamen; bei Bildern und Feldern wählen Sie
+im Dateityp zwischen PNG und CSV. \gui{Save run…} fragt nach einem Ordner und legt darin einen
+Unterordner mit dem Namen des Ergebnissatzes an, mit einer Datei je Ergebnis (Bilder und Felder
+als PNG \emph{und} CSV); gleichnamige Ergebnisse werden durchnummeriert (\texttt{orders (2).csv}),
+Zeichen, die Dateisysteme nicht erlauben, durch \code{\_} ersetzt. Die Statusleiste meldet, wie
+viele Dateien wohin geschrieben wurden.
 
 \subsection{Felder auf Flächen und Farbskalen}\label{sec:felder-farbskalen}\index{Farbskala}
 
@@ -505,6 +549,11 @@ Titelleiste dorthin ziehen; \menu{View,Image} blendet es ein und aus.
   \item[Zoomen und Verschieben] Das Mausrad zoomt um den Mauszeiger (bis auf etwa vier Pixel
         Breite), Ziehen mit der linken Maustaste verschiebt den Ausschnitt, ein Doppelklick
         zeigt wieder das ganze Bild.
+  \item[Speichern] Die Schaltfläche \gui{Save…} oben rechts speichert das gezeigte Bild:
+        \gui{Image as PNG…} -- ein Bildpunkt je Wert, mit Farbskala und \gui{log} wie
+        angezeigt; \gui{View with axes as PNG…} -- das Fenster so, wie es aussieht, mit Achsen,
+        Titel, Farbbalken und dem aktuellen Ausschnitt; \gui{Values as CSV…} -- die Zahlenwerte
+        (Abschnitt~\ref{sec:ergebnisse-speichern}).
 \end{description}
 
 \paragraph{Farbbilder.} Ein Plugin kann ein Bild auch in Farbe liefern (z.\,B.\ das

@@ -9,6 +9,7 @@
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class QToolButton;
 
 namespace nfcad::results {
 class ResultStore;
@@ -33,13 +34,21 @@ class ImageView : public QWidget {
   /// visible images.
   void setKey(const QString& key);
 
+  /// What "Save…" writes: the image's pixels (colour map and scale as shown), the view as drawn
+  /// (axes, colour bar, zoom) or the values (CSV).
+  enum class SaveWhat { Pixels, View, Values };
+  /// Writes the shown image to `path` (no dialog); false with a reason in `error`.
+  bool saveTo(SaveWhat what, const QString& path, QString* error = nullptr) const;
+
  private:
   void rebuild();
+  void save(SaveWhat what);
 
   const results::ResultStore* store_;
   QComboBox* chooser_ = nullptr;
   QCheckBox* log_ = nullptr;
   QLabel* readout_ = nullptr;
+  QToolButton* save_ = nullptr;
   ImageCanvas* canvas_ = nullptr;
   results::ResultId shown_ = 0;
   results::ResultId newest_ = 0;

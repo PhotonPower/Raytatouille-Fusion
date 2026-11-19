@@ -322,13 +322,17 @@ Ergebnisse mit ihrer Art:
 Die Kontrollkästchen schalten einen ganzen Lauf oder einzelne Ergebnisse sichtbar oder
 unsichtbar. Das \maus{Kontextmenü} (Rechtsklick)
 \begin{itemize}
-  \item auf einem Lauf: \gui{Delete run} entfernt den Lauf mit allen Ergebnissen;
+  \item auf einem Lauf: \gui{Save run…} schreibt alle seine Ergebnisse als PNG- und
+    CSV-Dateien in einen Ordner (\autoref{sec:ergebnisse-speichern}); \gui{Delete run}
+    entfernt den Lauf mit allen Ergebnissen;
+  \item auf einem Ergebnis: \gui{Save…} speichert es als PNG (Bilder, Felder) oder CSV;
   \item auf einem Linien-Ergebnis: \gui{Convert to CAD curves...} fragt
     \enquote{Every n-th ray (of \dots)} -- jeder wievielte Strahl übernommen werden soll --
     und legt die Strahlen als Kurven im Dokument an (ein Rückgängig-Schritt \enquote{Rays to
     curves}). So werden Strahlen zu Geometrie, die gespeichert, exportiert und als
     Fangpunkte benutzt werden kann.
 \end{itemize}
+Die Schaltfläche \gui{Save…} unter dem Baum speichert die gewählte Zeile (Lauf oder Ergebnis).
 
 Ergebnisse sind keine Geometrie und werden nicht als solche gespeichert. Die neuesten
 Ergebnisse der Anzeigeblöcke des Workflows speichert das Programm aber mit dem Dokument; nach
@@ -378,6 +382,8 @@ Hauptfensters und lässt sich wie jedes Dock andocken.
     verschieben; \maus{Doppelklick}: wieder das ganze Bild.
   \item Gibt es mehrere Bilder, wählt eine Auswahlliste oben das angezeigte (\enquote{Lauf --
     Bild}). Ein neues Bild kommt automatisch nach vorn.
+  \item \gui{Save…} (oben rechts): \gui{Image as PNG…}, \gui{View with axes as PNG…},
+    \gui{Values as CSV…} (\autoref{sec:ergebnisse-speichern}).
 \end{itemize}
 
 \subsection{Plugin log}

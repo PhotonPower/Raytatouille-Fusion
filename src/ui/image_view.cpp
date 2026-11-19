@@ -1,11 +1,17 @@
 #include "ui/image_view.hpp"
 
 #include <QCheckBox>
+#include <QDir>
+#include <QFileInfo>
 #include <QComboBox>
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <algorithm>
@@ -13,6 +19,7 @@
 #include <limits>
 
 #include "results/colormap.hpp"
+#include "results/result_export.hpp"
 #include "results/result_store.hpp"
 
 namespace nfcad::ui {
@@ -49,8 +56,18 @@ ImageView::ImageView(const results::ResultStore* store, QWidget* parent) : QWidg
   chooser_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
   log_ = new QCheckBox(tr("log"), this);
   log_->setToolTip(tr("Logarithmic colour scale (faint light next to a bright spot)"));
+  save_ = new QToolButton(this);
+  save_->setText(tr("Save…"));
+  save_->setToolTip(tr("Save the image: as PNG (its pixels or the view with axes and colour bar) or its values as CSV"));
+  save_->setPopupMode(QToolButton::InstantPopup);
+  auto* save_menu = new QMenu(save_);
+  save_menu->addAction(tr("Image as PNG…"), this, [this] { save(SaveWhat::Pixels); });
+  save_menu->addAction(tr("View with axes as PNG…"), this, [this] { save(SaveWhat::View); });
+  save_menu->addAction(tr("Values as CSV…"), this, [this] { save(SaveWhat::Values); });
+  save_->setMenu(save_menu);
   top->addWidget(chooser_, 1);
   top->addWidget(log_);
+  top->addWidget(save_);
   layout->addLayout(top);
   canvas_ = new ImageCanvas(this);
   layout->addWidget(canvas_, 1);
@@ -99,8 +116,38 @@ void ImageView::rebuild() {
   chooser_->blockSignals(false);
   const results::ResultItem* item = current();
   log_->setEnabled(item == nullptr || !item->image->coloured());  // a colour image has no scale
+  save_->setEnabled(item != nullptr);
   canvas_->setImage(item != nullptr ? item->image : nullptr, item != nullptr ? item->name : QString(), log_->isChecked());
   readout_->setText(item != nullptr ? item->image->description : QString());
+}
+
+bool ImageView::saveTo(SaveWhat what, const QString& path, QString* error) const {
+  const results::ResultItem* item = current();
+  if (item == nullptr) {
+    if (error != nullptr) *error = tr("no image");
+    return false;
+  }
+  if (what == SaveWhat::View) {
+    if (canvas_->grab().save(path, "PNG")) return true;
+    if (error != nullptr) *error = tr("cannot write %1").arg(QDir::toNativeSeparators(path));
+    return false;
+  }
+  return results::save_item(*item, path, error, log_->isChecked());
+}
+
+void ImageView::save(SaveWhat what) {
+  const results::ResultItem* item = current();
+  if (item == nullptr) return;
+  const bool csv = what == SaveWhat::Values;
+  const QString suffix = csv ? QStringLiteral("csv") : QStringLiteral("png");
+  const QString path = QFileDialog::getSaveFileName(
+      this, csv ? tr("Save values") : tr("Save image"), results::file_name_for(item->name, suffix),
+      csv ? tr("CSV values (*.csv)") : tr("PNG image (*.png)"));
+  if (path.isEmpty()) return;
+  QString error;
+  if (!saveTo(what, QFileInfo(path).suffix().isEmpty() ? path + QLatin1Char('.') + suffix : path, &error)) {
+    QMessageBox::warning(this, tr("Save image"), error);
+  }
 }
 
 // ------------------------------------------------------------------------------ canvas
@@ -122,40 +169,7 @@ void ImageCanvas::setImage(std::shared_ptr<const results::Image> image, const QS
 }
 
 void ImageCanvas::render() {
-  rendered_ = {};
-  if (!image_ || image_->width <= 0 || image_->height <= 0) return;
-  const results::Image& im = *image_;
-  if (im.coloured()) {  // the colours as they are
-    rendered_ = QImage(im.width, im.height, QImage::Format_RGB32);
-    for (int j = 0; j < im.height; ++j) {
-      auto* line = reinterpret_cast<QRgb*>(rendered_.scanLine(im.height - 1 - j));  // row 0 = y0 at the bottom
-      const unsigned char* c = im.rgb.data() + 3 * static_cast<std::size_t>(j) * static_cast<std::size_t>(im.width);
-      for (int i = 0; i < im.width; ++i, c += 3) line[i] = qRgb(c[0], c[1], c[2]);
-    }
-    return;
-  }
-  const results::Range r = im.effectiveRange();
-  lo_ = r.min;
-  hi_ = r.max;
-  if (log_) {  // 4 decades below the peak, or the smallest positive value
-    double positive = std::numeric_limits<double>::max();
-    for (float v : im.values) {
-      if (v > 0) positive = std::min(positive, static_cast<double>(v));
-    }
-    hi_ = std::log10(std::max(r.max, 1e-300));
-    lo_ = std::max(hi_ - 4.0, std::log10(std::min(positive, std::max(r.max, 1e-300))));
-    if (!(hi_ > lo_)) lo_ = hi_ - 1.0;
-  }
-  rendered_ = QImage(im.width, im.height, QImage::Format_RGB32);
-  for (int j = 0; j < im.height; ++j) {
-    auto* line = reinterpret_cast<QRgb*>(rendered_.scanLine(im.height - 1 - j));  // row 0 = y0 at the bottom
-    for (int i = 0; i < im.width; ++i) {
-      double v = im.value(i, j);
-      if (log_) v = v > 0 ? std::log10(v) : lo_;
-      const double t = std::isfinite(v) ? std::clamp((v - lo_) / (hi_ - lo_), 0.0, 1.0) : 0.0;
-      line[i] = results::colormap_color(im.colormap, t).rgb();
-    }
-  }
+  rendered_ = image_ ? results::image_pixels(*image_, log_, &lo_, &hi_) : QImage();
 }
 
 void ImageCanvas::resetView() {

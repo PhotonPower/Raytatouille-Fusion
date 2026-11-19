@@ -69,9 +69,12 @@ ResultId ResultStore::add(ResultId set_id, ResultItem item) {
   return 0;
 }
 
-ResultId ResultStore::addLines(ResultId set, const QString& name, LineSet lines) {
+ResultId ResultStore::addLines(ResultId set, const QString& name, LineSet lines, const QString& key) {
+  if (this->set(set) == nullptr) return 0;
+  if (!key.isEmpty()) dropKeyedLines(key, set);
   ResultItem i;
   i.name = name;
+  i.key = key;
   i.kind = ResultItem::Kind::Lines;
   if (lines.starts.empty() && lines.pointCount() > 0) {
     lines.starts = {0, static_cast<std::uint32_t>(lines.pointCount())};  // one polyline
@@ -122,6 +125,16 @@ ResultId ResultStore::addBars(ResultId set, const QString& name, Bars bars, cons
   i.kind = ResultItem::Kind::Bars;
   i.bars = std::make_shared<const Bars>(std::move(bars));
   return add(set, std::move(i));
+}
+
+void ResultStore::dropKeyedLines(const QString& key, ResultId keep_set) {
+  for (ResultSet& s : sets_) {
+    if (s.id == keep_set) continue;
+    const auto before = s.items.size();
+    std::erase_if(s.items, [&](const ResultItem& i) { return i.kind == ResultItem::Kind::Lines && i.key == key; });
+    if (s.items.size() != before && s.items.empty()) s.id = 0;  // left empty: goes too
+  }
+  std::erase_if(sets_, [](const ResultSet& s) { return s.id == 0; });
 }
 
 void ResultStore::setKey(ResultId item, const QString& key) {

@@ -71,7 +71,8 @@ caustics, a prism, materials with depth of field.
    Texels in which a trimmed face has hardly any area stay empty.
 
 4. **Camera.** Position, *Looks at* (both with *Pick*), up direction, horizontal field of view and
-   pixels; *Show camera* draws the viewing pyramid. *Camera image* shows the radiance in
+   pixels; *Show camera* draws the viewing pyramid (drawn again, it replaces the earlier drawing:
+   there is one camera in the views). *Camera image* shows the radiance in
    W/(m² sr) in the *Image* window (*White at percentile* sets the grey scale). With several
    wavelengths and *Colour image* it adds an image in colour, the one the window then shows: every wavelength in
    the colour the eye gives it (CIE 1931 observer, sRGB), equal power on all wavelengths of the

@@ -169,7 +169,20 @@ interface the plugin host (P3) fills:
 | `Bars` | labels and values, y label | Plot dock as a bar chart (when no curves are shown) |
 
 Results are listed in the *Results* dock (visibility per run and item, delete a run, *Convert to
-CAD curves* for rays). Colour maps: viridis, inferno, plasma, coolwarm, grey. 2D images (`ctx.image`) open in the *Image* window – scalar with a colour map, or in colour (`rgb=`). Not yet: saving results with the document.
+CAD curves* for rays, *Save run…* / *Save…*). Colour maps: viridis, inferno, plasma, coolwarm, grey. 2D images (`ctx.image`) open in the *Image* window – scalar with a colour map, or in colour (`rgb=`). The keyed results of the workflow display windows are kept with the document (docs/file-format.md); the others are display data of the session.
+
+A line set with a `key` (`ctx.lines(..., key=...)`) replaces the line items with that key of
+earlier runs (a set left empty goes too): one drawing per key, e.g. the Path Tracer's camera
+(`pathtracer:camera`), drawn again after its parameters changed.
+
+**Saving results** (`results/result_export.hpp`, dependency-free): *Save…* on an item, *Save
+run…* on a run (a folder named after the run, one file per item; images and fields as PNG and
+CSV), *Save…* in the *Image* window (the pixels as PNG with the colour map and log scale as shown,
+the view with axes as PNG, or the values as CSV). CSV: comma separated, `.` decimal point, UTF-8,
+9 significant digits, `nan` for missing values. Images and fields: `#` comment lines (name, unit,
+extent), then one line per row from y0 (v = 0) upwards – `numpy.loadtxt(path, delimiter=",")`
+reads them; curves `x,y` with the axis labels as header; tables as they are; bars `label,value`;
+line sets `polyline,x,y,z[,value]`, one point per line.
 
 ## 4. Milestones
 

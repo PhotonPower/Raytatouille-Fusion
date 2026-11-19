@@ -132,10 +132,15 @@ class Context:
 
     def lines(self, result_set: int, name: str, points, starts=None, values=None, *,
               colormap: str = "viridis", unit: str = "", on_top: bool = True,
-              value_range: tuple[float, float] | None = None) -> int:
-        """Polylines: points (n, 3) or flat; starts = first point of each polyline (+ total)."""
+              value_range: tuple[float, float] | None = None, key: str = "") -> int:
+        """Polylines: points (n, 3) or flat; starts = first point of each polyline (+ total).
+        With `key` the drawing replaces the earlier ones with this key (their line items are
+        removed, a result set left empty with them) – e.g. a camera drawn again after its
+        parameters changed."""
         args: dict[str, Any] = {"set": result_set, "name": name, "points": arrays.write(points, "f4"),
                                 "colormap": colormap, "unit": unit, "on_top": on_top}
+        if key:
+            args["key"] = key
         if starts is not None:
             args["starts"] = arrays.write(starts, "u4")
         if values is not None:

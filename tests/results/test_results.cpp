@@ -1,4 +1,8 @@
+#include <QDir>
+#include <QFileInfo>
+#include <QFile>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <cmath>
 #include <nurbforge/nurbforge.hpp>
@@ -7,6 +11,7 @@
 #include "document/document.hpp"
 #include "render/scene.hpp"
 #include "results/colormap.hpp"
+#include "results/result_export.hpp"
 #include "results/result_io.hpp"
 #include "results/result_store.hpp"
 #include "tessellation/tessellation_service.hpp"
@@ -148,6 +153,86 @@ class TestResults : public QObject {
     store.removeSet(set);
     QVERIFY(store.sets().empty());
     QVERIFY(changed.count() >= 5);
+  }
+
+  void keyedLinesReplaceTheEarlierDrawing() {
+    // a drawing with a key (the Path Tracer's camera) replaces the one before: its line items go,
+    // a set left empty with it too; other items of that set and unkeyed lines stay
+    results::ResultStore store;
+    results::LineSet l;
+    l.points = {0, 0, 0, 1, 0, 0};
+    const auto first = store.createSet(QStringLiteral("Camera"));
+    store.addLines(first, QStringLiteral("pyramid"), l, QStringLiteral("cam"));
+    const auto trace = store.createSet(QStringLiteral("Trace"));
+    store.addLines(trace, QStringLiteral("rays"), l);
+    store.addLines(trace, QStringLiteral("marker"), l, QStringLiteral("cam"));
+    const auto second = store.createSet(QStringLiteral("Camera"));
+    const auto pyramid = store.addLines(second, QStringLiteral("pyramid"), l, QStringLiteral("cam"));
+    store.addLines(second, QStringLiteral("frame"), l, QStringLiteral("cam"));  // same set: both stay
+    QVERIFY(store.set(first) == nullptr);
+    QCOMPARE(store.set(trace)->items.size(), std::size_t{1});
+    QCOMPARE(store.set(trace)->items.front().name, QStringLiteral("rays"));
+    QCOMPARE(store.set(second)->items.size(), std::size_t{2});
+    QCOMPARE(store.item(pyramid)->key, QStringLiteral("cam"));
+    QCOMPARE(store.addLines(9999, QStringLiteral("nowhere"), l, QStringLiteral("cam")), results::ResultId{0});
+    QCOMPARE(store.set(second)->items.size(), std::size_t{2});  // an unknown set removes nothing
+  }
+
+  void savesResultsAsCsvAndPng() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    results::ResultStore store;
+    const auto set = store.createSet(QStringLiteral("Run: 1/2"));
+    results::Image im;
+    im.width = 3;
+    im.height = 2;
+    im.values = {1.0F, 2.5F, NAN, 4.0F, 5.0F, 6.0F};
+    im.unit = QStringLiteral("W/mm²");
+    im.colormap = results::Colormap::Grey;
+    const auto image = store.addImage(set, QStringLiteral("camera"), im);
+    results::Curve c{{0.0, 0.5}, {1.0, 1.0 / 3.0}, QStringLiteral("t / s"), QStringLiteral("I, a.u.")};
+    const auto curve = store.addCurve(set, QStringLiteral("sweep"), c);
+    store.addTable(set, QStringLiteral("orders"),
+                   results::Table{{"m", "note"}, {QStringList{"-1", "a, \"b\""}, QStringList{"0", "c"}}});
+    store.addBars(set, QStringLiteral("orders"), results::Bars{{"-1", "0"}, {0.25, 0.5}, "η"});
+    results::LineSet l;
+    l.points = {0, 0, 0, 1, 0, 0, 0, 1, 0, NAN, NAN, NAN};
+    l.starts = {0, 2, 4};
+    l.values = {1, 2, 3, 4};
+    const auto lines = store.addLines(set, QStringLiteral("rays"), l);
+
+    // the image values: comments, then one line per row from y0 up (numpy.loadtxt reads it)
+    const QString image_csv = results::to_csv(*store.item(image));
+    QVERIFY(image_csv.startsWith(QStringLiteral("# camera\n")));
+    QVERIFY(image_csv.contains(QStringLiteral("# unit: W/mm²\n")));
+    QVERIFY(image_csv.endsWith(QStringLiteral("1,2.5,nan\n4,5,6\n")));
+    QCOMPARE(results::to_csv(*store.item(curve)), QStringLiteral("t / s,\"I, a.u.\"\n0,1\n0.5,0.333333333\n"));
+    QCOMPARE(results::to_csv(store.set(set)->items[2]), QStringLiteral("m,note\n-1,\"a, \"\"b\"\"\"\n0,c\n"));
+    QCOMPARE(results::to_csv(store.set(set)->items[3]), QStringLiteral("label,η\n-1,0.25\n0,0.5\n"));
+    QCOMPARE(results::to_csv(*store.item(lines)),
+             QStringLiteral("polyline,x,y,z,value\n0,0,0,0,1\n0,1,0,0,2\n1,0,1,0,3\n1,nan,nan,nan,4\n"));
+
+    // PNG: the pixels as the Image window shows them, y0 at the bottom
+    const QString png = dir.filePath(QStringLiteral("camera.png"));
+    QVERIFY(results::save_item(*store.item(image), png));
+    const QImage back(png);
+    QCOMPARE(back.size(), QSize(3, 2));
+    QCOMPARE(back.pixelColor(0, 1), QColor(0, 0, 0));        // 1: the minimum, bottom left
+    QCOMPARE(back.pixelColor(2, 0), QColor(255, 255, 255));  // 6: the maximum, top right
+    QString error;
+    QVERIFY(!results::save_item(*store.item(curve), dir.filePath(QStringLiteral("x.png")), &error));
+    QVERIFY(error.contains(QStringLiteral("csv")));
+
+    // a whole run: one file per item (images also as PNG), names made safe, duplicates numbered
+    const QStringList files = results::save_set(*store.set(set), dir.filePath(QStringLiteral("run")), &error);
+    QCOMPARE(files.size(), 6);
+    QStringList names;
+    for (const QString& f : files) names << QFileInfo(f).fileName();
+    QCOMPARE(names, (QStringList{"camera.png", "camera.csv", "sweep.csv", "orders.csv", "orders (2).csv", "rays.csv"}));
+    QFile f(files[2]);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QCOMPARE(QString::fromUtf8(f.readAll()), results::to_csv(*store.item(curve)));
+    QCOMPARE(results::file_name_for(QStringLiteral("Run: 1/2."), QStringLiteral("csv")), QStringLiteral("Run_ 1_2.csv"));
   }
 
   void promoteRaysToCurves() {

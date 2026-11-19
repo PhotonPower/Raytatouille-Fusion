@@ -23,7 +23,10 @@ class ResultStore : public QObject {
   [[nodiscard]] const ResultSet* set(ResultId id) const;
 
   ResultId createSet(const QString& name, const QString& source = {});
-  ResultId addLines(ResultId set, const QString& name, LineSet lines);
+  /// `key`: a drawing that replaces older ones – the line items with this key in other result
+  /// sets are removed (and sets left empty by that), e.g. the camera of the Path Tracer drawn
+  /// again after its parameters changed.
+  ResultId addLines(ResultId set, const QString& name, LineSet lines, const QString& key = {});
   ResultId addField(ResultId set, const QString& name, FaceField field);
   /// `key`: as `setKey`, but set before the item is announced (one `changed` with the key – a
   /// window that ignores keyed results never sees the item without it)
@@ -62,6 +65,8 @@ class ResultStore : public QObject {
  private:
   ResultItem* mutableItem(ResultId id);
   ResultId add(ResultId set, ResultItem item);
+  /// Removes the line items with `key` outside `keep_set` (and sets left empty); no signal.
+  void dropKeyedLines(const QString& key, ResultId keep_set);
 
   std::vector<ResultSet> sets_;
   ResultId next_ = 1;
