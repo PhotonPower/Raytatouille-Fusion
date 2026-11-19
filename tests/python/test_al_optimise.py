@@ -278,6 +278,27 @@ for e, up in zip(edged.elements, rising):
         assert e.spread_h == 0.0 or e.spread_angle == 0.0, e
 assert any(rising)
 
+# ---- cylinder strips: a segment's prism its own, the cylinder the strip's – through it
+calls.clear()
+stripped = dataclasses.replace(settings, structure=al_lens.STRIPS, pitch=5.0, segment=10.0)
+flutes = O.optimise(stripped, frame, evaluate, rounds=0, spacing=2.0, direct=False, starts=(O.CYLINDERS,),
+                    along_edges=True, scout=False, least=2.0)
+fluted = al_lens.build(dataclasses.replace(stripped, sectors=flutes.sectors), frame)
+assert fluted.strips and len(flutes.elements) == fluted.cells > fluted.ny and len(calls) == 1
+assert flutes.objective < start - 0.5, (flutes.objective, start)
+by_strip = {}
+for e in flutes.elements:
+    by_strip.setdefault((e.y0, e.sector), set()).add((e.spread_h, e.spread_angle))
+    lean = fluted.tilts[e.sector]
+    assert e.spread_angle == round(lean, 6) and e.spread_v == 0.0 and e.z1 - e.z0 == 10.0, e
+    if lean:
+        assert abs(e.deflect_v - slope * e.deflect_h) <= O.ALONG + 1e-9, e
+assert all(len(x) == 1 for x in by_strip.values())                                 # one cylinder per strip,
+assert all(e.spread_h >= 2.0 for e in flutes.elements)                             # a real one (least)
+assert len({x for v_ in by_strip.values() for x in v_}) > 1 and any(e.deflect_v for e in flutes.elements)
+again_ = al_lens.build(dataclasses.replace(stripped, sectors=flutes.sectors, elements=flutes.elements), frame)
+assert again_.cells == fluted.cells and not again_.warnings
+
 # ---- R112's zone I in the table of the test points
 dist = al_photometry.Distribution(np.arange(-20, 20.01, 0.25), np.arange(-6, 3.01, 0.1), np.zeros((91, 161)), 0, 0, 1000)
 dist.intensity[(dist.v > -1.0) & (dist.v < -0.7)] = 12000.0
@@ -322,6 +343,7 @@ assert "optimise_lens" in plugin.actions()
 host = Host()
 ctx = Context(host, 1, plugin.convert_params({"lamp": "H4 (low beam)", "frame_width": 80.0, "frame_height": 50.0,
                                               "frame_radius": 8.0, "cell_width": 8.0, "cell_height": 8.0,
+                                              "lens_structure": al_plugin.CELLS,
                                               "focus_behind": 3.0, "sampling": 2.0, "optimise_rounds": 0,
                                               "optimise_blur": "none",
                                               "optimise_start": "both, the better kept"}), [])

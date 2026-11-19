@@ -31,7 +31,13 @@ its light distribution taken with the full model (evaluate) and half the differe
 the surrogate before it is optimised again; the best round is kept. The lamp as it is (helix,
 bulb) is softer than the filament images: with a Gaussian blur fitted on the plane lens
 (fit_blur) the beam is judged in two views, as the filament images have it and blurred – every
-lower limit in the darker of the two, every upper limit in the brighter. NumPy only."""
+lower limit in the darker of the two, every upper limit in the brighter.
+
+Cylinder strips (al_lens.STRIPS): the cells are the strips' segments – their patterns are those of
+the plane lens' segments, a cylinder smears them along the strip's lean over ± its spread (evenly:
+a segment spreads across the strip only). A segment's deflection is its own (in the wedge along
+the rise), its cylinder the strip's: chosen for all of a strip's segments at once (Surrogate.group).
+A strip in one piece deflects along its lean only (no prism along it). NumPy only."""
 
 from __future__ import annotations
 
@@ -632,6 +638,9 @@ class Surrogate:
         self.deepest = np.inf
         self.edge_angle = np.full(count, -1)                         # per cell: the one direction its cylinder may
         self.edge_slope = np.full(count, np.nan)                     # have, the line its deflection keeps to (-1, nan: any)
+        self.tilt = TILT                                             # how far a rising one's cylinder may turn from it
+        self.group = np.full(count, -1)                              # per cell: those that share its cylinder (-1: none)
+        self.least = 0.0                                             # degrees: a group's cylinder spreads at least so
 
     def smeared(self, k: int, sp: int, an: int) -> np.ndarray:
         axis, slope, halves = self.lines[(int(sp), int(an))]
@@ -675,6 +684,11 @@ def depths(settings: al_lens.LensSettings) -> tuple[np.ndarray, np.ndarray, np.n
     """How deep (mm, below the cell's middle) an element of the cell on the lamp axis reaches: the
     prism turning across (DEFLECT_H), up and down (DEFLECT_V), the cylinder (SPREAD x ANGLE) – an
     element's depth is at most their sum. inf: the element cannot bend the light that far."""
+    strips = settings.structure == al_lens.STRIPS
+    whole = strips and settings.segment <= 0.0
+    if strips:           # a segment: as a cell as wide and as long (a strip in one piece: hardly long)
+        settings = replace(settings, structure=al_lens.CELLS, cell_width=settings.pitch,
+                           cell_height=settings.segment if not whole else 0.2, sectors=())
     w, hgt = settings.cell_width, settings.cell_height
     frame = al_layout.rounded_rectangle(1.02 * w, 1.02 * hgt, 0.0)
 
@@ -687,7 +701,14 @@ def depths(settings: al_lens.LensSettings) -> tuple[np.ndarray, np.ndarray, np.n
         return -one.sag[0]
 
     across = np.array([depth(a) for a in DEFLECT_H])
+    cylinder = None
+    if strips:           # (its cylinder spreads across the strip, whatever its lean)
+        cylinder = np.repeat([[depth(0.0, 0.0, s)] for s in SPREAD], len(ANGLE), axis=1)
+    if whole:            # (a strip in one piece deflects along its spread: up and down only with its lean)
+        return across, np.zeros(len(DEFLECT_V)), cylinder
     up = np.array([depth(0.0, a) for a in DEFLECT_V])
+    if strips:
+        return across, up, cylinder
     cylinder = np.array([[depth(0.0, 0.0, s, 0.0, a) for a in ANGLE] for s in SPREAD])
     return across, up, cylinder
 
@@ -699,8 +720,10 @@ def _cost(dh, dv, sp, an, sur: Surrogate) -> np.ndarray:
 def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, progress=None,
             uniformity: float = 0.0, only: np.ndarray | None = None) -> tuple[Choice, int]:
     """Coordinate descent over the cells (brightest first): each cell's deflection with its
-    cylinder kept, then its cylinder (strength, direction) with its deflection kept. only: the
-    cells descended (the rest kept). Returns the choice and the sweeps made."""
+    cylinder kept, then its cylinder (strength, direction) with its deflection kept – cells of a
+    group (Surrogate.group: a strip's segments) share theirs: chosen for all of them at once, when
+    the first of them comes. only: the cells descended (the rest kept). Returns the choice and the
+    sweeps made."""
     pr = sur.probes
 
     def judged(flux):                            # (views, k, probes) -> objective (k)
@@ -719,8 +742,41 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
     SPg, ANg = np.concatenate([SPg[~plain], [0]]), np.concatenate([ANg[~plain], [int(np.argmin(np.abs(ANGLE)))]])
     done = 0
     before = float(judged(total[:, None, :])[0])
+    members = {}
+    for k in range(len(sur.flux)):
+        if sur.group[k] >= 0:
+            members.setdefault(int(sur.group[k]), []).append(k)
+
+    def shared(g: int, sweep: int, total: np.ndarray) -> tuple[np.ndarray, int]:
+        """The cylinder of group g's cells, their deflections kept: the new total and whether it changed."""
+        cells = np.array(members[g])
+        lit = cells[sur.flux[cells] > 0.0]
+        k0 = int(cells[0])
+        rest = total - sum(sur.at_probes(u, sur.smeared(u, choice.sp[u], choice.an[u]), choice.dh[u], choice.dv[u])[:, 0]
+                           for u in lit)
+        fits = np.ones(len(SPg), dtype=bool)
+        for u in cells:
+            fits &= sur.fits(choice.dh[u], choice.dv[u], SPg, ANg)
+        if sur.edge_angle[k0] >= 0:
+            fits &= (np.abs(ANGLE[ANg] - ANGLE[sur.edge_angle[k0]]) <= sur.tilt + 1e-9) | (SPREAD[SPg] == 0.0)
+        if sweep > 0:
+            turn = np.abs(ANg - choice.an[k0])
+            fits &= (np.abs(SPg - choice.sp[k0]) <= 2) & (np.minimum(turn, len(ANGLE) - turn) <= 2)
+        fits |= (SPg == choice.sp[k0]) & (ANg == choice.an[k0])
+        strong = fits & (SPREAD[SPg] >= sur.least - 1e-9)
+        fits = np.flatnonzero(strong if strong.any() else fits)
+        cand = sum(np.stack([sur.at_probes(u, sur.smeared(u, SPg[q], ANg[q]), choice.dh[u], choice.dv[u])[:, 0]
+                             for q in fits], axis=1) for u in lit)
+        score = judged(rest[:, None, :] + cand) + sum(_cost(choice.dh[u], choice.dv[u], SPg[fits], ANg[fits], sur)
+                                                      for u in lit)
+        best = int(np.argmin(score))
+        moved = int((choice.sp[k0], choice.an[k0]) != (SPg[fits[best]], ANg[fits[best]]))
+        choice.sp[cells], choice.an[cells] = SPg[fits[best]], ANg[fits[best]]
+        return rest + cand[:, best], moved
+
     for sweep in range(sweeps):
         changed = 0
+        visited = set()
         for n, k in enumerate(order):
             if progress is not None and n % 50 == 0:
                 progress((sweep + n / len(order)) / sweeps, f"optimising the lens: sweep {sweep + 1}, cell {n} of "
@@ -739,10 +795,18 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
             score = judged(rest[:, None, :] + cand) + _cost(DHg[fits], DVg[fits], choice.sp[k], choice.an[k], sur)
             best = int(np.argmin(score))
             choice.dh[k], choice.dv[k] = DHg[fits][best], DVg[fits][best]
+            if sur.group[k] >= 0:                       # the cylinder: the group's
+                total = rest + cand[:, best]
+                changed += old[:2] != (choice.dh[k], choice.dv[k])
+                if int(sur.group[k]) not in visited:
+                    visited.add(int(sur.group[k]))
+                    total, moved = shared(int(sur.group[k]), sweep, total)
+                    changed += moved
+                continue
             # the cylinder, the deflection kept: all in the first sweep, then those near the present one
             fits = sur.fits(choice.dh[k], choice.dv[k], SPg, ANg)
             if sur.edge_angle[k] >= 0:                  # spreading along its edge (a rising one: up to TILT off)
-                tilt = TILT if not np.isnan(sur.edge_slope[k]) else 0.0
+                tilt = sur.tilt if not np.isnan(sur.edge_slope[k]) else 0.0
                 fits &= (np.abs(ANGLE[ANg] - ANGLE[sur.edge_angle[k]]) <= tilt + 1e-9) | (SPREAD[SPg] == 0.0)
             else:
                 fits &= FREE[ANg]
@@ -785,8 +849,24 @@ class Result:
 
 
 def elements_of(system: al_lens.LensSystem, cells: list, choice: Choice) -> tuple:
+    """al_lens.Element per cell – per segment of a strip (STRIPS): its band across (t) and along (w;
+    a strip in one piece: z all); its spread along its lean (a strip in one piece: its deflection
+    too, deflect V the lean's share of deflect H – no prism along the strip)."""
     s = system.settings
     out = []
+    if system.strips:
+        L = s.segment
+        for k, (i, j, sector) in enumerate(cells):
+            m, n = i + system.strip_m0, j + system.strip_j0
+            dh, dv, spread, _, _ = choice.element(k)
+            lean = round(float(system.tilts[sector]), 6)
+            w0, w1 = ((n - 0.5) * L, (n + 0.5) * L) if L > 0.0 else (-500.0, 500.0)
+            if L <= 0.0:
+                dv = round(math.tan(math.radians(lean)) * dh, 6) + 0.0
+            out.append(al_lens.Element(round((m - 0.5) * s.pitch, 6), round((m + 0.5) * s.pitch, 6), round(w0, 6),
+                                       round(w1, 6), dh, dv, spread, 0.0, lean,
+                                       sector=sector if system.count > 1 else -1))
+        return tuple(out)
     for k, (i, j, sector) in enumerate(cells):
         y0, z0 = system.y0 + i * s.cell_width, system.z0 + j * s.cell_height
         out.append(al_lens.Element(round(y0, 6), round(y0 + s.cell_width, 6), round(z0, 6),
@@ -828,7 +908,8 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
              rounds: int = 2, blur: tuple[float, float] = (0.0, 0.0), spacing: float = 1.0,
              reflectance: float = 0.85, transmittance: float = 0.92, direct: bool = True, progress=None,
              log=None, uniformity: float = 0.0, starts: tuple = (None,), along_edges: bool = False,
-             band: float = 0.0, rise: float = 0.0, check=None, fit: float = 0.0, scout: bool = True) -> Result:
+             band: float = 0.0, rise: float = 0.0, check=None, fit: float = 0.0, scout: bool = True,
+             least: float = 0.0) -> Result:
     """The elements of every cell. evaluate(system) -> Distribution: the filament images (with the
     lamp's direct light) of a lens built; rounds: how often half its difference from the surrogate
     is carried back; blur (fit_blur, sigma H, V in degrees): a second view in which the beam must
@@ -851,7 +932,8 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     test points'; 0: none. check(system) -> Distribution: the lamp as it is (ray tracing) – once
     the rounds are done, what it adds to the blurred view of the lens kept is carried back and the
     cells optimised again, CHECKS times, each lens ray traced; the best by its ray tracing is kept
-    (Result.traced)."""
+    (Result.traced). least: the weakest cylinder a strip's segments share (degrees; STRIPS with
+    segments: every strip a cylinder lens, not a flat one)."""
     def step(lo: float, hi: float):
         if progress is None:
             return None
@@ -883,10 +965,22 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
 
     def surrogate(rays_: Rays, plane_: al_lens.LensSystem) -> Surrogate:
         """The surrogate of the plane lens' cells (parts), with each cell's edge if along_edges."""
-        s_ = Surrogate(rays_, pr, np.zeros(0), blur, (settings.cell_width, settings.cell_height))
+        cell = (settings.pitch, 1e-6) if plane_.strips else (settings.cell_width, settings.cell_height)
+        s_ = Surrogate(rays_, pr, np.zeros(0), blur, cell)
         s_.depth_h, s_.depth_v, s_.depth_c = depth
         s_.deepest = DEPTH * (settings.thickness - 0.3)              # (al_lens.build: at least 0.3 mm of glass left)
-        if along_edges:
+        if plane_.strips:          # a strip spreads along its lean, its segments share its cylinder
+            lean = np.array([plane_.tilts[k] for _, _, k in rays_.cells])
+            s_.edge_angle = np.abs(ANGLE[None, :] - lean[:, None]).argmin(axis=1)
+            s_.tilt = 0.0
+            if settings.segment <= 0.0:                          # in one piece: it deflects along its lean only
+                s_.edge_slope = np.tan(np.radians(lean))
+            else:                                                # the rising ones' segments along the rise
+                s_.edge_slope = np.where(lean != 0.0, np.tan(np.radians(lean)), np.nan)
+                strips = {}
+                s_.group = np.array([strips.setdefault((i, k), len(strips)) for i, _, k in rays_.cells])
+                s_.least = least
+        elif along_edges:
             rising = np.array([plane_.branch(k) == RISING for _, _, k in rays_.cells]) if plane_.count > 1 \
                 else edges(rays_, cut)
             level = int(np.argmin(np.abs(ANGLE)))
@@ -898,7 +992,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
         """What every cell begins with (a start of optimise's): its cylinders along each cell's edge."""
         z = zero if start is None else nearest(start, s_)
         choice = Choice(*(np.full(len(s_.flux), c, dtype=np.int64) for c in z))
-        if along_edges:
+        if along_edges or settings.structure == al_lens.STRIPS:
             choice.an[:] = np.where(SPREAD[choice.sp] > 0.0, s_.edge_angle, choice.an)
             off = ~np.isnan(s_.edge_slope) & (np.abs(DEFLECT_V[choice.dv] - cut.slope * DEFLECT_H[choice.dh]) > ALONG)
             choice.dh[off], choice.dv[off] = zero[0], zero[1]
@@ -921,7 +1015,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
         sur.background = at(first)
         base, _ = descend(sur, begin(starts[0], sur), margin, sweeps=SCOUT_SWEEPS, uniformity=uniformity,
                           progress=step(0.1, 0.13))
-        kept = {(i, j, plane.branch(k)): (base.dh[n], base.dv[n], base.sp[n], base.an[n])
+        kept = {(i + plane.strip_m0, j + plane.strip_j0, plane.branch(k)): (base.dh[n], base.dv[n], base.sp[n], base.an[n])
                 for n, (i, j, k) in enumerate(rays.cells)}
         a0, a1 = found[0].az_from, found[1].az_from
         best_s = [math.inf, None]
@@ -947,7 +1041,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
             sur_.background = at(first)
             choice = begin(starts[0], sur_)
             for n, (i, j, k) in enumerate(rays_.cells):
-                q = kept.get((i, j, plane_.branch(k)))
+                q = kept.get((i + plane_.strip_m0, j + plane_.strip_j0, plane_.branch(k)))
                 if q is not None:
                     choice.dh[n], choice.dv[n], choice.sp[n], choice.an[n] = q
             az = np.degrees(np.arctan2(rays_.z, rays_.y)) % 360.0

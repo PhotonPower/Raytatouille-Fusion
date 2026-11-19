@@ -574,6 +574,77 @@ try:
 except al_design.DesignError as e:
     assert "inside the mirror" in str(e)
 
+# ---- cylinder strips: through each sector in one piece, upright – leaning by the rise in the wedge
+strip = lambda element, **kw: lens_beam(element, structure=al_lens.STRIPS, pitch=5.0, **kw)     # noqa: E731
+turned, _, centre, wide_h, wide_v = strip((5.0, 0.0, 0, 0))                      # prisms: the beam turned
+assert turned.strips and abs(centre[0] - 5.0) < 0.2 and abs(centre[1]) < 0.1 and turned.fit_error < 1e-3, centre
+spread_s, _, centre, wide_h, _ = strip((0.0, 0.0, 8.0, 0.0), segment=0.0)        # cylinders in one piece: spread across
+assert abs(centre[0]) < 0.2 and wide_h[1] - wide_h[0] > 12.0 and wide_h[1] - wide_h[0] < 20.0, wide_h
+assert spread_s.cells == spread_s.used.sum() and spread_s.ny == spread_s.cells and spread_s.nz == 1
+y_ = np.linspace(-20.0, 20.0, 4001)                                              # across: equal strips, no step
+sag_ = spread_s.inner(y_, np.full(len(y_), 3.0))[0]
+assert np.abs(np.diff(sag_)).max() < 0.01 and sag_.max() - sag_.min() > 0.05
+cut_up = (al_lens.Sector(300.0, al_optics.RISING), al_lens.Sector(10.0, al_optics.HORIZONTAL))
+mixed = al_lens.build(al_lens.LensSettings(H7, cut, (al_lens.Element(-7.5, -2.5, -500, 500, 3.0, 0.0, 4.0),
+                                                     al_lens.Element(-500, 500, -500, 500, -2.0, -0.5, 8.0, 0.0, 15.0)),
+                                           structure=al_lens.STRIPS, pitch=5.0, sectors=cut_up), lens_frame)
+assert np.allclose(mixed.tilts, [0.0, 15.0]) and mixed.count == 2
+w_ = np.linspace(-30.0, 30.0, 6001)                                              # along a strip: no step in its sector
+for k_, t_ in ((0, -5.0), (1, 10.0)):
+    c_, s_ = math.cos(math.radians(mixed.tilts[k_])), math.sin(math.radians(mixed.tilts[k_]))
+    yy, zz = t_ * c_ + w_ * s_, -t_ * s_ + w_ * c_
+    sag_, _, _, on_, _ = mixed.inner(yy, zz)
+    mine = on_ & (mixed.sector(yy, zz) == k_)
+    assert mine.sum() > 1000 and np.abs(np.diff(sag_[mine])).max() < 0.005
+    h_ = 1e-5                                                                    # its slopes: those of its surface
+    a_, b_, c2 = mixed.inner(yy[mine][::300], zz[mine][::300]), mixed.inner(yy[mine][::300] + h_, zz[mine][::300]), \
+        mixed.inner(yy[mine][::300], zz[mine][::300] + h_)
+    assert np.allclose(a_[1], (b_[0] - a_[0]) / h_, atol=1e-4) and np.allclose(a_[2], (c2[0] - a_[0]) / h_, atol=1e-4)
+across_ = mixed.inner(np.array([-2.5 - 1e-6, -2.5 + 1e-6]), np.array([2.0, 2.0]))[0]          # between unequal ones
+assert abs(across_[1] - across_[0]) > 0.01
+pieces = al_lens.faces(mixed)
+strips_ = [f for f in pieces if f[0] == "element"]
+assert len({f[1] for f in strips_}) == mixed.cells and all(f[1].startswith("Lens strip") for f in strips_)
+assert any("|" in f[1] and "/" in f[1] for f in pieces if f[0] == "wall")                         # between strips
+assert any(" at " in f[1] for f in pieces if f[0] == "wall")                                      # along the sectors' lines
+assert not any(f[1].startswith("Lens step -1.") and "/0|" in f[1] for f in pieces)   # segments alike: no step
+assert any(f[1].startswith("Lens step 2.") and "/0|" in f[1] for f in pieces)        # a prism up and down: steps
+assert mixed.nz > 1 and mixed.cells == mixed.used.sum() > mixed.ny
+for _, name_, face in strips_[::4]:                                              # the faces are the segments
+    sf = face["surface"]
+    mj, k_ = name_.split()[-1].split("/")
+    m_, j_, k_ = int(mj.split(".")[0]), int(mj.split(".")[1]), int(k_)
+    ku, kv = np.array(sf["knots_u"]), np.array(sf["knots_v"])
+    uu, vv = np.linspace(ku[0], ku[-1], 4), np.linspace(kv[0], kv[-1], 6)
+    P_ = np.array(sf["points"]).reshape(sf["num_u"], sf["num_v"], 3)
+    X_ = np.einsum("ui,ijk,vj->uvk", al_spline.basis_matrix(ku, sf["num_u"], sf["degree_u"], uu), P_,
+                   al_spline.basis_matrix(kv, sf["num_v"], sf["degree_v"], vv))
+    T_, W_ = np.meshgrid(uu, vv, indexing="ij")
+    want = mixed.strip_at(m_ - mixed.strip_m0, j_ - mixed.strip_j0, k_, T_.ravel(), W_.ravel(), slopes=False)
+    assert np.abs(X_[..., 0].ravel() - mixed.settings.lens_x - want).max() < 1e-6
+    c_, s_ = math.cos(math.radians(mixed.tilts[k_])), math.sin(math.radians(mixed.tilts[k_]))
+    assert np.allclose(X_[..., 1], T_ * c_ + W_ * s_, atol=1e-6) and np.allclose(X_[..., 2], -T_ * s_ + W_ * c_, atol=1e-6)
+prisms = al_lens.build(al_lens.LensSettings(H7, cut, (al_lens.Element(-500, 500, -0.5, 9.5, 0.0, -1.0, 4.0),
+                                                      al_lens.Element(-500, 500, -500, 500, 0.0, 0.0, 4.0)),
+                                            structure=al_lens.STRIPS, pitch=5.0, segment=10.0), lens_frame)
+steps = [f for f in al_lens.faces(prisms) if f[1].startswith("Lens step")]     # a segment that turns light down:
+assert steps and all(f[1].endswith("|0") or f[1].endswith("|1") for f in steps), [f[1] for f in steps][:4]   # steps at its ends
+z_ = np.linspace(-20.0, 20.0, 4001)
+jump = np.abs(np.diff(prisms.inner(np.full(len(z_), 2.0), z_)[0]))
+assert jump.max() > 0.02 and np.sort(jump)[-3] < 0.01                          # two steps along the strip, no more
+try:
+    al_lens.build(al_lens.LensSettings(H7, cut, (al_lens.Element(*everywhere),), structure=al_lens.STRIPS,
+                                       wall_draft=5.0), lens_frame)
+    raise AssertionError("strips with drafted walls")
+except al_design.DesignError as e:
+    assert "strips" in str(e)
+aim = np.array([1.0, 0.4, 0.0]) / math.hypot(1.0, 0.4)                          # oblique rays across a step
+ends = np.column_stack([np.full(200, 75.0), np.linspace(-4.0, -1.0, 200), np.full(200, 2.0)])
+_, _, wall_ = mixed.through(ends - 60.0 * aim, np.tile(aim, (200, 1)), 1.0)
+assert 0 < wall_.sum() < 100
+_, _, wall_far = mixed.through(np.array([[0.0, -5.0, 2.0]]), np.array([[1.0, 0.0, 0.0]]), 1.0)
+assert not wall_far[0]
+
 # ---- signal lamps: the standard light distribution of UN R148, lamps with the coil across the axis
 flat = al_photometry.Distribution(np.arange(-39.875, 40, 0.25), np.arange(-19.875, 20, 0.25), np.full((160, 320), 100.0),
                                   1.0, 1.0, 1.0)
@@ -745,6 +816,16 @@ assert plugin.reflector(ctx).transitions is None
 ctx.params.update({"system": al_plugin.PATTERNED, "frame_curves": [], "position": (0.0, 0.0, 0.0), "cell_width": 12.5,
                    "cell_height": 16.0})
 host.model, host.results = [], []
+assert ctx.params["lens_structure"] == al_plugin.STRIPS                            # by default: cylinder strips
+assert "strips" in plugin.generate(ctx)
+kinds = [e["attributes"]["al.part"] for e in host.model]
+assert kinds.count("mirror") == 1 and kinds.count("lens") == 1 and kinds.count("element") >= 15
+assert any(e["name"].startswith("Lens strip") for e in host.model)
+walls_ = [e["name"] for e in host.model if e["attributes"]["al.part"] == "wall"]
+assert walls_ and all(n.startswith("Lens step") for n in walls_)   # one element for all: equal strips meet without a
+                                                                    # step, its prism down makes steps along them
+ctx.params["lens_structure"] = al_plugin.CELLS
+host.model = []
 assert "elements" in plugin.generate(ctx)
 kinds = [e["attributes"]["al.part"] for e in host.model]
 assert kinds.count("mirror") == 1 and kinds.count("lens") == 1 and kinds.count("element") >= 15
