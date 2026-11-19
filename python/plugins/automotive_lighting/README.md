@@ -292,7 +292,8 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   points lie along it). The beam of any choice is the sum of the shifted and smeared patterns and
   the lamp's direct light – no filament images to be taken again. Choices: deflection −16 … 16°
   (1° steps) across, −3 … 0.6° (0.2°) up and down; a cylinder of 0 … 12° spread turned by −60 …
-  90° (0, ± 5, 10, 15, 20, 30, 45, 60, 90°); |deflection| + the spread's part across ≤ 22°, its
+  90° (0, ± 5, 10, 15, 20, 30, 45, 60, 90°; in the wedge along the rise also 12.5 and 17.5°);
+  |deflection| + the spread's part across ≤ 22°, its
   part up and down ≤ 4°, and only elements that fit into the lens' thickness (prism and cylinder
   depths taken from al_lens).
 - **The objective**: R112's test points (their photometer windows) and zones III, IV and I (every
@@ -308,6 +309,18 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   kink), and the kink seen with the rise lit and sharp (*Optimise: under the rise*, 3000 cd: at
   least that 0.15–0.35° under the rising branch, 1–5° from the kink, above it at most a tenth);
   0 leaves either out.
+- **A target beam** (*Optimise: target beam*, a weight, 0.3; 0: none) – not only test points: the
+  whole field (|H| ≤ 30°, −6 … 2°; every 1° across, 0.1° up and down near the cut-off, 0.3°
+  further down) is fitted to the shape of a classic lens' beam, made from the plane lens' own
+  light: each row under the horizontal branch (its light summed across) spread anew – a core
+  (55 %, σ 2.5°, its middle 0.5° to the driver's side of the kink) and a wide part (σ 9°), both
+  wider the deeper the row –; on the driver's side every column lifted to the rising line (up to
+  1°), so that the rows follow the cut-off and the wedge under the rise is lit as the same depth
+  under the line; nothing above the line. Its term: the squared difference in the blurred view,
+  weighted three times within |H| < 12°, V > −4°, scaled so that the weight is that of a beam
+  missing the target entirely. The rounds log how far the beam is off it (the surrogate's / the
+  filament images', rms relative to the target's). With the weight 1 the target pulls against
+  R112 (zone III, 25R just missed); 0.3 keeps R112 first.
 - **Evenness** (*Optimise: evenness*, a weight; 0: R112 alone): below the cut-off (from 0.4°
   under the line down to −5°, |H| ≤ 20°) the beam is to be free of patches, stripes and hot
   spots. On a lattice of 1° across and 0.3° up and down, the second differences between
@@ -323,11 +336,14 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   more than half of the light lies above the horizontal branch on the driver's side it ends at the
   rising one – the wedge in front of the mirror's sector that the shield's slanting edge lets light
   reach (H4: from 316° to 4°, 1110 elements instead of 1063 cells); the rest ends at the
-  horizontal branch. The wedge's elements get cylinders turned by the rise (15°) and deflections
-  along it (within 0.15°), so the rise stays on its line; the others cylinders across and any
-  deflection. Free, the search pulls the wedge's light down to the oncoming traffic's side, where
-  R112 counts it, and leaves the rise dark. (Without a wedge: per cell, by the majority of its
-  light.)
+  horizontal branch. Then its two radial lines are searched: the one moved by ± 6 and ± 12°, the
+  best kept, then the other – for each the parts near the lines (15°) optimised again from where
+  the lens with the lines first found has them (two sweeps), the surrogate's objective compared;
+  the log lists them (H4: from 316–328° to 4–10°, depending on the objective). The wedge's elements
+  get cylinders turned by the rise (15°, or up to 5° off it: 10 … 20°) and deflections along it
+  (within 0.15°), so the rise stays on its line; the others cylinders across and any deflection.
+  Free, the search pulls the wedge's light down to the oncoming traffic's side, where R112 counts
+  it, and leaves the rise dark. (Without a wedge: per cell, by the majority of its light.)
 - **The start** (*Optimise: start with*): every cell begins as a cylinder lens spreading 6° across
   (the default), as plane glass, or both are tried – two searches, twice the time – and the better
   kept. The search ends near where it begins: from plane glass nearly every cell becomes a prism,
@@ -347,24 +363,35 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
 
 What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
 6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, from cylinder
-lenses, about 9 minutes, 0.75 GB): all of R112 met by the filament images and by the ray tracing.
+lenses, 0.75 GB; about 9 minutes before the sectors were searched and the target fitted, with
+them some 20 … 25 minutes on a machine shared with other work): all of R112 met by the filament
+images and by the ray tracing.
 
-| ray tracing | sectors, along the edges, band and rise (default) | free, R112 alone |
-|---|---|---|
-| under the cut-off, −10 … −2° / −2 … 0° | 6 700 / 14 000 cd | 2 500 / 7 400 cd |
-| under the cut-off, 0 … 2° / 2 … 6° (rise) | 12 400 / 3 300 cd | 11 800 / 3 700 cd |
-| 75R / 50R / 50V | 12 400 / 16 900 / 13 300 cd | 11 000 / 19 500 / 11 900 cd |
-| 25L / zone III | 2 200 / 582 cd | 2 600 / 594 cd |
-| at most | 19 000 cd | 20 200 cd |
-| cut-off | −0.70°, G = 0.28 | −0.70°, G = 0.46 |
-| bumps (of 50R's minimum) | 3.8 % | 3.7 % |
+| ray tracing | default (sectors searched, target 0.3) | target 0 | before (0.22: lines found, 15°) | free, R112 alone |
+|---|---|---|---|---|
+| under the cut-off, −10 … −2° / −2 … 0° | 4 300 / 10 900 cd | 4 800 / 11 300 cd | 6 700 / 14 000 cd | 2 500 / 7 400 cd |
+| under the cut-off, 0 … 2° / 2 … 6° (rise) | 11 400 / 4 800 cd | 11 700 / 4 700 cd | 12 400 / 3 300 cd | 11 800 / 3 700 cd |
+| 5000 cd line at H = 4° / 2000 cd at 8° | 0.05° / 0.55° | 0.05° / −0.65° | −0.25° / −1.65° | |
+| 75R / 50R / 50V | 11 900 / 14 500 / 11 300 cd | 11 800 / 18 500 / 11 100 cd | 12 400 / 16 900 / 13 300 cd | 11 000 / 19 500 / 11 900 cd |
+| 25L / zone III | 2 200 / 537 cd | 2 300 / 574 cd | 2 200 / 582 cd | 2 600 / 594 cd |
+| at most | 15 700 cd | 20 000 cd | 19 000 cd | 20 200 cd |
+| cut-off | −0.50°, G = 0.34 | −0.60°, G = 0.28 | −0.70°, G = 0.28 | −0.70°, G = 0.46 |
+| bumps (of 50R's minimum) | 3.0 % | 3.9 % | 3.8 % | 3.7 % |
 
 Free, the light gathers in a patch 2 … 3° under the cut-off and the horizontal branch is a faint
 seam; with the band it lies at the cut-off and falls off downwards, as in a real beam – the
-horizontal branch carried from below, the kink seen. Cut into sectors the rise is a little
-brighter and follows its line further than with square cells alone (the 5000 cd line at H = 4°:
-−0.25° instead of −0.75°; 102 elements with 15° cylinders instead of 39). Its price: a softer cut-off (G) and a darker
-rise (the wedge's light goes to the kink). How bright it can be at all is set by the mirror: every
+horizontal branch carried from below, the kink seen. Cut into sectors the rise is brighter and
+follows its line further than with square cells alone. Searching the sectors' lines and letting
+the wedge's cylinders turn by 10 … 20° makes it brighter still (2 … 6°: 4 700 instead of
+3 300 cd; at H = 4° 10 600 instead of 6 400 cd at most); the target beam spreads the light wider
+across (as a classic lens' flutes), evens it, keeps the rise lit along its line out to 8° and
+sharpens the cut-off – at the price of the hot spot (15 700 instead of 20 000 cd) and of the
+horizontal branch's band far to the side. A prototype of the target alone (continuous flutes, no
+prisms: its strips spread but do not move the light) reaches only 9 650 cd at most – 75R and 50R
+below R112's 10 100 cd: the prisms of the cells are what puts the hot spot under the kink. With
+the target's wedge at half the brightness of the row under the horizontal branch, as in that
+prototype, the target pulls the rise down (at H = 4° 6 900 cd at most): it is lit as the same
+depth under the line. How bright the beam can be at all is set by the mirror: every
 cell placed on its own as well as it can, the band would hold some 7 600 cd on average with the
 focus 6.7 mm behind the coil, 11 900 cd with it 3 mm behind; a longer focal length (35 mm) gives
 no more – the frame's mirror takes in less light. From plane glass (free) the beam is less even

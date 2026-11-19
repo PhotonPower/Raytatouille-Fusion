@@ -89,16 +89,17 @@ assert abs(both - O.objective(glare[None, None, :], pr, 0.1)[0]) < 1e-9
 both = O.objective(np.stack([ok, bad])[:, None, :], pr, 0.1)[0]       # the darker one a lower limit
 assert abs(both - O.objective(bad[None, None, :], pr, 0.1)[0]) < 1e-9
 lit = np.full(len(real.bins), 3000.0)                # the same beam with a band and a rise
-lit[rg["zone III"].at] = lit[rg["above the cut-off"].at] = lit[rg["over the cut-off"].at] = 100.0
-lit[rg["B50L"].at] = lit[rg["BR"].at] = lit[rg["over the rise"].at] = 100.0
+lit[rg["under the line"].at] = lit[rg["under the rise"].at] = 7000.0      # (a bin is probed once: the
+lit[rg["zone III"].at] = lit[rg["above the cut-off"].at] = lit[rg["over the cut-off"].at] = 100.0   # band
+lit[rg["B50L"].at] = lit[rg["BR"].at] = lit[rg["over the rise"].at] = 100.0                         # first)
 for name in ("75R", "50R", "50V"):
     lit[rg[name].at] = 12000.0
 lit[rg["under the cut-off"].at] = 5000.0
-lit[rg["under the line"].at] = lit[rg["under the rise"].at] = 7000.0
+points = np.concatenate([g.at for g in real.groups if g.weight >= 1.0])
 dark = lit.copy()
-dark[rg["under the line"].at] = dark[rg["under the rise"].at] = 3000.0
+dark[np.setdiff1d(np.concatenate([rg["under the line"].at, rg["under the rise"].at]), points)] = 3000.0
 assert O.objective(lit[None, None, :], real, 0.1)[0] < 0
-assert O.objective(dark[None, None, :], real, 0.1)[0] > O.objective(lit[None, None, :], real, 0.1)[0] + 0.05
+assert O.objective(dark[None, None, :], real, 0.1)[0] > O.objective(lit[None, None, :], real, 0.1)[0] + 0.02
 legal = lit.copy()                                   # but R112 comes first: a shortfall at 75R costs more
 legal[rg["75R"].at] = 6000.0
 assert O.objective(legal[None, None, :], real, 0.1)[0] > O.objective(dark[None, None, :], real, 0.1)[0]
@@ -117,6 +118,39 @@ patch = slope.copy()
 patch[pr.field[5, 10]] += 3000.0
 assert O.evenness(patch, pr) > 0.01
 assert O.objective(patch[None, None, :], pr, 0.1, 1.0)[0] > O.objective(slope[None, None, :], pr, 0.1, 1.0)[0] + 1e-4
+
+# ---- the target beam: the plane lens' light under the cut-off spread across, the wedge under the
+# rise filled, nothing above the line, as much light as the plane lens has
+HH, VV = np.meshgrid(h, v)
+beam = np.where((VV < -0.6) & (VV > -4.0) & (np.abs(HH) < 8.0), 10000.0, 0.0) \
+    + np.where((VV > -0.57) & (VV < 0.5) & (HH > 0.0) & (HH < 6.0), 3000.0, 0.0)
+T = O.target(cut, beam)
+om = al_photometry._solid_angle(HH, VV, O.DH, O.DV)
+assert abs((T * om).sum() / (beam * om).sum() - 1) < 1e-9
+top = np.minimum(np.degrees(np.arctan(cut.line(np.tan(np.radians(HH))))), O.TARGET_TOP)
+assert T[VV > top + 0.4].max() == 0.0 and T[(HH < 0) & (VV > cut.v_deg)].max() == 0.0
+at = lambda x, y: T[int(np.argmin(np.abs(v - y))), int(np.argmin(np.abs(h - x)))]  # noqa: E731
+rise_line = lambda x: min(-0.57 + np.tan(np.radians(15.0)) * x, O.TARGET_TOP)       # noqa: E731
+assert at(3.25, rise_line(3.25) - 0.3) > 0.5 * at(0.25, -0.87) and at(-3.0, 0.0) == 0.0   # the wedge lit as under the line
+assert at(6.25, 1.5) == 0.0 and at(6.25, 0.7) > 0.0                                 # up to TARGET_TOP
+row = T[int(np.argmin(np.abs(v + 1.0)))]
+assert (row * h).sum() / row.sum() > 0.0                                           # its core to the driver's side
+deep = T[int(np.argmin(np.abs(v + 3.0)))]
+left = h < 0.0                                                                     # (the side not lifted to the rise)
+assert deep[left].max() / deep[left].sum() < row[left].max() / row[left].sum()     # wider further down
+lefthand = dataclasses.replace(cut, right_hand_traffic=False)
+assert np.allclose(O.target(lefthand, beam[:, ::-1]), T[:, ::-1])                  # mirrored for left-hand traffic
+fitted = O.probes(cut, band=6000.0, rise=3000.0, fit=True)
+assert len(set(fitted.bins.tolist())) == len(fitted.bins)                          # a bin probed once
+fh_, fv_ = h[fitted.bins[fitted.fit] % len(h)], v[fitted.bins[fitted.fit] // len(h)]
+assert np.abs(fh_).max() <= O.FIT_H and fv_.min() >= O.FIT_V - O.DV and fv_.max() <= O.FIT_TOP
+assert np.allclose(np.diff(np.unique(fh_)), 2 * O.DH)
+O.set_target(fitted, T, 2.0)
+on = T.ravel()[fitted.bins]
+assert O.fit_error(on, fitted) < 1e-12 and abs(O.fit_error(0.0 * on, fitted) - 1) < 1e-12
+untargeted = dataclasses.replace(fitted, fit_weight=None)
+for x, extra in ((on, 0.0), (0.0 * on, 2.0)):                                    # its weight: that of the beam missing it all
+    assert abs(O.objective(x[None, None, :], fitted, 0.1)[0] - O.objective(x[None, None, :], untargeted, 0.1)[0] - extra) < 1e-9
 assert O.objective(patch[None, None, :], pr, 0.1)[0] == O.objective(slope[None, None, :], pr, 0.1)[0]
 
 # ---- a small H4 lens: the cells' light, the surrogate against the filament images
@@ -127,13 +161,14 @@ plane = al_lens.build(settings, frame)
 rays = O.lens_rays(plane, spacing=2.0)
 assert len(rays.cells) == plane.cells and rays.cell.max() < len(rays.cells) and (rays.flux > 0).all()
 sur = O.Surrogate(rays, pr, np.zeros((1, len(pr.bins))), cell=(8.0, 8.0))
-zero = O.Choice(*(np.full(len(rays.cells), z, dtype=np.int64) for z in (16, 15, 0, 7)))
+ANG = lambda a: int(np.flatnonzero(O.ANGLE == a)[0])                  # noqa: E731
+zero = O.Choice(*(np.full(len(rays.cells), z, dtype=np.int64) for z in (16, 15, 0, ANG(0.0))))
 assert O.DEFLECT_H[16] == 0.0 and O.DEFLECT_V[15] == 0.0
 flat = sur.full(zero)[0]
 inside = (rays.H >= O.H_RANGE[0]) & (rays.H < O.H_RANGE[1]) & (rays.V >= O.V_RANGE[0]) & (rays.V < O.V_RANGE[1])
 assert abs(flat.sum() / rays.flux[inside].sum() - 1) < 1e-5
-assert O.ANGLE[7] == 0.0 and O.SPREAD[1] == 1.0 and O.ANGLE[15] == 90.0
-moved = O.Choice(np.full(len(rays.cells), 22), zero.dv.copy(), np.full(len(rays.cells), 1), np.full(len(rays.cells), 15))
+assert O.SPREAD[1] == 1.0
+moved = O.Choice(np.full(len(rays.cells), 22), zero.dv.copy(), np.full(len(rays.cells), 1), np.full(len(rays.cells), ANG(90.0)))
 shifted = sur.full(moved)[0]                                                       # 6° to the right, ± 0.5° up and down
 centre = lambda m: ((m.sum(axis=0) * h).sum() / m.sum(), (m.sum(axis=1) * v).sum() / m.sum())  # noqa: E731
 assert abs(centre(shifted)[0] - centre(flat)[0] - 6.0) < 0.05 and abs(centre(shifted)[1] - centre(flat)[1]) < 0.02
@@ -145,8 +180,8 @@ omega = al_photometry._solid_angle(h[None, :], v[:, None], O.DH, O.DV)
 bright = seen > 0.2 * seen.max()
 assert np.abs((flat / omega)[bright] / seen[bright] - 1).mean() < 0.05            # the surrogate is the model
 # a cylinder turned by 15° (strength 6°): the surrogate's slanting smear against the lens built
-assert O.SPREAD[5] == 6.0 and O.ANGLE[10] == 15.0
-slant = O.Choice(zero.dh.copy(), zero.dv.copy(), np.full(len(rays.cells), 5), np.full(len(rays.cells), 10))
+assert O.SPREAD[5] == 6.0
+slant = O.Choice(zero.dh.copy(), zero.dv.copy(), np.full(len(rays.cells), 5), np.full(len(rays.cells), ANG(15.0)))
 built = al_lens.build(dataclasses.replace(settings, elements=(al_lens.Element(-1e3, 1e3, -1e3, 1e3, 0.0, 0.0, 6.0, 0.0, 15.0),)),
                       frame)
 model15 = al_photometry.intensity(H4, built.filament, *built.samples(2.0), np.full(len(built.samples(2.0)[0]), 0.85),
@@ -216,15 +251,21 @@ def check(system):
 
 
 edged = O.optimise(settings, frame, evaluate, rounds=0, spacing=2.0, direct=False, starts=(O.CYLINDERS,),
-                   along_edges=True, band=4000.0, rise=1500.0, check=check)
+                   along_edges=True, band=4000.0, rise=1500.0, check=check, fit=1.0)
 n = O.CHECKS
 assert len(traced) == 1 + n and len(calls) == 2 + 2 * n and edged.rounds[-n - 1].get("traced") is True
 assert all(r.get("checked") for r in edged.rounds[-n:]) and edged.traced is not None
 assert edged.objective == min(r["objective"] for r in edged.rounds[-n - 1:])
 assert "under the line" in edged.rounds[0]["model"] and np.isfinite(edged.objective)
+assert all(0.0 < f < 1.0 for f in edged.rounds[0]["fit"])                          # the target beam, missed by
 assert [x.branch for x in edged.sectors] == ["rising", "horizontal"]           # the wedge, cut out radially
 a0, a1 = edged.sectors[0].az_from, edged.sectors[1].az_from
 assert 270.0 < a0 < 360.0 and (a1 > a0 or a1 < 30.0), (a0, a1)                    # below the left side (driver's view)
+# the sectors searched: the lines first found, each moved in turn; the lowest kept
+assert len(edged.scouted) == 2 * len(O.SCOUT) + 1 and len({x[:2] for x in edged.scouted}) == len(edged.scouted)
+assert min(edged.scouted, key=lambda x: x[2])[:2] == (a0, a1)
+first_found = edged.scouted[0][:2]
+assert all(x[0] == first_found[0] or x[1] == first_found[1] or x[0] == a0 for x in edged.scouted)
 cutlens = al_lens.build(dataclasses.replace(settings, sectors=edged.sectors), frame)
 assert len(edged.elements) == cutlens.cells > plane.cells and all(e.sector in (0, 1) for e in edged.elements)
 slope = cut.slope
@@ -232,7 +273,7 @@ rising = [cutlens.branch(e.sector) == "rising" for e in edged.elements]
 for e, up in zip(edged.elements, rising):
     if up:
         assert abs(e.deflect_v - slope * e.deflect_h) <= O.ALONG + 1e-9, e
-        assert e.spread_h == 0.0 or e.spread_angle == 15.0, e
+        assert e.spread_h == 0.0 or abs(e.spread_angle - 15.0) <= O.TILT, e
     else:
         assert e.spread_h == 0.0 or e.spread_angle == 0.0, e
 assert any(rising)
@@ -300,7 +341,8 @@ assert host.results == ["image", "table", "curve", "curve"], host.results
 log = "\n".join(host.logs)
 assert "start 1 (cylinder lenses), round 1:" in log and "start 2 (plane glass), round 1:" in log
 assert "kept: the search from" in log and "filament images: R112" in log and "cut-off at V" in log
-assert "the lens cut into sectors" in log
+assert "the lens cut into sectors" in log and "the sectors searched: rising" in log
+assert "off the target beam by" in log
 again = plugin.lens_system(ctx)                    # the tables build the lens it was optimised for
 assert again.cells == n_parts and len(again.settings.elements) == n_parts and again.count == 2
 
