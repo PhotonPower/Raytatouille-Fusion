@@ -105,9 +105,14 @@ Blöcke nehmen S \emph{nativ}, also ohne Umwandlung an ihrem Eingang:
   \item \block{fusion.convert} mit \param{to}~=~\code{S}.
 \end{itemize}
 
-\code{auto} wählt S nur zwischen zwei Blöcken, die beide S nativ nehmen, und auch dort nur, wenn
-R nicht zulässig ist; bestehende Workflows behalten daher ihren Plan. S bekommen Sie also, indem
-Sie den Transport fest auf \code{S} stellen, typischerweise
+\code{auto} wählt S zwischen zwei Blöcken, die beide S nativ nehmen, sobald das Licht, das den
+ersten verlässt, ein Spektrum ist: hinter einem \block{fusion.convert} mit \param{to}~=~\code{S},
+hinter einer fest auf \code{S} gestellten Verbindung oder hinter einem Gitter, Stapel, einer
+verdichteten Gruppe oder einem Streukörper, die ein Spektrum bekommen haben. Die ganze Kette
+nativer Blöcke dahinter bleibt so bei S. Aus Strahlen erzeugt \code{auto} dagegen kein Spektrum
+von selbst (R $\to$ S geht über ein Feld und kann sehr viele Wellen ergeben); Workflows ohne
+Spektrum behalten daher ihren Plan. S beginnen Sie, indem Sie einen Transport fest auf \code{S}
+stellen oder einen \block{fusion.convert} einsetzen, typischerweise
 \begin{itemize}
   \item zwischen zwei Gittern oder einem Gitter und einem Stapel: keine Rundreise über ein Feld
         an jedem Block, die Kette ist so genau wie FourierGrating mit beiden Gittern in einer
@@ -138,8 +143,8 @@ bei Strahlen. Eine Verbindung, die fest auf R, H oder S steht, behält ihre Eins
 \paragraph{Was wurde verwendet?}\label{sec:workflow-verwendet}
 Nach einem Lauf zeigt eine Verbindung auf \code{auto}, was sie tatsächlich getragen hat, wenn es
 vom Plan abweicht: \textbf{R$\to$H} heißt geplant R, gerechnet als Feld (Detektor nahe einem
-Fokus); \textbf{R$\to$S} heißt geplant R, aber ein Spektrum ist geflossen (z.\,B.\ aus einem
-\block{fusion.convert} in eine Kamera). Der Tooltip nennt in der Zeile \gui{last run} die
+Fokus); \textbf{R$\to$S} hieße geplant R, aber ein Spektrum ist geflossen -- seit \code{auto}
+hinter einem Spektrum selbst S plant, kommt das praktisch nicht mehr vor. Der Tooltip nennt in der Zeile \gui{last run} die
 Darstellung, die Umwandlungen auf dem Weg und den Grund, z.\,B.\
 \code{last run: S (R$\to$H$\to$S) – lens gave rays; spectra on the link; Camera takes them as
 they are} -- das auch bei einem festen Transport. \enquote{takes them as they are} heißt: Der

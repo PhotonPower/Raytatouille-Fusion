@@ -152,6 +152,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   ray tracing) with R112 still met.
 
 ### Changed
+- **auto plans S behind a spectrum** (RTT-Fusion R30f): a link between two blocks that take
+  spectra natively is planned S once the light leaving the first is a spectrum (behind
+  *fusion.convert* to S, a fixed S link, or a grating, stack, condensed group or particle fed a
+  spectrum), so such links read S instead of R→S. Workflows without spectra keep their plan.
 - **Raytracer and Workflow plugins need RTT-Fusion 0.3** (plane-wave spectra on links, the
   representation each link carried). *Plugins → Settings…* reports an older version; *Create
   environment…* installs 0.3 from PyPI.

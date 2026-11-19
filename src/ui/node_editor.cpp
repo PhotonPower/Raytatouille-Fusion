@@ -255,8 +255,9 @@ class LinkItem : public QGraphicsPathItem {
       const bool is_auto = transport == QLatin1String("auto");
       QString text = representation_ + (is_auto ? QString() : QStringLiteral("*"));
       // what the link carried in the last run: on an auto link the label shows it where it differs
-      // from the plan (a camera near a focus: R→H; a spectrum on a link planned R: R→S); the
-      // tooltip names the conversions (H→S, S→H→R) also on a fixed link
+      // from the plan (a camera near a focus: R→H; a spectrum on a link planned R: R→S, rare since
+      // auto plans S behind spectra); the tooltip names the conversions (H→S, S→H→R) also on a
+      // fixed link
       const QString used = planned["used"].toString();
       if (is_auto && !used.isEmpty() && used != representation_) text += QStringLiteral("→") + used;
       if (const QString last = lastRun(planned); !last.isEmpty()) tip << last;
