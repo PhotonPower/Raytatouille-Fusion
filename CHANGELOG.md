@@ -28,8 +28,19 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   *Image as PNG…* (one pixel per value, colour map and log scale as shown), *View with axes as
   PNG…*, *Values as CSV…*. Images and fields as PNG and CSV (a grid, `numpy.loadtxt` reads it),
   curves, tables, bars and rays as CSV (docs/plugins.md, "Saving results").
-- **Plugin API: `ctx.lines(..., key=...)`** – a drawing that replaces the earlier line items with
-  that key.
+- **Result drawings are objects in the views.** The rays of a run (Raytracer *Trace rays*) and the
+  Path Tracer's camera are one clickable element each: hovered and selected like an object
+  (Shift / Cmd–Ctrl add and remove), *Move* and *Rotate* move them (alone or with objects, one
+  undo step; a display transform – the rays are not traced again, CSV export and *Convert to CAD
+  curves* use the shown place), *Delete* removes them (undoable). Copy, Scale, Mirror and the
+  arrays stay for objects.
+- **Path Tracer: move and rotate the camera in the views.** Moving or rotating the drawn viewing
+  pyramid writes *Position*, *Looks at*, *Up* and the new *Roll* (`camera_roll`: turn about the
+  view direction, degrees) into the panel, in the same undo step; *Up* is the axis needing the
+  least turn, *Roll* the rest, so every rotation is kept exactly.
+- **Plugin API: `ctx.lines(..., key=..., binding=...)`** – a keyed drawing replaces the earlier
+  line items with that key; a binding names point parameters and a camera orientation that
+  moving the drawing writes back (docs/plugin-api.md, "Drawings bound to parameters").
 - **User manual (German, LaTeX and PDF)**: `docs/manual/handbuch.pdf`, about 390 pages – installation,
   main window, navigation, modelling with every command, layers and groups, files, plugins, the
   node workflow, the Raytracer, Path Tracer, FourierGrating and Automotive Lighting plugins; appendices

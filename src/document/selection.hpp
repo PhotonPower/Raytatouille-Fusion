@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <functional>
 #include <optional>
 #include <set>
 #include <vector>
@@ -32,6 +33,10 @@ struct SelectionItem {
 /// Selected and hovered items (M3). Kept consistent with the document: removed entities and
 /// those on a locked layer leave the selection, and objects on a locked layer cannot be
 /// selected. Not part of the undo history.
+///
+/// Besides entities, result drawings can be selected: the line items of a run (rays, the Path
+/// Tracer's camera), by the run's id (results::ResultId) – docs/plugins.md, "Result drawings in
+/// the views". empty() and the entity queries ignore them.
 class Selection : public QObject {
   Q_OBJECT
  public:
@@ -51,11 +56,25 @@ class Selection : public QObject {
   /// Entities with any selected item (whole or parts).
   [[nodiscard]] std::vector<EntityId> entities() const;
 
+  /// Mode::Replace also deselects the result drawings.
   void apply(const std::vector<SelectionItem>& items, Mode mode);
+  /// Deselects everything (entities and result drawings).
   void clear();
+
+  // ---- result drawings (runs by id)
+  [[nodiscard]] const std::set<std::uint64_t>& results() const { return results_; }
+  [[nodiscard]] bool hasResults() const { return !results_.empty(); }
+  [[nodiscard]] bool isResultSelected(std::uint64_t set) const { return results_.contains(set); }
+  /// Selects result drawings like apply(); Mode::Replace also deselects the entities.
+  void applyResults(const std::vector<std::uint64_t>& sets, Mode mode);
+  /// Drops the runs that no longer exist (the result store changed).
+  void retainResults(const std::function<bool(std::uint64_t)>& exists);
 
   [[nodiscard]] std::optional<SelectionItem> hovered() const { return hovered_; }
   void setHovered(std::optional<SelectionItem> item);
+  /// The result drawing under the cursor (a run's id).
+  [[nodiscard]] std::optional<std::uint64_t> hoveredResult() const { return hovered_result_; }
+  void setHoveredResult(std::optional<std::uint64_t> set);
 
   /// Incremented on every change (renderers compare it to skip work).
   [[nodiscard]] std::uint64_t version() const { return version_; }
@@ -71,6 +90,8 @@ class Selection : public QObject {
   std::set<SelectionItem> items_;
   std::vector<SelectionItem> order_;
   std::optional<SelectionItem> hovered_;
+  std::set<std::uint64_t> results_;
+  std::optional<std::uint64_t> hovered_result_;
   std::uint64_t version_ = 0;
 };
 

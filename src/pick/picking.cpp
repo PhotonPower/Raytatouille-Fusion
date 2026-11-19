@@ -308,4 +308,59 @@ std::vector<document::EntityId> pick_rect(const std::vector<Target>& targets,
   return out;
 }
 
+std::optional<LineHit> pick_lines(const std::vector<LineTarget>& targets, const viewport::Camera& camera,
+                                  const QPointF& cursor_px, float radius_px) {
+  const viewport::Ray ray = camera.pickRay(cursor_px);
+  const QMatrix4x4 view_projection = camera.viewProjection();  // once: ray sets are large
+  const QSizeF size = camera.viewportSize();
+  std::optional<LineHit> best;
+  for (const LineTarget& t : targets) {
+    if (t.item == nullptr || !t.item->lines) continue;
+    const results::LineSet& l = *t.item->lines;
+    // where the drawing is shown: its placement (row-major [R | t]) before the projection
+    const auto& m = t.item->placement.matrix();
+    QMatrix4x4 model;
+    for (int r = 0; r < 3; ++r) {
+      model.setRow(r, QVector4D(static_cast<float>(m[4 * r]), static_cast<float>(m[4 * r + 1]),
+                                static_cast<float>(m[4 * r + 2]), static_cast<float>(m[4 * r + 3])));
+    }
+    const QMatrix4x4 mvp = view_projection * model;
+    auto screen = [&](const QVector3D& p) -> std::optional<QPointF> {
+      const QVector4D clip = mvp * QVector4D(p, 1.0F);
+      if (clip.w() <= 0.0F) return std::nullopt;  // behind the eye
+      return QPointF((clip.x() / clip.w() + 1.0) * 0.5 * size.width(), (1.0 - clip.y() / clip.w()) * 0.5 * size.height());
+    };
+    for (std::size_t k = 0; k < l.polylineCount(); ++k) {
+      std::optional<QPointF> prev_px;
+      QVector3D prev;
+      for (std::uint32_t p = l.starts[k]; p < l.starts[k + 1]; ++p) {
+        if (std::isnan(l.points[3 * p])) break;  // a lost ray ends here
+        const QVector3D w(l.points[3 * p], l.points[3 * p + 1], l.points[3 * p + 2]);
+        const std::optional<QPointF> px = screen(w);
+        if (prev_px && px) {
+          const auto [d, s] = point_segment_2d(cursor_px, *prev_px, *px);
+          if (d <= radius_px) {
+            const QVector3D at = model.map(prev + (w - prev) * static_cast<float>(s));
+            const float depth = QVector3D::dotProduct(at - ray.origin, ray.direction);
+            const auto dist = static_cast<float>(d);
+            if (!best || dist < best->distance_px - 0.5F ||
+                (std::abs(dist - best->distance_px) <= 0.5F && depth < best->depth)) {
+              best = LineHit{t.id, dist, depth, l.on_top};
+            }
+          }
+        }
+        prev_px = px;
+        prev = w;
+      }
+    }
+  }
+  return best;
+}
+
+bool line_hit_wins(const LineHit& line, const std::optional<Hit>& entity) {
+  if (!entity) return true;
+  if (entity->kind == Hit::Kind::Face) return line.on_top || line.depth < entity->depth;
+  return line.distance_px < entity->distance_px;
+}
+
 }  // namespace nfcad::pick

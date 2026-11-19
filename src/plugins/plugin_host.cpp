@@ -449,8 +449,23 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     l.unit = args["unit"].toString();
     l.on_top = args["on_top"].toBool(true);
     l.range = range_of(args);
-    return static_cast<qint64>(results_->addLines(static_cast<results::ResultId>(args["set"].toInteger()),
-                                                  args["name"].toString(), std::move(l), args["key"].toString()));
+    // a binding names parameters of this plugin that moving the drawing writes (result_edit.hpp)
+    const QJsonObject binding = args["binding"].toObject();
+    if (!binding.isEmpty()) {
+      QStringList known;
+      for (const QJsonValue& p : params_) known << p.toObject()["name"].toString();
+      QStringList named = binding["points"].toObject().keys();
+      for (const char* key : {"up_param", "roll_param"}) {
+        if (const QString n = binding["view"].toObject()[QLatin1String(key)].toString(); !n.isEmpty()) named << n;
+      }
+      for (const QString& n : named) {
+        if (!known.contains(n)) throw std::runtime_error(("binding: no parameter " + n).toStdString());
+      }
+    }
+    const auto id = results_->addLines(static_cast<results::ResultId>(args["set"].toInteger()), args["name"].toString(),
+                                       std::move(l), args["key"].toString());
+    if (!binding.isEmpty()) results_->setBinding(id, binding);
+    return static_cast<qint64>(id);
   }
   if (method == QLatin1String("results.field")) {
     results::FaceField f;

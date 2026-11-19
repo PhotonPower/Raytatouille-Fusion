@@ -106,7 +106,7 @@ document as modified but is not an undo step.
 | `ctx.replace(id, geometry)` | new geometry for an object – shown immediately (live optimisation) |
 | `ctx.set_attribute(id, key, value)` | attribute (None removes it) |
 | `ctx.result_set(name)` | a new run in the *Results* dock |
-| `ctx.lines(set, name, points, starts, values, colormap=, unit=, on_top=, value_range=, key=)` | polylines; `points` (n, 3), `starts` = first point of each polyline plus the total; NaN ends a polyline; with `key` the drawing replaces the line items with that key of earlier runs (e.g. a camera drawn again) |
+| `ctx.lines(set, name, points, starts, values, colormap=, unit=, on_top=, value_range=, key=, binding=)` | polylines; `points` (n, 3), `starts` = first point of each polyline plus the total; NaN ends a polyline; with `key` the drawing replaces the line items with that key of earlier runs (e.g. a camera drawn again); `binding`: parameters the drawing stands for (below) |
 | `ctx.field(set, name, entity, values, width, height, face=0, colormap=, unit=, value_range=)` | field on a face over its normalised (u, v): `values[j * width + i]` |
 | `ctx.curve(set, name, x, y, x_label=, y_label=)` / `ctx.append(curve, x, y)` | curve in the *Plot* dock, extended live |
 | `ctx.image(set, name, values, width, height, extent=(x0, x1, y0, y1), x_label=, y_label=, colormap=, unit=, value_range=, description=, rgb=)` | 2D image in the *Image* window (e.g. a camera image): `values[j * width + i]`, row 0 at y0, extent in physical units; with `rgb` (red, green, blue in 0 … 1 per pixel, sRGB) a colour image, shown as it is – `values` is then the number read out under the cursor |
@@ -293,3 +293,29 @@ Signed plugins inside the repository are checked by the `signed_plugins` test.
 also loads unsigned plugins – e.g. the one you are writing – from their folder. They appear as
 *Name [unsigned]*, and a red *DEVELOPER MODE* banner stays in the status bar. A signature proves
 who wrote a plugin and that it is unchanged; it is not a sandbox.
+
+## Drawings bound to parameters
+
+The user can select a run's line drawing in the views and move, rotate or delete it (a display
+transform, docs/plugins.md). With `binding=` a drawing stands for parameters of the plugin that
+drew it; moving it writes their new values into the plugin's parameters (one undo step with the
+motion; the panel shows them; the next action gets them). Names must be parameters of the plugin.
+
+```python
+ctx.lines(run, "Viewing pyramid", points, starts, key="pathtracer:camera", binding={
+    "points": {"camera_position": [x, y, z], "camera_target": [x, y, z]},   # as drawn
+    "view": {"forward": [..], "up": [..],              # unit vectors of the camera as drawn
+             "up_param": "camera_up", "roll_param": "camera_roll",
+             "choices": {"+Z": [0, 0, 1], "-Z": [0, 0, -1], ...},
+             "order": ["+Z", ...]},                    # ties: first one (the current choice)
+})
+```
+
+- `points`: point parameters, moved with the drawing.
+- `view`: an orientation. CAD writes into `up_param` the choice whose direction, made orthogonal
+  to the moved view direction, needs the least turn about it to reach the moved `up`, and into
+  `roll_param` that turn in degrees (right-handed about the view direction; 0 when the choice
+  fits). The plugin rebuilds the up vector as `cos(roll)·up₀ + sin(roll)·right₀` with
+  `right₀ = normalize(forward × choice)`, `up₀ = right₀ × forward` (Path Tracer:
+  `pt_setup.camera_up`). Without `roll_param` the nearest choice is written and the status bar
+  says which turn about the view was lost.

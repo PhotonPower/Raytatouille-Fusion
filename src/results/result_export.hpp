@@ -28,7 +28,7 @@ namespace nfcad::results {
 /// - table: the column heads, then the rows;
 /// - bars: "label,<y label>", then one bar per line;
 /// - lines: "polyline,x,y,z" (and "value" if the points have values), one point per line,
-///   NaN where a ray was lost.
+///   NaN where a ray was lost; where the drawing is shown (moved / rotated in the views).
 [[nodiscard]] QString to_csv(const ResultItem& item);
 
 /// The file suffixes a result can be saved as: "png" and "csv" for images and face fields, "csv"

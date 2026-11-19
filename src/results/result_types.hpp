@@ -1,9 +1,11 @@
 #pragma once
 
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <cstdint>
 #include <memory>
+#include <nurbforge/geometry/transform.hpp>
 #include <optional>
 #include <vector>
 
@@ -113,6 +115,13 @@ struct ResultItem {
   QString stamp;
   Kind kind = Kind::Lines;
   bool visible = true;
+  /// Line items: where the drawing is shown – a rigid motion (Move / Rotate of the drawing in the
+  /// views) applied when it is drawn, picked, saved and converted to curves; the data stay as
+  /// computed. Identity for a new item.
+  nf::Transform placement;
+  /// Line items: the plugin parameters the drawing stands for (e.g. a camera's position), which
+  /// moving it writes back – see results/result_edit.hpp, bound_parameters(). Empty: none.
+  QJsonObject binding;
   std::shared_ptr<const LineSet> lines;
   std::shared_ptr<const FaceField> field;
   std::shared_ptr<const Curve> curve;
@@ -132,5 +141,14 @@ struct ResultSet {
 
 /// Data range of a value array (NaN ignored); {0, 1} for no data.
 [[nodiscard]] Range data_range(const std::vector<float>& values);
+
+/// True for the identity (nothing moved).
+[[nodiscard]] bool is_identity(const nf::Transform& t);
+
+/// Point p of a line item where it is shown (its placement applied).
+[[nodiscard]] inline nf::Vec3 placed_point(const ResultItem& item, std::size_t p) {
+  const float* q = &item.lines->points[3 * p];
+  return item.placement.apply({q[0], q[1], q[2]});
+}
 
 }  // namespace nfcad::results

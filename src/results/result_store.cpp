@@ -21,6 +21,8 @@ Range data_range(const std::vector<float>& values) {
   return {lo, hi};
 }
 
+bool is_identity(const nf::Transform& t) { return t.matrix() == nf::Transform().matrix(); }
+
 Range FaceField::effectiveRange() const { return range.value_or(data_range(values)); }
 
 Range Image::effectiveRange() const { return range.value_or(data_range(values)); }
@@ -198,6 +200,56 @@ void ResultStore::setItemVisible(ResultId id, bool visible) {
   }
 }
 
+void ResultStore::setPlacement(ResultId id, const nf::Transform& placement) {
+  if (ResultItem* i = mutableItem(id); i != nullptr && i->placement.matrix() != placement.matrix()) {
+    i->placement = placement;
+    emit changed();
+  }
+}
+
+void ResultStore::setBinding(ResultId id, const QJsonObject& binding) {
+  if (ResultItem* i = mutableItem(id)) i->binding = binding;
+}
+
+void ResultStore::removeLines(ResultId id) {
+  for (ResultSet& s : sets_) {
+    if (s.id != id) continue;
+    std::erase_if(s.items, [](const ResultItem& i) { return i.kind == ResultItem::Kind::Lines; });
+    if (s.items.empty()) {
+      removeSet(id);
+      return;
+    }
+    emit changed();
+    return;
+  }
+}
+
+void ResultStore::restoreSet(ResultSet set, std::size_t index) {
+  for (const ResultItem& i : set.items) next_ = std::max(next_, i.id + 1);
+  next_ = std::max(next_, set.id + 1);
+  const auto it = std::find_if(sets_.begin(), sets_.end(), [&](const ResultSet& s) { return s.id == set.id; });
+  if (it != sets_.end()) {
+    *it = std::move(set);
+  } else {
+    sets_.insert(sets_.begin() + static_cast<std::ptrdiff_t>(std::min(index, sets_.size())), std::move(set));
+  }
+  emit changed();
+}
+
+std::size_t ResultStore::indexOf(ResultId id) const {
+  const auto it = std::find_if(sets_.begin(), sets_.end(), [id](const ResultSet& s) { return s.id == id; });
+  return static_cast<std::size_t>(it - sets_.begin());
+}
+
+ResultId ResultStore::setOf(ResultId item) const {
+  for (const ResultSet& s : sets_) {
+    for (const ResultItem& i : s.items) {
+      if (i.id == item) return s.id;
+    }
+  }
+  return 0;
+}
+
 void ResultStore::removeSet(ResultId id) {
   std::erase_if(sets_, [id](const ResultSet& s) { return s.id == id; });
   emit changed();
@@ -220,14 +272,15 @@ std::vector<const ResultItem*> ResultStore::visibleItems(ResultItem::Kind kind) 
 }
 
 std::vector<document::Entity> ResultStore::promote(const LineSet& lines, std::size_t every,
-                                                   std::size_t max_count) {
+                                                   std::size_t max_count, const nf::Transform& placement) {
   std::vector<document::Entity> out;
   every = std::max<std::size_t>(every, 1);
   for (std::size_t k = 0; k < lines.polylineCount() && out.size() < max_count; k += every) {
     std::vector<nf::Vec3> pts;
     for (std::uint32_t p = lines.starts[k]; p < lines.starts[k + 1]; ++p) {
-      const nf::Vec3 q{lines.points[3 * p], lines.points[3 * p + 1], lines.points[3 * p + 2]};
-      if (std::isnan(q.x) || std::isnan(q.y) || std::isnan(q.z)) break;  // lost ray: stop there
+      const nf::Vec3 raw{lines.points[3 * p], lines.points[3 * p + 1], lines.points[3 * p + 2]};
+      if (std::isnan(raw.x) || std::isnan(raw.y) || std::isnan(raw.z)) break;  // lost ray: stop there
+      const nf::Vec3 q = placement.apply(raw);
       if (pts.empty() || nf::distance(pts.back(), q) > 1e-12) pts.push_back(q);
     }
     if (pts.size() < 2) continue;

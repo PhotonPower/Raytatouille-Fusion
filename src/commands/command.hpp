@@ -3,6 +3,7 @@
 #include <QString>
 #include <QStringList>
 #include <memory>
+#include <nurbforge/geometry/transform.hpp>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -72,6 +73,15 @@ class Command {
   /// True if the command is complete right after begin() (e.g. Booleans).
   [[nodiscard]] virtual bool immediate() const { return false; }
 
+  /// Commands that move the selection rigidly (Move, Rotate) also move selected result drawings
+  /// (rays, a plugin's camera – docs/plugins.md, "Result drawings in the views"): before begin()
+  /// the controller gives them the drawings' polylines (preview; non-empty: there are drawings,
+  /// so begin() accepts a selection without entities), and applies takeMotion() to them.
+  [[nodiscard]] virtual bool movesDrawings() const { return false; }
+  void setDrawingWire(std::vector<std::vector<nf::Vec3>> wire) { drawing_wire_ = std::move(wire); }
+  /// The rigid motion applied since the last call (for the selected drawings).
+  [[nodiscard]] std::optional<nf::Transform> takeMotion() { return std::exchange(motion_, std::nullopt); }
+
   /// Entities created since the last call.
   [[nodiscard]] std::vector<document::Entity> takeEntities() { return std::exchange(entities_, {}); }
   /// All changes since the last call: created entities, removed ids, replaced geometry
@@ -91,6 +101,8 @@ class Command {
   std::vector<std::pair<document::EntityId, document::GeometryPtr>> replace_;
   QString message_;
   PlaneFrame view_plane_;
+  std::vector<std::vector<nf::Vec3>> drawing_wire_;
+  std::optional<nf::Transform> motion_;
 };
 
 /// Creates a command by id or alias (case-insensitive): point/pt, line/l, polyline/pl,

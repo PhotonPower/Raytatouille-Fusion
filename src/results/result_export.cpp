@@ -93,7 +93,9 @@ QString field_csv(const QString& name, const FaceField& f) {
   return out;
 }
 
-QString lines_csv(const LineSet& l) {
+QString lines_csv(const ResultItem& item) {
+  const LineSet& l = *item.lines;
+  const bool moved = !is_identity(item.placement);
   const bool values = !l.values.empty() && l.values.size() == l.pointCount();
   QString out = row(values ? QStringList{QStringLiteral("polyline"), QStringLiteral("x"), QStringLiteral("y"),
                                          QStringLiteral("z"),
@@ -102,8 +104,9 @@ QString lines_csv(const LineSet& l) {
                                          QStringLiteral("z")});
   for (std::size_t k = 0; k < l.polylineCount(); ++k) {
     for (std::uint32_t p = l.starts[k]; p < l.starts[k + 1] && 3 * p + 2 < l.points.size(); ++p) {
-      out += QString::number(k) + QLatin1Char(',') + number(l.points[3 * p]) + QLatin1Char(',') +
-             number(l.points[3 * p + 1]) + QLatin1Char(',') + number(l.points[3 * p + 2]);
+      const nf::Vec3 q = moved ? placed_point(item, p) : nf::Vec3{l.points[3 * p], l.points[3 * p + 1], l.points[3 * p + 2]};
+      out += QString::number(k) + QLatin1Char(',') + number(q.x) + QLatin1Char(',') + number(q.y) + QLatin1Char(',') +
+             number(q.z);
       if (values) out += QLatin1Char(',') + number(l.values[p]);
       out += QLatin1Char('\n');
     }
@@ -176,7 +179,7 @@ QString to_csv(const ResultItem& item) {
   switch (item.kind) {
     case ResultItem::Kind::Image: return item.image ? image_csv(item.name, *item.image) : QString();
     case ResultItem::Kind::Field: return item.field ? field_csv(item.name, *item.field) : QString();
-    case ResultItem::Kind::Lines: return item.lines ? lines_csv(*item.lines) : QString();
+    case ResultItem::Kind::Lines: return item.lines ? lines_csv(item) : QString();
     case ResultItem::Kind::Curve: {
       if (!item.curve) return {};
       const Curve& c = *item.curve;

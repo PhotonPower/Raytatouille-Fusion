@@ -10,6 +10,10 @@
 #include "render/scene.hpp"
 #include "results/result_store.hpp"
 
+namespace nfcad::document {
+class Selection;
+}
+
 namespace nfcad::render {
 
 /// Per-viewport GPU copy of the visible results (docs/plugins.md, P2): line sets (rays) as
@@ -22,6 +26,8 @@ class ResultRenderer {
     QMatrix4x4 view;
     bool perspective = false;
     DisplayMode mode = DisplayMode::Shaded;
+    /// Selected / hovered result drawings are highlighted (may be null).
+    const document::Selection* selection = nullptr;
   };
 
   void initialize(QRhi* rhi, QRhiRenderTarget* target, int sample_count);
@@ -38,6 +44,7 @@ class ResultRenderer {
     std::shared_ptr<const results::LineSet> data;  // identity
     LineLayer layer;
     bool on_top = true;
+    int highlight = 0;  // 0 plain, 1 hovered, 2 selected (vertex colours)
   };
   struct GpuField {
     std::shared_ptr<const results::FaceField> data;  // identity

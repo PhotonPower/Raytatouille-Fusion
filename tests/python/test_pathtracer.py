@@ -1134,6 +1134,16 @@ p.update(export="", samples=20_000)
 assert plugin.show_paths(cad) == "20 light paths" and plugin.show_camera(cad) == "Camera drawn"
 assert cad.line_sets == [("Light paths", 20), ("Viewing pyramid", 5)]
 assert cad.line_kw[-1]["key"] == "pathtracer:camera" and "key" not in cad.line_kw[0]   # the camera replaces itself
+binding = cad.line_kw[-1]["binding"]                       # moved or rotated in the views, it writes the camera back
+assert set(binding["points"]) == {"camera_position", "camera_target"} and binding["view"]["roll_param"] == "camera_roll"
+assert np.allclose(binding["points"]["camera_position"], p["camera_position"]) and binding["view"]["order"][0] == "+Z"
+json.dumps(binding)
+# the roll CAD writes turns the camera about its view, right-handed: +Z turned by 30° about +Y
+up0 = pt_setup.camera_up((0, -100, 0), (0, 0, 0), "+Z")
+cam = pt_scene.Camera((0, -100, 0), (0, 0, 0), pt_setup.camera_up((0, -100, 0), (0, 0, 0), "+Z", 30.0), 40, 16, 12)
+assert np.allclose(up0, (0, 0, 1)) and np.allclose(cam.up, (0.5, 0, math.sqrt(3) / 2))
+assert np.allclose(cam.right, (math.sqrt(3) / 2, 0, -0.5)) and np.allclose(cam.forward, (0, 1, 0))
+assert pt_setup.camera_up((0, 0, 0), (0, 0, 5), "+Z", 30.0) == (0.0, 0.0, 1.0)   # along "up": left to the camera
 cad.selection = [12, 13]
 plugin.clear(cad)
 assert plain[1]["attributes"] == {} and plain[2]["attributes"] == {}

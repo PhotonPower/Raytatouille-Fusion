@@ -45,17 +45,32 @@ class ResultStore : public QObject {
 
   void setSetVisible(ResultId set, bool visible);
   void setItemVisible(ResultId item, bool visible);
+  /// Where a line item is shown (ResultItem::placement).
+  void setPlacement(ResultId item, const nf::Transform& placement);
+  /// What a line item stands for in its plugin's parameters (ResultItem::binding).
+  void setBinding(ResultId item, const QJsonObject& binding);
   void removeSet(ResultId set);
+  /// Removes the line items of a run (its drawing in the views); the run goes too if nothing
+  /// else is left in it.
+  void removeLines(ResultId set);
+  /// Puts a run back as it was (undo): replaces the run with this id, or inserts it at `index`.
+  void restoreSet(ResultSet set, std::size_t index);
+  /// Position of a run in sets() (sets().size() if unknown).
+  [[nodiscard]] std::size_t indexOf(ResultId set) const;
+  /// The run an item belongs to (0 if unknown).
+  [[nodiscard]] ResultId setOf(ResultId item) const;
   void clear();
 
   /// Visible items of visible sets.
   [[nodiscard]] std::vector<const ResultItem*> visibleItems(ResultItem::Kind kind) const;
   [[nodiscard]] const ResultItem* item(ResultId id) const;
 
-  /// Creates CAD polylines from every n-th polyline of a line set (at most `max_count`);
-  /// returns the entities (the caller adds them as one undo step).
+  /// Creates CAD polylines from every n-th polyline of a line set (at most `max_count`), where
+  /// the drawing is shown (`placement`); returns the entities (the caller adds them as one undo
+  /// step).
   [[nodiscard]] static std::vector<document::Entity> promote(const LineSet& lines, std::size_t every,
-                                                             std::size_t max_count);
+                                                             std::size_t max_count,
+                                                             const nf::Transform& placement = {});
 
  signals:
   void changed();

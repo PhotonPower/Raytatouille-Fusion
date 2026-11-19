@@ -107,6 +107,8 @@ class TestPluginHost : public QObject {
     QCOMPARE(items[4].image->rgb, rgb);
     QCOMPARE(items[0].lines->polylineCount(), std::size_t{2});
     QCOMPARE(items[0].lines->values.size(), std::size_t{4});
+    QCOMPARE(items[0].key, QStringLiteral("test:rays"));  // a drawing bound to the parameter "where"
+    QVERIFY(items[0].binding["points"].toObject().contains(QStringLiteral("where")));
     QCOMPARE(items[1].field->values.size(), std::size_t{6});
     QCOMPARE(items[2].curve->y.size(), std::size_t{2});  // incl. the appended point
     bool logged = false;

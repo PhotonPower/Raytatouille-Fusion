@@ -72,7 +72,10 @@ caustics, a prism, materials with depth of field.
 
 4. **Camera.** Position, *Looks at* (both with *Pick*), up direction, horizontal field of view and
    pixels; *Show camera* draws the viewing pyramid (drawn again, it replaces the earlier drawing:
-   there is one camera in the views). *Camera image* shows the radiance in
+   there is one camera in the views). Click the pyramid in a view to select it: *Move* and
+   *Rotate* move the camera – position, *Looks at*, *Up* and *Roll* follow in the panel (undoable);
+   *Roll* turns the image about the view direction (degrees, right-handed), so any rotation is
+   kept exactly; *Delete* removes the drawing. *Camera image* shows the radiance in
    W/(m² sr) in the *Image* window (*White at percentile* sets the grey scale). With several
    wavelengths and *Colour image* it adds an image in colour, the one the window then shows: every wavelength in
    the colour the eye gives it (CIE 1931 observer, sRGB), equal power on all wavelengths of the

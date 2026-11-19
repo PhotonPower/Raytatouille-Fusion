@@ -7,6 +7,8 @@
 #include "commands/input_parser.hpp"
 #include "document/document.hpp"
 #include "document/selection.hpp"
+#include "results/result_edit.hpp"
+#include "results/result_store.hpp"
 #include "viewport/viewport.hpp"
 #include "viewport/viewport_grid.hpp"
 
@@ -81,7 +83,20 @@ bool CommandController::start(const QString& name) {
   if (!cmd) return false;
   if (command_) cancel();
   last_name_ = cmd->id();
+  drawings_.clear();
+  drawing_note_.clear();
   if (cmd->usesSelection()) {
+    // selected result drawings (rays, a plugin's camera): Move and Rotate take them along
+    std::vector<std::uint64_t> drawings;
+    if (selection_ != nullptr && results_ != nullptr) {
+      for (std::uint64_t id : selection_->results()) {
+        if (!results::drawn_lines(*results_, id).empty()) drawings.push_back(id);
+      }
+    }
+    if (cmd->movesDrawings() && !drawings.empty()) {
+      cmd->setDrawingWire(results::drawing_wire(*results_, drawings));
+      drawings_ = drawings;
+    }
     // whole entities in selection order (Boolean difference: first minus the others)
     std::vector<document::Entity> picked;
     if (selection_ != nullptr) {
@@ -89,6 +104,10 @@ bool CommandController::start(const QString& name) {
         if (i.sub.kind != document::SubElement::Kind::None) continue;
         if (const document::Entity* e = doc_->entity(i.entity)) picked.push_back(*e);
       }
+    }
+    if (picked.empty() && !drawings.empty() && !cmd->movesDrawings()) {
+      status_->showMessage(tr("%1: result drawings can only be moved and rotated").arg(cmd->title()), 6000);
+      return true;
     }
     if (!cmd->begin(picked)) {
       status_->showMessage(cmd->message(), 6000);
@@ -217,7 +236,20 @@ void CommandController::onPicked(viewport::Viewport* view, const Point3& p, bool
 void CommandController::flush() {
   if (!command_) return;
   document::Edit edit = command_->takeEdit();
+  std::unique_ptr<QUndoCommand> drawings;
+  if (const auto motion = command_->takeMotion(); motion && results_ != nullptr && !drawings_.empty()) {
+    drawings = results::move_results(*results_, doc_, drawings_, *motion, command_->title(), &drawing_note_);
+  }
+  if (!drawings) {
+    if (!edit.empty()) doc_->apply(std::move(edit), command_->title());
+    return;
+  }
+  // objects and drawings moved together: one undo step
+  QUndoStack* undo = doc_->undoStack();
+  undo->beginMacro(command_->title());
   if (!edit.empty()) doc_->apply(std::move(edit), command_->title());
+  undo->push(drawings.release());
+  undo->endMacro();
 }
 
 void CommandController::handle(Command::Result r) {
@@ -227,10 +259,14 @@ void CommandController::handle(Command::Result r) {
       flush();
       refresh();
       break;
-    case Command::Result::Done:
+    case Command::Result::Done: {
       flush();
-      end(command_->message());
+      const QString message = command_->message();
+      // e.g. "Viewing pyramid: up +Z, roll 12.50°" – what a moved camera wrote into its plugin
+      end(message.isEmpty() && !drawing_note_.isEmpty() ? tr("%1 – %2").arg(command_->title(), drawing_note_)
+                                                        : message);
       break;
+    }
     case Command::Result::Cancelled:
       end(tr("%1 cancelled").arg(command_->title()));
       break;

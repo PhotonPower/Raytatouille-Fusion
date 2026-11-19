@@ -2,7 +2,9 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QSignalSpy>
+#include <QJsonArray>
 #include <QTemporaryDir>
+#include <numbers>
 #include <QTest>
 #include <cmath>
 #include <nurbforge/nurbforge.hpp>
@@ -11,6 +13,7 @@
 #include "document/document.hpp"
 #include "render/scene.hpp"
 #include "results/colormap.hpp"
+#include "results/result_edit.hpp"
 #include "results/result_export.hpp"
 #include "results/result_io.hpp"
 #include "results/result_store.hpp"
@@ -233,6 +236,119 @@ class TestResults : public QObject {
     QVERIFY(f.open(QIODevice::ReadOnly));
     QCOMPARE(QString::fromUtf8(f.readAll()), results::to_csv(*store.item(curve)));
     QCOMPARE(results::file_name_for(QStringLiteral("Run: 1/2."), QStringLiteral("csv")), QStringLiteral("Run_ 1_2.csv"));
+  }
+
+  void boundParametersFollowTheCamera() {
+    // a camera at (0, -100, 0) looking at the origin along +Y, up +Z (as the Path Tracer draws it)
+    const QJsonObject binding{
+        {"points", QJsonObject{{"pos", QJsonArray{0, -100, 0}}, {"target", QJsonArray{0, 0, 0}}}},
+        {"view", QJsonObject{{"forward", QJsonArray{0, 1, 0}},
+                             {"up", QJsonArray{0, 0, 1}},
+                             {"up_param", "up"},
+                             {"roll_param", "roll"},
+                             {"choices", QJsonObject{{"+Z", QJsonArray{0, 0, 1}},
+                                                     {"-Z", QJsonArray{0, 0, -1}},
+                                                     {"+Y", QJsonArray{0, 1, 0}},
+                                                     {"-Y", QJsonArray{0, -1, 0}},
+                                                     {"+X", QJsonArray{1, 0, 0}},
+                                                     {"-X", QJsonArray{-1, 0, 0}}}},
+                             {"order", QJsonArray{"+Z", "-Z", "+Y", "-Y", "+X", "-X"}}}}};
+    auto point = [](const QJsonObject& o, const char* name) {
+      const QJsonArray a = o[QLatin1String(name)].toArray();
+      return nf::Vec3{a[0].toDouble(), a[1].toDouble(), a[2].toDouble()};
+    };
+    constexpr double kQuarter = std::numbers::pi / 2;
+    // moved: the points go along, the orientation stays
+    QString note;
+    QJsonObject v = results::bound_parameters(binding, nf::Transform::translation({10, 0, 5}), &note);
+    QVERIFY(nf::distance(point(v, "pos"), {10, -100, 5}) < 1e-12);
+    QVERIFY(nf::distance(point(v, "target"), {10, 0, 5}) < 1e-12);
+    QCOMPARE(v["up"].toString(), QStringLiteral("+Z"));
+    QCOMPARE(v["roll"].toDouble(), 0.0);
+    QCOMPARE(note, QStringLiteral("up +Z"));
+    // turned about Z (the construction plane of the top view): up stays +Z without roll
+    v = results::bound_parameters(binding, nf::Transform::rotation({0, 0, 0}, {0, 0, 1}, kQuarter));
+    QVERIFY(nf::distance(point(v, "pos"), {100, 0, 0}) < 1e-9);
+    QCOMPARE(v["up"].toString(), QStringLiteral("+Z"));
+    QCOMPARE(v["roll"].toDouble(), 0.0);
+    // turned about the view direction by 30°: +Z with a roll of +30° (right-handed about the view)
+    v = results::bound_parameters(binding, nf::Transform::rotation({0, 0, 0}, {0, 1, 0}, std::numbers::pi / 6), &note);
+    QCOMPARE(v["up"].toString(), QStringLiteral("+Z"));
+    QVERIFY(std::abs(v["roll"].toDouble() - 30.0) < 1e-9);
+    QCOMPARE(note, QStringLiteral("up +Z, roll 30.00°"));
+    // tilted to look up along +Z: +Z is the view direction now, the up becomes -Y without roll
+    v = results::bound_parameters(binding, nf::Transform::rotation({0, -100, 0}, {1, 0, 0}, kQuarter));
+    QVERIFY(nf::distance(point(v, "target"), {0, -100, 100}) < 1e-9);
+    QCOMPARE(v["up"].toString(), QStringLiteral("-Y"));
+    QCOMPARE(v["roll"].toDouble(), 0.0);
+    // a plugin without a roll parameter: the nearest choice, and the note says the turn is lost
+    QJsonObject view = binding["view"].toObject();
+    view.remove(QStringLiteral("roll_param"));
+    QJsonObject no_roll = binding;
+    no_roll["view"] = view;
+    v = results::bound_parameters(no_roll, nf::Transform::rotation({0, 0, 0}, {0, 1, 0}, std::numbers::pi / 6), &note);
+    QCOMPARE(v["up"].toString(), QStringLiteral("+Z"));
+    QVERIFY(!v.contains(QStringLiteral("roll")));
+    QVERIFY(note.contains(QStringLiteral("cannot be kept")));
+    QVERIFY(results::bound_parameters({}, nf::Transform::translation({1, 0, 0})).isEmpty());
+  }
+
+  void drawingsMoveAndDeleteAsUndoSteps() {
+    document::Document doc;
+    results::ResultStore store;
+    doc.setPluginParameters(QStringLiteral("cam"), QJsonObject{{"fov", 40}});
+    results::LineSet l;
+    l.points = {0, -100, 0, 0, 0, 0};
+    const auto camera = store.createSet(QStringLiteral("Camera"), QStringLiteral("cam"));
+    const auto pyramid = store.addLines(camera, QStringLiteral("pyramid"), l, QStringLiteral("cam:camera"));
+    store.setBinding(pyramid, QJsonObject{{"points", QJsonObject{{"pos", QJsonArray{0, -100, 0}}}}});
+    QSignalSpy shown(&doc, &document::Document::pluginParametersSet);
+
+    // moved twice: the motions compose, the bound parameter follows, the others stay
+    for (int k = 0; k < 2; ++k) {
+      QString note;
+      auto step = results::move_results(store, &doc, {camera}, nf::Transform::translation({5, 0, 0}),
+                                        QStringLiteral("Move"), &note);
+      QVERIFY(step);
+      doc.undoStack()->push(step.release());
+    }
+    QVERIFY(nf::distance(results::placed_point(*store.item(pyramid), 0), {10, -100, 0}) < 1e-12);
+    const QJsonArray pos = doc.pluginParameters(QStringLiteral("cam"))["pos"].toArray();
+    QVERIFY(pos.size() == 3 && pos[0].toDouble() == 10.0 && pos[1].toDouble() == -100.0 && pos[2].toDouble() == 0.0);
+    QCOMPARE(doc.pluginParameters(QStringLiteral("cam"))["fov"].toInt(), 40);
+    QCOMPARE(shown.count(), 2);  // the plugin panel shows the values
+    // where it is shown: saved and converted to curves there
+    QVERIFY(results::to_csv(*store.item(pyramid)).contains(QStringLiteral("0,10,-100,0\n")));
+    const auto curves = results::ResultStore::promote(*store.item(pyramid)->lines, 1, 10, store.item(pyramid)->placement);
+    QVERIFY(nf::distance(std::get<nf::NurbsCurve>(*curves.front().geometry).evaluate(0.0), {10, -100, 0}) < 1e-12);
+    doc.undoStack()->undo();
+    doc.undoStack()->undo();
+    QVERIFY(results::is_identity(store.item(pyramid)->placement));
+    QCOMPARE(doc.pluginParameters(QStringLiteral("cam")), (QJsonObject{{"fov", 40}}));
+    QVERIFY(!results::move_results(store, &doc, {12345}, nf::Transform(), QStringLiteral("Move")));
+
+    // deleted: the drawing goes – a run with other results keeps them; undo puts all back in place
+    const auto trace = store.createSet(QStringLiteral("Trace"));
+    const auto rays = store.addLines(trace, QStringLiteral("rays"), l);
+    results::Curve c;
+    store.addCurve(trace, QStringLiteral("spot"), c);
+    const auto last = store.createSet(QStringLiteral("Last"));
+    auto del = results::delete_results(store, {trace, camera}, QStringLiteral("Delete"));
+    QVERIFY(del);
+    doc.undoStack()->push(del.release());
+    QVERIFY(store.set(camera) == nullptr);
+    QCOMPARE(store.set(trace)->items.size(), std::size_t{1});
+    QCOMPARE(store.sets().size(), std::size_t{2});
+    doc.undoStack()->undo();
+    QCOMPARE(store.sets().size(), std::size_t{3});
+    QCOMPARE(store.sets()[0].id, camera);
+    QCOMPARE(store.sets()[1].id, trace);
+    QCOMPARE(store.sets()[2].id, last);
+    QVERIFY(store.item(rays) != nullptr && store.item(pyramid) != nullptr);
+    QCOMPARE(store.item(pyramid)->binding["points"].toObject().size(), 1);
+    QVERIFY(!results::delete_results(store, {last}, QStringLiteral("Delete")));  // no drawing
+    // an item added after the restore gets a fresh id
+    QVERIFY(store.addLines(last, QStringLiteral("more"), l) > rays);
   }
 
   void promoteRaysToCurves() {

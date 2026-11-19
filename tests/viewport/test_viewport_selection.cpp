@@ -5,6 +5,7 @@
 #include "document/document.hpp"
 #include "document/selection.hpp"
 #include "render/scene.hpp"
+#include "results/result_store.hpp"
 #include "tessellation/tessellation_service.hpp"
 #include "viewport/viewport.hpp"
 
@@ -87,6 +88,41 @@ class TestViewportSelection : public QObject {
     send(v, QEvent::MouseMove, Qt::LeftButton, c1);
     send(v, QEvent::MouseButtonRelease, Qt::LeftButton, c1);
     QCOMPARE(selection_.items().size(), std::size_t{2});
+  }
+
+  void resultDrawingsAreClickable() {
+    // the rays of a run cross the first box (drawn on top): hovering and clicking a ray picks the
+    // whole drawing instead of the face under it; a click on the box picks the box again
+    nfcad::results::ResultStore store;
+    nfcad::results::LineSet l;
+    l.points = {-9, -6, 4, -3, -6, 4, -9, -4, 4, -3, -4, 4};
+    l.starts = {0, 2, 4};
+    const auto run = store.createSet(QStringLiteral("Trace"));
+    store.addLines(run, QStringLiteral("rays"), l);
+    Viewport v(ViewKind::Top);
+    v.resize(800, 600);
+    v.setScene(&scene_);
+    v.setSelection(&selection_);
+    v.setResults(&store);
+    v.zoomExtents();
+    const QPointF ray = *v.camera().project({-5, -4, 4});
+    const QPointF box = *v.camera().project({-5, -8, 4});
+    send(v, QEvent::MouseMove, Qt::NoButton, ray);
+    QCOMPARE(selection_.hoveredResult(), std::optional<std::uint64_t>(run));
+    QVERIFY(!selection_.hovered());
+    send(v, QEvent::MouseButtonPress, Qt::LeftButton, ray);
+    send(v, QEvent::MouseButtonRelease, Qt::LeftButton, ray);
+    QVERIFY(selection_.isResultSelected(run) && selection_.empty());
+    send(v, QEvent::MouseMove, Qt::NoButton, box);
+    QVERIFY(!selection_.hoveredResult() && selection_.hovered());
+    send(v, QEvent::MouseButtonPress, Qt::LeftButton, box, Qt::ShiftModifier);
+    send(v, QEvent::MouseButtonRelease, Qt::LeftButton, box, Qt::ShiftModifier);
+    QVERIFY(selection_.isResultSelected(run));
+    QCOMPARE(selection_.entities(), std::vector{ids_[0]});
+    send(v, QEvent::MouseButtonPress, Qt::LeftButton, box);
+    send(v, QEvent::MouseButtonRelease, Qt::LeftButton, box);
+    QVERIFY(!selection_.hasResults());
+    selection_.clear();
   }
 
   void subElementClick() {

@@ -130,6 +130,9 @@ class PathTracerPlugin(Plugin):
         "camera_position": Param.point((300.0, -300.0, 200.0), label="Position", group="Camera"),
         "camera_target": Param.point((0.0, 0.0, 0.0), label="Looks at", group="Camera"),
         "camera_up": Param.choice(list(pt_setup.UP), "+Z", label="Up", group="Camera"),
+        "camera_roll": Param.number(0.0, min=-180.0, max=180.0, decimals=3, unit="°", label="Roll", group="Camera",
+                                    description="Turn of the image about the view direction (right-handed), from "
+                                                "\"Up\". Set when the camera drawing is rotated in the views"),
         "camera_fov": Param.number(40.0, min=0.1, max=170.0, decimals=2, unit="°", label="Field of view (horizontal)",
                                    group="Camera"),
         "camera_width": Param.integer(320, min=8, max=4096, unit="px", label="Width", group="Camera"),
@@ -328,10 +331,14 @@ class PathTracerPlugin(Plugin):
                               face=f["face"], unit=unit["irradiance"], colormap="inferno")
         return f"Irradiance on {len(faces)} face(s), {out['samples']:,} samples{note}"
 
+    @staticmethod
+    def _up(p) -> tuple:
+        return pt_setup.camera_up(p["camera_position"], p["camera_target"], p["camera_up"], p.get("camera_roll", 0.0))
+
     def _camera(self, ctx) -> pt_scene.Camera:
         p = ctx.params
         try:
-            return pt_scene.Camera(p["camera_position"], p["camera_target"], pt_setup.UP[p["camera_up"]],
+            return pt_scene.Camera(p["camera_position"], p["camera_target"], self._up(p),
                                    p["camera_fov"], p["camera_width"], p["camera_height"],
                                    p["camera_lens"], p["camera_focus"])
         except ValueError as e:
@@ -344,7 +351,7 @@ class PathTracerPlugin(Plugin):
         camera = self._camera(ctx)
         scene = self._scene(ctx)
         if self._native(ctx):
-            camera = pt_native.camera(p["camera_position"], p["camera_target"], pt_setup.UP[p["camera_up"]],
+            camera = pt_native.camera(p["camera_position"], p["camera_target"], self._up(p),
                                       p["camera_fov"], p["camera_width"], p["camera_height"], p["camera_lens"],
                                       p["camera_focus"])
         out, note = self._render(ctx, scene, camera, "Camera image")
@@ -385,8 +392,17 @@ class PathTracerPlugin(Plugin):
         points = [apex, c[0], apex, c[1], apex, c[2], apex, c[3], c[0], c[1], c[2], c[3], c[0]]
         starts = [0, 2, 4, 6, 8, 13]
         run = ctx.result_set("Camera")
+        # selected in the views, the drawing can be moved and rotated: CAD then writes position, target,
+        # up and roll of the moved camera into the parameters
+        up = ctx.params["camera_up"]
+        binding = {"points": {"camera_position": [float(v) for v in camera.position],
+                              "camera_target": [float(v) for v in ctx.params["camera_target"]]},
+                   "view": {"forward": [float(v) for v in camera.forward], "up": [float(v) for v in camera.up],
+                            "up_param": "camera_up", "roll_param": "camera_roll",
+                            "choices": {k: [float(c) for c in v] for k, v in pt_setup.UP.items()},
+                            "order": [up] + [k for k in pt_setup.UP if k != up]}}
         ctx.lines(run, "Viewing pyramid", np.asarray(points), starts, np.zeros(len(points)), colormap="grey",
-                  key=CAMERA_KEY)  # replaces the camera drawn before
+                  key=CAMERA_KEY, binding=binding)  # replaces the camera drawn before
         return "Camera drawn"
 
     @action("Show light paths", description="Draws some paths of the light from the sources – to check where "

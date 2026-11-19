@@ -1,3 +1,4 @@
+#include <QJsonArray>
 #include <QLineEdit>
 #include <QSignalSpy>
 #include <QStatusBar>
@@ -9,6 +10,7 @@
 #include "document/document.hpp"
 #include "document/selection.hpp"
 #include "render/scene.hpp"
+#include "results/result_store.hpp"
 #include "snap/snap_engine.hpp"
 #include "tessellation/tessellation_service.hpp"
 #include "viewport/viewport.hpp"
@@ -136,6 +138,67 @@ class TestCommandController : public QObject {
     QVERIFY(!c.active());
     const auto& shell = std::get<nf::Shell>(*doc.entity(result)->geometry);
     QVERIFY(std::abs(shell.mass_properties().centroid.z - 12.0) < 1e-6);
+  }
+
+  void movesAndRotatesSelectedDrawings() {
+    // a plugin's camera drawing, bound to its position: Move and Rotate move the drawing and
+    // write the camera's new place into the plugin's parameters, one undo step each
+    nfcad::document::Document doc;
+    nfcad::document::Selection selection;
+    selection.attach(&doc);
+    nfcad::results::ResultStore store;
+    nfcad::viewport::ViewportGrid grid;
+    QLineEdit line;
+    QStatusBar status;
+    CommandController c(&doc, &selection, &grid, &line, &status);
+    c.setResults(&store);
+    nfcad::results::LineSet l;
+    l.points = {0, -100, 0, 0, 0, 0};
+    const auto run = store.createSet(QStringLiteral("Camera"), QStringLiteral("cam"));
+    const auto item = store.addLines(run, QStringLiteral("pyramid"), l);
+    store.setBinding(item, QJsonObject{{"points", QJsonObject{{"pos", QJsonArray{0, -100, 0}}}}});
+    selection.applyResults({run}, nfcad::document::Selection::Mode::Replace);
+    auto pos = [&] {
+      const QJsonArray a = doc.pluginParameters(QStringLiteral("cam"))["pos"].toArray();
+      return a.size() == 3 ? nf::Vec3{a[0].toDouble(), a[1].toDouble(), a[2].toDouble()} : nf::Vec3{NAN, NAN, NAN};
+    };
+
+    c.submit(QStringLiteral("move"));
+    QVERIFY(c.active());  // drawings alone are something to move
+    c.submit(QStringLiteral("0,0,0"));
+    c.submit(QStringLiteral("@10,0,0"));
+    QVERIFY(!c.active());
+    QVERIFY(nf::distance(pos(), {10, -100, 0}) < 1e-12);
+    c.submit(QStringLiteral("rotate"));
+    c.submit(QStringLiteral("0,0,0"));
+    c.submit(QStringLiteral("90"));  // about the normal of the construction plane (+Z)
+    QVERIFY(!c.active());
+    QVERIFY2(nf::distance(pos(), {100, 10, 0}) < 1e-9, qPrintable(QString::number(pos().x)));
+    QVERIFY(nf::distance(nfcad::results::placed_point(*store.item(item), 1), {0, 10, 0}) < 1e-9);
+    QCOMPARE(doc.undoStack()->count(), 2);
+    doc.undoStack()->undo();
+    QVERIFY(nf::distance(pos(), {10, -100, 0}) < 1e-12);
+    doc.undoStack()->undo();
+    QVERIFY(doc.pluginParameters(QStringLiteral("cam")).isEmpty());
+    QVERIFY(nfcad::results::is_identity(store.item(item)->placement));
+
+    // copies, scaling and mirroring are for objects
+    c.submit(QStringLiteral("scale"));
+    QVERIFY(!c.active());
+    QVERIFY(status.currentMessage().contains(QStringLiteral("moved and rotated")));
+    // an object and a drawing move together, as one undo step
+    const auto ids = doc.addEntities({nfcad::document::make_entity(nf::Vec3{1, 2, 3})}, QStringLiteral("add"));
+    selection.apply({{ids[0], {}}}, nfcad::document::Selection::Mode::Add);
+    selection.applyResults({run}, nfcad::document::Selection::Mode::Add);
+    c.submit(QStringLiteral("move"));
+    c.submit(QStringLiteral("0,0,0"));
+    c.submit(QStringLiteral("@0,0,5"));
+    QVERIFY(nf::distance(std::get<nf::Vec3>(*doc.entity(ids[0])->geometry), {1, 2, 8}) < 1e-12);
+    QVERIFY(nf::distance(pos(), {0, -100, 5}) < 1e-12);
+    QCOMPARE(doc.undoStack()->count(), 2);  // add, move
+    doc.undoStack()->undo();
+    QVERIFY(nf::distance(std::get<nf::Vec3>(*doc.entity(ids[0])->geometry), {1, 2, 3}) < 1e-12);
+    QVERIFY(nfcad::results::is_identity(store.item(item)->placement));
   }
 
   void extrudeTypedDistanceInTheActiveView() {

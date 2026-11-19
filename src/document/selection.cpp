@@ -27,6 +27,7 @@ void Selection::attach(Document* doc) {
   });
   connect(doc, &Document::documentReset, this, [this] {
     hovered_.reset();
+    hovered_result_.reset();
     clear();
   });
 }
@@ -62,7 +63,9 @@ void Selection::apply(const std::vector<SelectionItem>& items, Mode mode) {
         break;
     }
   }
-  if (next == items_) return;
+  const bool drop_results = mode == Mode::Replace && !results_.empty();
+  if (next == items_ && !drop_results) return;
+  if (drop_results) results_.clear();
   items_ = std::move(next);
   if (mode == Mode::Replace) order_.clear();
   for (const SelectionItem& i : items) {
@@ -76,6 +79,44 @@ void Selection::apply(const std::vector<SelectionItem>& items, Mode mode) {
 }
 
 void Selection::clear() { apply({}, Mode::Replace); }
+
+void Selection::applyResults(const std::vector<std::uint64_t>& sets, Mode mode) {
+  std::set<std::uint64_t> next = mode == Mode::Replace ? std::set<std::uint64_t>{} : results_;
+  for (std::uint64_t s : sets) {
+    switch (mode) {
+      case Mode::Replace:
+      case Mode::Add: next.insert(s); break;
+      case Mode::Remove: next.erase(s); break;
+      case Mode::Toggle:
+        if (!next.erase(s)) next.insert(s);
+        break;
+    }
+  }
+  const bool drop_entities = mode == Mode::Replace && !items_.empty();
+  if (next == results_ && !drop_entities) return;
+  results_ = std::move(next);
+  if (drop_entities) {
+    items_.clear();
+    order_.clear();
+  }
+  ++version_;
+  emit changed();
+}
+
+void Selection::retainResults(const std::function<bool(std::uint64_t)>& exists) {
+  if (hovered_result_ && !exists(*hovered_result_)) setHoveredResult(std::nullopt);
+  if (std::erase_if(results_, [&](std::uint64_t s) { return !exists(s); }) > 0) {
+    ++version_;
+    emit changed();
+  }
+}
+
+void Selection::setHoveredResult(std::optional<std::uint64_t> set) {
+  if (set == hovered_result_) return;
+  hovered_result_ = set;
+  ++version_;
+  emit hoverChanged();
+}
 
 void Selection::setHovered(std::optional<SelectionItem> item) {
   if (item == hovered_) return;

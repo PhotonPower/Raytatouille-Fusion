@@ -21,6 +21,25 @@ INACTIVE = "sim.inactive"       # attribute: the object takes no part (docs/plug
 METHODS = {"light tracing": "light", "path tracing": "path", "bidirectional": "bidir", "photon mapping": "photon"}
 UP = {"+Z": (0, 0, 1), "-Z": (0, 0, -1), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+X": (1, 0, 0), "-X": (-1, 0, 0)}
 
+
+def camera_up(position, target, up: str, roll: float = 0.0) -> tuple:
+    """The camera's up direction: the choice `up` ("+Z", …) turned by `roll` degrees about the view
+    direction (right-handed) – the orientation of a camera drawing rotated in the views (CAD writes
+    the up choice and the roll back, docs/plugin-api.md, "Drawings bound to parameters"). Without
+    roll, or where the view runs along `up` (the camera reports that), the choice as it is."""
+    a = np.asarray(UP[up], dtype=float)
+    forward = np.asarray(target, dtype=float) - np.asarray(position, dtype=float)
+    if not roll or np.linalg.norm(forward) < 1e-12:
+        return tuple(float(v) for v in a)
+    forward /= np.linalg.norm(forward)
+    right = np.cross(forward, a)
+    if np.linalg.norm(right) < 1e-9:
+        return tuple(float(v) for v in a)
+    right /= np.linalg.norm(right)
+    up0 = np.cross(right, forward)
+    r = np.radians(roll)
+    return tuple(float(v) for v in np.cos(r) * up0 + np.sin(r) * right)
+
 DEFAULT_MATERIALS = [
     {"name": "white", "kind": "diffuse", "reflectance": 0.8, "transmittance": 0.0, "roughness": 0.2, "ior": 1.5,
      "absorption": 0.0, "abbe": 0.0, "spectrum": ""},

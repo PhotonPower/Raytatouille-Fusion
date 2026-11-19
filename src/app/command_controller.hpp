@@ -17,6 +17,9 @@ namespace nfcad::viewport {
 class Viewport;
 class ViewportGrid;
 }  // namespace nfcad::viewport
+namespace nfcad::results {
+class ResultStore;
+}
 
 namespace nfcad::app {
 
@@ -47,6 +50,10 @@ class CommandController : public QObject {
   void setOrtho(bool on);
   [[nodiscard]] bool ortho() const { return ortho_; }
 
+  /// Results whose selected drawings Move and Rotate also move (docs/plugins.md, "Result
+  /// drawings in the views"); may be null.
+  void setResults(results::ResultStore* results) { results_ = results; }
+
  signals:
   void activeChanged(bool active);
   void orthoChanged(bool on);
@@ -67,6 +74,9 @@ class CommandController : public QObject {
   QLineEdit* line_;
   QStatusBar* status_;
   std::unique_ptr<commands::Command> command_;
+  results::ResultStore* results_ = nullptr;
+  std::vector<std::uint64_t> drawings_;  // runs whose drawings the active command moves
+  QString drawing_note_;                 // what moving them wrote into plugin parameters
   QString last_name_;
   commands::PlaneFrame plane_;
   commands::Point3 cursor_;
