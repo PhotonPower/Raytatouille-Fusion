@@ -40,7 +40,10 @@ zeigen dort ihr Schema mit Ports, Anschlüssen und Parametern (Abschnitt~\ref{se
 \code{R} Strahlen, \code{H} hybrides Feld, \code{G} Gitterfeld, \code{S} Ebene-Wellen-Spektrum,
 \code{T} Jones-Tabelle, \code{P} radiometrisch ohne Phase
 (Abschnitt~\ref{sec:workflow-darstellungen}). Gerechnet werden derzeit R und, mit
-\code{fieldtracing}, H.
+\code{fieldtracing}, H und S. Welche Blöcke S \emph{nativ} nehmen (Gitter, Stapel, verdichtete
+Gruppe, Partikel, Detektoren, \block{fusion.convert}) und wann S lohnt, steht in
+Abschnitt~\ref{sec:workflow-darstellungen}; alle übrigen Blöcke mit S am Anschluss bekommen an
+ihrem Port ein Feld oder Strahlen.
 
 \paragraph{Datentypen.} \code{result} (ein Ergebnis: Bild, Kurven, Zahlen; der Ausgang
 \code{view} eines Anzeigeblocks ist ebenfalls \code{result}), \code{drive} (ein Antriebswert
@@ -152,7 +155,7 @@ Ein kollimiertes Bündel ohne Raytatouille: je Feldwinkel und Wellenlänge eine 
 einer Kreisscheibe, auf einem hexapolaren Raster abgetastet. Für einfache Interferometer
 (Michelson, Linnik ohne Objektive) und Tests.
 
-\textbf{Licht:} \code{out} (aus, RH).
+\textbf{Licht:} \code{out} (aus, RHS).
 
 \textbf{Ports:} \code{out} (aus \code{out}).
 
@@ -243,7 +246,7 @@ Radien 51{,}68~mm und $-51{,}68$~mm, 4~mm dick, kreisförmige Apertur mit 12{,}5
 Verlässt das Licht den Block durch die Seite, durch die es kam, ist das eine Reflexion, sonst
 eine Transmission.
 
-\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+\textbf{Licht:} \code{front\_in} (ein, RHS, vorn); \code{front\_out} (aus, RHS, vorn); \code{back\_in} (ein, RHS, hinten); \code{back\_out} (aus, RHS, hinten).
 
 \textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
 
@@ -265,7 +268,7 @@ eine Transmission.
 Ein neuer Raytatouille-Spiegel aus der Bibliothek. Vorlage: idealer Spiegel, kreisförmige
 Apertur mit 12{,}5~mm Radius.
 
-\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn).
+\textbf{Licht:} \code{front\_in} (ein, RHS, vorn); \code{front\_out} (aus, RHS, vorn).
 
 \textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}).
 
@@ -287,7 +290,7 @@ Apertur mit 12{,}5~mm Radius.
 Eine neue Raytatouille-Blende aus der Bibliothek. Vorlage: kreisförmige Öffnung mit 5~mm Radius.
 \gui{New Raytatouille system} legt eine solche Blende bei $z = 0$ an.
 
-\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+\textbf{Licht:} \code{front\_in} (ein, RHS, vorn); \code{front\_out} (aus, RHS, vorn); \code{back\_in} (ein, RHS, hinten); \code{back\_out} (aus, RHS, hinten).
 
 \textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
 
@@ -309,7 +312,7 @@ Eine neue Raytatouille-Blende aus der Bibliothek. Vorlage: kreisförmige Öffnun
 Ein ebener Spiegel (analytisch, ohne Raytatouille). Die Ebene geht durch \param{point} mit der
 Normalen \param{normal}; zwischen den Elementen breitet sich das Licht frei in Luft ($n = 1$) aus.
 
-\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH).\\
+\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS).\\
 \textbf{Daten:} \code{drive} (ein, \code{drive}).
 
 \textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
@@ -336,7 +339,7 @@ Normalen \param{normal}; zwischen den Elementen breitet sich das Licht frei in L
 Eine ebene Grenzfläche zweier Medien mit Fresnel-Koeffizienten für s- und p-Polarisation,
 in beiden Richtungen durchlaufbar.
 
-\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+\textbf{Licht:} \code{front\_in} (ein, RHS, vorn); \code{front\_out} (aus, RHS, vorn); \code{back\_in} (ein, RHS, hinten); \code{back\_out} (aus, RHS, hinten).
 
 \textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
 
@@ -362,7 +365,7 @@ in beiden Richtungen durchlaufbar.
 
 Eine paraxiale dünne Linse (Matrixoptik, beliebiger Einfall).
 
-\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH).
+\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS).
 
 \textbf{Ports:} \code{in} (ein \code{in}); \code{out} (aus \code{out}).
 
@@ -387,7 +390,7 @@ Eine paraxiale dünne Linse (Matrixoptik, beliebiger Einfall).
 Eine ideale aplanatische Linse (Sinusbedingung, Beleuchtung nach Richards-Wolf), z.\,B.\ als
 Ersatz eines realen Objektivs in einer Variante einer Gruppe.
 
-\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH).
+\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS).
 
 \textbf{Ports:} \code{in} (ein \code{in}); \code{out} (aus \code{out}).
 
@@ -415,7 +418,7 @@ mit FourierGrating gerechnet. Die Schichten stehen in einer FourierGrating-Konfi
 die Konfiguration im Block. Mit \gui{Store panel configuration in block} übernehmen Sie die
 Konfiguration aus dem FourierGrating-Panel (Kapitel~\ref{kap:fouriergrating}).
 
-\textbf{Licht:} \code{front\_in} (ein, RH, vorn); \code{front\_out} (aus, RH, vorn); \code{back\_in} (ein, RH, hinten); \code{back\_out} (aus, RH, hinten).
+\textbf{Licht:} \code{front\_in} (ein, RHS, vorn); \code{front\_out} (aus, RHS, vorn); \code{back\_in} (ein, RHS, hinten); \code{back\_out} (aus, RHS, hinten).
 
 \textbf{Ports:} \code{front} (ein \code{front\_in}, aus \code{front\_out}); \code{back} (ein \code{back\_in}, aus \code{back\_out}).
 
@@ -445,7 +448,7 @@ Strahlen (z.\,B.\ der Fokus eines Objektivs) werden in ein Winkelspektrum umgere
 Partikel gestreut und als rückgestreute Strahlen zurückgeschickt. Gleiche Anschlüsse wie ein
 Spiegel, sodass er einen Probenspiegel mit \gui{Replace with} ersetzen kann.
 
-\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH, \enquote{backscattered}).
+\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS, \enquote{backscattered}).
 
 \textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
 
@@ -503,7 +506,7 @@ Ein neuer Raytatouille-Strahlteiler aus der Bibliothek mit vier Ports. Vorlage: 
 Strahlteiler, um 45\si{\degree} um x gedreht, Apertur 12{,}5~mm. Verlässt das Licht den Teiler
 durch die Seite, durch die es kam, ist das eine Reflexion.
 
-\textbf{Licht:} \code{front\_a\_in} (ein, RH, vorn); \code{front\_a\_out} (aus, RH, vorn); \code{front\_b\_in} (ein, RH, vorn); \code{front\_b\_out} (aus, RH, vorn); \code{back\_a\_in} (ein, RH, hinten); \code{back\_a\_out} (aus, RH, hinten); \code{back\_b\_in} (ein, RH, hinten); \code{back\_b\_out} (aus, RH, hinten).
+\textbf{Licht:} \code{front\_a\_in} (ein, RHS, vorn); \code{front\_a\_out} (aus, RHS, vorn); \code{front\_b\_in} (ein, RHS, vorn); \code{front\_b\_out} (aus, RHS, vorn); \code{back\_a\_in} (ein, RHS, hinten); \code{back\_a\_out} (aus, RHS, hinten); \code{back\_b\_in} (ein, RHS, hinten); \code{back\_b\_out} (aus, RHS, hinten).
 
 \textbf{Ports:} \code{front\_a} (ein \code{front\_a\_in}, aus \code{front\_a\_out}); \code{front\_b} (ein \code{front\_b\_in}, aus \code{front\_b\_out}); \code{back\_a} (ein \code{back\_a\_in}, aus \code{back\_a\_out}); \code{back\_b} (ein \code{back\_b\_in}, aus \code{back\_b\_out}).
 
@@ -527,7 +530,7 @@ reflektiert nach \code{r} und durchgelassen nach \code{t}; was auf dem durchgela
 zurückkommt (\code{t\_in}), wird nach \code{merged} reflektiert, was auf dem reflektierten Arm
 zurückkommt (\code{r\_in}), nach \code{merged} durchgelassen.
 
-\textbf{Licht:} \code{in} (ein, RH); \code{r} (aus, RH); \code{t} (aus, RH); \code{r\_in} (ein, RH); \code{t\_in} (ein, RH); \code{merged} (aus, RH).
+\textbf{Licht:} \code{in} (ein, RHS); \code{r} (aus, RHS); \code{t} (aus, RHS); \code{r\_in} (ein, RHS); \code{t\_in} (ein, RHS); \code{merged} (aus, RHS).
 
 \textbf{Ports:} \code{in} (ein \code{in}); \code{r} (ein \code{r\_in}, aus \code{r}); \code{t} (ein \code{t\_in}, aus \code{t}); \code{merged} (aus \code{merged}).
 
@@ -556,7 +559,7 @@ den Block durch den anderen Port derselben Seite (reflektiert, z.\,B.\ \code{fro
 \code{front\_b}) und durch den Port mit demselben Buchstaben auf der anderen Seite (durchgelassen,
 z.\,B.\ \code{front\_a} $\to$ \code{back\_a}).
 
-\textbf{Licht:} \code{front\_a\_in} (ein, RH, vorn); \code{front\_a\_out} (aus, RH, vorn); \code{front\_b\_in} (ein, RH, vorn); \code{front\_b\_out} (aus, RH, vorn); \code{back\_a\_in} (ein, RH, hinten); \code{back\_a\_out} (aus, RH, hinten); \code{back\_b\_in} (ein, RH, hinten); \code{back\_b\_out} (aus, RH, hinten).
+\textbf{Licht:} \code{front\_a\_in} (ein, RHS, vorn); \code{front\_a\_out} (aus, RHS, vorn); \code{front\_b\_in} (ein, RHS, vorn); \code{front\_b\_out} (aus, RHS, vorn); \code{back\_a\_in} (ein, RHS, hinten); \code{back\_a\_out} (aus, RHS, hinten); \code{back\_b\_in} (ein, RHS, hinten); \code{back\_b\_out} (aus, RHS, hinten).
 
 \textbf{Ports:} \code{front\_a} (ein \code{front\_a\_in}, aus \code{front\_a\_out}); \code{front\_b} (ein \code{front\_b\_in}, aus \code{front\_b\_out}); \code{back\_a} (ein \code{back\_a\_in}, aus \code{back\_a\_out}); \code{back\_b} (ein \code{back\_b\_in}, aus \code{back\_b\_out}).
 
@@ -589,7 +592,7 @@ Tabelle und Konfiguration im Block und leert die Pfade. Der frühere Typname
 verschwindet oder die außerhalb der Tabelle bzw.\ nahe einer Rayleigh-Anomalie liegen, werden mit
 einer Log-Zeile verworfen.
 
-\textbf{Licht:} \code{in} (ein, RH); \code{out} (aus, RH, \enquote{orders}).
+\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS, \enquote{orders}).
 
 \textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
 
@@ -654,7 +657,7 @@ eingestellt, ersetzt es \param{half\_size}.
 Ein neuer Raytatouille-Detektor aus der Bibliothek. Vorlage: rechteckige Fläche
 $10 \times 10$~mm. \gui{New Raytatouille system} legt einen solchen Detektor bei $z = 50$~mm an.
 
-\textbf{Licht:} \code{in\_in} (ein, RH, vorn).\\
+\textbf{Licht:} \code{in\_in} (ein, RHS, vorn).\\
 \textbf{Daten:} \code{image} (aus, \code{result}).
 
 \textbf{Ports:} \code{in} (ein \code{in\_in}).
@@ -676,7 +679,7 @@ $10 \times 10$~mm. \gui{New Raytatouille system} legt einen solchen Detektor bei
 
 Ein ebener Detektor (analytisch): kohärentes Bild, Amplituden je Kohärenzgruppe.
 
-\textbf{Licht:} \code{in} (ein, RH).\\
+\textbf{Licht:} \code{in} (ein, RHS).\\
 \textbf{Daten:} \code{image} (aus, \code{result}).
 
 \textbf{Ports:} \code{in} (ein \code{in}).
@@ -719,11 +722,14 @@ G $\leftrightarrow$ S …). Normalerweise plant der Planer Umwandlungen selbst; 
 Umwandlung nur, wenn Sie sie festlegen.
 
 Gerechnet wird ab RTT-Fusion 0.2.1 (mit \code{fieldtracing}): R $\to$ H (Strahlen zu einem Feld
-auf der Portebene) und H $\to$ R. Licht, das schon in der Zieldarstellung ankommt, geht
-unverändert durch. Die Ziele G, S und P kommen in einer späteren Stufe; ein Lauf meldet dann
-\code{exec.convert\_unsupported}, ebenso wenn \code{fieldtracing} fehlt. Stellen Sie
-\param{to} daher auf \code{R} oder \code{H} -- der Standardwert \code{S} ist noch nicht
-rechenbar.
+auf der Portebene) und H $\to$ R, mit Spektren (RTT-Fusion R30) auch \param{to}~=~\code{S}:
+Strahlen über ein Feld zum Spektrum ebener Wellen (R $\to$ H $\to$ S), ein Feld über die PFT oder
+eine FFT (H $\to$ S), und zurück. Licht, das schon in der Zieldarstellung ankommt, geht
+unverändert durch. Ein Spektrum hinter dem Block bleibt auf einer Verbindung auf \code{auto} ein
+Spektrum, wenn der nächste Block S nativ nimmt (z.\,B.\ eine Kamera); die Verbindung zeigt nach
+dem Lauf dann \textbf{R$\to$S} (Abschnitt~\ref{sec:workflow-verwendet}). Die Ziele G und P kommen
+in einer späteren Stufe; ein Lauf meldet dann \code{exec.convert\_unsupported}, ebenso wenn
+\code{fieldtracing} fehlt. Standard ist \code{H}.
 
 \textbf{Licht:} \code{in} (ein, RHGSTP); \code{out} (aus, RHGSTP).
 
@@ -734,7 +740,7 @@ rechenbar.
 \textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
 \midrule
 \endhead
-\param{to} & Auswahl & \code{S} & \code{R}, \code{H}, \code{G}, \code{S}, \code{P} & Ziel-Darstellung. \\
+\param{to} & Auswahl & \code{H} & \code{R}, \code{H}, \code{G}, \code{S}, \code{P} & Ziel-Darstellung. \\
 \bottomrule
 \end{referenz}
 

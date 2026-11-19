@@ -126,7 +126,15 @@ shows a label with an arrow (▶ / ◀ as on the screen; the one above the band 
 direction, the one below the other) and the representation – the planned one, or a fixed
 transport with a star (H*); the tooltip names the blocks ("Objective A → Sample: H, transport
 fixed H"); the arrows of a highlighted branch take its colour; right-click: *Transport (both
-directions)*, *Transport A → B*, *Transport B → A*, *Delete connection*. After an edit the last
+directions)*, *Transport A → B*, *Transport B → A*, *Delete connection*. The transport menus name
+each representation (*auto – the planner chooses*, *R – rays*, *H – fields*, *S – plane-wave
+spectra*, G, T, P), tick the current one and disable those the installation cannot compute (the
+document's `available`, written by *Check workflow*; the tooltip says why). After a run a direction
+on *auto* shows what it carried where that differs from the plan – R→H (fields near a focus), R→S
+(a spectrum, e.g. from `fusion.convert`); the tooltip adds the conversions on the way ("last run:
+S (R→H→S) – …") also for fixed transports, and a ⚠ after the representation marks the warnings
+of the spectrum conversions (`exec.spectrum_cut`, `exec.spectrum_rays`), listed in the tooltip; a
+block with such a warning gets a ⚠ in its header (RTT-Fusion R30e). After an edit the last
 plan stays visible in grey ("out of date") until *Check workflow* renews it; data sockets (drive, pose, image, results) stay
 directed, and a port dragged onto a display block makes an observer link. Drag from a port to a
 port to connect them – a port has one connection. The **Branches** list next to the editor

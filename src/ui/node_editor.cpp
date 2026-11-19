@@ -122,7 +122,8 @@ class SocketItem : public QGraphicsEllipseItem {
 class NodeItem : public QGraphicsRectItem {
  public:
   NodeItem(NodeEditor* editor, const QJsonObject& node, const QJsonArray& sockets, const QString& category,
-           const QString& problem, const QStringList& conversions = {}, bool running = false, int state = -1)
+           const QString& problem, const QStringList& conversions = {}, bool running = false, int state = -1,
+           const QStringList& notes = {})
       : editor_(editor), id_(node["id"].toString()) {
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     QJsonArray ins;
@@ -187,12 +188,24 @@ class NodeItem : public QGraphicsRectItem {
       if (it.key() == QLatin1String("surfaces") || it.key() == QLatin1String("paths")) continue;
       tip << QStringLiteral("%1 = %2").arg(it.key(), it.value().toVariant().toString());
     }
+    double marks = 0.0;  // width of the marks at the right of the header
+    auto mark = [this, &marks](const QString& glyph, const QColor& color) {
+      auto* m = new QGraphicsSimpleTextItem(glyph, this);
+      m->setBrush(color);
+      marks += m->boundingRect().width() + 2.0;
+      m->setPos(kWidth - 4 - marks, 4);
+    };
     if (!conversions.isEmpty()) {
       tip << QString() << QObject::tr("planned conversions:") << conversions;
-      auto* mark = new QGraphicsSimpleTextItem(QStringLiteral("⇄"), this);
-      mark->setBrush(QColor(240, 240, 240));
-      mark->setPos(kWidth - 6 - mark->boundingRect().width(), 4);
-      text->setText(QFontMetrics(text->font()).elidedText(text->text(), Qt::ElideRight, static_cast<int>(kWidth - 30)));
+      mark(QStringLiteral("⇄"), QColor(240, 240, 240));
+    }
+    if (!notes.isEmpty()) {  // warnings of the last run at this block (spectra: exec.spectrum_*)
+      tip << QString() << QObject::tr("last run:") << notes;
+      mark(QStringLiteral("⚠"), QColor(255, 210, 90));
+    }
+    if (marks > 0.0) {
+      const int room = static_cast<int>(kWidth - 14 - marks);
+      text->setText(QFontMetrics(text->font()).elidedText(text->text(), Qt::ElideRight, room));
     }
     if (!problem.isEmpty()) tip << QString() << problem;
     setToolTip(tip.join(QLatin1Char('\n')));
@@ -239,12 +252,19 @@ class LinkItem : public QGraphicsPathItem {
     representation_ = planned["representation"].toString();
     if (!representation_.isEmpty()) {
       tip << QObject::tr("planned: %1 – %2").arg(representation_, planned["reason"].toString());
-      // what a block used at run time on an auto link (a camera near a focus: fields), R→H
-      const QString used = transport == QLatin1String("auto") ? planned["used"].toString() : QString();
-      QString text = representation_ + (transport == QLatin1String("auto") ? QString() : QStringLiteral("*"));
-      if (!used.isEmpty() && used != representation_) {
-        text += QStringLiteral("→") + used;
-        tip << QObject::tr("last run: %1 – %2").arg(used, planned["used_reason"].toString());
+      const bool is_auto = transport == QLatin1String("auto");
+      QString text = representation_ + (is_auto ? QString() : QStringLiteral("*"));
+      // what the link carried in the last run: on an auto link the label shows it where it differs
+      // from the plan (a camera near a focus: R→H; a spectrum on a link planned R: R→S); the
+      // tooltip names the conversions (H→S, S→H→R) also on a fixed link
+      const QString used = planned["used"].toString();
+      if (is_auto && !used.isEmpty() && used != representation_) text += QStringLiteral("→") + used;
+      if (const QString last = lastRun(planned); !last.isEmpty()) tip << last;
+      QStringList notes;
+      for (const QJsonValue& n : planned["notes"].toArray()) notes << n.toString();
+      if (!notes.isEmpty()) {  // warnings of the spectrum conversions (exec.spectrum_*)
+        text += QStringLiteral(" ⚠");
+        for (const QString& n : notes) tip << QStringLiteral("⚠ ") + n;
       }
       label_ = new QGraphicsSimpleTextItem(text, this);
       QFont f = label_->font();
@@ -287,7 +307,7 @@ class LinkItem : public QGraphicsPathItem {
       const double rad = angle * M_PI / 180.0;
       const bool right = std::cos(rad) >= 0.0;
       // ▶ / ◀ as seen on the screen: the direction's horizontal sense
-      a.text->setText((right ? QStringLiteral("▶ ") : QStringLiteral("◀ ")) + a.text->text().section(QLatin1Char(' '), -1));
+      a.text->setText((right ? QStringLiteral("▶ ") : QStringLiteral("◀ ")) + a.label);
       a.box->setRect(a.text->boundingRect().adjusted(-3, -1, 3, 1));
       const double h = a.box->rect().height();
       const double shift = arrows_.size() == 1 ? 0.0 : (a.reverse ? 0.5 : -0.5) * (h + 2.0);
@@ -296,6 +316,22 @@ class LinkItem : public QGraphicsPathItem {
   }
   [[nodiscard]] int index() const { return index_; }
   [[nodiscard]] QString representation() const { return representation_; }
+  /// The tooltip line of what a link carried in the last run ("" if nothing to say): the
+  /// representation, the conversions on the way (e.g. "R→H→S") and why – where it differs from
+  /// the plan, where something was converted, and for spectra (taken natively or not).
+  static QString lastRun(const QJsonObject& planned) {
+    const QString used = planned["used"].toString();
+    const QString chain = planned["used_chain"].toString();
+    const QString reason = planned["used_reason"].toString();
+    const bool differs = used != planned["representation"].toString();
+    if (used.isEmpty() || (!differs && !chain.contains(QStringLiteral("→")) && !used.contains(QLatin1Char('S')))) {
+      return {};
+    }
+    QString line = QObject::tr("last run: %1").arg(used);
+    if (!chain.isEmpty() && chain != used) line += QStringLiteral(" (%1)").arg(chain);
+    if (!reason.isEmpty()) line += QStringLiteral(" – ") + reason;
+    return line;
+  }
   /// The plan was made before the last edit: its label grey, the tooltip says so.
   void markStale() {
     if (label_back_ != nullptr) label_back_->setBrush(QColor(120, 120, 120));
@@ -332,7 +368,7 @@ class LinkItem : public QGraphicsPathItem {
       t->setFont(f);
       t->setBrush(QColor(20, 20, 20));
       box->setRect(t->boundingRect().adjusted(-3, -1, 3, 1));
-      arrows_.append(Arrow{box, t, reverse, used});
+      arrows_.append(Arrow{box, t, text, reverse, used});
     };
     make(forward, false, forward_used);
     make(back, true, back_used);
@@ -387,6 +423,7 @@ class LinkItem : public QGraphicsPathItem {
   struct Arrow {
     QGraphicsRectItem* box;
     QGraphicsSimpleTextItem* text;
+    QString label;  // the representation (and marks) after the arrow
     bool reverse;
     bool used;
   };
@@ -591,6 +628,48 @@ int NodeEditor::linkAt(const QPoint& view_pos) const {
   return -1;
 }
 
+bool NodeEditor::transportOffered(const QString& transport) const {
+  if (transport == QLatin1String("auto")) return true;
+  const QJsonValue available = workflow_.value(QStringLiteral("available"));
+  if (!available.isArray()) return true;  // a document from before R30e: every transport (the check reports)
+  return available.toArray().contains(transport);
+}
+
+void NodeEditor::addTransportActions(QMenu* menu, const QString& current,
+                                     const std::function<void(const QString&)>& choose) const {
+  menu->setToolTipsVisible(true);
+  struct Choice {
+    const char* letter;
+    const char* text;
+    const char* missing;  // why it cannot be chosen when the installation cannot compute it
+  };
+  static const Choice choices[] = {
+      {"auto", "auto – the planner chooses", ""},
+      {"R", "R – rays", ""},
+      {"H", "H – fields (hybrid, Fieldtracing)",
+       "needs the Python package fieldtracing in the plugin environment"},
+      {"S", "S – plane-wave spectra",
+       "needs fieldtracing and RTT-Fusion with spectra (R30)"},
+      {"G", "G – gridded fields",
+       "planned: not computed on links yet"},
+      {"T", "T – tables (Jones, S-matrix)",
+       "planned: not computed on links yet"},
+      {"P", "P – radiometric (no phase)",
+       "planned: not computed on links yet"},
+  };
+  for (const Choice& c : choices) {
+    const QString letter = QString::fromLatin1(c.letter);
+    QAction* a = menu->addAction(tr(c.text), menu, [choose, letter] { choose(letter); });
+    a->setData(letter);
+    a->setCheckable(true);
+    a->setChecked(letter == current);
+    if (!transportOffered(letter)) {
+      a->setEnabled(false);
+      a->setToolTip(tr(c.missing));
+    }
+  }
+}
+
 QString NodeEditor::plannedRepresentation(int index) const {
   for (LinkItem* l : links_) {
     if (l->index() == index) return l->representation();
@@ -638,10 +717,13 @@ void NodeEditor::rebuild() {
   for (const QJsonValue& v : g["nodes"].toArray()) {
     const QJsonObject n = v.toObject();
     const QString type = n["type"].toString();
+    QStringList notes;  // warnings of the last run at the block (RTT-Fusion R30: exec.spectrum_*)
+    for (const QJsonValue& line : plan["node_notes"].toObject()[n["id"].toString()].toArray()) notes << line.toString();
     auto* item = new NodeItem(this, n, shownSockets(n), categories.value(type, type_category(type)),
                               problems.value(n["id"].toString()).trimmed(), conversions.value(n["id"].toString()),
                               n["id"].toString() == running_,
-                              states_.contains(n["id"].toString()) ? (states_.value(n["id"].toString()) ? 1 : 0) : -1);
+                              states_.contains(n["id"].toString()) ? (states_.value(n["id"].toString()) ? 1 : 0) : -1,
+                              notes);
     scene()->addItem(item);
     nodes_.insert(item->id(), item);
   }
@@ -688,6 +770,9 @@ void NodeEditor::rebuild() {
     const QJsonObject reps = planned_connections[QString::number(k)].toObject();
     // what a block used at run time on an auto direction (a camera near a focus: fields), R→H
     const QJsonObject used = plan["connections_used"].toObject()[QString::number(k)].toObject();
+    // the conversions on the way and why (R30e: "H→S – …"), the warnings of the run per direction
+    const QJsonObject used_reason = plan["connections_used_reason"].toObject()[QString::number(k)].toObject();
+    const QJsonObject notes = plan["connections_notes"].toObject()[QString::number(k)].toObject();
     const bool stale = plan["stale"].toBool();
     const QString name_a = node_of(g, ends.at(0).toArray().at(0).toString())["name"].toString(ends.at(0).toArray().at(0).toString());
     const QString name_b = node_of(g, ends.at(1).toArray().at(0).toString())["name"].toString(ends.at(1).toArray().at(0).toString());
@@ -704,25 +789,30 @@ void NodeEditor::rebuild() {
       }
     }
     // per direction: the planned representation, else a fixed transport (marked *)
-    auto text_of = [&reps, &used](const char* side, const QString& fixed, bool in_use) {
+    auto text_of = [&reps, &used, &notes](const char* side, const QString& fixed, bool in_use) {
       if (!in_use) return QString();
-      if (fixed != QLatin1String("auto")) return fixed + QStringLiteral("*");  // the planner keeps it
+      const QString warn = notes[QLatin1String(side)].toArray().isEmpty() ? QString() : QStringLiteral(" ⚠");
+      if (fixed != QLatin1String("auto")) return fixed + QStringLiteral("*") + warn;  // the planner keeps it
       const QString r = reps[QLatin1String(side)].toString();
       const QString u = used[QLatin1String(side)].toString();
-      return u.isEmpty() || u == r ? r : r + QStringLiteral("→") + u;
+      return (u.isEmpty() || u == r ? r : r + QStringLiteral("→") + u) + warn;
     };
     const QString forward_text = text_of("forward", fixed_forward, forward_used);
     const QString back_text = text_of("back", fixed_back, back_used);
     QJsonObject planned;  // the tooltip
-    auto line = [&reps, &used, stale](const QString& from, const QString& to, const char* side, const QString& fixed,
-                                      bool in_use) {
+    auto line = [&reps, &used, &used_reason, &notes, stale](const QString& from, const QString& to, const char* side,
+                                                            const QString& fixed, bool in_use) {
       QString r = reps[QLatin1String(side)].toString();
       QString t = QStringLiteral("%1 → %2: ").arg(from, to);
       if (!in_use) return t + tr_("no branch");
       t += r.isEmpty() ? QStringLiteral("–") : r + (stale ? tr_(" (out of date)") : QString());
       t += fixed == QLatin1String("auto") ? tr_(", transport auto") : tr_(", transport fixed %1").arg(fixed);
       const QString u = used[QLatin1String(side)].toString();
-      if (fixed == QLatin1String("auto") && !u.isEmpty() && u != r) t += tr_(", last run: %1 (see the log)").arg(u);
+      const QString why = used_reason[QLatin1String(side)].toString();
+      if (!u.isEmpty() && (u != r || !why.isEmpty())) {
+        t += why.isEmpty() ? tr_(", last run: %1 (see the log)").arg(u) : tr_(", last run: %1 (%2)").arg(u, why);
+      }
+      for (const QJsonValue& n : notes[QLatin1String(side)].toArray()) t += QStringLiteral("\n  ⚠ ") + n.toString();
       return t;
     };
     planned["reason"] = line(name_a, name_b, "forward", fixed_forward, forward_used) + QLatin1Char('\n') +
@@ -1805,12 +1895,16 @@ void NodeEditor::showMenu(const QPoint& view_pos, const QPoint& global_pos) {
     QMenu* both = menu.addMenu(tr("Transport (both directions)"));
     QMenu* forward = menu.addMenu(tr("Transport %1 → %2").arg(block_name(ends.at(0)), block_name(ends.at(1))));
     QMenu* back = menu.addMenu(tr("Transport %1 → %2").arg(block_name(ends.at(1)), block_name(ends.at(0))));
-    for (const char* t : {"auto", "R", "H", "G", "S", "T", "P"}) {
-      const QString name = QString::fromLatin1(t);
-      both->addAction(name, this, [this, c, name] { setConnectionTransport(c, QStringLiteral("both"), name); });
-      forward->addAction(name, this, [this, c, name] { setConnectionTransport(c, QStringLiteral("forward"), name); });
-      back->addAction(name, this, [this, c, name] { setConnectionTransport(c, QStringLiteral("back"), name); });
-    }
+    const QJsonValue fixed = graph()["connections"].toArray().at(c).toObject()["transport"];
+    const QString fixed_forward =
+        fixed.isObject() ? fixed.toObject()["forward"].toString() : fixed.toString(QStringLiteral("auto"));
+    const QString fixed_back = fixed.isObject() ? fixed.toObject()["back"].toString() : fixed_forward;
+    auto set = [this, c](const char* direction) {
+      return [this, c, direction](const QString& t) { setConnectionTransport(c, QString::fromLatin1(direction), t); };
+    };
+    addTransportActions(both, fixed_forward == fixed_back ? fixed_forward : QString(), set("both"));
+    addTransportActions(forward, fixed_forward, set("forward"));
+    addTransportActions(back, fixed_back, set("back"));
     menu.addAction(tr("Delete connection"), this, [this, c] { removeConnection(c); });
     menu.exec(global_pos);
     return;
@@ -1910,9 +2004,9 @@ void NodeEditor::showMenu(const QPoint& view_pos, const QPoint& global_pos) {
   } else if (link != nullptr) {
     const int index = link->index();
     QMenu* transport = menu.addMenu(tr("Transport"));
-    for (const char* t : {"auto", "R", "H", "G", "S", "T", "P"}) {
-      transport->addAction(QString::fromLatin1(t), this, [this, index, t] { setTransport(index, QString::fromLatin1(t)); });
-    }
+    const QJsonObject l = graph()["links"].toArray().at(index).toObject();
+    addTransportActions(transport, l["transport"].toString(QStringLiteral("auto")),
+                        [this, index](const QString& t) { setTransport(index, t); });
     menu.addAction(tr("Delete link"), this, [this, index] { removeLink(index); });
   } else {
     QMenu* add = menu.addMenu(tr("Add block"));

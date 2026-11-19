@@ -10,6 +10,7 @@
 
 class QGraphicsPathItem;
 class QLabel;
+class QMenu;
 class QGraphicsRectItem;
 
 namespace nfcad::ui {
@@ -106,6 +107,14 @@ class NodeEditor : public QGraphicsView {
   [[nodiscard]] int linkAt(const QPoint& view_pos) const;
   /// The representation the planner chose for a link ("" without a plan).
   [[nodiscard]] QString plannedRepresentation(int index) const;
+  /// Whether a transport can be chosen: "auto", and the representations this installation can
+  /// compute (the document's "available", e.g. ["H", "R", "S"] with fieldtracing; all without it).
+  [[nodiscard]] bool transportOffered(const QString& transport) const;
+  /// The transports of a link's context menu: auto, R, H, S, G, T, P with what they are, the
+  /// current one checked, those the installation cannot compute disabled (tooltip: why);
+  /// `choose` gets the letter.
+  void addTransportActions(QMenu* menu, const QString& current,
+                           const std::function<void(const QString&)>& choose) const;
 
   // ---- model (RTT-Fusion R24): ports, connections, branches
   /// The workflow is a model (ports and branches) rather than a socket graph.

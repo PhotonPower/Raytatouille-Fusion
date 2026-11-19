@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import math
+import re
 import tempfile
 from pathlib import Path
 
@@ -76,6 +77,92 @@ def _raytracer_catalogues(ctx) -> list[str]:
 def _link_target(key: str) -> str:
     """The block a link key "a.out -> b.in" leads to."""
     return key.split(" -> ", 1)[-1].rsplit(".", 1)[0]
+
+
+#: diagnostics of the spectrum conversions in the run's log (RTT-Fusion R30a–R30d): "<where>: <code>: <text>"
+_RUN_CODES = re.compile(r"^(?P<where>.*?):\s+(?P<code>exec\.spectrum_[a-z_]+):\s*(?P<message>.*)$", re.S)
+
+#: what each representation is, for the status line and the log
+REPRESENTATIONS = {"R": "rays", "H": "fields", "S": "plane-wave spectra", "G": "gridded fields",
+                   "T": "tables", "P": "radiometric rays"}
+
+
+def run_notes(lines) -> list[dict]:
+    """The warnings of the spectrum conversions (`exec.spectrum_cut`, `exec.spectrum_rays`, …) in
+    an executor's log, as diagnostics {"code", "severity", "location", "message"}: the location
+    is a link key ("a.out -> b.in") or a block, as the line names it. A line that repeats one
+    already listed counts once."""
+    out: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    for line in lines:
+        m = _RUN_CODES.match(str(line))
+        if m is None:
+            continue
+        where = m["where"].split(": ")[0].strip()  # a block's note on a link: the link
+        key = (m["code"], where, m["message"].strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"code": key[0], "severity": "warning", "location": where, "message": key[2]})
+    return out
+
+
+def error_note(error) -> dict | None:
+    """A run's `exec.spectrum_*` error (an ExecutionError with code and location) as a diagnostic."""
+    code = str(getattr(error, "code", ""))
+    if not code.startswith("exec.spectrum_"):
+        return None
+    where = str(getattr(error, "location", ""))
+    text = str(error)
+    text = text.removeprefix(f"{code}: ")
+    if where:
+        text = text.removesuffix(f" ({where})")
+    return {"code": code, "severity": "error", "location": where, "message": text}
+
+
+def notes_summary(notes: list[dict]) -> str:
+    """One line for the status bar: how many notes, the first one shortened."""
+    if not notes:
+        return ""
+    first = notes[0]
+    text = first["message"]
+    if len(text) > 90:
+        text = text[:87].rstrip() + "…"
+    more = f" (+{len(notes) - 1} more)" if len(notes) > 1 else ""
+    return f"spectra: {first['code']} at {first['location']}: {text}{more} – marked at the link, details in the log"
+
+
+def with_notes(plan: dict, notes: list[dict], model_id=None, per_connection=None) -> dict:
+    """The plan with the run's notes at the links (`links[key]["notes"]`), at the blocks
+    (`node_notes[block]`, a block of the model with `model_id`) and – with `per_connection`
+    (link key -> text) -> {connection: {direction: text}} – at the connections of a model
+    (`connections_notes`). Lines "code: message"; the plan itself is not changed."""
+    if not notes or not plan:
+        return plan
+    out = {**plan, "links": {k: dict(v) for k, v in plan.get("links", {}).items()}}
+    on_links: dict[str, list[str]] = {}
+    on_nodes: dict[str, list[str]] = {}
+    for d in notes:
+        line = f"{d['code']}: {d['message']}"
+        where = d["location"]
+        if " -> " in where:
+            on_links.setdefault(where, []).append(line)
+        elif where:
+            block = model_id(where) if model_id is not None else where
+            on_nodes.setdefault(block, []).append(line)
+    for key, lines in on_links.items():
+        if key in out["links"]:
+            out["links"][key]["notes"] = lines
+    if on_nodes:
+        out["node_notes"] = on_nodes
+    if per_connection is not None and on_links:
+        try:
+            out["connections_notes"] = {
+                c: {side: text.split("\n") for side, text in sides.items()}
+                for c, sides in per_connection({k: "\n".join(v) for k, v in on_links.items()}).items()}
+        except Exception:  # noqa: BLE001 - only a hint at the connections
+            pass
+    return out
 
 
 def _evaluators(extra: dict) -> dict:
@@ -148,6 +235,8 @@ class WorkflowEngine(Plugin):
         #: what blocks used at run time on links on "auto" (link key -> representation, reason):
         #: shown at the link (R→H) while the block's result is up to date
         self._used = {}
+        #: the warnings of the spectrum conversions in the runs (exec.spectrum_*), kept like `_used`
+        self._run_notes: list[dict] = []
         self._ran = set()
         self._notes: list[str] = []
         self._model_ids: set[str] | None = None
@@ -244,6 +333,7 @@ class WorkflowEngine(Plugin):
                 wf["plan"] = self._plan_with_used(workflow, wf["plan"], graph, model, registry, fresh)
             except Exception as e:  # noqa: BLE001 - only a hint
                 ctx.log(f"workflow state: {e}")
+        wf["available"] = sorted(workflow.available())  # the editor offers these transports
         ctx.set_workflow(wf)
         if ex is not None:
             self._send_status(ctx, ex)
@@ -409,6 +499,7 @@ class WorkflowEngine(Plugin):
         block's window (double-click)."""
         workflow, _, _, _ = _fusion()
         made = []
+        failed: list[dict] = []
         ex = self._executor(ctx, graph, registry, evaluators, execute, wf)
         self._ran = set()
         kept = self._kept(ctx)
@@ -426,6 +517,8 @@ class WorkflowEngine(Plugin):
             except execute.ExecutionError as e:
                 ctx.log(f"{node.name or node.id}: {e}")
                 self._failures.append(f"{node.name or node.id}: {e}")
+                if (failure := error_note(e)) is not None:
+                    failed.append(failure)
                 continue
             key = f"workflow:{node.id}"
             if view.kind == "image" and view.image is not None:
@@ -463,6 +556,11 @@ class WorkflowEngine(Plugin):
         if used is not None:  # the blocks computed now replace what they decided before
             self._used = {k: v for k, v in self._used.items() if _link_target(k) not in self._ran}
             self._used.update(used)
+        notes = run_notes(ex.context.log) + failed
+        self._run_notes = [d for d in self._run_notes if self._note_block(d) not in self._ran] + notes
+        warnings = [d for d in notes if d["severity"] == "warning"]  # errors: already in the failures
+        if warnings:  # shown in the status line and at the link
+            self._notes.append(notes_summary(warnings))
         self._send_status(ctx, ex)
         try:
             fresh = self._fresh(ex)
@@ -476,16 +574,30 @@ class WorkflowEngine(Plugin):
         shown = [(n.id, "view") for n in ex.graph.nodes.values() if n.type_id.startswith("display.")]
         return {k for k, v in ex.status(wanted=shown).items() if v}
 
+    @staticmethod
+    def _note_block(note: dict) -> str:
+        """The block (of the run's graph) a note belongs to: the end of its link, or the block."""
+        where = note.get("location", "")
+        return _link_target(where) if " -> " in where else where
+
     def _plan_with_used(self, workflow, plan, graph, model, registry, fresh):
-        """The plan with what the blocks used on links on "auto" in the run whose results are up to
-        date (a detector that computed fields near a focus: R→H at the link); RTT-Fusion #85."""
+        """The plan with what the blocks used on links in the run whose results are up to date (a
+        detector that computed fields near a focus: R→H at the link, RTT-Fusion #85; a spectrum
+        on a link planned R: R→S, R30e) and the warnings of the spectrum conversions."""
         with_used = getattr(workflow, "with_used", None)
         used = {k: v for k, v in self._used.items() if _link_target(k) in fresh}
-        if with_used is None or not used or not plan:
-            return plan
-        if model is None:
-            return with_used(plan, used)
-        return with_used(plan, used, graph, model, registry)
+        shown = plan
+        if with_used is not None and used and plan:
+            shown = with_used(plan, used) if model is None else with_used(plan, used, graph, model, registry)
+        notes = [d for d in self._run_notes if self._note_block(d) in fresh]
+        per_connection = None
+        connection_plan = getattr(workflow, "connection_plan", None)
+        if model is not None and connection_plan is not None:
+            def per_connection(texts: dict) -> dict:
+                return connection_plan(graph, model, registry,
+                                       {"links": {k: {"representation": v} for k, v in texts.items()}})
+        model_id = getattr(workflow, "model_id", None) if model is not None else None
+        return with_notes(shown, notes, model_id, per_connection)
 
     def _show_used(self, ctx, workflow, graph, model, registry, providers, fresh) -> None:
         """After a run: the plan of the current workflow with what the blocks used (R→H)."""
@@ -496,7 +608,7 @@ class WorkflowEngine(Plugin):
                 plan = self._document(workflow, model, registry, wf, providers)["plan"]
             shown = self._plan_with_used(workflow, plan, graph, model, registry, fresh)
             if shown is not plan or plan is not wf.get("plan"):
-                ctx.set_workflow({**wf, "plan": shown})
+                ctx.set_workflow({**wf, "plan": shown, "available": sorted(workflow.available())})
         except Exception as e:  # noqa: BLE001 - only a hint at the links
             ctx.log(f"workflow plan: {e}")
 

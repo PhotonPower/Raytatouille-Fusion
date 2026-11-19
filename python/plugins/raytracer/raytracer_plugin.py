@@ -766,16 +766,28 @@ class RaytracerPlugin(Plugin):
 
     @staticmethod
     def _available(execute) -> frozenset:
-        """Representations the workflow can run: R, and H (fields, RTT-Fusion R18b) with fieldtracing."""
+        """Representations the workflow can run: R, and with fieldtracing H (fields, RTT-Fusion R18b)
+        and S (plane-wave spectra, R30a) – RTT-Fusion's `workflow.available()` where it has one."""
+        try:
+            return frozenset(importlib.import_module("rtt_fusion.graph.workflow").available())
+        except (ImportError, AttributeError):
+            pass
         try:
             import fieldtracing  # noqa: F401
         except ImportError:
             return execute.EXECUTABLE
-        return getattr(execute, "WITH_FIELDS", execute.EXECUTABLE)
+        return getattr(execute, "WITH_SPECTRA", getattr(execute, "WITH_FIELDS", execute.EXECUTABLE))
 
     @classmethod
     def _checked(cls, fg, execute, validate, graph, registry) -> tuple[list[dict], dict]:
-        """Diagnostics of the graph check and of the planner (R17, with what can run), and the plan."""
+        """Diagnostics of the graph check and of the planner (R17, with what can run and what the
+        blocks take natively, R30a), and the plan."""
+        try:
+            checked = importlib.import_module("rtt_fusion.graph.workflow").checked
+        except (ImportError, AttributeError):
+            checked = None
+        if checked is not None:
+            return checked(graph, registry)
         diagnostics = [d.__dict__ for d in validate.validate(graph, registry)]
         plan = fg.plan(graph, registry, fg.Requirements(available=cls._available(execute)))
         diagnostics += [d.__dict__ for d in plan.diagnostics]
@@ -883,7 +895,10 @@ class RaytracerPlugin(Plugin):
                 else:
                     node.params.pop("rtt_catalogs", None)
         workflow = importlib.import_module("rtt_fusion.graph.workflow")
-        return workflow.model_document(model, registry, self._rtt_fields)
+        document = workflow.model_document(model, registry, self._rtt_fields)
+        if hasattr(workflow, "available"):  # the transports the node editor offers (R30e)
+            document["available"] = sorted(workflow.available())
+        return document
 
     # keys that carry the structure (ids are referenced by the paths; a type changes the shape of
     # the entry): shown nowhere, changed by the import or the library only

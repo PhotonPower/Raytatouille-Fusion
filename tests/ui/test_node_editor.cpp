@@ -7,6 +7,7 @@
 #include <QImage>
 #include <QJsonArray>
 #include <QListWidget>
+#include <QMenu>
 #include <QTabWidget>
 #include <QKeyEvent>
 #include <QJsonDocument>
@@ -128,6 +129,92 @@ class TestNodeEditor : public QObject {
     QVERIFY(e.workflow()["plan"].toObject()["stale"].toBool());
     QCOMPARE(e.plannedRepresentation(0), QStringLiteral("H"));
     QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("before the last edit")));
+  }
+
+  void spectraAtTheLinks() {
+    // R30e: what a link carried in the last run – a spectrum on a link planned R (R→S), the
+    // conversions in the tooltip (also on a fixed link), the warnings of the spectrum
+    // conversions at the link and the block
+    QJsonObject wf = linnik();
+    QJsonObject g = wf["graph"].toObject();
+    QJsonArray links = g["links"].toArray();
+    QJsonObject l1 = links[1].toObject();
+    l1["transport"] = "S";
+    links[1] = l1;
+    g["links"] = links;
+    wf["graph"] = g;
+    auto key_of = [](const QJsonObject& l) {
+      return QStringLiteral("%1.%2 -> %3.%4")
+          .arg(l["from"].toArray()[0].toString(), l["from"].toArray()[1].toString(), l["to"].toArray()[0].toString(),
+               l["to"].toArray()[1].toString());
+    };
+    const QString k0 = key_of(links[0].toObject());
+    const QString k1 = key_of(l1);
+    const QString block = links[0].toObject()["to"].toArray()[0].toString();
+    wf["plan"] = QJsonObject{
+        {"links", QJsonObject{{k0, QJsonObject{{"representation", "R"},
+                                               {"reason", "cheapest"},
+                                               {"used", "S"},
+                                               {"used_chain", "S"},
+                                               {"used_reason", "toS gave spectra; cam takes them as they are"},
+                                               {"notes", QJsonArray{"exec.spectrum_cut: 1.2e-02 of the power left out"}}}},
+                              {k1, QJsonObject{{"representation", "S"},
+                                               {"reason", "fixed"},
+                                               {"used", "S"},
+                                               {"used_chain", "R→H→S"},
+                                               {"used_reason", "lens gave rays; spectra on the link"}}}}},
+        {"conversions", QJsonArray{}},
+        {"node_notes", QJsonObject{{block, QJsonArray{"exec.spectrum_rays: the orders overlap"}}}}};
+    NodeEditor e;
+    e.setWorkflow(wf);
+    auto label = [&e](int k) {
+      for (QGraphicsItem* child : e.linkItem(k)->childItems()) {
+        if (auto* t = dynamic_cast<QGraphicsSimpleTextItem*>(child)) return t->text();
+      }
+      return QString();
+    };
+    QCOMPARE(label(0), QStringLiteral("R→S ⚠"));  // planned R, a spectrum flowed, with a warning
+    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("last run: S – toS gave spectra; cam takes them as they are")));
+    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("⚠ exec.spectrum_cut: 1.2e-02")));
+    QCOMPARE(label(1), QStringLiteral("S*"));  // fixed: the setting, the conversions in the tooltip
+    QVERIFY(e.linkItem(1)->toolTip().contains(QStringLiteral("last run: S (R→H→S) – lens gave rays")));
+    QVERIFY(e.nodeItem(block)->toolTip().contains(QStringLiteral("exec.spectrum_rays: the orders overlap")));
+    // a plain link of the plan: no "last run"
+    QVERIFY(!e.linkItem(2)->toolTip().contains(QStringLiteral("last run")));
+  }
+
+  void transportMenuOffersWhatRuns() {
+    // the transports with what they are; those the installation cannot compute are disabled
+    QJsonObject wf = linnik();
+    wf["available"] = QJsonArray{"H", "R", "S"};
+    NodeEditor e;
+    e.setWorkflow(wf);
+    QVERIFY(e.transportOffered(QStringLiteral("auto")) && e.transportOffered(QStringLiteral("S")));
+    QVERIFY(!e.transportOffered(QStringLiteral("G")) && !e.transportOffered(QStringLiteral("P")));
+    QMenu menu;
+    QString chosen;
+    e.addTransportActions(&menu, QStringLiteral("S"), [&chosen](const QString& t) { chosen = t; });
+    const QList<QAction*> actions = menu.actions();
+    QCOMPARE(actions.size(), 7);
+    QStringList letters;
+    for (QAction* a : actions) letters << a->data().toString();
+    QCOMPARE(letters, (QStringList{"auto", "R", "H", "S", "G", "T", "P"}));
+    QAction* s = actions[3];
+    QCOMPARE(s->text(), QStringLiteral("S – plane-wave spectra"));
+    QVERIFY(s->isEnabled() && s->isChecked() && !actions[0]->isChecked());
+    QVERIFY(!actions[4]->isEnabled() && actions[4]->toolTip().contains(QStringLiteral("not computed")));
+    s->trigger();
+    QCOMPARE(chosen, QStringLiteral("S"));
+    // a link set to S through the editor
+    e.setTransport(0, chosen);
+    QCOMPARE(e.workflow()["graph"].toObject()["links"].toArray()[0].toObject()["transport"].toString(), QStringLiteral("S"));
+    // without fieldtracing only R (and auto); a document without the list offers everything
+    wf["available"] = QJsonArray{"R"};
+    e.setWorkflow(wf);
+    QVERIFY(!e.transportOffered(QStringLiteral("H")) && !e.transportOffered(QStringLiteral("S")));
+    wf.remove(QStringLiteral("available"));
+    e.setWorkflow(wf);
+    QVERIFY(e.transportOffered(QStringLiteral("S")) && e.transportOffered(QStringLiteral("T")));
   }
 
   void replaceAndParameters() {
@@ -335,6 +422,19 @@ class TestNodeEditor : public QObject {
     e.setParams(QStringLiteral("Sample"), QJsonObject{{"offset", QJsonArray{0, 0, 0.001}}});
     QVERIFY(e.connectionItem(both)->toolTip().contains(QStringLiteral("(out of date)")));
     QCOMPARE(arrows(both).size(), 2);  // still shown
+    // what the last run carried, its conversions and warnings per direction (R30e)
+    QJsonObject wf = e.workflow();
+    QJsonObject plan = wf["plan"].toObject();
+    plan.remove(QStringLiteral("stale"));
+    const QString c = QString::number(both);
+    plan["connections_used"] = QJsonObject{{c, QJsonObject{{"forward", "S"}}}};
+    plan["connections_used_reason"] = QJsonObject{{c, QJsonObject{{"forward", "S – toS gave spectra"}}}};
+    plan["connections_notes"] = QJsonObject{{c, QJsonObject{{"forward", QJsonArray{"exec.spectrum_cut: 3e-3"}}}}};
+    wf["plan"] = plan;
+    e.setWorkflow(wf);
+    QVERIFY(arrows(both).join(QLatin1Char(' ')).contains(QStringLiteral("R→S ⚠")));
+    QVERIFY(e.connectionItem(both)->toolTip().contains(QStringLiteral("last run: S (S – toS gave spectra)")));
+    QVERIFY(e.connectionItem(both)->toolTip().contains(QStringLiteral("⚠ exec.spectrum_cut: 3e-3")));
     // a fixed transport shows with a star
     e.setConnectionTransport(both, QStringLiteral("forward"), QStringLiteral("H"));
     QVERIFY(arrows(both).join(QLatin1Char(' ')).contains(QStringLiteral("H*")));  // also with an old plan
