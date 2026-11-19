@@ -152,6 +152,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   ray tracing) with R112 still met.
 
 ### Changed
+- **Raytracer and Workflow plugins need RTT-Fusion 0.3** (plane-wave spectra on links, the
+  representation each link carried). *Plugins → Settings…* reports an older version; *Create
+  environment…* installs 0.3 from PyPI.
 - **More undo steps**: new, renamed, recoloured and deleted layers, renamed groups, and every edit
   in the node editor (moving a block counts once, at the release; before, only plugin runs that
   changed the workflow could be undone).
@@ -164,6 +167,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ### Fixed
 - **Path Tracer: *Show camera* drew the new camera over the old one.** The drawing now replaces
   the previous one (keyed line result `pathtracer:camera`).
+- **Path Tracer: *Show light paths* added new paths over the old ones.** They now replace the
+  previous drawing as well (keyed line result `pathtracer:light_paths`).
 - **Extrude: a typed distance went along +Z in every view.** It now follows the normal of the
   construction plane of the view one works in (Front: −Y, Left: −X), as the prompt says.
 - **Right-click with no running command repeats the last command** in the views (like Enter on an
