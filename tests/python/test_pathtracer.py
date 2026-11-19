@@ -1133,7 +1133,8 @@ except UserError as e:
 p.update(export="", samples=20_000)
 assert plugin.show_paths(cad) == "20 light paths" and plugin.show_camera(cad) == "Camera drawn"
 assert cad.line_sets == [("Light paths", 20), ("Viewing pyramid", 5)]
-assert cad.line_kw[-1]["key"] == "pathtracer:camera" and "key" not in cad.line_kw[0]   # the camera replaces itself
+assert cad.line_kw[-1]["key"] == "pathtracer:camera"   # the camera replaces itself
+assert cad.line_kw[0]["key"] == "pathtracer:light_paths"   # and so do the light paths
 binding = cad.line_kw[-1]["binding"]                       # moved or rotated in the views, it writes the camera back
 assert set(binding["points"]) == {"camera_position", "camera_target"} and binding["view"]["roll_param"] == "camera_roll"
 assert np.allclose(binding["points"]["camera_position"], p["camera_position"]) and binding["view"]["order"][0] == "+Z"

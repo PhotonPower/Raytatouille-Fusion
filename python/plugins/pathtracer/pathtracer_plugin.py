@@ -26,6 +26,7 @@ import pt_setup  # noqa: E402
 _SURFACES = ["surface", "trimmed_surface", "shell"]
 #: result key of the camera drawing: drawn again, it replaces the one before
 CAMERA_KEY = "pathtracer:camera"
+PATHS_KEY = "pathtracer:light_paths"
 
 _MATERIAL = {
     "name": Param.text("", label="Name"),
@@ -418,5 +419,6 @@ class PathTracerPlugin(Plugin):
         for a, b in zip(starts[:-1], starts[1:]):
             order[a:b] = np.arange(b - a)
         run = ctx.result_set("Light paths")
-        ctx.lines(run, "Light paths", points, starts, order, colormap="plasma", unit="bounce")
+        ctx.lines(run, "Light paths", points, starts, order, colormap="plasma", unit="bounce",
+                  key=PATHS_KEY)  # replaces the light paths drawn before
         return f"{len(starts) - 1} light paths"

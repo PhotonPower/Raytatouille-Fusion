@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "api": 1,
   "entry": "raytracer_plugin:RaytracerPlugin",
-  "requires": ["numpy", "raytatouille>=0.9", "rtt_fusion>=0.2 (rtt-fusion)", "fieldtracing>=0.2 (photonpower-fieldtracing)"],
+  "requires": ["numpy", "raytatouille>=0.9", "rtt_fusion>=0.3 (rtt-fusion)", "fieldtracing>=0.2 (photonpower-fieldtracing)"],
   "previews": ["rtt.*"],
   "description": "Raytatouille: load optical systems, trace rays, irradiance on the image, optimise live. Needs the Python package raytatouille in the plugin environment."
 }

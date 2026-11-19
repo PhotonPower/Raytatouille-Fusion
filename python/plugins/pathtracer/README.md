@@ -61,7 +61,7 @@ caustics, a prism, materials with depth of field.
      wavelength to the sum.
 
    *Show materials and sources* lists the objects; *Show light paths* draws some paths from the
-   sources (colour: number of the bounce) – a check of where and into which direction they emit.
+   sources (colour: number of the bounce) – a check of where and into which direction they emit. Drawn again, they replace the earlier paths.
 
 3. **Irradiance.** *Irradiance on* (use the selection; empty: every surface), *Texels (longer
    side)*, then *Irradiance*: every face gets a texture with the irradiance in W/m² – the light
