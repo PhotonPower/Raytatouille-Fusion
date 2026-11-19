@@ -51,7 +51,9 @@ H_RANGE, V_RANGE = (-45.0, 45.0), (-12.0, 6.0)
 DEFLECT_H = np.arange(-16.0, 16.01, 1.0)
 DEFLECT_V = np.round(np.arange(-3.0, 0.61, 0.2), 6)
 SPREAD = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0])        # the cylinder's ± spread
-ANGLE = np.array([-60.0, -45.0, -30.0, -20.0, -15.0, -10.0, -5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 30.0, 45.0, 60.0, 90.0])
+ANGLE = np.array([-60.0, -45.0, -30.0, -20.0, -17.5, -15.0, -12.5, -10.0, -5.0, 0.0, 5.0, 10.0, 12.5, 15.0, 17.5, 20.0,
+                  30.0, 45.0, 60.0, 90.0])
+FREE = ~np.isin(np.abs(ANGLE), (12.5, 17.5))       # the directions of a cell free in its direction (the others: TILT)
 REACH = 22.0                                       # degrees: |deflect H| + the spread's H part at most (the patches' slope)
 REACH_V = 4.0                                      # degrees: the spread's V part at most
 EPSILON, LAMBDA = 0.02, 2e-6
@@ -72,6 +74,21 @@ BUMP_H, BUMP_V = 2, 3                              # bins (1°, 0.3°): the fiel
 ABOVE = 0.3                                        # degrees above the cut-off from which it must be dark
 RISING_SHARE = 0.5                                 # a cell whose light lies this much above the horizontal branch: its edge rises
 ALONG = 0.15                                       # degrees: a rising cell's deflection at most this far off its edge's line
+TILT = 5.0                                         # degrees: a rising cell's cylinder may turn this far from the rise
+# the target beam (target()): per row under the horizontal branch a core and a wide part, the wedge
+# under the rising branch filled, nothing above the line – the shape of a classic lens' beam
+CORE, CORE_SHIFT = 0.55, 0.5                       # the core's share of a row; its middle this far to the driver's side
+CORE_SIGMA, WIDE_SIGMA = (2.5, 0.8), (9.0, 2.0)    # degrees: σ = a + b x the depth under the line
+TARGET_RISE = 1.0                                  # the wedge: this share of the same depth under the line
+TARGET_TOP = 1.0                                   # degrees: the rise as high as this (zone III above)
+TARGET_SOFT = 0.12                                 # degrees: how softly the wedge ends at the line
+FIT_H, FIT_V, FIT_TOP = 30.0, -6.0, 2.0            # the field fitted: |H| ≤ 30°, V from −6° to 2°
+FIT_CORE = (12.0, -4.0, 3.0)                       # |H| < 12°, V > −4°: the fit there counts this many times
+# the sectors searched (optimise): their radial lines moved by these angles, one after the other;
+# only the parts this near the lines re-optimised for each
+SCOUT = (-12.0, -6.0, 6.0, 12.0)
+SCOUT_NEAR = 15.0                                  # degrees about the lines found first
+SCOUT_SWEEPS = 2
 
 
 @dataclass
@@ -174,6 +191,10 @@ class Probes:
     field: np.ndarray | None = None                 # positions in bins of the field judged for evenness (rows, columns)
     inside: np.ndarray | None = None                # which of them lie below the cut-off
     reference: float = 1.0                          # cd: the evenness' measure (R112's minimum at 50R)
+    fit: np.ndarray | None = None                   # positions in bins of the field fitted to the target beam
+    fit_area: np.ndarray | None = None              # their weights (FIT_CORE) …
+    target: np.ndarray | None = None                # … and the target beam there (cd; set_target)
+    fit_weight: np.ndarray | None = None            # the weights scaled: the fit's term (set_target)
 
 
 def grid() -> tuple[np.ndarray, np.ndarray]:
@@ -182,7 +203,7 @@ def grid() -> tuple[np.ndarray, np.ndarray]:
     return H_RANGE[0] + (np.arange(nh) + 0.5) * DH, V_RANGE[0] + (np.arange(nv) + 0.5) * DV
 
 
-def probes(cutoff: Cutoff, band: float = 0.0, rise: float = 0.0) -> Probes:
+def probes(cutoff: Cutoff, band: float = 0.0, rise: float = 0.0, fit: bool = False) -> Probes:
     """R112's test points (their photometer windows: ± 0.25° x ± 0.1°) and every bin of its zones
     III, IV and I – of III and I every bin that touches them: an optimiser finds any gap between the
     probes –, for the traffic side of `cutoff`; and, to keep the cut-off where it is aimed, every
@@ -190,16 +211,24 @@ def probes(cutoff: Cutoff, band: float = 0.0, rise: float = 0.0) -> Probes:
     Beyond R112, as a real beam has it: `band` cd at least on average in a band under both
     branches (BAND_V under the line, BAND_H about the kink) – the beam brightest at its cut-off,
     not in a patch below it –, and `rise` cd just under the rising branch (RISE_H from the kink)
-    with a fall by STEP above it – the kink seen, the rise sharp (0: neither)."""
+    with a fall by STEP above it – the kink seen, the rise sharp (0: neither). fit: also the field
+    fitted to a target beam (FIT_H, FIT_V … FIT_TOP; set_target) – every other column (1°), near
+    the cut-off every row, further down every third. A bin is probed once, whatever judges it."""
     h, v = grid()
     sign = 1.0 if cutoff.right_hand_traffic else -1.0
     bins: list[int] = []
+    known: dict[int, int] = {}
     groups = []
 
     def add(flat) -> np.ndarray:
-        start = len(bins)
-        bins.extend(int(b) for b in flat)
-        return np.arange(start, len(bins))
+        out = []
+        for b in flat:
+            b = int(b)
+            if b not in known:
+                known[b] = len(bins)
+                bins.append(b)
+            out.append(known[b])
+        return np.asarray(out, dtype=np.int64)
 
     for tp in al_photometry.R112_CLASS_B:
         hi = np.flatnonzero(np.abs(h - sign * tp.h) <= 0.25 + 1e-9)
@@ -259,9 +288,76 @@ def probes(cutoff: Cutoff, band: float = 0.0, rise: float = 0.0) -> Probes:
     where = add((rows[:, None] * len(h) + cols[None, :]).ravel()).reshape(len(rows), len(cols))
     inside = v[rows][:, None] <= line[None, :] - FIELD_GAP
     reference = next(tp.minimum for tp in al_photometry.R112_CLASS_B if tp.name == "50R")
+    fitted = area = None
+    if fit:
+        cols = np.flatnonzero(np.abs(h) <= FIT_H + 1e-9)[::2]
+        near = cutoff.v_deg - 1.0
+        rows = np.concatenate([np.flatnonzero((v >= FIT_V - 1e-9) & (v < near))[::3],
+                               np.flatnonzero((v >= near) & (v <= FIT_TOP + 1e-9))])
+        flat_fit = (rows[:, None] * len(h) + cols[None, :]).ravel()
+        fitted = add(flat_fit)
+        hf, vf = h[flat_fit % len(h)], v[flat_fit // len(h)]
+        area = np.where((np.abs(hf) < FIT_CORE[0]) & (vf > FIT_CORE[1]), FIT_CORE[2], 1.0)
     flat = np.asarray(bins)
     omega = al_photometry._solid_angle(h[flat % len(h)], v[flat // len(h)], DH, DV)
-    return Probes(flat, omega, groups, where, inside, float(reference))
+    return Probes(flat, omega, groups, where, inside, float(reference), fitted, area)
+
+
+def target(cutoff: Cutoff, beam: np.ndarray) -> np.ndarray:
+    """A target beam (cd, nv x nh on the surrogate's grid) from the plane lens' `beam`: the light of
+    each row under the horizontal branch (its sum across) spread across anew – a core (CORE of it,
+    σ CORE_SIGMA, its middle CORE_SHIFT to the driver's side of the kink) and a wide part
+    (WIDE_SIGMA), both wider the deeper the row –; on the driver's side every column lifted to the
+    rising line (at most TARGET_TOP), so that the rows follow the cut-off and the wedge between the
+    branches is lit as the same depth under the line (x TARGET_RISE, softly up to the line);
+    nothing above the line; as much light in all as the plane lens has. The shape of a classic
+    lens' beam, whose flutes spread what the mirror lays under the cut-off, the slanted ones along
+    the rise."""
+    h, v = grid()
+    H, V = np.meshgrid(h, v)
+    sign = 1.0 if cutoff.right_hand_traffic else -1.0
+    omega = al_photometry._solid_angle(H, V, DH, DV)
+    level = cutoff.v_deg
+    depth = np.clip(level - V, 0.0, None)
+    x = H - cutoff.kink_deg
+
+    def bell(mid, sigma):
+        g = np.exp(-0.5 * ((x - mid) / sigma) ** 2)
+        return g / g.sum(axis=1, keepdims=True)
+
+    rows = (beam * omega).sum(axis=1, keepdims=True)                   # lm per row
+    spread = CORE * bell(sign * CORE_SHIFT, CORE_SIGMA[0] + CORE_SIGMA[1] * depth) \
+        + (1.0 - CORE) * bell(0.0, WIDE_SIGMA[0] + WIDE_SIGMA[1] * depth)
+    T = np.where(V <= level, rows * spread / omega, 0.0)
+    # the rows follow the line: under the rise (up to TARGET_TOP) each column is the horizontal
+    # branch's column lifted to the line, the wedge as bright as the same depth under the line
+    line = np.minimum(np.degrees(np.arctan(cutoff.line(np.tan(np.radians(H))))), TARGET_TOP)
+    lift = np.clip(line - level, 0.0, None)
+    below = np.zeros_like(T)
+    for i in np.flatnonzero(lift[0] > 0.0):
+        below[:, i] = np.interp(V[:, i] - lift[0, i], v, T[:, i], left=0.0, right=0.0)
+    lifted = (sign * x > 0.0) & (lift > 0.0)
+    soft = 0.5 * (1.0 + np.tanh((line - V) / TARGET_SOFT))
+    wedge = lifted & (V > level)
+    T = np.where(lifted, below * np.where(wedge, TARGET_RISE * soft, 1.0), T)
+    T = np.where(wedge & (V > line + 3.0 * TARGET_SOFT), 0.0, T)
+    return T * (beam * omega).sum() / max(float((T * omega).sum()), 1e-300)
+
+
+def set_target(pr: Probes, T: np.ndarray, weight: float) -> None:
+    """The target beam T (target()) at the fitted field, its term in the objective weighted so that
+    `weight` is that of the beam missing it entirely."""
+    if pr.fit is None:
+        raise ValueError("the probes have no field to fit (probes(fit=True))")
+    pr.target = T.ravel()[pr.bins[pr.fit]]
+    pr.fit_weight = weight * pr.fit_area / max(float((pr.fit_area * pr.target ** 2).sum()), 1e-300)
+
+
+def fit_error(I: np.ndarray, pr: Probes) -> float:
+    """How far intensities I (bins) miss the target: the weighted rms difference relative to the
+    target's (0: met, 1: as far as dark)."""
+    w = pr.fit_area
+    return float(np.sqrt((w * (I[pr.fit] - pr.target) ** 2).sum() / max((w * pr.target ** 2).sum(), 1e-300)))
 
 
 def bumps(F: np.ndarray, inside: np.ndarray) -> np.ndarray:
@@ -290,7 +386,8 @@ def objective(I: np.ndarray, pr: Probes, margin: float, uniformity: float = 0.0)
     squared shortfalls (in the darkest view) and excesses (in the brightest) beyond the margin, less
     EPSILON x the (soft) smallest of the ratios value / minimum and maximum / value (each up to
     CAP) – the weakest requirement raised –, plus `uniformity` x the squared rms of the bumps
-    (relative to 50R's minimum) in the last view – the lamp's as it is if it has one."""
+    (relative to 50R's minimum) in the last view – the lamp's as it is if it has one –, plus, with a
+    target beam (set_target), its weighted squared difference from it in the last view."""
     low_view, high_view = I.min(axis=0), I.max(axis=0)
     total = np.zeros(I.shape[1])
 
@@ -318,6 +415,8 @@ def objective(I: np.ndarray, pr: Probes, margin: float, uniformity: float = 0.0)
     soft = weakest - TAU * np.log(np.exp(-(R - weakest[:, None]) / TAU).sum(axis=1))
     if uniformity > 0.0 and pr.field is not None:
         total += uniformity * bumps(I[-1][:, pr.field], pr.inside) / pr.reference ** 2
+    if pr.fit_weight is not None:                     # the target beam, in the last view (set_target)
+        total += (pr.fit_weight * (I[-1][:, pr.fit] - pr.target) ** 2).sum(axis=1)
     return total - EPSILON * soft
 
 
@@ -598,10 +697,10 @@ def _cost(dh, dv, sp, an, sur: Surrogate) -> np.ndarray:
 
 
 def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, progress=None,
-            uniformity: float = 0.0) -> tuple[Choice, int]:
+            uniformity: float = 0.0, only: np.ndarray | None = None) -> tuple[Choice, int]:
     """Coordinate descent over the cells (brightest first): each cell's deflection with its
-    cylinder kept, then its cylinder (strength, direction) with its deflection kept. Returns the
-    choice and the sweeps made."""
+    cylinder kept, then its cylinder (strength, direction) with its deflection kept. only: the
+    cells descended (the rest kept). Returns the choice and the sweeps made."""
     pr = sur.probes
 
     def judged(flux):                            # (views, k, probes) -> objective (k)
@@ -610,6 +709,8 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
     total = sur.beam(choice)
     order = np.argsort(-sur.flux)
     order = order[sur.flux[order] > 0.0]
+    if only is not None:
+        order = order[np.isin(order, only)]
     DHg, DVg = np.meshgrid(np.arange(len(DEFLECT_H)), np.arange(len(DEFLECT_V)), indexing="ij")
     DHg, DVg = DHg.ravel(), DVg.ravel()
     SPg, ANg = np.meshgrid(np.arange(len(SPREAD)), np.arange(len(ANGLE)), indexing="ij")
@@ -640,8 +741,11 @@ def descend(sur: Surrogate, choice: Choice, margin: float, sweeps: int = 8, prog
             choice.dh[k], choice.dv[k] = DHg[fits][best], DVg[fits][best]
             # the cylinder, the deflection kept: all in the first sweep, then those near the present one
             fits = sur.fits(choice.dh[k], choice.dv[k], SPg, ANg)
-            if sur.edge_angle[k] >= 0:                  # spreading along its edge
-                fits &= (ANg == sur.edge_angle[k]) | (SPREAD[SPg] == 0.0)
+            if sur.edge_angle[k] >= 0:                  # spreading along its edge (a rising one: up to TILT off)
+                tilt = TILT if not np.isnan(sur.edge_slope[k]) else 0.0
+                fits &= (np.abs(ANGLE[ANg] - ANGLE[sur.edge_angle[k]]) <= tilt + 1e-9) | (SPREAD[SPg] == 0.0)
+            else:
+                fits &= FREE[ANg]
             if sweep > 0:
                 turn = np.abs(ANg - choice.an[k])
                 fits &= (np.abs(SPg - choice.sp[k]) <= 2) & (np.minimum(turn, len(ANGLE) - turn) <= 2)
@@ -677,6 +781,7 @@ class Result:
     sectors: tuple = ()                 # the lens' sectors (al_lens.Sector) the elements are for
     traced: al_photometry.Distribution | None = None   # check()'s of the lens kept
     background: np.ndarray | None = None   # (views, grid) the surrogate's in its best round
+    scouted: list = field(default_factory=list)      # the sectors searched: (rising from, horizontal from, objective)
 
 
 def elements_of(system: al_lens.LensSystem, cells: list, choice: Choice) -> tuple:
@@ -723,7 +828,7 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
              rounds: int = 2, blur: tuple[float, float] = (0.0, 0.0), spacing: float = 1.0,
              reflectance: float = 0.85, transmittance: float = 0.92, direct: bool = True, progress=None,
              log=None, uniformity: float = 0.0, starts: tuple = (None,), along_edges: bool = False,
-             band: float = 0.0, rise: float = 0.0, check=None) -> Result:
+             band: float = 0.0, rise: float = 0.0, check=None, fit: float = 0.0, scout: bool = True) -> Result:
     """The elements of every cell. evaluate(system) -> Distribution: the filament images (with the
     lamp's direct light) of a lens built; rounds: how often half its difference from the surrogate
     is carried back; blur (fit_blur, sigma H, V in degrees): a second view in which the beam must
@@ -737,48 +842,133 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
     lit; False: any direction. The edge is the branch of the element's sector; without sectors the
     lens is cut into them first (default_sectors: the wedge whose light ends at the rising branch,
     radial lines about the lamp axis, as the zones of a clear-lens reflector) – or, if there is no
-    such wedge, it is found per cell (edges()). band, rise: what a real beam has beyond R112 (probes).
-    check(system) -> Distribution: the lamp as it is (ray tracing) – once the rounds are done, what
-    it adds to the blurred view of the lens kept is carried back and the cells optimised again, CHECKS
-    times, each lens ray traced; the best by its ray tracing is kept (Result.traced)."""
+    such wedge, it is found per cell (edges()). A rising element's cylinder may turn up to TILT from
+    the rise. scout: the wedge found, its two lines are moved (SCOUT, first the one, then the
+    other) to where the surrogate's objective is lowest – the parts near them descended again for
+    each (Result.scouted). band, rise: what a real beam has beyond R112 (probes). fit: the weight of
+    a target beam (target(): the plane lens' light under the cut-off spread across as a classic lens
+    spreads it, the wedge under the rising branch filled) – the whole field's shape, not only the
+    test points'; 0: none. check(system) -> Distribution: the lamp as it is (ray tracing) – once
+    the rounds are done, what it adds to the blurred view of the lens kept is carried back and the
+    cells optimised again, CHECKS times, each lens ray traced; the best by its ray tracing is kept
+    (Result.traced)."""
     def step(lo: float, hi: float):
         if progress is None:
             return None
         return lambda fraction, text: progress(lo + (hi - lo) * fraction, text)
 
-    plane = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),), wall_draft=0.0), frame)
-    rays = lens_rays(plane, spacing=spacing, reflectance=reflectance, transmittance=transmittance,
-                     progress=step(0.0, 0.1))
+    def plane_of(s: al_lens.LensSettings) -> al_lens.LensSystem:
+        return al_lens.build(replace(s, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),), wall_draft=0.0), frame)
+
+    plane = plane_of(settings)
+    rays0 = rays = lens_rays(plane, spacing=spacing, reflectance=reflectance, transmittance=transmittance,
+                             progress=step(0.0, 0.1))
+    found = ()
     if along_edges and not settings.sectors:      # the wedge's radial lines, from the plane lens' light
         found = default_sectors(rays, settings.cutoff)
         if found:
             settings = replace(settings, sectors=found)
-            plane = al_lens.build(replace(settings, elements=(al_lens.Element(-1e9, 1e9, -1e9, 1e9),),
-                                          wall_draft=0.0), frame)
-            rays = rays.regrouped(plane)
-    pr = probes(settings.cutoff, band, rise)
+            plane = plane_of(settings)
+            rays = rays0.regrouped(plane)
+    pr = probes(settings.cutoff, band, rise, fit=fit > 0.0)
     h, v = grid()
     omega = al_photometry._solid_angle(h[None, :], v[:, None], DH, DV)
     direct_light = np.zeros((len(v), len(h)))
     if direct:
         direct_light, _ = al_photometry.direct_light(settings.lamp, plane.filament, h, v,
                                                      after=lambda o, d: plane.through(o, d, transmittance))
-    sur = Surrogate(rays, pr, np.zeros(0), blur, (settings.cell_width, settings.cell_height))
-    sur.depth_h, sur.depth_v, sur.depth_c = depths(settings)
-    sur.deepest = DEPTH * (settings.thickness - 0.3)              # (al_lens.build: at least 0.3 mm of glass left)
+    depth = depths(settings)
     zero = (int(np.argmin(np.abs(DEFLECT_H))), int(np.argmin(np.abs(DEFLECT_V))), 0, int(np.argmin(np.abs(ANGLE))))
+    cut = settings.cutoff
+
+    def surrogate(rays_: Rays, plane_: al_lens.LensSystem) -> Surrogate:
+        """The surrogate of the plane lens' cells (parts), with each cell's edge if along_edges."""
+        s_ = Surrogate(rays_, pr, np.zeros(0), blur, (settings.cell_width, settings.cell_height))
+        s_.depth_h, s_.depth_v, s_.depth_c = depth
+        s_.deepest = DEPTH * (settings.thickness - 0.3)              # (al_lens.build: at least 0.3 mm of glass left)
+        if along_edges:
+            rising = np.array([plane_.branch(k) == RISING for _, _, k in rays_.cells]) if plane_.count > 1 \
+                else edges(rays_, cut)
+            level = int(np.argmin(np.abs(ANGLE)))
+            s_.edge_angle = np.where(rising, int(np.argmin(np.abs(ANGLE - math.degrees(math.atan(cut.slope))))), level)
+            s_.edge_slope = np.where(rising, cut.slope, np.nan)
+        return s_
+
+    def begin(start, s_: Surrogate) -> Choice:
+        """What every cell begins with (a start of optimise's): its cylinders along each cell's edge."""
+        z = zero if start is None else nearest(start, s_)
+        choice = Choice(*(np.full(len(s_.flux), c, dtype=np.int64) for c in z))
+        if along_edges:
+            choice.an[:] = np.where(SPREAD[choice.sp] > 0.0, s_.edge_angle, choice.an)
+            off = ~np.isnan(s_.edge_slope) & (np.abs(DEFLECT_V[choice.dv] - cut.slope * DEFLECT_H[choice.dh]) > ALONG)
+            choice.dh[off], choice.dv[off] = zero[0], zero[1]
+            bad = ~s_.fits(choice.dh, choice.dv, choice.sp, choice.an)
+            choice.sp[bad], choice.an[bad] = 0, zero[3]
+        return choice
+
+    sur = surrogate(rays, plane)
     if not sur.fits(*zero):
         raise DesignError("the lens is too thin for even plane elements")
     first = np.stack([blurred(direct_light, b) for b in sur.blurs])
-    if along_edges:
-        cut = settings.cutoff
-        rising = np.array([plane.branch(k) == RISING for _, _, k in rays.cells]) if plane.count > 1 \
-            else edges(rays, cut)
-        level = int(np.argmin(np.abs(ANGLE)))
-        sur.edge_angle = np.where(rising, int(np.argmin(np.abs(ANGLE - math.degrees(math.atan(cut.slope))))), level)
-        sur.edge_slope = np.where(rising, cut.slope, np.nan)
     count = len(rays.cells)
     at = lambda a: a.reshape(len(sur.blurs), -1)[:, pr.bins]           # noqa: E731
+    if fit > 0.0:                  # the target beam, from the plane lens' (the last view)
+        flat = Choice(*(np.full(count, c, dtype=np.int64) for c in zero))
+        set_target(pr, target(cut, (sur.full(flat) / omega + first)[-1]), fit)
+    scouted = []
+    opening = None
+    if found and scout:            # the sectors' lines moved where the objective is lowest
+        sur.background = at(first)
+        base, _ = descend(sur, begin(starts[0], sur), margin, sweeps=SCOUT_SWEEPS, uniformity=uniformity,
+                          progress=step(0.1, 0.13))
+        kept = {(i, j, plane.branch(k)): (base.dh[n], base.dv[n], base.sp[n], base.an[n])
+                for n, (i, j, k) in enumerate(rays.cells)}
+        a0, a1 = found[0].az_from, found[1].az_from
+        best_s = [math.inf, None]
+
+        def apart(a, b):
+            return np.abs((a - b + 180.0) % 360.0 - 180.0)
+
+        def tried(b0: float, b1: float) -> float:
+            """The surrogate's objective with the wedge from b0 to b1: the parts near the lines first
+            found descended again, the others as the lens with the lines first found has them."""
+            b0, b1 = b0 % 360.0, b1 % 360.0
+            if (b1 - b0) % 360.0 < 10.0 or (b1 - b0) % 360.0 > 180.0:
+                return math.inf
+            for x in scouted:
+                if x[:2] == (b0, b1):
+                    return x[2]
+            if progress is not None:
+                progress(0.13 + 0.02 * len(scouted) / (2 * len(SCOUT) + 1), "searching the lens' sectors …")
+            s_ = replace(settings, sectors=(al_lens.Sector(b0, RISING), al_lens.Sector(b1, HORIZONTAL)))
+            plane_ = plane_of(s_)
+            rays_ = rays0.regrouped(plane_)
+            sur_ = surrogate(rays_, plane_)
+            sur_.background = at(first)
+            choice = begin(starts[0], sur_)
+            for n, (i, j, k) in enumerate(rays_.cells):
+                q = kept.get((i, j, plane_.branch(k)))
+                if q is not None:
+                    choice.dh[n], choice.dv[n], choice.sp[n], choice.an[n] = q
+            az = np.degrees(np.arctan2(rays_.z, rays_.y)) % 360.0
+            near = np.unique(rays_.cell[(apart(az, a0) <= SCOUT_NEAR) | (apart(az, a1) <= SCOUT_NEAR)])
+            ij = {rays_.cells[c][:2] for c in near}
+            only = np.array([n for n, c in enumerate(rays_.cells) if c[:2] in ij], dtype=np.int64)
+            choice, _ = descend(sur_, choice, margin, sweeps=SCOUT_SWEEPS, uniformity=uniformity, only=only)
+            score = float(objective((sur_.beam(choice) / pr.omega + sur_.background)[:, None, :], pr, margin,
+                                    uniformity)[0])
+            scouted.append((b0, b1, score))
+            if score < best_s[0]:
+                best_s[:] = [score, (s_, plane_, rays_, sur_, choice)]
+            return score
+
+        for d in (0.0, *SCOUT):                  # (a tie keeps the lines first found)
+            tried(a0 + d, a1)
+        b0 = best_s[1][0].sectors[0].az_from
+        for d in (0.0, *SCOUT):
+            tried(b0, a1 + d)
+        settings, plane, rays, sur, opening = best_s[1]
+        count = len(rays.cells)
     best = None
     share = 0.8 / (len(starts) * (rounds + 1) + (CHECKS if check is not None else 0))
 
@@ -799,18 +989,13 @@ def optimise(settings: al_lens.LensSettings, frame: np.ndarray, evaluate, *, mar
         record = {"sweeps": sweeps, "surrogate": report(at(predicted), pr), "model": report(at(actual), pr),
                   "objective": score, "bumps": (float(evenness(at(predicted)[-1], pr)),
                                                 float(evenness(at(actual)[-1], pr)))}
+        if pr.target is not None:
+            record["fit"] = (fit_error(at(predicted)[-1], pr), fit_error(at(actual)[-1], pr))
         return choice, elements, system, dist, score, record, np.where(seen[None], actual - predicted, 0.0)
 
     for n, start in enumerate(starts):
-        z = zero if start is None else nearest(start, sur)
-        choice = Choice(*(np.full(count, c, dtype=np.int64) for c in z))
-        if along_edges:                             # a start's cylinders turned along each cell's edge
-            choice.an[:] = np.where(SPREAD[choice.sp] > 0.0, sur.edge_angle, choice.an)
-            off = ~np.isnan(sur.edge_slope) & (np.abs(DEFLECT_V[choice.dv] - cut.slope * DEFLECT_H[choice.dh]) > ALONG)
-            choice.dh[off], choice.dv[off] = zero[0], zero[1]
-            bad = ~sur.fits(choice.dh, choice.dv, choice.sp, choice.an)
-            choice.sp[bad], choice.an[bad] = 0, zero[3]
-        result = Result((), choice, rays.cells, start=n, sectors=settings.sectors)
+        choice = opening.copy() if n == 0 and opening is not None else begin(start, sur)
+        result = Result((), choice, rays.cells, start=n, sectors=settings.sectors, scouted=scouted)
         background = first
         for r in range(rounds + 1):
             choice, elements, system, dist, score, record, missed = judge(

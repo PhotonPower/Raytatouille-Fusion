@@ -234,6 +234,13 @@ class AutomotiveLighting(Plugin):
                                       description="at least this on average 0.15–0.35° under the rising branch, "
                                                   "1–5° from the kink, and above it at most a tenth: the kink seen, "
                                                   "the rise lit and sharp (0: not asked)"),
+        "optimise_target": Param.number(0.3, min=0.0, max=100.0, decimals=2, label="Optimise: target beam",
+                                        group="Lens",
+                                        description="the weight of a target beam, the shape of a classic lens' one: "
+                                                    "the mirror's light under the cut-off spread across (a core "
+                                                    "to the driver's side, a wide part, both wider further down), "
+                                                    "the wedge under the rise filled up to 1° – the whole field "
+                                                    "fitted, not only the test points (0: none)"),
         "optimise_start": Param.choice(list(OPTIMISE_STARTS), CYLINDER_START, label="Optimise: start with",
                                        group="Lens",
                                        description="what every cell begins with: the search stays near it – from "
@@ -837,7 +844,9 @@ class AutomotiveLighting(Plugin):
             ctx.log(f"{begun}round {r_ + 1}: {sweeps} sweeps; " + ", ".join(
                 f"{k} {values['surrogate'][k]:.0f}/{values['model'][k]:.0f}" for k in values["model"])
                 + " cd (the surrogate's / the filament images'); bumps "
-                + "/".join(f"{100.0 * b:.1f}" for b in values["bumps"]) + " % of 50R's minimum")
+                + "/".join(f"{100.0 * b:.1f}" for b in values["bumps"]) + " % of 50R's minimum"
+                + ("; off the target beam by " + "/".join(f"{100.0 * f:.0f}" for f in values["fit"]) + " %"
+                   if "fit" in values else ""))
 
         start = time.time()
         blur = (0.0, 0.0)
@@ -858,7 +867,12 @@ class AutomotiveLighting(Plugin):
                                           progress=progress, log=log, uniformity=float(p["optimise_uniformity"]),
                                           starts=starts, along_edges=bool(p["optimise_edges"]),
                                           band=float(p["optimise_band"]), rise=float(p["optimise_rise"]),
-                                          check=check if traced else None)
+                                          check=check if traced else None, fit=float(p["optimise_target"]))
+            if result.scouted:
+                kept = min(result.scouted, key=lambda x: x[2])
+                ctx.log("the sectors searched: " + ", ".join(
+                    f"rising {a:g}°–{b:g}° {s:.4g}" for a, b, s in result.scouted)
+                    + f" (the surrogate's objective) – kept: rising from {kept[0]:g}° to {kept[1]:g}°")
             if traced:
                 ctx.log("kept: " + ("the lens optimised once more for what the ray tracing adds" if result.checked
                                     else "the lens before (the one optimised once more is worse in the ray tracing)"))

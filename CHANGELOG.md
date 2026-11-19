@@ -87,6 +87,18 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   stops *Run workflow* with a traceback. The log and the status line name the catalogue, the
   glasses that are missing, and the fix (RTT-Fusion #87, #89). Plugin API:
   `ctx.plugin_params(plugin_id)` reads another plugin's panel values.
+- **Automotive Lighting plugin**: *Optimise lens* fits a **target beam** and **searches the
+  sectors**. *Optimise: target beam* (a weight, 0.3; 0: none): besides R112's points the whole
+  field is fitted to the shape of a classic lens' beam made from the plane lens' own light – each
+  row under the cut-off spread across anew (a core to the driver's side, a wide part, both wider
+  further down), the rows lifted to follow the rise up to 1°, nothing above the line; the rounds
+  log how far the beam is off it. The wedge found is no longer taken as it is: its two radial
+  lines are moved (± 6, ± 12°) one after the other and the lowest objective kept (the parts near
+  the lines optimised again for each; the log lists them), and the wedge's cylinders may turn by
+  10 … 20° instead of exactly 15°. For the H4 a wider, more even beam whose rise is lit along its
+  line out to 8° (under the rise 4 800 instead of 3 300 cd, the 2000 cd line at H = 8° at 0.55°
+  instead of −1.65°), a sharper cut-off, R112 met in the ray tracing; the hot spot lower (15 700
+  instead of 19 000 cd). A bin of the screen is probed once, whichever requirement judges it.
 - **Automotive Lighting plugin**: lens **sectors** – radial sections about the lamp axis, as the
   zones of a clear-lens reflector (a new table: azimuth and cut-off branch). They cut the cells along
   radial lines, each part an element of its own (a new *sector* column of the element table), the
