@@ -41,7 +41,7 @@ and V upwards.
 - *Connecting faces*: on / off, the draft angle of the walls between the facets and the fillet
   radius at their foot and head.
 - *Lens* (patterned lens only): position, shape, thickness, refractive index, transmittance,
-  element size, draft angle and fillet radius of the walls between the elements, the position of
+  the **structure** (cylinder strips – their width and segments – or cells, their size), draft angle and fillet radius of the walls between the elements, the position of
   the mirror's focus, the **sectors** and the **elements**; for *Optimise lens* its margin, rounds, the weight of
   the beam's evenness, what the cells start with, whether the elements follow the edges of their
   light, the band under the cut-off and the rising branch a real beam has, and whether the lamp's
@@ -198,8 +198,9 @@ frame, outside the lamp hole; *Lens → Mirror focus behind the filament centre*
 (H4: the low-beam coil sits before the focus – in the H4's headlamp the focus is at the
 driving-beam coil, 6.7 mm behind –, so the upper half of the mirror, which alone gets light past
 the shield, sends it below the horizon). The lens is a plate that meets the lamp axis
-at *Lens in front of the filament*; its outer side is smooth, its inner side a grid of cells
-(*Element width / height*, one cell centred on the lamp axis). It may lean back (*Rake*: its top
+at *Lens in front of the filament*; its outer side is smooth, its inner side carries the elements
+– **cylinder strips** (*Structure*, the default, below) or a grid of **cells** (*Element width /
+height*, one cell centred on the lamp axis). It may lean back (*Rake*: its top
 towards the mirror), run back to one side (*Sweep*) and be domed outwards (*Dome radius*, a
 sphere): the outer side has that shape, the inner side the same shape *Thickness* behind it
 (measured along X) with the elements on it.
@@ -230,6 +231,24 @@ leaves the shield by its slanting edge reaches a wedge from the middle of the le
 are radial lines – a classic H4 lens has its slanted flutes there – and cells of a square grid
 mix it with the rest at both borders: some 40 % of that light lies in cells half in, half out.
 Empty: one sector; *Optimise lens* (along the edges) fills it. Not with a draft angle yet.
+
+**Cylinder strips** (*Structure → cylinder strips through the sectors*): cylinder lenses that run
+through their sector, *Strip width* wide (5 mm; one centred on the lamp axis) – upright where the
+sector's light ends at the horizontal branch, leaning by the rise (15°) in the wedge whose light
+ends at the rising one, their cylinders spreading along it: the flutes of a classic H4 lens. Along
+a strip, its **segments** (*Strip segments*, 10 mm; 0: the strip in one piece) are its elements:
+the table's row that holds a segment's middle counts – y and z are then the strip's coordinates
+t = y cos φ − z sin φ across and w = y sin φ + z cos φ along (φ its lean; for upright strips y and
+z). A segment's prism may be its own; its cylinder is the strip's – *Optimise lens* keeps it so:
+the cylinder lens runs through the strip, the prisms make steps between its segments (a segment
+like the one before it, with no prism up or down along the strip, goes on from it without a
+step). The slopes of a segment are integrated along the strip's middle and then across it; its
+surface is the B-spline closest to that (degree 5 across, cubic along, a span per 8 mm), exact in
+CAD as such and trimmed to the segment's part of the sector. The walls between strips and between
+segments are ruled between their rims; those along the sectors' radial lines are fitted (cubic,
+within some 1e-5 mm), piece by piece between the strips and segments the line crosses. Not with a
+draft angle yet. With cells, each has a prism and a cylinder lens of its own and a step to all of
+its neighbours: in CAD a mosaic of square patches, the cylinders not running on.
 
 For a point of a cell, the ray that comes from the filament centre by way of the mirror
 (direction d) is to leave the lens turned by these angles (direction t). The direction g inside
@@ -344,6 +363,13 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   (within 0.15°), so the rise stays on its line; the others cylinders across and any deflection.
   Free, the search pulls the wedge's light down to the oncoming traffic's side, where R112 counts
   it, and leaves the rise dark. (Without a wedge: per cell, by the majority of its light.)
+- **Cylinder strips** (*Structure*, the default): the cells of the search are the strips'
+  segments. A segment's prism is its own (in the wedge along the rise), the cylinder the strip's:
+  when the first segment of a strip comes, the cylinder is chosen for all of its segments at once,
+  their prisms kept (one strip in one piece: its deflection along its lean only, no prism up or
+  down). *Optimise: strips spread at least* (0°) is the weakest cylinder a strip may have – with
+  1° or 2° every strip is a curved cylinder lens; 0 lets the search leave strips flat, their
+  segments' prisms alone spreading the light.
 - **The start** (*Optimise: start with*): every cell begins as a cylinder lens spreading 6° across
   (the default), as plane glass, or both are tried – two searches, twice the time – and the better
   kept. The search ends near where it begins: from plane glass nearly every cell becomes a prism,
@@ -361,7 +387,25 @@ under its rise, steeper into the foreground, as the facets of a clear-lens refle
   images do not have – is carried back and the cells optimised again, twice, each lens ray traced;
   the best by its ray tracing is kept.
 
-What to expect (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
+What to expect with cylinder strips (H4 as below, strips 5 mm wide, segments 10 mm – 415 –, the
+target 0.3; ray tracing; some 11 minutes on a quiet machine, 50 on a busy one):
+
+| ray tracing | strips spread at least 0° (default) | 1° | 2° | strips in one piece | 4 mm cells |
+|---|---|---|---|---|---|
+| R112 | met | 75R, zone III missed | 75R, zone III missed | 75R, 50R, 50V, 25L, III, IV missed | met |
+| 75R / 50R / 50V | 11 100 / 17 700 / 10 100 cd | 9 300 / 15 600 / 8 600 cd | 7 700 / 13 100 / 7 600 cd | 4 100 / 5 600 / 3 200 cd | 11 600 / 14 300 / 11 800 cd |
+| zone III / at most | 625 / 18 400 cd | 779 / 18 400 cd | 789 / 16 000 cd | 1 121 / 7 600 cd | 547 / 15 900 cd |
+| cut-off | −0.70°, G = 0.30 | −0.60°, G = 0.25 | −0.70°, G = 0.27 | −0.60°, G = 0.26 | −0.50°, G = 0.32 |
+| bumps (of 50R's minimum) | 3.9 % | 4.0 % | 3.1 % | 3.3 % | 2.7 % |
+| strips with a cylinder | 12 of 54 | 54 | 54 | 23 of 54 | – |
+
+A strip's cylinder spreads all along it, also where the light has to stay together under the cut-off
+and at 75R: R112 holds only if most strips may stay flat (the prisms of their segments spread the
+light, steps between them). Strips in one piece have no prisms up or down: the paraboloid's light,
+6.7 mm out of focus, cannot be gathered to a hot spot (the prototype of continuous flutes alike:
+9 650 cd at most).
+
+What to expect with cells (H4, frame 170 x 100 mm, 4 mm cells – 1063 –, the focus at the driving-beam coil
 6.7 mm behind, the shield shining at 0.5, the blur measured, 2 rounds, evenness 1, from cylinder
 lenses, 0.75 GB; about 9 minutes before the sectors were searched and the target fitted, with
 them some 20 … 25 minutes on a machine shared with other work): all of R112 met by the filament

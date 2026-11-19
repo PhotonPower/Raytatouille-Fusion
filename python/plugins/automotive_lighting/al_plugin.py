@@ -41,6 +41,9 @@ CYLINDER_START = "cylinder lenses (6° across)"
 OPTIMISE_STARTS = {CYLINDER_START: (al_optimise.CYLINDERS,), "plane glass": (None,),
                    "both, the better kept": (al_optimise.CYLINDERS, None)}
 STARTED = {al_optimise.CYLINDERS: "cylinder lenses", None: "plane glass"}
+# the patterned lens' structure (al_lens.LensSettings.structure)
+STRIPS, CELLS = "cylinder strips through the sectors", "cells (a grid)"
+STRUCTURES = {STRIPS: al_lens.STRIPS, CELLS: al_lens.CELLS}
 # the lamp's parts in the model tree (Generate lamp): group and face names by their role in the ray tracing
 _LAMP_PARTS = {al_trace.COIL: "Coil (lit)", al_trace.OFF: "Other coil (dark)", al_trace.SHIELD: "Shield",
                al_trace.BULB: "Bulb glass", al_trace.CAP: "Black top"}
@@ -177,9 +180,31 @@ class AutomotiveLighting(Plugin):
         "lens_index": Param.number(1.49, min=1.01, max=3.0, decimals=3, label="Refractive index", group="Lens",
                                    description="PMMA 1.49, polycarbonate 1.59, glass about 1.52"),
         "lens_transmittance": Param.number(0.92, min=0.0, max=1.0, decimals=2, label="Transmittance", group="Lens"),
-        "cell_width": Param.number(10.0, min=0.5, max=500.0, decimals=2, unit="mm", label="Element width", group="Lens"),
+        "lens_structure": Param.choice(list(STRUCTURES), STRIPS, label="Structure", group="Lens",
+                                       description="cylinder strips: cylinder lenses that run through their sector "
+                                                   "in one piece, upright – leaning by the rise where the light ends "
+                                                   "at the rising branch –, as the flutes of a classic lens; each strip "
+                                                   "one element. Cells: a grid of elements, each a prism with a "
+                                                   "cylinder lens of its own (steps between all of them)"),
+        "lens_pitch": Param.number(5.0, min=0.5, max=100.0, decimals=2, unit="mm", label="Strip width", group="Lens",
+                                   description="of the cylinder strips"),
+        "lens_segment": Param.number(10.0, min=0.0, max=500.0, decimals=1, unit="mm", label="Strip segments",
+                                     group="Lens",
+                                     description="their length along the strips: each segment an element with a "
+                                                 "prism of its own, the cylinder lens the strip's (Optimise lens "
+                                                 "keeps it so) – it runs through, the prisms make steps; 0: every "
+                                                 "strip in one piece (no prisms up or down)"),
+        "optimise_least_spread": Param.number(0.0, min=0.0, max=12.0, decimals=1, unit="°",
+                                              label="Optimise: strips spread at least", group="Lens",
+                                              description="cylinder strips with segments: the weakest cylinder lens a "
+                                                          "strip may have (± this across), so that every strip is one; "
+                                                          "0: flat strips too, their segments' prisms alone spreading "
+                                                          "the light (H4: R112 met only so – with 1° or 2° every strip "
+                                                          "is curved, but 75R and zone III are missed)"),
+        "cell_width": Param.number(10.0, min=0.5, max=500.0, decimals=2, unit="mm", label="Element width", group="Lens",
+                                   description="of the cells (Structure: cells)"),
         "cell_height": Param.number(10.0, min=0.5, max=500.0, decimals=2, unit="mm", label="Element height",
-                                    group="Lens"),
+                                    group="Lens", description="of the cells (Structure: cells)"),
         "focus_behind": Param.number(0.0, min=-50.0, max=50.0, decimals=2, unit="mm",
                                      label="Mirror focus behind the filament centre", group="Lens",
                                      description="0: the filament sits in the focus of the paraboloid (its focal "
@@ -197,7 +222,8 @@ class AutomotiveLighting(Plugin):
                                             "spread_angle": 0.0}],
                                 label="Elements", group="Lens",
                                 description="what the cells of the lens do, by the place of their centre (the first "
-                                            "row that holds it; y to the left, z up, about the lamp axis): by how "
+                                            "row that holds it; y to the left, z up, about the lamp axis; a strip: "
+                                            "its middle across, t = y cos φ − z sin φ with φ its lean, at z 0): by how "
                                             "much the light is turned in the cell's middle and the half spread "
                                             "about that, both turned by the angle (counter-clockwise on the "
                                             "screen: a cylinder lens, spread V 0, that spreads along the line "
@@ -358,7 +384,8 @@ class AutomotiveLighting(Plugin):
                                             cell_height=float(p["cell_height"]), rake=float(p["lens_rake"]),
                                             sweep=float(p["lens_sweep"]), radius=float(p["lens_radius"]),
                                             wall_draft=float(p["wall_draft"]), wall_fillet=float(p["wall_fillet"]),
-                                            sectors=sectors)
+                                            sectors=sectors, structure=STRUCTURES[p["lens_structure"]],
+                                            pitch=float(p["lens_pitch"]), segment=float(p["lens_segment"]))
             key = hashlib.sha256(repr(settings).encode() + frame.tobytes()).hexdigest()
             if getattr(self, "_lens", (None, None))[0] != key:
                 def progress(fraction: float, text: str) -> None:
@@ -393,11 +420,14 @@ class AutomotiveLighting(Plugin):
             ctx.log(f"warning: {w}")
         form = ", ".join(text for value, text in ((s.rake, f"rake {s.rake:g}°"), (s.sweep, f"sweep {s.sweep:g}°"),
                                                   (s.radius, f"dome radius {s.radius:g} mm")) if value) or "flat, upright"
+        what = (f"cylinder strips {s.pitch:g} mm wide" + (f" in {system.cells} segments of up to {s.segment:g} mm"
+                                                          if s.segment > 0.0 else f", {system.cells} of them")
+                if system.strips
+                else f"{system.cells} elements of {s.cell_width:g} x {s.cell_height:g} mm")
         ctx.log(f"paraboloid f = {s.focal:g} mm; lens at x = {s.lens_x + origin[0]:g} mm on the axis ({form}), "
-                f"{s.thickness:g} mm thick, n = {s.index:g}: {system.cells} elements of {s.cell_width:g} x "
-                f"{s.cell_height:g} mm, their surfaces from {system.sag[0]:.2f} to {system.sag[1]:.2f} mm about the "
-                f"lens' shape (slopes within {system.fit_error:.1e} of the wanted ones)")
-        return f"paraboloid and lens with {system.cells} elements"
+                f"{s.thickness:g} mm thick, n = {s.index:g}: {what}, their surfaces from {system.sag[0]:.2f} to "
+                f"{system.sag[1]:.2f} mm about the lens' shape (slopes within {system.fit_error:.1e} of the wanted ones)")
+        return f"paraboloid and lens with {system.cells} " + ("strips" if system.strips else "elements")
 
     def reflector(self, ctx) -> al_reflector.Reflector:
         """The reflector of the panel; kept until a setting changes."""
@@ -792,8 +822,9 @@ class AutomotiveLighting(Plugin):
 
     @action("Optimise lens",
             description="Chooses every cell's element (a prism and a cylinder lens: deflection, spread and its "
-                        "direction) so that the low beam meets the R112 test points and zones with the margin – for a "
-                        "lamp whose shield makes the cut-off (H4); sets the element table, one row per cell")
+                        "direction) – every strip's (deflection and spread along its lean) – so that the low beam "
+                        "meets the R112 test points and zones with the margin – for a lamp whose shield makes the "
+                        "cut-off (H4); sets the element table, one row per cell or strip")
     def optimise_lens(self, ctx):
         p = ctx.params
         if p["system"] != PATTERNED:
@@ -867,7 +898,8 @@ class AutomotiveLighting(Plugin):
                                           progress=progress, log=log, uniformity=float(p["optimise_uniformity"]),
                                           starts=starts, along_edges=bool(p["optimise_edges"]),
                                           band=float(p["optimise_band"]), rise=float(p["optimise_rise"]),
-                                          check=check if traced else None, fit=float(p["optimise_target"]))
+                                          check=check if traced else None, fit=float(p["optimise_target"]),
+                                          least=float(p["optimise_least_spread"]))
             if result.scouted:
                 kept = min(result.scouted, key=lambda x: x[2])
                 ctx.log("the sectors searched: " + ", ".join(
@@ -905,7 +937,7 @@ class AutomotiveLighting(Plugin):
                     + f"; cut-off at V = {v_cut:.2f}° with G = {g:.2f}")
             verdicts.append(f"{name}: R112 " + ("met" if not failed else "not met: " + ", ".join(failed)))
         ctx.log(f"optimised {len(rows)} elements in {time.time() - start:.0f} s; the element table now has a row per "
-                "cell (per part of a cell cut by the sectors)")
+                + ("strip segment" if r.strips else "cell (per part of a cell cut by the sectors)"))
         return f"lens optimised ({len(rows)} elements); " + "; ".join(verdicts)
 
     @action("Default zones", description="Sets the zone table for the chosen traffic side")

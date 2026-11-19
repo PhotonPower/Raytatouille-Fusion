@@ -7,6 +7,19 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Automotive Lighting plugin**: the patterned lens of **cylinder strips** – *Lens → Structure*,
+  the new default (*cells* as before). Cylinder lenses run through their sector, *Strip width*
+  wide (5 mm), upright under the horizontal branch, leaning by the rise (15°) in the wedge, as the
+  flutes of a classic H4 lens; along a strip its *Strip segments* (10 mm; 0: in one piece) are the
+  elements, each with a prism of its own, the cylinder the strip's (*Optimise lens* chooses it for
+  all of a strip's segments at once). In CAD the strips are B-spline faces through their sector
+  (degree 5 across, cubic along), steps only where a segment's prism changes, between unlike
+  strips and along the radial lines – no longer a mosaic of square cells whose cylinders do not
+  run on. *Optimise: strips spread at least* (0°): with 1° or 2° every strip is a curved cylinder
+  lens. For the H4 (ray tracing) R112 is met with 0° (75R 11 100, 50R 17 700 cd, at most
+  18 400 cd, zone III 625 cd, 415 elements instead of 1 116 cells); with 1° or 2° 75R and zone III
+  are missed, and strips in one piece – no prisms up or down, as continuous flutes alone – reach
+  7 600 cd at most.
 - **Plane-wave spectra (S) on workflow links** (RTT-Fusion R30e). The transport menu of a link or
   connection names each representation (*auto – the planner chooses*, *R – rays*, *H – fields*,
   *S – plane-wave spectra*, *G*, *T*, *P*), ticks the current one and disables those the
