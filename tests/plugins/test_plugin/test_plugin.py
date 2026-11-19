@@ -45,7 +45,13 @@ class TestPlugin(Plugin):
         ctx.set_attribute(target["id"], "rtt.role", "mirror")
         new = ctx.add(g.line((1, 1, 1), (2, 2, 2)), name="from plugin", attributes={"x": 1})
         run = ctx.result_set("test run")
-        ctx.lines(run, "rays", [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 1)], [0, 2, 4], [1, 2, 3, 4], unit="nm")
+        ctx.lines(run, "rays", [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 1)], [0, 2, 4], [1, 2, 3, 4], unit="nm",
+                  key="test:rays", binding={"points": {"where": [0, 0, 0]}})
+        try:
+            ctx.lines(run, "unbound", [(0, 0, 0), (1, 0, 0)], binding={"points": {"nowhere": [0, 0, 0]}})
+            raise AssertionError("a binding to an unknown parameter was accepted")
+        except RuntimeError as e:
+            assert "no parameter nowhere" in str(e), e
         ctx.field(run, "field", target["id"], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3, 2)
         c = ctx.curve(run, "merit", [0], [1.0])
         ctx.append(c, 1, 0.5)

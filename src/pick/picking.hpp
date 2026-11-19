@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "document/selection.hpp"
+#include "results/result_types.hpp"
 #include "tessellation/display_mesh.hpp"
 #include "viewport/camera.hpp"
 
@@ -48,6 +49,30 @@ struct Hit {
 /// World length of one pixel at the farthest corner of a box (conservative pick radius).
 [[nodiscard]] float farthest_world_per_pixel(const viewport::Camera& camera,
                                              const tessellation::Box3& box);
+
+/// A result drawing to pick as a whole: the line items of a run (results::ResultItem with
+/// lines; drawn where its placement puts them).
+struct LineTarget {
+  std::uint64_t id = 0;  ///< the run
+  const results::ResultItem* item = nullptr;
+};
+
+struct LineHit {
+  std::uint64_t id = 0;       ///< the run
+  float distance_px = 0.0F;   ///< screen distance to the cursor
+  float depth = 0.0F;         ///< distance along the pick ray of the closest point
+  bool on_top = true;         ///< drawn over the model (not hidden by faces)
+};
+
+/// The result drawing with a polyline segment closest to the cursor within `radius_px` (lost
+/// rays end at their NaN point); ties: the smaller depth.
+[[nodiscard]] std::optional<LineHit> pick_lines(const std::vector<LineTarget>& targets,
+                                                const viewport::Camera& camera, const QPointF& cursor_px,
+                                                float radius_px = 6.0F);
+
+/// Whether a result drawing hit wins over the entity hit at the same cursor: over a face if the
+/// drawing is on top or in front of it, over a curve or point if it is closer on the screen.
+[[nodiscard]] bool line_hit_wins(const LineHit& line, const std::optional<Hit>& entity);
 
 /// Window (all display geometry inside the rectangle) or crossing selection (any part inside
 /// or crossing it). Rectangle in screen pixels.

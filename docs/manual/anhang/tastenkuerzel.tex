@@ -61,8 +61,9 @@ Kürzel & Menü & Wirkung \\
 \keys{Strg+Z} & \menu{Edit,Undo} & Letzten Schritt rückgängig machen (Systemstandard). \\
 \keys{Strg+Shift+Z} & \menu{Edit,Redo} & Rückgängig gemachten Schritt wiederholen
   (Systemstandard; unter Windows ist üblicherweise auch \keys{Strg+Y} belegt). \\
-\keys{Entf}, Rücktaste & \menu{Edit,Delete} & Ausgewählte Objekte löschen (rückgängig
-  machbar). Einzelne Flächen, Kanten und Ecken lassen sich nicht löschen. \\
+\keys{Entf}, Rücktaste & \menu{Edit,Delete} & Ausgewählte Objekte und Ergebnis-Zeichnungen
+  (Strahlen, Kamera) löschen (rückgängig machbar). Einzelne Flächen, Kanten und Ecken lassen sich
+  nicht löschen. \\
 \keys{Strg+A} & \menu{Edit,Select All} & Alle sichtbaren Objekte auswählen. \\
 \keys{Strg+G} & \menu{Edit,Group…} & Auswahl gruppieren (Kapitel~\ref{kap:organisieren}). \\
 \keys{Strg+Shift+G} & \menu{Edit,Ungroup} & Gruppe auflösen. \\
@@ -146,7 +147,8 @@ ein Linksklick stattdessen einen Punkt.
 \toprule
 Eingabe & Wirkung \\
 \midrule\endhead
-\maus{Klick} auf ein Objekt & Objekt auswählen (ersetzt die Auswahl). \\
+\maus{Klick} auf ein Objekt & Objekt auswählen (ersetzt die Auswahl). Ein Klick auf eine
+  Ergebnis-Zeichnung (Strahlen eines Laufs, Kamera des Path Tracers) wählt sie als Ganzes aus. \\
 \maus{Klick} ins Leere & Auswahl aufheben. \\
 \keys{Shift}+\maus{Klick} & Objekt zur Auswahl hinzufügen. \\
 \keys{Strg}+\maus{Klick} & Objekt aus der Auswahl entfernen. \\

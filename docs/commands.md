@@ -28,9 +28,9 @@ one undo step.
 | Union / Intersection | `bu` / `bi` | the selected solids (immediately) |
 | Difference | `bd` | the **first selected** solid minus the other selected solids |
 | **Transforms** (on the selection) | | |
-| Move | `m` | from, to |
+| Move | `m` | from, to; also moves selected result drawings |
 | Copy | `co` | from, to (repeat; Enter: done) |
-| Rotate | `ro` | centre, angle in degrees – or two reference points (axis: plane normal) |
+| Rotate | `ro` | centre, angle in degrees – or two reference points (axis: plane normal); also turns selected result drawings |
 | Scale | `sc` | base, factor – or two reference points (ratio of distances) |
 | Mirror | `mi` | two points of the mirror line (plane through the line and the plane normal); creates copies |
 | Linear array | `array` | (count,) base, step |

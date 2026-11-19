@@ -210,6 +210,13 @@ is drawn in the CAD view and computes like an imported element.
 | Drag right → left | crossing: objects inside or touching the rectangle (dashed green frame) |
 | `Esc` / Cmd+A / `Delete` | select none / select all / delete selected objects (undoable) |
 
+**Result drawings** – the line items of one run (the rays of a trace, the Path Tracer's camera)
+– are picked as one object (`pick::pick_lines`, 6 px): highlighted cyan / yellow like objects,
+in front of the faces they are drawn over, in front of a curve or point only when closer on the
+screen. Shift / Cmd–Ctrl add and remove as for objects; a plain click on either kind replaces the
+whole selection (`Selection::applyResults`). Not in rectangle selections. *Move* and *Rotate*
+take them along, `Delete` deletes them (docs/plugins.md, "Result drawings in the views").
+
 Objects on a locked layer are drawn and snapped to, but neither hovered nor selected
 (`Scene::selectableTargets`; `Selection` refuses them and drops them when their layer is locked).
 

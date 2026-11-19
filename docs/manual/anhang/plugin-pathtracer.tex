@@ -84,6 +84,7 @@ Schlüssel / Beschriftung & Typ & Standard & Bereich, Einheit & Bedeutung \\
 \param{camera\_position}\newline\gui{Position} & Punkt & (300, $-300$, 200) & mm; \gui{Pick} & Ort der Kamera \\
 \param{camera\_target}\newline\gui{Looks at} & Punkt & (0, 0, 0) & mm; \gui{Pick} & Blickziel \\
 \param{camera\_up}\newline\gui{Up} & Auswahl & \code{+Z} & \code{+Z}, \code{-Z}, \code{+Y}, \code{-Y}, \code{+X}, \code{-X} & Oben-Richtung des Bildes \\
+\param{camera\_roll}\newline\gui{Roll} & Zahl & 0 & $-180$ \dots{} 180\si{\degree} & Drehung des Bildes um die Blickrichtung ab \gui{Up} (rechtshändig); gesetzt beim Drehen der Kamerazeichnung \\
 \param{camera\_fov}\newline\gui{Field of view (horizontal)} & Zahl & 40 & 0{,}1 \dots{} 170\si{\degree} & voller horizontaler Bildwinkel \\
 \param{camera\_width}\newline\gui{Width} & Ganzzahl & 320 & 8 \dots{} 4\,096 px & Bildbreite \\
 \param{camera\_height}\newline\gui{Height} & Ganzzahl & 240 & 8 \dots{} 4\,096 px & Bildhöhe \\
@@ -188,7 +189,7 @@ Aktion & Lauf (Dock \gui{Results}) & Art & Inhalt \\
  & & Bild & mit \gui{Also per wavelength}: \textit{L}\texttt{ }\textit{nm}\texttt{ nm – }\textit{V} \\
  & & Bild (Farbe) & mit \gui{Colour image} und mehreren Wellenlängen: \texttt{Colour – }\textit{V} (zuletzt, wird angezeigt) \\
 \gui{Show materials and sources} & \texttt{Path tracer: objects} & Tabelle & \texttt{Materials and sources}: \gui{Object}, \gui{Kind}, \gui{Material}, \gui{Source} \\
-\gui{Show camera} & \texttt{Camera} & Linien & \texttt{Viewing pyramid}, Schlüssel \code{pathtracer:camera}: ersetzt die zuvor gezeichnete Kamera \\
+\gui{Show camera} & \texttt{Camera} & Linien & \texttt{Viewing pyramid}, Schlüssel \code{pathtracer:camera}: ersetzt die zuvor gezeichnete Kamera; gebunden an \param{camera\_position}, \param{camera\_target}, \param{camera\_up}, \param{camera\_roll} (Verschieben/Drehen in der Ansicht schreibt sie) \\
 \gui{Show light paths} & \texttt{Light paths} & Linien & \texttt{Light paths}, Wert: Nummer des Abprallens (\code{bounce}), Farbskala plasma \\
 \bottomrule
 \end{referenz}

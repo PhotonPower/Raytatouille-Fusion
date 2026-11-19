@@ -7,6 +7,7 @@
 #include "render/display_mode.hpp"
 #include "render/line_renderer.hpp"
 #include "render/result_renderer.hpp"
+#include "pick/picking.hpp"
 #include "render/scene_renderer.hpp"
 #include "snap/snap_engine.hpp"
 #include "viewport/camera.hpp"
@@ -114,6 +115,9 @@ class Viewport : public QRhiWidget {
   enum class LeftAction { None, Pending, Rectangle };
 
   void hoverPick(const QPointF& px, Qt::KeyboardModifiers mods);
+  /// The result drawing (a run) under the cursor if it wins over the entity hit.
+  [[nodiscard]] std::optional<std::uint64_t> pickDrawing(const QPointF& px,
+                                                         const std::optional<pick::Hit>& entity) const;
   void clickSelect(const QPointF& px, Qt::KeyboardModifiers mods);
   void rectSelect(const QRectF& rect, bool crossing, Qt::KeyboardModifiers mods);
   void updateSnap(const QPointF& px, Qt::KeyboardModifiers mods);

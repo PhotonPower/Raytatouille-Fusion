@@ -417,6 +417,7 @@ Parameter & Standard & Bedeutung \\
 \gui{Position} & (300, $-300$, 200) & Ort der Kamera in mm; mit \gui{Pick} in einer Ansicht anklicken (mit Objektfang) \\
 \gui{Looks at} & (0, 0, 0) & Blickziel; ebenfalls mit \gui{Pick} \\
 \gui{Up} & \code{+Z} & Oben-Richtung: \code{+Z}, \code{-Z}, \code{+Y}, \code{-Y}, \code{+X}, \code{-X} \\
+\gui{Roll} & \SI{0}{\degree} & Drehung des Bildes um die Blickrichtung, ausgehend von \gui{Up} (rechtshändig, $-180$ \dots{} \SI{180}{\degree}); wird beim Drehen der Kamerazeichnung gesetzt \\
 \gui{Field of view (horizontal)} & \SI{40}{\degree} & voller horizontaler Bildwinkel \\
 \gui{Width}, \gui{Height} & 320, 240 px & Bildgröße in Pixeln \\
 \gui{Lens radius} & 0 mm & 0: Lochkamera; darüber: Linse mit Schärfentiefe \\
@@ -433,6 +434,35 @@ Parameter & Standard & Bedeutung \\
   \item \gui{Show camera} zeigt die Sichtpyramide; prüfen Sie, ob das Gewünschte darin liegt.
   \item Wählen Sie Verfahren und Samples, dann \gui{Camera image}.
 \end{schritte}
+
+\subsection{Die Kamera in der Ansicht verschieben und drehen}\label{sec:pt-kamera-bewegen}
+\index{Kamera!verschieben und drehen}
+
+Die gezeichnete Sichtpyramide ist ein Element der Ansichten: Ein Klick auf eine ihrer Linien
+wählt sie aus (gelb). Dann
+\begin{itemize}
+  \item verschiebt \gui{Move} (\code{m}) die Kamera: \gui{Position} und \gui{Looks at} im Panel
+    wandern mit;
+  \item dreht \gui{Rotate} (\code{ro}) sie um eine Achse durch den angegebenen Punkt, parallel
+    zur Normalen der Konstruktionsebene: \gui{Position}, \gui{Looks at}, \gui{Up} und \gui{Roll}
+    werden so gesetzt, dass das neue Kamerabild genau zur gedrehten Pyramide passt;
+  \item löscht \keys{Entf} die Zeichnung (die Kameraparameter bleiben).
+\end{itemize}
+Jeder Schritt ist ein Rückgängig-Schritt, der Zeichnung \emph{und} Parameter zurücksetzt; das
+Panel zeigt die neuen Werte sofort, die Statuszeile nennt sie (z.\,B.\ \enquote{\texttt{Rotate – Viewing pyramid: up +Z, roll
+30.00\textdegree}}).
+
+\paragraph{Oben-Richtung und Roll.} \gui{Up} kennt nur die sechs Achsrichtungen. Nach einer
+Drehung wählt das Programm die Achsrichtung, von der aus die kleinste Drehung um die (neue)
+Blickrichtung nötig ist, und schreibt diese Drehung als \gui{Roll}. Dreht man die Kamera um die
+Normale der Konstruktionsebene der Draufsicht ($+Z$), bleibt \gui{Up} \code{+Z} und \gui{Roll}
+$0$. Kippt man sie z.\,B.\ so, dass sie senkrecht nach oben blickt, wird \gui{Up} zu einer
+anderen Achse (etwa \code{-Y}); dreht man sie um ihre eigene Blickachse, bleibt \gui{Up} und
+\gui{Roll} nimmt den Winkel auf. So bleibt jede Drehung exakt erhalten.
+
+Ändern Sie danach Parameter im Panel, zeichnet \gui{Show camera} die Pyramide neu (sie ersetzt
+die verschobene). Verschieben Sie umgekehrt eine Pyramide, die nicht mehr zu den Parametern
+passt, gilt die Zeichnung: Ihre Lage wird in die Parameter geschrieben.
 
 \subsection{Das Bild}
 

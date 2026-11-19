@@ -12,6 +12,7 @@
 
 #include "document/selection.hpp"
 #include "pick/picking.hpp"
+#include "results/result_edit.hpp"
 #include "platform/rhi_backend.hpp"
 #include "viewport/selection_rect.hpp"
 #include "viewport/field_legend.hpp"
@@ -190,7 +191,10 @@ void Viewport::setPointInput(bool on) {
   marker_->clear();
   if (on) {
     setCursor(Qt::CrossCursor);
-    if (selection_ != nullptr) selection_->setHovered(std::nullopt);
+    if (selection_ != nullptr) {
+      selection_->setHovered(std::nullopt);
+      selection_->setHoveredResult(std::nullopt);
+    }
   } else {
     unsetCursor();
   }
@@ -270,7 +274,21 @@ void Viewport::hoverPick(const QPointF& px, Qt::KeyboardModifiers mods) {
   q.isocurves = mode_ == render::DisplayMode::Wireframe;
   q.sub_elements = sub_element_mode(mods);
   const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
-  selection_->setHovered(hit ? std::optional(hit->item) : std::nullopt);
+  const auto drawing = q.sub_elements ? std::nullopt : pickDrawing(px, hit);
+  selection_->setHovered(hit && !drawing ? std::optional(hit->item) : std::nullopt);
+  selection_->setHoveredResult(drawing);
+}
+
+std::optional<std::uint64_t> Viewport::pickDrawing(const QPointF& px, const std::optional<pick::Hit>& entity) const {
+  if (results_ == nullptr) return std::nullopt;
+  std::vector<pick::LineTarget> targets;
+  for (const results::ResultSet& s : results_->sets()) {
+    for (const results::ResultItem* i : results::drawn_lines(*results_, s.id)) targets.push_back({s.id, i});
+  }
+  if (targets.empty()) return std::nullopt;
+  const auto line = pick::pick_lines(targets, camera_, px, kPickRadiusPx);
+  if (!line || !pick::line_hit_wins(*line, entity)) return std::nullopt;
+  return line->id;
 }
 
 void Viewport::clickSelect(const QPointF& px, Qt::KeyboardModifiers mods) {
@@ -283,7 +301,10 @@ void Viewport::clickSelect(const QPointF& px, Qt::KeyboardModifiers mods) {
   q.sub_elements = sub_element_mode(mods);
   const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
   const auto mode = q.sub_elements ? document::Selection::Mode::Toggle : selection_mode(mods);
-  if (hit) {
+  // a result drawing (rays, a plugin's camera) is selected as a whole
+  if (const auto drawing = q.sub_elements ? std::nullopt : pickDrawing(px, hit)) {
+    selection_->applyResults({*drawing}, mode);
+  } else if (hit) {
     selection_->apply({hit->item}, mode);
   } else if (mode == document::Selection::Mode::Replace) {
     selection_->clear();
@@ -438,6 +459,7 @@ void Viewport::render(QRhiCommandBuffer* cb) {
       rf.view = frame.view;
       rf.perspective = frame.perspective;
       rf.mode = mode_;
+      rf.selection = selection_;
       result_renderer_.prepare(*results_, *scene_, rf, updates);
     }
   }
@@ -651,7 +673,10 @@ bool Viewport::event(QEvent* event) {
 void Viewport::leaveEvent(QEvent* event) {
   emit cursorMoved({}, false);
   marker_->clear();
-  if (selection_ != nullptr && left_ == LeftAction::None) selection_->setHovered(std::nullopt);
+  if (selection_ != nullptr && left_ == LeftAction::None) {
+    selection_->setHovered(std::nullopt);
+    selection_->setHoveredResult(std::nullopt);
+  }
   QRhiWidget::leaveEvent(event);
 }
 

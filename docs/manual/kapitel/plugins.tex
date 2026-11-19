@@ -393,9 +393,11 @@ die Kennung des Plugins, das ihn angelegt hat; darunter stehen seine Ergebnisse 
 \end{itemize}
 
 \begin{hinweis}
-Ergebnisse sind Anzeigedaten und gehören nicht zum Modell: Sie werden nicht gefangen, nicht
-ausgewählt und – mit einer Ausnahme – nicht mit dem Dokument gespeichert (wohl aber auf Wunsch als Dateien,
-Abschnitt~\ref{sec:ergebnisse-speichern}). Die Ausnahme sind die
+Ergebnisse sind Anzeigedaten und gehören nicht zum Modell: Sie werden nicht gefangen und
+– mit einer Ausnahme – nicht mit dem Dokument gespeichert (wohl aber auf Wunsch als Dateien,
+Abschnitt~\ref{sec:ergebnisse-speichern}). Linien-Ergebnisse lassen sich in den Ansichten
+anklicken, verschieben, drehen und löschen (Abschnitt~\ref{sec:ergebnis-zeichnungen}). Die
+Ausnahme beim Speichern sind die
 Ergebnisse der Anzeigeblöcke des Node-Workflows; sie stehen nach dem Öffnen im Ergebnissatz
 \gui{Saved results} (Abschnitt~\ref{sec:workflow-gespeichert}).
 \end{hinweis}
@@ -423,6 +425,36 @@ Strahlen sind Anzeigedaten; zum Messen oder Konstruieren brauchen Sie echte Kurv
 
 Die neuen Kurven sind normale CAD-Objekte (fangbar, messbar, exportierbar) und bilden einen
 Rückgängig-Schritt \enquote{Rays to curves}.
+
+\subsubsection{Zeichnungen anklicken, verschieben, drehen, löschen}\label{sec:ergebnis-zeichnungen}
+\index{Ergebnis!auswählen}
+
+Die Linien-Ergebnisse eines Ergebnissatzes -- etwa alle Strahlen eines Laufs des Raytracers oder
+die Kamera des Path Tracers -- sind in den Ansichten \emph{ein} Element, das sich wie ein
+CAD-Objekt anklicken lässt:
+
+\begin{itemize}
+  \item \textbf{Auswählen:} Klick auf eine beliebige Linie (Fangradius 6~Pixel). Die ganze
+    Zeichnung wird gelb, unter dem Mauszeiger türkis. \keys{Shift}+Klick fügt hinzu,
+    \keys{Strg}+Klick (macOS: \keys{Cmd}) nimmt heraus; ein einfacher Klick ersetzt die Auswahl
+    -- Objekte wie Zeichnungen. Über einer Fläche gewinnt eine Zeichnung, die über dem Modell
+    liegt (der Normalfall), sonst die vordere; neben einer Kurve oder einem Punkt die nähere.
+    Rechteck-Auswahl erfasst Zeichnungen nicht.
+  \item \textbf{Verschieben und Drehen:} \gui{Move} und \gui{Rotate} nehmen ausgewählte
+    Zeichnungen mit -- allein oder zusammen mit Objekten, in einem Rückgängig-Schritt. Das ist
+    eine Darstellungs-Transformation: Die Daten bleiben, wie sie berechnet wurden; gespeichert
+    und in Kurven umgewandelt wird die Zeichnung dort, wo sie gezeigt wird. \gui{Copy},
+    \gui{Scale}, \gui{Mirror} und die Anordnungen gelten nur für Objekte
+    (\enquote{\texttt{Scale: result drawings can only be moved and rotated}}).
+  \item \textbf{Löschen:} \keys{Entf} entfernt die Linien des Ergebnissatzes (rückgängig
+    machbar); andere Ergebnisse des Satzes, etwa Felder oder Tabellen, bleiben, ein leerer Satz
+    verschwindet.
+\end{itemize}
+
+Ein Plugin kann eine Zeichnung an seine Parameter \emph{binden}. Dann schreibt Verschieben oder
+Drehen die neue Lage in diese Parameter, im selben Rückgängig-Schritt, und das Plugin-Dock zeigt
+die neuen Werte. So verschiebt und dreht man die Kamera des Path Tracers direkt in der Ansicht
+(Abschnitt~\ref{sec:pt-kamera-bewegen}).
 
 \subsubsection{Zeichnungen, die sich ersetzen}
 

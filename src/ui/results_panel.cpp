@@ -127,14 +127,15 @@ void ResultsPanel::showContextMenu(const QPoint& pos) {
   if (const results::ResultItem* r = store_->item(item->data(0, kItemRole).toULongLong());
       r != nullptr && r->kind == results::ResultItem::Kind::Lines) {
     const auto lines = r->lines;
-    menu.addAction(tr("Convert to CAD curves…"), this, [this, lines] {
+    const nf::Transform placement = r->placement;  // where the drawing is shown
+    menu.addAction(tr("Convert to CAD curves…"), this, [this, lines, placement] {
       bool ok = false;
       const int every = QInputDialog::getInt(this, tr("Convert to curves"),
                                              tr("Every n-th ray (of %1):").arg(lines->polylineCount()),
                                              std::max<int>(1, static_cast<int>(lines->polylineCount() / 50)),
                                              1, 1000000, 1, &ok);
       if (!ok) return;
-      auto entities = results::ResultStore::promote(*lines, static_cast<std::size_t>(every), 2000);
+      auto entities = results::ResultStore::promote(*lines, static_cast<std::size_t>(every), 2000, placement);
       if (!entities.empty()) doc_->addEntities(std::move(entities), tr("Rays to curves"));
     });
   }

@@ -186,6 +186,51 @@ class TestPicking : public QObject {
     QVERIFY(!s.hovered());
   }
 
+  void resultDrawingsPickedAsAWhole() {
+    // a run's rays: one polyline along x at y = 15 (beside the box), one lost after its first
+    // point; drawn on top of the model
+    nfcad::results::ResultItem rays;
+    auto set = std::make_shared<nfcad::results::LineSet>();
+    set->points = {-20, 15, 0, 20, 15, 0, 0, 25, 0, NAN, NAN, NAN};
+    set->starts = {0, 2, 4};
+    rays.lines = set;
+    const std::vector<nfcad::pick::LineTarget> targets = {{7, &rays}};
+    const Camera c = top_camera();
+    auto hit = nfcad::pick::pick_lines(targets, c, px(c, {5, 15.2F, 0}));
+    QVERIFY(hit);
+    QCOMPARE(hit->id, std::uint64_t{7});
+    QVERIFY(hit->distance_px < 3.0F);
+    QVERIFY(!nfcad::pick::pick_lines(targets, c, px(c, {0, 25, 0})));  // the lost ray has no segment
+    QVERIFY(!nfcad::pick::pick_lines(targets, c, px(c, {5, 0, 0})));
+    // moved in the views: picked where it is shown
+    rays.placement = nf::Transform::translation({0, -15, 0});
+    QVERIFY(!nfcad::pick::pick_lines(targets, c, px(c, {5, 15, 0})));
+    hit = nfcad::pick::pick_lines(targets, c, px(c, {5, 0, 0}));
+    QVERIFY(hit);
+    // over the box: rays on top win over its face, depth-tested ones only in front of it
+    Query q;
+    q.cursor_px = px(c, {5, 0, 4});
+    const auto face = nfcad::pick::pick(targets_, c, q);
+    QVERIFY(face && face->kind == Hit::Kind::Face);
+    QVERIFY(nfcad::pick::line_hit_wins(*hit, face));
+    hit->on_top = false;  // at z = 0, below the top face at z = 4
+    QVERIFY(!nfcad::pick::line_hit_wins(*hit, face));
+    QVERIFY(nfcad::pick::line_hit_wins(*hit, std::nullopt));
+
+    // the selection keeps drawings apart from entities: selecting one replaces the other
+    nfcad::document::Selection s;
+    s.apply({SelectionItem{3, {}}}, nfcad::document::Selection::Mode::Replace);
+    s.applyResults({7}, nfcad::document::Selection::Mode::Replace);
+    QVERIFY(s.empty() && s.isResultSelected(7));
+    s.applyResults({8}, nfcad::document::Selection::Mode::Add);
+    s.apply({SelectionItem{3, {}}}, nfcad::document::Selection::Mode::Add);  // adding keeps them
+    QCOMPARE(s.results().size(), std::size_t{2});
+    s.retainResults([](std::uint64_t id) { return id == 8; });
+    QVERIFY(!s.isResultSelected(7) && s.isResultSelected(8));
+    s.apply({SelectionItem{3, {}}}, nfcad::document::Selection::Mode::Replace);
+    QVERIFY(!s.hasResults());
+  }
+
   void assignLayerUndo() {
     nfcad::document::Document doc;
     const auto layer = doc.addLayer({0, QStringLiteral("L"), QColor(Qt::green), true});

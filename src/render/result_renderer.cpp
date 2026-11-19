@@ -3,6 +3,9 @@
 #include <QFile>
 #include <cmath>
 
+#include "document/selection.hpp"
+#include "render/scene_renderer.hpp"
+
 namespace nfcad::render {
 
 namespace {
@@ -15,14 +18,24 @@ QShader load_shader(const QString& path) {
   return QShader::fromSerialized(f.readAll());
 }
 
-std::vector<LineVertex> line_vertices(const results::LineSet& s) {
+/// `highlight`: 1 hovered (tinted), 2 selected (the selection colour).
+std::vector<LineVertex> line_vertices(const results::LineSet& s, int highlight) {
   std::vector<LineVertex> out;
   const bool mapped = !s.values.empty() && s.values.size() == s.pointCount();
   const results::Range r = mapped ? s.range.value_or(results::data_range(s.values)) : results::Range{};
+  const QColor mark = highlight == 2 ? kSelectedColor : kHoverColor;
+  const float tint = highlight == 2 ? 1.0F : highlight == 1 ? 0.6F : 0.0F;
   auto color = [&](std::uint32_t p) -> std::array<float, 4> {
-    if (!mapped) return s.color;
-    const auto c = results::colormap_rgba(s.colormap, (s.values[p] - r.min) / (r.max - r.min));
-    return {c[0] / 255.0F, c[1] / 255.0F, c[2] / 255.0F, s.color[3]};
+    std::array<float, 4> c = s.color;
+    if (mapped) {
+      const auto m = results::colormap_rgba(s.colormap, (s.values[p] - r.min) / (r.max - r.min));
+      c = {m[0] / 255.0F, m[1] / 255.0F, m[2] / 255.0F, s.color[3]};
+    }
+    if (tint > 0.0F) {
+      c = {c[0] + (mark.redF() - c[0]) * tint, c[1] + (mark.greenF() - c[1]) * tint,
+           c[2] + (mark.blueF() - c[2]) * tint, std::max(c[3], 0.9F)};
+    }
+    return c;
   };
   for (std::size_t k = 0; k < s.polylineCount(); ++k) {
     for (std::uint32_t p = s.starts[k]; p + 1 < s.starts[k + 1]; ++p) {
@@ -154,12 +167,29 @@ void ResultRenderer::prepare(const results::ResultStore& store, const Scene& sce
   for (const results::ResultItem* item : store.visibleItems(results::ResultItem::Kind::Lines)) {
     alive[item->id] = true;
     GpuLines& g = lines_[item->id];
-    if (g.data != item->lines) {
+    int highlight = 0;
+    if (frame.selection != nullptr) {
+      const results::ResultId run = store.setOf(item->id);
+      if (frame.selection->isResultSelected(run)) {
+        highlight = 2;
+      } else if (frame.selection->hoveredResult() == run) {
+        highlight = 1;
+      }
+    }
+    if (g.data != item->lines || g.highlight != highlight) {
       g.data = item->lines;
       g.on_top = item->lines->on_top;
-      g.layer.setVertices(line_vertices(*item->lines));
+      g.highlight = highlight;
+      g.layer.setVertices(line_vertices(*item->lines, highlight));
     }
-    g.layer.setMvp(frame.clip_view_projection);
+    // where the drawing is shown (moved / rotated in the views): row-major [R | t]
+    const auto& m = item->placement.matrix();
+    const QMatrix4x4 model(static_cast<float>(m[0]), static_cast<float>(m[1]), static_cast<float>(m[2]),
+                           static_cast<float>(m[3]), static_cast<float>(m[4]), static_cast<float>(m[5]),
+                           static_cast<float>(m[6]), static_cast<float>(m[7]), static_cast<float>(m[8]),
+                           static_cast<float>(m[9]), static_cast<float>(m[10]), static_cast<float>(m[11]), 0.0F,
+                           0.0F, 0.0F, 1.0F);
+    g.layer.setMvp(frame.clip_view_projection * model);
     (g.on_top ? top_lines_ : scene_lines_).prepare(g.layer, updates);
   }
   std::erase_if(lines_, [&](const auto& kv) { return !alive.contains(kv.first); });

@@ -28,6 +28,7 @@
 #include "app/command_controller.hpp"
 #include "app/demo_results.hpp"
 #include "plugins/plugin_manager.hpp"
+#include "results/result_edit.hpp"
 #include "results/result_store.hpp"
 #include "ui/results_panel.hpp"
 #include "snap/snap_engine.hpp"
@@ -63,6 +64,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   selection_->attach(doc_);
   results_ = new results::ResultStore(this);
   connect(doc_, &document::Document::documentReset, results_, &results::ResultStore::clear);
+  // a run deleted or hidden, or without its drawing, leaves the selection
+  connect(results_, &results::ResultStore::changed, selection_, [this] {
+    selection_->retainResults([this](std::uint64_t id) { return !results::drawn_lines(*results_, id).empty(); });
+  });
   snap_engine_ = new snap::SnapEngine;
   connect(doc_, &document::Document::documentReset, this, [this] { snap_engine_->clear(); });
 
@@ -101,6 +106,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(snapbar_, &ui::SnapBar::maskChanged, this,
           [this](snap::SnapMask mask, bool enabled) { grid_->setSnapSettings(mask, enabled); });
   commands_ = new CommandController(doc_, selection_, grid_, command_line_, statusBar(), this);
+  commands_->setResults(results_);
   connect(ortho_, &QToolButton::toggled, commands_, &CommandController::setOrtho);
   connect(commands_, &CommandController::orthoChanged, ortho_, &QToolButton::setChecked);
 
@@ -568,13 +574,25 @@ void MainWindow::deleteSelection() {
     }
     return out;
   }();
-  if (ids.empty()) {
+  // selected result drawings (rays, a plugin's camera): their line items go, as one undo step
+  const std::vector<results::ResultId> runs(selection_->results().begin(), selection_->results().end());
+  auto drawings = results::delete_results(*results_, runs, tr("Delete result drawing(s)"));
+  if (ids.empty() && !drawings) {
     if (!selection_->empty()) {
       statusBar()->showMessage(tr("Faces, edges and vertices cannot be deleted on their own"), 4000);
     }
     return;
   }
-  doc_->removeEntities(ids, tr("Delete %n object(s)", nullptr, static_cast<int>(ids.size())));
+  const QString text = tr("Delete %n object(s)", nullptr, static_cast<int>(ids.size() + runs.size()));
+  if (!drawings) {
+    doc_->removeEntities(ids, text);
+    return;
+  }
+  QUndoStack* undo = doc_->undoStack();
+  undo->beginMacro(text);
+  if (!ids.empty()) doc_->removeEntities(ids, text);
+  undo->push(drawings.release());
+  undo->endMacro();
 }
 
 void MainWindow::selectAll() {

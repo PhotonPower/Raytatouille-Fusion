@@ -175,6 +175,21 @@ A line set with a `key` (`ctx.lines(..., key=...)`) replaces the line items with
 earlier runs (a set left empty goes too): one drawing per key, e.g. the Path Tracer's camera
 (`pathtracer:camera`), drawn again after its parameters changed.
 
+**Result drawings in the views** (`results/result_edit.hpp`): the line items of a run are one
+object in the views – hovered and selected like a CAD object (click; Shift / Cmd–Ctrl add and
+remove), highlighted cyan / yellow. *Move* and *Rotate* take selected drawings along (with or
+without objects, one undo step): a rigid motion stored as the item's `placement` and applied
+when it is drawn, picked, saved as CSV and converted to curves – a **display transform**, the
+computed data stay as they are (moved rays are not traced again). *Delete* removes the drawing's
+line items (the run too if nothing else is left in it) as an undo step. A drawing with a
+`binding` (`ctx.lines(..., binding=...)`, docs/plugin-api.md) writes its new place into the
+parameters of the plugin that drew it, in the same undo step; the plugin panel shows the values.
+The Path Tracer's camera binds `camera_position`, `camera_target` and its orientation: CAD
+writes the *Up* choice that needs the least turn about the moved view direction and that turn
+as *Roll* (`camera_roll`, degrees, right-handed about the view), so every rigid motion is kept
+exactly; turning about the construction plane's normal (+Z in the top view) keeps *Up* and
+*Roll* = 0. Copy, Scale, Mirror and the arrays do not apply to drawings.
+
 **Saving results** (`results/result_export.hpp`, dependency-free): *Save…* on an item, *Save
 run…* on a run (a folder named after the run, one file per item; images and fields as PNG and
 CSV), *Save…* in the *Image* window (the pixels as PNG with the colour map and log scale as shown,

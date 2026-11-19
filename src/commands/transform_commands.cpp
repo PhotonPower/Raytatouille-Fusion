@@ -28,7 +28,7 @@ class SelectionCommand : public Command {
  public:
   bool usesSelection() const override { return true; }
   bool begin(const std::vector<document::Entity>& selection) override {
-    if (selection.empty()) {
+    if (selection.empty() && (drawing_wire_.empty() || !movesDrawings())) {
       message_ = QObject::tr("%1: select objects first").arg(title());
       return false;
     }
@@ -44,6 +44,7 @@ class SelectionCommand : public Command {
  protected:
   /// Moves the selection (replace) or adds transformed copies.
   void apply(const nf::Transform& t, bool copy) {
+    if (!copy && movesDrawings()) motion_ = t;  // the selected result drawings move too
     for (const document::Entity& e : selection_) {
       auto g = std::make_shared<const document::Geometry>(kernel::transformed(*e.geometry, t));
       if (copy) {
@@ -63,11 +64,13 @@ class SelectionCommand : public Command {
     std::size_t copies = 0;
     for (const nf::Transform& t : ts) {
       if (++copies > kMaxPreviewCopies) break;
-      for (const auto& pl : wire_) {
-        Polyline3 q;
-        q.reserve(pl.size());
-        for (const nf::Vec3& p : pl) q.push_back(P(t.apply(p)));
-        out.push_back(std::move(q));
+      for (const auto* wire : {&wire_, &drawing_wire_}) {
+        for (const auto& pl : *wire) {
+          Polyline3 q;
+          q.reserve(pl.size());
+          for (const nf::Vec3& p : pl) q.push_back(P(t.apply(p)));
+          out.push_back(std::move(q));
+        }
       }
     }
     return out;
@@ -81,6 +84,7 @@ class SelectionCommand : public Command {
 class MoveCommand : public SelectionCommand {
  public:
   explicit MoveCommand(bool copy) : copy_(copy) {}
+  bool movesDrawings() const override { return !copy_; }
   QString id() const override { return copy_ ? QStringLiteral("copy") : QStringLiteral("move"); }
   QString title() const override { return copy_ ? QObject::tr("Copy") : QObject::tr("Move"); }
   QString prompt() const override {
@@ -116,6 +120,7 @@ class MoveCommand : public SelectionCommand {
 class RotateCommand : public SelectionCommand {
  public:
   QString id() const override { return QStringLiteral("rotate"); }
+  bool movesDrawings() const override { return true; }
   QString title() const override { return QObject::tr("Rotate"); }
   QString prompt() const override {
     if (!centre_) return QObject::tr("Rotate: centre (axis: normal of the construction plane)");
