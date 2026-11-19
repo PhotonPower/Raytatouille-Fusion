@@ -7,6 +7,22 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Plane-wave spectra (S) on workflow links** (RTT-Fusion R30e). The transport menu of a link or
+  connection names each representation (*auto – the planner chooses*, *R – rays*, *H – fields*,
+  *S – plane-wave spectra*, *G*, *T*, *P*), ticks the current one and disables those the
+  installation cannot compute, with the reason in the tooltip (the document's new `available`,
+  e.g. `["H", "R", "S"]` with fieldtracing; *Check workflow* writes it). After a run a link shows
+  what it actually carried: on an *auto* link planned R a spectrum (e.g. from `fusion.convert` to a
+  camera) reads **R→S**, as fields near a focus read R→H; the tooltip names the conversions on the
+  way (*last run: S (R→H→S) – lens gave rays; spectra on the link; Camera takes them as they are*),
+  also on a fixed link. The warnings of the spectrum conversions (`exec.spectrum_cut`,
+  `exec.spectrum_rays`) mark the link (⚠, the lines in the tooltip) or the block, and the status
+  line names the first one; `exec.spectrum_support` (a spectrum without sampling cannot become a
+  field or rays) marks its link as well. The conversions on the way need RTT-Fusion with
+  `Context.used` per link (R30e); with an older one the links show the plan as before. The
+  Raytracer's check of a socket graph plans with RTT-Fusion's `workflow.checked` (S available, what
+  the blocks take natively). Manual: chapter *Node-Workflow* (representations, when S is used, the
+  transport menu, the new messages) and the block appendix (sockets RHS, `fusion.convert` to S).
 - **Overview of every workflow block.** The parameter dialog of a block in the node editor opens on
   a new first tab *Overview*: a drawing of the block's sub-model with the values in the dialog
   (also those not applied yet), redrawn a moment after a value changes and with *Update*. The

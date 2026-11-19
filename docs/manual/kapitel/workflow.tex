@@ -50,48 +50,111 @@ Verbindungen, Transporte, eigene Äste). Dieses Kapitel beschreibt die neue Form
 unterscheidet, ist es vermerkt.
 \end{hinweis}
 
-\subsection{Darstellungen: Strahlen und Felder}\label{sec:workflow-darstellungen}\index{Darstellung}
+\subsection{Darstellungen: Strahlen, Felder und Spektren}\label{sec:workflow-darstellungen}\index{Darstellung}
 
 Licht kann auf einer Verbindung in verschiedenen \emph{Darstellungen} (engl.\
 \emph{representations}) transportiert werden. Jede hat einen Kennbuchstaben:
 
-\begin{referenz}{@{}>{\bfseries}p{0.06\linewidth}>{\raggedright\arraybackslash}p{0.3\linewidth}X@{}}
+\begin{referenz}{@{}>{\bfseries}p{0.06\linewidth}>{\raggedright\arraybackslash}p{0.27\linewidth}X@{}}
 \toprule
 \textbf{} & \textbf{Darstellung} & \textbf{Inhalt} \\
 \midrule
 \endhead
 R & Strahlen & Strahlbündel mit Ort, Richtung und optischer Weglänge (damit auch Phase);
-  die schnellste Darstellung. \\
+  die schnellste Darstellung. Linsen, Spiegel und Strahlteiler eines optischen Systems
+  (\block{rtt.*}) rechnen immer mit Strahlen. \\
 H & hybrides Feld & Feld ohne Gitter (Amplitude und Phase mit ihren Ableitungen), gerechnet
   mit \emph{Fieldtracing}; für Fokusse, Beugung und Interferenz. \\
+S & Ebene-Wellen-Spektrum & das Licht als Summe ebener Wellen: ein abgetastetes
+  Winkelspektrum (ein begrenzter Strahl) oder einzelne Wellen bzw.\ Beugungsordnungen. Gitter,
+  Schichtstapel und Streukörper wirken auf jede ebene Welle exakt, und zwischen parallelen
+  Ebenen ist die freie Ausbreitung exakt (nur eine Phase je Welle). \\
 G & Gitterfeld & Feldwerte auf einem Gitter. \\
-S & Ebene-Wellen-Spektrum & ebene Wellen bzw.\ Beugungsordnungen. \\
-T & Tabelle & Jones-Tabelle je Ordnung über Wellenlänge und Einfallsrichtung. \\
+T & Tabelle & Streumatrix bzw.\ Jones-Tabelle je Ordnung über Wellenlänge und
+  Einfallsrichtung. \\
 P & radiometrisch & Strahlen ohne Phase (nur inkohärent). \\
 \bottomrule
 \end{referenz}
 
 Gerechnet werden können derzeit \textbf{R} und – wenn das Python-Paket \code{fieldtracing}
-in der Plugin-Umgebung installiert ist – \textbf{H}. Die übrigen Buchstaben kennt der Planer
-bereits; eine Verbindung, die fest auf eine davon gestellt ist, meldet beim Prüfen bzw.\ Rechnen
-einen Fehler.
+in der Plugin-Umgebung installiert ist – \textbf{H} und \textbf{S}. G, T und P kennt der
+Planer bereits; im Transportmenü sind sie ausgegraut (Abschnitt~\ref{sec:workflow-transport}),
+und eine Verbindung, die in einem älteren Dokument fest auf eine davon steht, meldet beim Prüfen
+bzw.\ Rechnen einen Fehler.
 
 Normalerweise steht der \emph{Transport} einer Verbindung auf \code{auto}: Der \emph{Planer}
 wählt für jede Verbindung und Richtung die günstigste Darstellung, die beide Enden annehmen
 können, und plant dort, wo ein Block eine andere Darstellung braucht, eine Umwandlung ein
 (z.\,B.\ R $\to$ H). \code{auto} wählt nie P, solange eine Darstellung mit Phase möglich ist.
 Sie können den Transport auch fest einstellen (Abschnitt~\ref{sec:workflow-transport}), etwa
-\code{H} für die Verbindung in eine Kamera nahe einem Fokus.
+\code{H} für die Verbindung in eine Kamera nahe einem Fokus oder \code{S} zwischen zwei Gittern.
+
+\paragraph{Wann wird S verwendet?}\index{Spektrum ebener Wellen}
+Ein Spektrum ebener Wellen lohnt sich zwischen Blöcken, die ohnehin im Spektrum rechnen. Diese
+Blöcke nehmen S \emph{nativ}, also ohne Umwandlung an ihrem Eingang:
+
+\begin{itemize}
+  \item Gitter \block{fg.grating} und Schichtstapel \block{fg.stack}: jede Welle für sich durch
+        FourierGrating; jede Beugungsordnung geht als eigenes Spektrum weiter,
+  \item eine verdichtete Gruppe (\gui{Condensed (plane-wave tables)},
+        Abschnitt~\ref{sec:workflow-gruppen}),
+  \item der Streukörper \block{fusion.particle}: das Spektrum am Eingang, das rückgestreute
+        Fernfeld als Spektrum am Ausgang,
+  \item die Detektoren \block{optics.detector} und \block{rtt.detector}: das Bild als Summe der
+        Wellen auf den Pixeln,
+  \item \block{fusion.convert} mit \param{to}~=~\code{S}.
+\end{itemize}
+
+\code{auto} wählt S nur zwischen zwei Blöcken, die beide S nativ nehmen, und auch dort nur, wenn
+R nicht zulässig ist; bestehende Workflows behalten daher ihren Plan. S bekommen Sie also, indem
+Sie den Transport fest auf \code{S} stellen, typischerweise
+\begin{itemize}
+  \item zwischen zwei Gittern oder einem Gitter und einem Stapel: keine Rundreise über ein Feld
+        an jedem Block, die Kette ist so genau wie FourierGrating mit beiden Gittern in einer
+        Struktur;
+  \item zwischen Fokus und Streukörper bzw.\ zwischen Streukörper und Kamera: keine Strahlen
+        dazwischen;
+  \item in eine Kamera nahe einem Fokus: die Summe der Wellen ist dort das Debye-Integral ohne
+        dessen Näherung (weit vom Fokus geht der Detektor selbst über H).
+\end{itemize}
+
+Kommt ein Spektrum auf einer Verbindung auf \code{auto} an (etwa aus einem
+\block{fusion.convert} oder einem Gitter, das ein Spektrum bekam), bleibt es ein Spektrum, wenn
+der nächste Block S nativ nimmt. Vor allen anderen Blöcken wandelt die Ausführung um:
+Strahlen werden über ein Feld zum Spektrum (R $\to$ H $\to$ S), ein Feld über die
+PFT\footnote{Fourier-Transformation durch stationäre Phase (Fieldtracing).} oder eine FFT (H $\to$
+S); ein Spektrum wird vor einem Block, der Felder nimmt, wieder ein Feld (S $\to$ H) und vor einem
+Block, der nur Strahlen nimmt, Strahlen (S $\to$ H $\to$ R). Linsen und Spiegel eines Systems
+nehmen deshalb nie S. Was ein Spektrum kostet: viele Wellen je Strahl (oft Tausende), bei Gittern
+je Welle eine FourierGrating-Lösung -- für breite Bündel hilft \param{field\_transfer}~=~%
+\code{interpolated}.
 
 \paragraph{Automatisch Wellenoptik nahe einem Fokus.} Ist im Panel des Workflow-Plugins
 \gui{Wave optics near a focus (automatic)} eingeschaltet (Standard), prüft ein Detektor an einer
 Verbindung auf \code{auto}, ob sich die Strahlen in seiner Nähe kreuzen oder fokussieren. Dann
 rechnet er ab der letzten Fläche mit Feldern, als stünde die Verbindung auf H; sonst bleibt er
-bei Strahlen. Nach dem Lauf zeigt die Verbindung, was tatsächlich verwendet wurde, z.\,B.\
-\textbf{R$\to$H}: geplant R, gerechnet als Feld. Der Tooltip nennt den Grund, das Plugin-Log
-ebenfalls. Die Anzeige bleibt, solange das Ergebnis des Detektors aktuell ist, und fällt auf die
-geplante Darstellung zurück, sobald es veraltet. Eine Verbindung, die fest auf R oder H steht,
-behält ihre Einstellung.
+bei Strahlen. Eine Verbindung, die fest auf R, H oder S steht, behält ihre Einstellung.
+
+\paragraph{Was wurde verwendet?}\label{sec:workflow-verwendet}
+Nach einem Lauf zeigt eine Verbindung auf \code{auto}, was sie tatsächlich getragen hat, wenn es
+vom Plan abweicht: \textbf{R$\to$H} heißt geplant R, gerechnet als Feld (Detektor nahe einem
+Fokus); \textbf{R$\to$S} heißt geplant R, aber ein Spektrum ist geflossen (z.\,B.\ aus einem
+\block{fusion.convert} in eine Kamera). Der Tooltip nennt in der Zeile \gui{last run} die
+Darstellung, die Umwandlungen auf dem Weg und den Grund, z.\,B.\
+\code{last run: S (R$\to$H$\to$S) – lens gave rays; spectra on the link; Camera takes them as
+they are} -- das auch bei einem festen Transport. \enquote{takes them as they are} heißt: Der
+Block rechnet nativ mit dieser Darstellung; sonst steht dort \enquote{converted to rays at the
+port of …}. Die Anzeige bleibt, solange das Ergebnis des Blocks am Ende der Verbindung aktuell
+ist, und fällt auf die geplante Darstellung zurück, sobald es veraltet.
+
+\paragraph{Hinweise der Spektren.} Die Umwandlungen prüfen ihre Gültigkeit und melden
+Abweichungen als Warnung: \code{exec.spectrum\_cut} (ein Teil der Leistung fiel aus dem Spektrum,
+meist evaneszente Wellen; die Meldung nennt den Anteil) und \code{exec.spectrum\_rays} (ein
+Spektrum wurde zu Strahlen, obwohl das Bündel nicht groß gegen die Wellenlänge ist oder sich
+Beugungsordnungen überlappen -- die Strahlen verlieren dann ihre Interferenz). Nach dem Lauf trägt
+die betroffene Verbindung bzw.\ der Block ein Warnzeichen (Dreieck mit Ausrufezeichen) neben der
+Darstellung, der Tooltip die Meldungen; die Statuszeile nennt die erste, das Plugin-Log alle
+(Abschnitt~\ref{sec:workflow-fehler}).
 
 \subsection{Wer rechnet?}
 
@@ -220,10 +283,13 @@ darunter seine einfachen Parameter als \code{Name = Wert}.
         Bildschirm; das Schild über dem Band gilt für die zuerst genannte Richtung, das darunter
         für die andere) und die Darstellung – die geplante, z.\,B.\ \code{R}, oder ein fester
         Transport mit Stern, z.\,B.\ \code{H*}. Hat der letzte Lauf etwas anderes verwendet als
-        geplant, steht beides da: \code{R$\to$H}.
+        geplant, steht beides da: \code{R$\to$H} oder \code{R$\to$S}
+        (Abschnitt~\ref{sec:workflow-verwendet}). Ein Warnzeichen (Dreieck mit Ausrufezeichen)
+        dahinter: Die Umwandlung in ein Spektrum oder aus ihm hat etwas gemeldet.
   \item Der Tooltip nennt beide Richtungen mit Blocknamen, z.\,B.\
         \code{Objective A $\to$ Sample: H,} \code{transport fixed H}, und \code{no branch} für eine
-        unbenutzte Richtung.
+        unbenutzte Richtung; nach einem Lauf auch \code{last run: …} mit den Umwandlungen und
+        die Hinweise der Spektren.
   \item Eine Verbindung mit einem Problem ist rot gestrichelt.
   \item Fest eingestellte Transporte werden etwas dicker gezeichnet als \code{auto}.
   \item Die Verbindungen des hervorgehobenen Asts sind dicker und hellblau, die Schilder der
@@ -388,9 +454,21 @@ Rechtsklick auf eine Verbindung zweier Ports bietet drei Untermenüs:
   \item \gui{Transport} \textit{B}~$\to$~\textit{A} – nur für die Gegenrichtung.
 \end{itemize}
 
-Jedes bietet \code{auto}, \code{R}, \code{H}, \code{G}, \code{S}, \code{T} und \code{P}. Bei einem
+Jedes bietet \gui{auto – the planner chooses}, \gui{R – rays}, \gui{H – fields (hybrid,
+Fieldtracing)}, \gui{S – plane-wave spectra}, \gui{G – gridded fields}, \gui{T – tables (Jones,
+S-matrix)} und \gui{P – radiometric (no phase)}; der aktuelle Transport ist abgehakt. Bei einem
 Link der alten Form heißt das Untermenü einfach \gui{Transport}. \code{auto} überlässt die Wahl dem
-Planer; jeder andere Buchstabe legt die Darstellung fest (Schild mit Stern, z.\,B.\ \code{H*}).
+Planer; jeder andere Buchstabe legt die Darstellung fest (Schild mit Stern, z.\,B.\ \code{S*}).
+Ausgegraut ist, was Ihre Installation nicht rechnen kann; der Tooltip sagt warum: H und S
+brauchen \code{fieldtracing}, G, T und P werden auf Verbindungen noch nicht gerechnet. Welche
+Darstellungen verfügbar sind, trägt \gui{Check workflow} ins Dokument ein.
+
+\begin{tipp}
+Zwei Gitter (oder Gitter und Stapel) hintereinander: Stellen Sie die Verbindung zwischen ihnen
+auf \code{S}. Das Spektrum geht ohne Umweg über ein Feld von Gitter zu Gitter; vor der nächsten
+Linse wandelt die Ausführung von selbst in Strahlen um. Ob und wie umgewandelt wurde, zeigt nach
+dem Lauf der Tooltip der Verbindungen (\gui{last run}).
+\end{tipp}
 
 \begin{tipp}
 Für ein beugungsbegrenztes Bild nahe einem Fokus (Pupillen- oder Fokuskamera) stellen Sie die
@@ -1030,12 +1108,22 @@ oder Ast). \emph{Fehler} (error) verhindern das Rechnen, \emph{Warnungen} (warni
 \code{plan.no\_output} & Warnung: kein Detektor und keine Auswertung, für die geplant werden
   kann. \\
 \multicolumn{2}{@{}l}{\textit{Beim Rechnen}} \\
-\code{exec.transport\_unsupported} & Der feste Transport kommt erst in einer späteren Stufe;
-  meist fehlt \code{fieldtracing} für H. \\
+\code{exec.transport\_unsupported} & Der feste Transport kommt erst in einer späteren Stufe
+  (G, T, P); meist fehlt \code{fieldtracing} für H bzw.\ S. \\
 \code{exec.no\_evaluator} & Für den Blocktyp gibt es keinen Rechner (geplanter Typ, oder
   Plugin bzw.\ Paket fehlt); \gui{Check workflow} warnt davor mit \code{check.no\_evaluator}. \\
 \code{exec.convert\_unsupported} & Ein \block{fusion.convert} soll in eine Darstellung umwandeln,
-  die diese Version noch nicht rechnet (G, S, P), oder für R bzw.\ H fehlt \code{fieldtracing}. \\
+  die diese Version noch nicht rechnet (G, P), oder für R, H bzw.\ S fehlt \code{fieldtracing}. \\
+\code{exec.spectrum\_cut} & Warnung: Ein Teil der Leistung fiel aus einem Spektrum (Anteil in der
+  Meldung), meist evaneszente Wellen an einer Grenzfläche oder einer gekippten Ebene, oder
+  Wellen, die einen Block nicht erreichen. Bei kleinen Anteilen harmlos; sonst die Apertur bzw.\
+  die Ebene prüfen. Markiert die Verbindung bzw.\ den Block (Warnzeichen). \\
+\code{exec.spectrum\_rays} & Warnung: Ein Spektrum wurde zu Strahlen, obwohl das Bündel nicht groß
+  gegen die Wellenlänge ist oder sich Beugungsordnungen überlappen; die Strahlen verlieren die
+  Interferenz. Abhilfe: die Verbindung bis zum Detektor auf \code{S} bzw.\ \code{H} lassen. \\
+\code{exec.spectrum\_support} & Ein Spektrum ohne Abtastung (hinter einer verdichteten Gruppe)
+  kann kein Feld und keine Strahlen werden. Die Meldung nennt den Block; die Verbindung in ihn
+  auf \code{H} oder \code{R} stellen -- ein Detektor nimmt das Spektrum weiter als Summe. \\
 \code{exec.param} & Ein Parameter ist ungültig, z.\,B.\ eine Datei nicht lesbar. \\
 \code{exec.field} & Fehler bei einer Feldrechnung. \\
 \code{exec.condense} & Die Gruppe lässt sich nicht verdichten. \\
