@@ -27,6 +27,18 @@ def _num(v: Any, default: float) -> float:
     return float(v) if isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v) else default
 
 
+def _polarisation_note(p: dict) -> str:
+    """The source's polarisation in words: linear along the field direction, or elliptical /
+    circular with ellipticity χ (> 0: the field turns from it towards direction × it)."""
+    axis = ", ".join(fmt(x) for x in _vec(p.get("polarisation"), (1.0, 0.0, 0.0)))
+    chi = _num(p.get("ellipticity_deg"), 0.0)
+    if chi == 0.0:
+        return f"polarisation linear along ({axis})"
+    turn = "towards" if chi > 0 else "away from"
+    kind = "circular" if abs(chi) == 45.0 else f"elliptical, χ = {fmt(chi)}°"
+    return f"polarisation {kind}, major axis ({axis}), turning {turn} direction × axis"
+
+
 def _zy(p: tuple[float, float, float]) -> tuple[float, float]:
     return p[2], p[1]
 
@@ -101,6 +113,7 @@ def preview(request: dict) -> dict:
             d.arrow(start, (start[0] + direction[0] * length, start[1] + direction[1] * length))
         waves = p.get("wavelengths_um") if isinstance(p.get("wavelengths_um"), list) else []
         d.note(f"beam radius {fmt(r)} mm" + (f"; λ = {', '.join(fmt(w) for w in waves)} µm" if waves else ""))
+        d.note(_polarisation_note(p))
         return answer(d)
     half = 1.0
     if kind == "optics.plane_mirror":

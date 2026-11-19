@@ -121,6 +121,11 @@ for t, params in (("optics.thin_lens", {"point": [0, 0, 5], "axis": [0, 0, 1], "
     d = valid(workflow_preview.preview({"node": {"id": "b", "type": t, "params": params}}), t)
     assert d["items"], t
 assert workflow_preview.preview({"node": {"type": "display.image"}})["unsupported"]
+for chi, words in ((0, "linear along (1, 0, 0)"), (45, "circular"), (-20, "elliptical, χ = -20°")):
+    src = {"node": {"id": "s", "type": "optics.collimated_source",
+                    "params": {"polarisation": [1, 0, 0], "ellipticity_deg": chi}}}
+    notes = valid(workflow_preview.preview(src), "source")["notes"]
+    assert any(words in n for n in notes), (chi, notes)
 ran += 1
 
 # ------------------------------------------------------------------ Raytracer
