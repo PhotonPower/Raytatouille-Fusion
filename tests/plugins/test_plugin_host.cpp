@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <memory>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSignalSpy>
@@ -282,6 +283,46 @@ class TestPluginHost : public QObject {
     QVERIFY(waitFinished(finished));
     QVERIFY(!finished.first().at(1).toBool());
     QVERIFY(finished.first().at(3).toString().contains(QStringLiteral("deliberate")));
+  }
+
+  void previewsAreDrawnByThePlugin() {
+    // docs/plugin-api.md, "Block previews": the manifest names the types, the plugin answers
+    // in its own thread; errors, NaN and types it does not draw come back as such
+    QVERIFY(host_->draws(QStringLiteral("demo.block")));
+    QVERIFY(!host_->draws(QStringLiteral("rtt.section")));
+    QObject context;
+    QList<QJsonObject> answers;
+    auto ask = [&](const QString& type) {
+      const qsizetype before = answers.size();
+      host_->preview(QJsonObject{{"node", QJsonObject{{"id", "b1"}, {"type", type}, {"params", QJsonObject{{"width", 0.25}}}}}},
+                     &context, [&answers](const QJsonObject& a) { answers << a; });
+      for (int waited = 0; answers.size() == before && waited < 20000; waited += 20) QTest::qWait(20);
+      return answers.size() > before ? answers.back() : QJsonObject{{"error", "timeout"}};
+    };
+    QJsonObject a = ask(QStringLiteral("demo.block"));
+    QVERIFY(a["ok"].toBool());
+    QCOMPARE(a["drawing"].toObject()["title"].toString(), QStringLiteral("b1: width 0.25"));  // the dialog's value
+    QCOMPARE(a["drawing"].toObject()["format"].toString(), QStringLiteral("nfcad-drawing"));
+    a = ask(QStringLiteral("demo.fail"));
+    QVERIFY(!a["ok"].toBool() && a["error"].toString().contains(QStringLiteral("deliberate")));
+    a = ask(QStringLiteral("demo.nan"));
+    QVERIFY(!a["ok"].toBool() && a["error"].toString().contains(QStringLiteral("ValueError")));
+    a = ask(QStringLiteral("other.block"));
+    QVERIFY(!a["ok"].toBool() && a["unsupported"].toBool());
+    // who is asked: the provider by id, the plugin with the type among its blocks, a manifest
+    const std::vector<plugins::PluginHost*> hosts{host_.get()};
+    QCOMPARE(plugins::PluginManager::previewOrder(hosts, QStringLiteral("demo.x"), {}).size(), std::size_t{1});
+    QCOMPARE(plugins::PluginManager::previewOrder(hosts, QStringLiteral("rtt.lens"), QStringLiteral("test")).size(), std::size_t{1});
+    QVERIFY(plugins::PluginManager::previewOrder(hosts, QStringLiteral("rtt.lens"), QStringLiteral("raytracer")).empty());
+    // the dialog is gone before the answer: nothing is called
+    auto called = std::make_shared<bool>(false);
+    {
+      QObject gone;
+      host_->preview(QJsonObject{{"node", QJsonObject{{"type", "demo.block"}}}}, &gone, [called](const QJsonObject&) { *called = true; });
+    }
+    QTest::qWait(500);
+    QVERIFY(!*called);
+    QCOMPARE(answers.size(), qsizetype{4});
   }
 
   void crashIsContained() {

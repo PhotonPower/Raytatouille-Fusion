@@ -6,6 +6,22 @@ from nfcad import geometry as g
 
 
 class TestPlugin(Plugin):
+    def preview_block(self, request):
+        """Overview drawings (docs/plugin-api.md, "Block previews") of the demo.* blocks."""
+        from nfcad.drawing import Drawing, answer
+
+        node = request.get("node", {})
+        kind = node.get("type")
+        if kind == "demo.block":
+            d = Drawing(f"{node.get('id')}: width {node.get('params', {}).get('width')}", unit="µm")
+            d.polygon([(0, 0), (1, 0), (1, 1)], material="si")
+            return answer(d)
+        if kind == "demo.fail":
+            raise RuntimeError("deliberate preview failure")
+        if kind == "demo.nan":
+            return {"ok": True, "drawing": {"items": [{"type": "text", "at": [float("nan"), 0], "text": "x"}]}}
+        return super().preview_block(request)
+
     params = {
         "count": Param.integer(3, min=1),
         "scale": Param.number(1.5, unit="mm"),

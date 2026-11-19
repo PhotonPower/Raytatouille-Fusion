@@ -519,6 +519,15 @@ void MainWindow::createPanels() {
     }
     return out;
   };
+  // the overview drawing of a block (its parameter dialog): drawn by the plugins
+  node_editor_->block_preview = [this](const QString& type, const QString& provider, const QJsonObject& request,
+                                       QObject* context, const ui::NodeEditor::PreviewDone& done) {
+    if (plugins_ == nullptr) {
+      done(QJsonObject{{"ok", false}, {"unsupported", true}, {"error", tr("no plugins loaded")}});
+      return;
+    }
+    plugins_->preview(type, provider, request, context, done);
+  };
   // the block a plugin computes now
   connect(doc_, &document::Document::workflowRunning, this, [this, workflow](const QString& node) {
     node_editor_->setRunning(node);

@@ -41,6 +41,15 @@ configuration – a table built around the incident rays. The workflow engine se
 the plugin's process; without the plugin the engine computes it itself, with the same result
 (RTT-Fusion's evaluator in both, compared bit for bit in `test_multi_plugin_workflow`).
 
+**Overview of a block** (tab *Overview* of an `fg.grating` / `fg.stack` dialog, `fg_preview.py`,
+pure Python): the cross-section of the block's configuration in x–y (µm) over two periods with the
+values in the dialog – substrate, the layers bottom up, superstrate, each in its material's colour
+(legend with n, n + i k or the model's name). Homogeneous, lamellar, profile1d (sinus, triangle,
+points) exactly, profile2d at z0, polygon2d / contour2d cut at the height of their first
+inclusion, rings radially, other types hatched with their name; layer thicknesses and the period
+dimensioned; the incidence (λ, θ, ψ, TE/TM) as an arrow, for a grating its zeroth reflected or
+transmitted order. A grating with a Jones table only is drawn as the sample plane with its orders.
+
 **Step 5: Optimise.** L-BFGS-B (scipy) with FourierGrating's exact gradients (adjoint, about 1.3
 to 2.5 solves per step whatever the number of parameters) at the first incidence point:
 - *Objective*: rows (side R/T, n, m, weight), L = Σ weight · efficiency, maximised or minimised;

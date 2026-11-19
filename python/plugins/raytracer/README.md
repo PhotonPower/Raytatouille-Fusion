@@ -48,6 +48,17 @@ or from the object points (finite object). That is exact when the aperture stop 
 surface of the path (as with an illumination stop); otherwise the plugin says that it cannot
 aim into the path.
 
+**Overview of a block** (tab *Overview* of a workflow block's parameter dialog, `rtt_preview.py`):
+the block's elements in the meridional section (y–z, mm) with the values in the dialog – every
+lens as the closed outline of its glass segments from the exact sag profiles over the apertures
+(`raytatouille.layout.outlines`), coloured by glass, the legend with the index at the reference
+wavelength; cemented groups one area per glass; mirrors, ideal lenses (arrows, f), splitters
+(dashed), detectors and stops (marks beside the opening) as their profiles; the optical axis; a fan
+of seven parallel rays along the block's first run (sections, new lenses) when the glasses are
+known; the centre thickness or the length dimensioned, a singlet's radii in the notes. The source
+draws the whole system. Compiled with the source's glass catalogues; a missing glass draws the
+geometry with a constant index and says so.
+
 ## Not yet
 
 - Switching elements off for the computation (attribute `sim.inactive`, needs

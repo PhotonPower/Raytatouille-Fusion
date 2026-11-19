@@ -11,8 +11,11 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
+#include <QPointer>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTimer>
 #include <QRegularExpression>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -40,6 +43,9 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
+
+#include "ui/block_drawing.hpp"
 
 namespace nfcad::ui {
 
@@ -1250,7 +1256,35 @@ QJsonValue with_value(const QJsonValue& root, const QStringList& parts, const QJ
   o[parts[k]] = with_value(o[parts[k]], parts, value, k + 1);
   return o;
 }
+
+/// `params` with `changes` (plain names, or JSON pointers into the params: fields)
+QJsonObject merged_params(QJsonObject params, const QJsonObject& changes) {
+  for (auto it = changes.begin(); it != changes.end(); ++it) {
+    if (it.key().startsWith(QLatin1Char('/'))) {
+      params = with_value(params, pointer_parts(it.key()), it.value()).toObject();
+    } else {
+      params[it.key()] = it.value();
+    }
+  }
+  return params;
+}
+
+/// The tab the next parameter dialog opens on: the overview, unless the last one was closed on
+/// a parameter tab (kept for the session)
+bool g_open_overview = true;
 }  // namespace
+
+QJsonObject NodeEditor::previewRequest(const QString& id, const QJsonObject& changes) const {
+  QJsonObject node = node_of(graph(), id);
+  node["params"] = merged_params(node["params"].toObject(), changes);
+  QJsonArray scope;
+  for (const QString& g : scope_) scope.append(g);
+  return QJsonObject{{"node", node},
+                     {"type", type_of(workflow_, node["type"].toString())},
+                     {"model", workflow_.value(key()).toObject()},
+                     {"scope", scope},
+                     {"locale", QLocale().name()}};
+}
 
 void NodeEditor::setParams(const QString& id, const QJsonObject& params) {
   QJsonObject g = graph();
@@ -1258,15 +1292,7 @@ void NodeEditor::setParams(const QString& id, const QJsonObject& params) {
   for (int k = 0; k < nodes.size(); ++k) {
     QJsonObject n = nodes[k].toObject();
     if (n["id"].toString() != id) continue;
-    QJsonObject p = n["params"].toObject();
-    for (auto it = params.begin(); it != params.end(); ++it) {
-      if (it.key().startsWith(QLatin1Char('/'))) {  // a JSON pointer into the params (fields)
-        p = with_value(p, pointer_parts(it.key()), it.value()).toObject();
-      } else {
-        p[it.key()] = it.value();
-      }
-    }
-    n["params"] = p;
+    n["params"] = merged_params(n["params"].toObject(), params);
     nodes[k] = n;
   }
   g["nodes"] = nodes;
@@ -1286,28 +1312,35 @@ void NodeEditor::editParams(const QString& id) {
   QDialog dialog(this);
   dialog.setWindowTitle(tr("Parameters of %1").arg(node["name"].toString(id)));
   auto* outer = new QVBoxLayout(&dialog);
-  QTabWidget* tabs = node["fields"].toArray().isEmpty() ? nullptr : new QTabWidget(&dialog);
+  // every block has the overview first, then its parameters (a tab per group of fields)
+  auto* tabs = new QTabWidget(&dialog);
+  auto* overview = new QWidget;
+  overview->setObjectName(QStringLiteral("overview"));
+  auto* overview_layout = new QVBoxLayout(overview);
+  auto* view = new DrawingView(overview);
+  overview_layout->addWidget(view, 1);
+  auto* overview_row = new QHBoxLayout;
+  auto* update = new QPushButton(tr("Update"), overview);
+  update->setToolTip(tr("Draw the block again with the values in this dialog"));
+  overview_row->addStretch(1);
+  overview_row->addWidget(update);
+  overview_layout->addLayout(overview_row);
+  tabs->addTab(overview, tr("Overview"));
   QHash<QString, QFormLayout*> forms;
   auto form_of = [&](const QString& group) -> QFormLayout* {
     const QString name = group.isEmpty() ? tr("Block") : group;
     if (QFormLayout* f = forms.value(name)) return f;
     auto* page = new QWidget;
     auto* f = new QFormLayout(page);
-    if (tabs != nullptr) {
-      auto* scroll = new QScrollArea;
-      scroll->setWidgetResizable(true);
-      scroll->setWidget(page);
-      tabs->addTab(scroll, name);
-    } else {
-      outer->addWidget(page);
-    }
+    auto* scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setWidget(page);
+    tabs->addTab(scroll, name);
     forms.insert(name, f);
     return f;
   };
-  if (tabs != nullptr) {
-    outer->addWidget(tabs);
-    dialog.resize(560, 520);
-  }
+  outer->addWidget(tabs);
+  dialog.resize(640, 560);
   const QJsonObject current = node["params"].toObject();
   std::vector<std::function<void(QJsonObject&)>> readers;
   for (const QJsonValue& v : specs) {
@@ -1393,9 +1426,81 @@ void NodeEditor::editParams(const QString& id) {
   connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   outer->addWidget(buttons);
-  if (dialog.exec() != QDialog::Accepted || specs.isEmpty()) return;
-  QJsonObject params;
-  for (auto& read : readers) read(params);
+
+  // the overview: drawn by a plugin from the values in the dialog (asynchronous; the newest
+  // request wins), else the block's schematic
+  auto changes = [&readers] {
+    QJsonObject params;
+    for (auto& read : readers) read(params);
+    return params;
+  };
+  auto latest = std::make_shared<int>(0);
+  bool stale = true;
+  auto refresh = [&, this] {
+    stale = false;
+    const QJsonObject request = previewRequest(id, changes());
+    const QJsonObject block = request["node"].toObject();
+    const int mine = ++*latest;
+    auto show = [view = QPointer<DrawingView>(view), latest, mine, block, t](const QJsonObject& answer) {
+      if (!view || mine != *latest) return;  // the dialog is gone, or a newer request is on its way
+      QStringList problems;
+      if (answer["ok"].toBool()) {
+        if (auto d = parse_drawing(answer["drawing"].toObject(), &problems)) {
+          view->setDrawing(*d);
+          return;
+        }
+      }
+      const bool unsupported = answer["unsupported"].toBool();
+      const QString why = answer["ok"].toBool() ? tr("the plugin's drawing is not valid: %1").arg(problems.join(QStringLiteral("; ")))
+                                                : answer["error"].toString();
+      const auto fallback = parse_drawing(schematic_drawing(block, t, unsupported ? why : QString()));
+      if (fallback) view->setDrawing(*fallback, unsupported ? QString() : why);
+    };
+    if (!block_preview) {
+      show(QJsonObject{{"ok", false}, {"unsupported", true}, {"error", tr("no plugins: the block's schematic")}});
+      return;
+    }
+    view->setBusy(tr("computing the overview…"));
+    QString provider = t["provider"].toString();
+    if (provider.isEmpty()) {
+      provider = workflow_["providers"].toObject()[node["type"].toString()].toObject()["plugin"].toString();
+    }
+    block_preview(node["type"].toString(), provider, request, view, show);
+  };
+  // a changed value draws again shortly after the last change (now if the overview is shown,
+  // else when it is)
+  auto* again = new QTimer(&dialog);
+  again->setSingleShot(true);
+  again->setInterval(700);
+  connect(again, &QTimer::timeout, &dialog, [&] {
+    if (tabs->currentWidget() == overview) {
+      refresh();
+    } else {
+      stale = true;
+    }
+  });
+  for (QLineEdit* line : dialog.findChildren<QLineEdit*>()) {
+    connect(line, &QLineEdit::textEdited, again, qOverload<>(&QTimer::start));
+  }
+  for (QSpinBox* spin : dialog.findChildren<QSpinBox*>()) {
+    connect(spin, &QSpinBox::valueChanged, again, qOverload<>(&QTimer::start));
+  }
+  for (QCheckBox* box : dialog.findChildren<QCheckBox*>()) {
+    connect(box, &QCheckBox::toggled, again, qOverload<>(&QTimer::start));
+  }
+  connect(update, &QPushButton::clicked, &dialog, [&] { refresh(); });
+  connect(tabs, &QTabWidget::currentChanged, &dialog, [&] {
+    if (tabs->currentWidget() == overview && stale) refresh();
+  });
+  if (g_open_overview) {
+    refresh();
+  } else if (tabs->count() > 1) {
+    tabs->setCurrentIndex(1);
+  }
+  const int result = dialog.exec();
+  g_open_overview = tabs->currentWidget() == overview;
+  if (result != QDialog::Accepted || specs.isEmpty()) return;
+  const QJsonObject params = changes();
   if (!params.isEmpty()) setParams(id, params);
 }
 

@@ -549,13 +549,15 @@ mit seinen Daten und seinem Teil jedes Durchlaufs; die Durchläufe des Abschnitt
 \section{Parameter der Blöcke}\label{sec:workflow-parameter}
 
 Ein Doppelklick auf einen Block (außer Gruppen und Anzeigeblöcken) oder \gui{Parameters…} im
-Kontextmenü öffnet den Dialog \gui{Parameters of} \textit{Name}. Er zeigt die Parameter des
-Blocktyps (Anhang~\ref{kap:workflow-bloecke}) und – bei Blöcken mit eigenen Daten – die Felder,
-die das zuständige Plugin für diesen Block beschreibt.
+Kontextmenü öffnet den Dialog \gui{Parameters of} \textit{Name}. Er ist in \emph{Reiter}
+gegliedert: zuerst \gui{Overview}, ein Übersichtsbild des Blocks
+(Abschnitt~\ref{sec:workflow-uebersicht}), dann die Parameter des Blocktyps
+(Anhang~\ref{kap:workflow-bloecke}) und – bei Blöcken mit eigenen Daten – die Felder, die das
+zuständige Plugin für diesen Block beschreibt.
 
 \begin{itemize}
-  \item Hat ein Block solche Datenfelder (z.\,B.\ ein importierter Raytatouille-Block), ist der
-        Dialog in \emph{Reiter} gegliedert: \gui{Block} für die Parameter des Typs und ein Reiter
+  \item Der Reiter \gui{Block} enthält die Parameter des Typs. Hat ein Block Datenfelder
+        (z.\,B.\ ein importierter Raytatouille-Block), folgt ein Reiter
         je Element bzw.\ Gruppe von Daten – Radien, Konstanten der Kegelschnitte, Aperturen,
         Lagen der Flächen, Gläser, Wechselwirkungen. Längen stehen in mm, Winkel in Grad; eine
         Größe, die in der Optimierung \enquote{variabel} ist, erscheint als Kontrollkästchen.
@@ -572,6 +574,70 @@ Stellen, als der Dialog zeigt, bleibt dadurch exakt erhalten, solange Sie ihn ni
 ein Block keine Parameter, steht dort \gui{This block has no parameters.}
 
 Interne Datenparameter (z.\,B.\ das gespeicherte System einer Quelle) zeigt der Dialog nicht.
+
+\subsection{Die Übersicht}\label{sec:workflow-uebersicht}\index{Uebersichtsbild@Übersichtsbild}\index{Overview}
+
+Der erste Reiter, \gui{Overview}, zeigt das Teilmodell des Blocks als Zeichnung: maßstäblich, mit
+Achsen in mm bzw.\ µm, Glas- und Materialfarben samt Legende, Bemaßungen und Hinweisen unter dem
+Bild. Gezeichnet wird mit den Werten, die \emph{im Dialog} stehen – auch solchen, die Sie noch
+nicht mit \gui{OK} übernommen haben. So sehen Sie, was eine Änderung an Radius, Dicke oder
+Schichtfolge bewirkt, bevor Sie sie übernehmen.
+
+\begin{description}
+  \item[Raytatouille-Blöcke] (\block{rtt.section}, \block{rtt.mirror}, \block{rtt.splitter},
+        \block{rtt.detector}, \block{rtt.part.*}): der Meridionalschnitt (y–z-Ebene, $z$ nach
+        rechts) der Elemente des Blocks. Jede Linse erscheint als geschlossene Kontur ihrer
+        Glasteile aus den exakten Pfeilhöhen der Flächen über ihren Aperturen, gefärbt nach Glas;
+        die Legende nennt das Glas und seine Brechzahl bei der Referenzwellenlänge. Kittglieder
+        zeigen je Glas eine Fläche. Spiegel, ideale Linsen (mit Pfeilspitzen und $f$), Strahlteiler
+        (gestrichelt) und Detektoren (blau) erscheinen als Profil, eine Blende als Marken neben
+        ihrer Öffnung mit ihrem Durchmesser, die optische Achse strichpunktiert. Bei einem
+        Abschnitt läuft ein Fächer paralleler Strahlen den ersten Lauf des Blocks entlang. Bei
+        einer einzelnen Linse nennen die Hinweise Radien, Dicke und Durchmesser; bemaßt ist die
+        Mittendicke bzw.\ die Länge vom ersten bis zum letzten Scheitel. Die Koordinaten sind die
+        der Baugruppe, in der der Block liegt.
+  \item[Quelle] (\block{rtt.source}): das ganze System im Meridionalschnitt, ohne Strahlen, mit
+        Wellenlängen und Zahl der Feldpunkte.
+  \item[FourierGrating-Blöcke] (\block{fg.grating}, \block{fg.stack}): der Querschnitt der
+        Konfiguration in der x–y-Ebene (µm) über zwei Perioden: Substrat unten, die Schichten von
+        unten nach oben, Superstrat oben, jede Fläche in der Farbe ihres Materials (Legende mit
+        $n$ bzw.\ $n + \mathrm{i}k$ oder dem Namen des Modells). Rechteck-, Sinus-, Dreiecks- und
+        Stützstellenprofile werden exakt gezeichnet, 2D-Schichten (\code{polygon2d},
+        \code{contour2d}) im Schnitt auf Höhe ihres ersten Einschlusses, unbekannte Schichttypen
+        (\code{cad}, \code{json}) schraffiert mit ihrem Namen. Rechts sind die Schichtdicken
+        bemaßt, oben die Periode $\Lambda$; ein Pfeil zeigt den Einfall ($\lambda$, $\theta$, ggf.\
+        $\psi$, TE/TM), bei einem Gitter gestrichelt die nullte reflektierte bzw.\ transmittierte
+        Ordnung. Sind Dicke und Breite sehr verschieden, werden die Achsen verschieden skaliert
+        (Hinweis unter dem Bild). Ein Gitter, das nur eine Jones-Tabelle hält, erscheint als
+        Probenebene mit seinen Ordnungen.
+  \item[Ideale Optik] (\block{optics.*}, gezeichnet vom Workflow-Plugin): Linsen als Symbol mit
+        Brennpunkten und $f$, Detektoren als Ebene mit Größe und ankommendem Licht, die
+        kollimierte Quelle als Strahlenbündel, Spiegel mit schraffierter Rückseite, Strahlteiler
+        gestrichelt, Grenzflächen mit beiden Brechzahlen; das Teilchen
+        (\block{fusion.particle}) als Kreis in µm.
+  \item[Alle anderen Blöcke] (z.\,B.\ Anzeige-, Meta- und Umwandlungsblöcke) zeigen ihr
+        \emph{Schema}: den Block mit seinen Lichtports (links hinein, rechts hinaus),
+        Datenanschlüssen, Typ, Beschreibung und den ersten Parameterwerten.
+\end{description}
+
+\paragraph{Aktualisieren.} Das Bild wird gezeichnet, sobald der Reiter sichtbar ist, und
+erneut etwa 0,7~Sekunden nach der letzten Änderung eines Werts im Dialog; \gui{Update} zeichnet
+sofort. Während das Plugin rechnet, steht oben rechts \gui{computing the overview…}; das
+vorige Bild bleibt so lange stehen. Das Plugin wird dafür gestartet, falls es noch nicht läuft
+(beim ersten Mal kann das einige Sekunden dauern). Der Dialog merkt sich für die Sitzung, ob Sie
+ihn zuletzt auf der Übersicht oder auf einem Parameterreiter geschlossen haben, und öffnet den
+nächsten ebenso; auf einem Parameterreiter wird erst gezeichnet, wenn Sie die Übersicht wählen.
+
+\paragraph{Bild kopieren oder speichern.} Das Kontextmenü des Bilds bietet \gui{Copy image}
+(in die Zwischenablage) und \gui{Save image…} (PNG in doppelter Auflösung).
+
+\paragraph{Wenn kein Bild kommt.} Kann ein Plugin den Block nicht zeichnen, steht sein Grund in
+Rot über dem Schema, z.\,B.\ \gui{the Raytracer's overview needs the Python package raytatouille}
+oder \gui{… holds no FourierGrating configuration (Store panel configuration in block, or name a
+configuration file)}. Fehlen die Glaskataloge eines Systems, wird die Geometrie trotzdem
+gezeichnet; der Hinweis \gui{glasses unknown (…) – geometry only, no rays} nennt den Grund
+(Glaskataloge: Abschnitt~\ref{sec:workflow-eingebettet}). Das Bild ist mit dem Dialog verbunden;
+schließen Sie ihn, bevor die Antwort kommt, wird sie verworfen.
 
 \begin{hinweis}
 Nach jeder Änderung im Editor ruft die Anwendung nach etwa 0,6~Sekunden die Plugins auf, die dem

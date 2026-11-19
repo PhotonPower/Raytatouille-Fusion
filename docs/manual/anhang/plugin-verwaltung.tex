@@ -179,6 +179,10 @@ Jedes Plugin beschreibt sich in einer JSON-Datei \datei{plugin.json}, z.\,B.\ de
 \code{description} & Beschreibung; erscheint im Plugin-Dock und als Tooltip im Menü. \\
 \code{update\_url} & Optional: Adresse für die Update-Prüfung
   (Abschnitt~\ref{sec:verwaltung-updates}). \\
+\code{previews} & Optional: Blocktypen, deren Übersichtsbild das Plugin zeichnet, obwohl es sie
+  nicht selbst anbietet, z.\,B.\ \code{["optics.*", "fusion.particle"]} beim Workflow-Plugin;
+  \code{*} am Ende passt auf jeden Typ mit diesem Anfang
+  (Abschnitt~\ref{sec:verwaltung-uebersicht}). \\
 \bottomrule
 \end{referenz}
 
@@ -333,6 +337,89 @@ als temporäre Dateien übergeben, die die Anwendung einliest und löscht.
 
 Wechseln Sie den Interpreter, werden alle Plugin-Prozesse beendet und mit dem neuen Interpreter
 neu gestartet.
+
+% ---------------------------------------------------------------------------
+\section{Übersichtsbilder der Blöcke (für Plugin-Autoren)}\label{sec:verwaltung-uebersicht}
+\index{Uebersichtsbild@Übersichtsbild!Protokoll}\index{preview\_block@\texttt{preview\_block}}
+
+Den Reiter \gui{Overview} im Parameterdialog eines Workflow-Blocks
+(Abschnitt~\ref{sec:workflow-uebersicht}) füllt ein Plugin mit der Methode
+\code{preview\_block(request)} seiner Plugin-Klasse. Sie gibt eine kleine 2D-Vektorzeichnung als
+JSON zurück; die Anwendung skaliert sie auf den Reiter, färbt sie passend zur hellen oder dunklen
+Oberfläche und setzt die Legende der Materialien. Das Plugin braucht dafür keine
+Zeichenbibliothek (kein matplotlib); \code{nfcad.drawing} hilft beim Aufbau:
+
+\begin{lstlisting}
+from nfcad.drawing import Drawing, answer, unsupported
+
+def preview_block(self, request):
+    node = request["node"]          # mit den Werten im Dialog
+    if node["type"] != "my.layer":
+        return unsupported()        # der nächste Zeichner oder das Schema
+    d = Drawing(node.get("name", "Layer"), unit="µm", axes=("x", "y"))
+    d.material("si", "si · n = 3.88")
+    d.polygon([(0, 0), (1, 0), (1, 0.2), (0, 0.2)], material="si")
+    d.dimension((1.1, 0), (1.1, 0.2), "0.2")
+    return answer(d)
+\end{lstlisting}
+
+\paragraph{Anfrage.} \code{node}: der Block, seine \code{params} schon mit den Werten im Dialog,
+die noch nicht übernommen sind; \code{type}: sein Katalogeintrag; \code{model}: das ganze Modell
+des Workflows (z.\,B.\ für die Glaskataloge der Quelle); \code{scope}: die Gruppen um den Block;
+\code{locale}: die Sprache der Anwendung (z.\,B.\ \code{de\_DE}).
+
+\paragraph{Antwort.} \code{\{"ok": true, "drawing": …\}} zeigt die Zeichnung;
+\code{\{"ok": false, "error": "…"\}} zeigt den Fehler rot über dem Schema des Blocks;
+\code{\{"ok": false, "unsupported": true\}} gibt den Block weiter. Ausnahmen werden zu Fehlern
+(mit Traceback im \gui{Plugin log}); eine Antwort mit NaN oder NumPy-Zahlen wird abgewiesen.
+Die Methode läuft in einem eigenen Thread, neben Aktionen und Blockauswertungen, eine Anfrage
+nach der anderen; sie sollte nach höchstens einer Sekunde fertig sein.
+
+\paragraph{Zeichnung} (Format \code{nfcad-drawing}, Version~1):
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}X@{}}
+\toprule
+\textbf{Schlüssel} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\code{title} & Überschrift. \\
+\code{unit}, \code{axes} & Einheit aller Koordinaten (\code{"mm"}, \code{"µm"}) und Namen der
+  waagrechten und senkrechten Achse, z.\,B.\ \code{["z", "y"]}; \code{"axes": false} zeichnet
+  keine Achsen (ein Schema). \\
+\code{aspect} & \code{"equal"} (Vorgabe: ein Maßstab für beide Achsen) oder \code{"fit"} (jede
+  Achse füllt den Reiter). \\
+\code{items} & \code{polygon} (\code{points}, mindestens drei, gefüllt; \code{material},
+  \code{fill} als \code{\#rrggbb}, \code{hatched}), \code{polyline} (\code{points}, mindestens
+  zwei), \code{text} (\code{at}, \code{text}, \code{align} \code{left}/\code{center}/\code{right},
+  \code{valign} \code{top}/\code{middle}/\code{bottom}), \code{dimension} (\code{from},
+  \code{to}, \code{text}: Maßpfeil mit Wert), \code{arrow} (\code{from}, \code{to}, \code{text}). \\
+\code{role} & Bedeutung einer Linie, eines Pfeils oder Texts, bestimmt Farbe und Strich:
+  \code{outline} (Vorgabe), \code{surface}, \code{axis} (strichpunktiert), \code{ray},
+  \code{light}, \code{stop}, \code{detector}, \code{dimension}, \code{guide} (gepunktet),
+  \code{note}, \code{error}; \code{color}, \code{width} (Pixel), \code{dashed} überschreiben sie. \\
+\code{materials} & Legende: \code{\{"name", "label", "fill"\}}; ein Material, das nur ein Polygon
+  nennt, kommt hinzu. Ohne \code{fill} folgt die Farbe aus dem Namen (dasselbe Material sieht in
+  jedem Bild gleich aus, Luft fast durchsichtig). \\
+\code{notes} & Zeilen unter dem Bild. \\
+\bottomrule
+\end{referenz}
+
+Koordinaten sind endliche Zahlen, $y$ nach oben; höchstens 20\,000 Elemente und 400\,000 Punkte.
+Eine fehlerhafte Zeichnung weist die Anwendung mit Grund ab (rot über dem Schema), unbekannte
+Elementtypen überspringt sie – ein neueres Plugin zeichnet also auch in einer älteren Anwendung.
+\code{nfcad.drawing.check(json)} nennt, was die Anwendung abweisen würde (für die Tests eines
+Plugins).
+
+\paragraph{Wer gefragt wird.} Zuerst der Anbieter des Blocktyps (das Plugin im Katalogeintrag
+bzw.\ unter \code{providers} des Workflows, sonst das Plugin, dessen \code{blocks()} den Typ
+enthält), dann jedes Plugin, dessen \datei{plugin.json} den Typ unter \code{previews} nennt. Die
+Anwendung startet das Plugin dafür, falls nötig. Antwortet keines mit einer Zeichnung, zeigt der
+Dialog das Schema des Blocks. Ein künftiger Kern (z.\,B.\ FEM) zeichnet den Schnitt seines Netzes
+genauso: Polygone je Material, \code{aspect} \code{equal}, \code{unit} des Netzes.
+
+\paragraph{Nachrichten.} Anwendung an Plugin \code{\{"type": "preview", "rid", "request"\}},
+Plugin an Anwendung \code{\{"type": "previewed", "rid", "response"\}}; JSON-Zeilen wie alle
+anderen Nachrichten.
 
 % ---------------------------------------------------------------------------
 \section{Update-Prüfung}\label{sec:verwaltung-updates}\index{Update-Pruefung@Update-Prüfung}

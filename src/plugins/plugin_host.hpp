@@ -38,6 +38,9 @@ struct Manifest {
   QString update_url;    ///< optional: JSON {"version": …, "url": …} with the newest release (P7)
   QString directory;    ///< directory the plugin runs from (for signed plugins a private, checked copy)
   QString source_directory;  ///< the plugin's folder as installed
+  /// Block types whose overview drawing this plugin makes besides its own blocks ("previews"
+  /// in plugin.json; "optics.*" matches a prefix): docs/plugin-api.md, "Block previews"
+  QStringList previews;
   bool trusted = false;      ///< signature valid with a built-in publisher key (P5)
   QString trust_note;        ///< why it is not trusted ("not signed", …); developer mode only
 
@@ -88,6 +91,15 @@ class PluginHost : public QObject {
   void respond(int rid, bool ok, const QJsonValue& result, const QString& error = {}) { reply(rid, ok, result, error); }
   /// Asks this plugin to evaluate a block (ADR 0010, D3); the answer comes as evaluated(rid, …).
   void evaluate(int rid, const QJsonObject& request);
+  /// The overview drawing of a block (docs/plugin-api.md, "Block previews"): sends `request`
+  /// ({"node", "type", "model", "scope"}) once the plugin is ready and calls `done` with its
+  /// answer ({"ok": true, "drawing": …} or {"ok": false, "error": …}); a plugin that stops or
+  /// fails answers {"ok": false, "error"}. Nothing is called once `context` is gone. The caller
+  /// starts the process (PluginManager::preview).
+  void preview(const QJsonObject& request, QObject* context, std::function<void(const QJsonObject&)> done);
+  /// Whether this plugin provides blocks of `type` (its hello) or draws them (manifest).
+  [[nodiscard]] bool provides(const QString& type) const;
+  [[nodiscard]] bool draws(const QString& type) const;
   /// Parameter descriptions from the plugin (nfcad.Param, in display order).
   [[nodiscard]] QJsonArray paramsSchema() const { return params_; }
   [[nodiscard]] std::optional<int> activeJob() const { return active_job_; }
@@ -147,6 +159,16 @@ class PluginHost : public QObject {
   Router router_;
   QJsonArray params_;
   std::optional<std::tuple<QString, QJsonObject, QJsonObject>> queued_;  // run requested before ready
+  struct Preview {
+    QJsonObject request;
+    QPointer<QObject> context;
+    std::function<void(const QJsonObject&)> done;
+    bool sent = false;
+  };
+  std::map<int, Preview> previews_;  // by rid
+  int next_preview_ = 1;
+  void sendPreviews();
+  void failPreviews(const QString& why);
   std::optional<int> active_job_;
   int next_job_ = 1;
   QString stderr_;
