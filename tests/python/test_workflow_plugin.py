@@ -282,11 +282,11 @@ if "S" in workflow.available() and hasattr(execute.Executor, "_record_used"):
     engine = workflow_plugin.WorkflowEngine()
     engine.check_workflow(ctx)
     assert ctx.wf["available"] == ["H", "R", "S"], ctx.wf["available"]
-    assert ctx.wf["plan"]["links"]["toS.out -> cam.in"]["representation"] == "R"
+    assert ctx.wf["plan"]["links"]["toS.out -> cam.in"]["representation"] == "S"   # auto keeps spectra (R30f)
     message = engine.run_workflow(ctx)
     assert message.startswith("workflow: Focus"), (message, ctx.lines)
     shown = ctx.wf["plan"]["links"]["toS.out -> cam.in"]
-    assert (shown["representation"], shown["used"], shown["used_chain"]) == ("R", "S", "S"), shown
+    assert (shown["representation"], shown["used"], shown["used_chain"]) == ("S", "S", "S"), shown
     assert "cam takes them as they are" in shown["used_reason"], shown
     assert "used" not in ctx.wf["plan"]["links"]["src.out -> lens.in"]
 

@@ -583,7 +583,8 @@ class WorkflowEngine(Plugin):
     def _plan_with_used(self, workflow, plan, graph, model, registry, fresh):
         """The plan with what the blocks used on links in the run whose results are up to date (a
         detector that computed fields near a focus: R→H at the link, RTT-Fusion #85; a spectrum
-        on a link planned R: R→S, R30e) and the warnings of the spectrum conversions."""
+        on a link planned R: R→S, R30e – rare since auto plans S behind spectra, R30f) and the
+        warnings of the spectrum conversions."""
         with_used = getattr(workflow, "with_used", None)
         used = {k: v for k, v in self._used.items() if _link_target(k) in fresh}
         shown = plan
