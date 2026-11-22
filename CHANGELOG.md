@@ -6,6 +6,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Fixed
+- **Release drafts for tags**: the RPM lies in an architecture folder of its artifact; the release
+  job now finds it (the draft of v1.1.0 was made by hand from the same artifacts).
+
 ## [1.1.0] - 2026-11-22
 
 ### Added
