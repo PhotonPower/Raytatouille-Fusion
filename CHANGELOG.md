@@ -6,7 +6,19 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-22
+
 ### Added
+- **Help → About names the build**: the version and the commit the app was built from
+  (`git describe`, "-dirty" for local changes), so an installed or self-built app can be told
+  from an older one.
+
+### Fixed
+- **A fresh build from the sources compiles again**: without options CMake downloaded Nurbforge
+  v0.7.0, which lacks the API `main` uses (labelled trimmed surfaces), while CI built against a
+  newer commit. The default (`NFCAD_NURBFORGE_TAG`) is now the commit CI tests; an existing build
+  directory keeps its cached value – configure it again with
+  `-DNFCAD_NURBFORGE_TAG=a35e92994ed55d5dbaba4e72f30bbdd106584d1c` or use a fresh one.
 - **Workflow: elliptical and circular light from the collimated source** – the new parameter
   *ellipticity_deg* χ of `optics.collimated_source` (−45° … 45°; 0 linear, ±45° circular) in the
   node dialog; *polarisation* is then the major axis. The rays carry the complex field through

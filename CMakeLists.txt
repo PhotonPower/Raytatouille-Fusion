@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(RaytatouilleFusion
-  VERSION 1.0.0
+  VERSION 1.1.0
   DESCRIPTION "Desktop CAD front end for the Nurbforge NURBS kernel"
   HOMEPAGE_URL "https://github.com/PhotonPower/Raytatouille-Fusion"
   LANGUAGES C CXX)
@@ -147,7 +147,32 @@ set_target_properties(RaytatouilleFusion PROPERTIES
   MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
   # Qt's template plus the document types (.rttf, .nfcad, STEP, .nfplugin): Finder opens them here
   MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/Info.plist.in")
-target_compile_definitions(nfcad_core PUBLIC NFCAD_VERSION="${PROJECT_VERSION}"
+# The commit of the build for Help → About (configure time; CMake configures again when HEAD moves)
+set(NFCAD_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+  execute_process(COMMAND "${GIT_EXECUTABLE}" describe --always --dirty --abbrev=10
+                  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE NFCAD_COMMIT
+                  OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --symbolic-full-name HEAD
+                  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE _nfcad_git_ref
+                  OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  foreach(_name HEAD ${_nfcad_git_ref})
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --git-path "${_name}"
+                    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" OUTPUT_VARIABLE _f
+                    OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_f AND NOT IS_ABSOLUTE "${_f}")
+      set(_f "${CMAKE_CURRENT_SOURCE_DIR}/${_f}")
+    endif()
+    if(_f AND EXISTS "${_f}")
+      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_f}")
+    endif()
+  endforeach()
+  if(NOT NFCAD_COMMIT)
+    set(NFCAD_COMMIT "unknown")
+  endif()
+endif()
+target_compile_definitions(nfcad_core PUBLIC NFCAD_VERSION="${PROJECT_VERSION}" NFCAD_COMMIT="${NFCAD_COMMIT}"
                            PRIVATE NFCAD_PYTHON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/python")
 
 # Trusted plugin publisher keys (keys/trusted-publishers.txt, comments removed) are compiled in.

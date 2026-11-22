@@ -655,11 +655,12 @@ void MainWindow::showAbout() {
   const bool kernel_ok = kernel::self_test();
   QMessageBox::about(
       this, tr("About Raytatouille Fusion"),
-      tr("<b>Raytatouille Fusion</b> %1<br>Desktop CAD front end for the Nurbforge NURBS kernel.<br><br>"
-         "Nurbforge kernel %2 – self-test %3<br>Qt %4")
+      tr("<b>Raytatouille Fusion</b> %1 (build %5)<br>Desktop CAD front end for the Nurbforge NURBS "
+         "kernel.<br><br>Nurbforge kernel %2 – self-test %3<br>Qt %4")
           .arg(QStringLiteral(NFCAD_VERSION),
                QString::fromStdString(kernel::nurbforge_version()),
-               kernel_ok ? tr("passed") : tr("FAILED"), QString::fromLatin1(qVersion())));
+               kernel_ok ? tr("passed") : tr("FAILED"), QString::fromLatin1(qVersion()),
+               QStringLiteral(NFCAD_COMMIT)));
 }
 
 QDockWidget* MainWindow::openDisplay(const QString& id, const QString& type, const QString& title) {
