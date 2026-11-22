@@ -143,7 +143,7 @@ jobs:
           test -s notes.md || echo "Raytatouille Fusion $version" > notes.md
           mkdir upload
           cp dist/windows-installer/*.exe upload/
-          cp dist/almalinux10-rpm/*.rpm upload/
+          find dist/almalinux10-rpm -name '*.rpm' -exec cp {} upload/ \;  # the artifact keeps RPMS/<arch>/
           cp dist/macos-dmg/RaytatouilleFusion-macos.dmg "upload/RaytatouilleFusion-$version-macos-universal.dmg"
       - name: Draft release
         env:
