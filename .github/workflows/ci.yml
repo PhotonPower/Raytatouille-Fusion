@@ -17,6 +17,7 @@ env:
   # Nurbforge is downloaded at this tag or commit (cmake/FindOrFetchNurbforge.cmake).
   # a35e929 = Nurbforge branch feature/macos (macOS < 26 support for the STEP reader);
   # switch back to a release tag once that is released.
+  # the default of NFCAD_NURBFORGE_TAG in cmake/FindOrFetchNurbforge.cmake: keep them equal
   NURBFORGE_TAG: a35e92994ed55d5dbaba4e72f30bbdd106584d1c
 
 jobs:
