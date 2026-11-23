@@ -141,7 +141,11 @@ try:
     raise AssertionError("not refused")
 except ValueError as e:
     assert "3 points" in str(e)
-import numpy as np  # noqa: E402
+try:
+    import numpy as np
+except ImportError:  # CI without numpy: the pure part only
+    print("numpy not installed: round trip only")
+    sys.exit(77)
 
 vals = np.zeros((2, 3, 3), dtype=complex)
 vals[:, :, 0] = [[1 + 1j, -2, 3], [4, 5j, np.nan]]

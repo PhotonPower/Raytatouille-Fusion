@@ -11,10 +11,9 @@ from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass
+from typing import Any
 
-import numpy as np
-
-import hpfem_job
+import hpfem_job  # numpy only inside picture() and tags(): the plugin loads without it
 
 QUANTITIES = ("E", "H", "S")
 #: what can be shown, with F for the chosen quantity: label -> (component or None, part, colormap, symmetric)
@@ -97,14 +96,16 @@ def point_job(job: dict, p: dict, index: int, xspec: list, yspec: list) -> tuple
     return out, wl, th
 
 
-def _edges(axis: np.ndarray) -> tuple[float, float]:
+def _edges(axis: Any) -> tuple[float, float]:
     if len(axis) < 2:
         return float(axis[0]) - 0.5, float(axis[0]) + 0.5
     return float(axis[0] - (axis[1] - axis[0]) / 2), float(axis[-1] + (axis[-1] - axis[-2]) / 2)
 
 
-def picture(x: np.ndarray, y: np.ndarray, values: np.ndarray, show: str) -> Picture:
+def picture(x: Any, y: Any, values: Any, show: str) -> Picture:
     """`values` (ny, nx, 3) on the axes x, y (already in the job's unit) as a picture."""
+    import numpy as np
+
     component, part, colormap, symmetric = SHOW[show]
     v = np.asarray(values)
     if part == "abs2":
@@ -154,7 +155,7 @@ def _shape_contains(shape: dict, x: float, y: float) -> bool | None:
     return None
 
 
-def tags(job: dict, xs: list[float], ys: list[float]) -> tuple[np.ndarray, list[str]]:
+def tags(job: dict, xs: list[float], ys: list[float]) -> tuple[Any, list[str]]:
     """The cell tag at every grid point (ny, nx) as hpfem.meshing.UnitCell.tag_at: the last shape
     containing it (periodically repeated), else its slab, else the background; and the shapes it
     cannot draw. Lengths in the job's unit."""
@@ -163,6 +164,8 @@ def tags(job: dict, xs: list[float], ys: list[float]) -> tuple[np.ndarray, list[
     shapes = list(model.get("shapes", []))
     unknown = [f"{i + 1} ({s.get('kind')})" for i, s in enumerate(shapes)
                if _shape_contains(s, 0.0, 0.0) is None]
+    import numpy as np
+
     left = float(model.get("x0", -period / 2))
     out = np.zeros((len(ys), len(xs)), dtype=float)
     for j, y in enumerate(ys):
