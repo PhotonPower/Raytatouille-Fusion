@@ -41,5 +41,18 @@ Actions:
   wavelength, …) with their hints go to the log; `results.json` (and the maps of *Advanced*) to
   the folder of *Results in folder of* or a temporary one.
 
-**Next steps:** field maps in the *Image* window; the block `hpfem.grating` in the node workflow
-(RTT-Fusion's adapter R9); the unit cell from CAD bodies.
+**Step 2: field maps.**
+
+- **Field map:** computes one point of the sweep (*Point of the sweep*) and shows the total – or
+  with *Scattered field only* the scattered – field on a grid in the *Image* window: E (incident
+  wave of amplitude 1 V/m), H in A/m or the Poynting vector S in W/m²; *Show* |F|², |F_x|, |F_y|,
+  |F_z| or the real or imaginary part of a component (colour scale symmetric about 0; Re S_y < 0
+  is power flowing down). The grid: x over *Periods* periods from the cell's left edge (or *x
+  from* … *to*; the field is periodic), y over the cell without the PML layers given in
+  *Solver* (or *y from* … *to*; points outside the cell stay empty). *Also write .npz*: the
+  runner's map (x, y in metres, values (ny, nx, 3)).
+- **Show cell:** the cell's tags on the same grid without solving – shapes (the last on top,
+  repeated periodically), slabs, background – with the material of every tag in the log.
+
+**Next steps:** the block `hpfem.grating` in the node workflow (RTT-Fusion's adapter R9); the
+unit cell from CAD bodies.
