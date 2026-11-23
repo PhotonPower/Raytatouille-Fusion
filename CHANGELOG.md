@@ -6,6 +6,14 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Added
+- **hp-FEM plugin** (step 1): grating jobs of hp-FEM's job runner in the panel – unit cell with
+  slabs and shapes, materials by tag, layer stack, incidence and sweep (wavelength or θ), mesh
+  (structured, Gmsh or a file) and solver; *Load job* / *Save job* (the same file again, every
+  other key kept under *Advanced*), *Check* (mesh and memory without solving) and *Solve* with
+  progress and Cancel: efficiencies per order, for a sweep ΣR, ΣT, A and the orders as curves.
+  Needs `hpfem>=0.5` in the plugin environment.
+
 ### Fixed
 - **Release drafts for tags**: the RPM lies in an architecture folder of its artifact; the release
   job now finds it (the draft of v1.1.0 was made by hand from the same artifacts).
