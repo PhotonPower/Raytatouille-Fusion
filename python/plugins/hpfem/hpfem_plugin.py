@@ -5,18 +5,22 @@ The panel holds a grating scattering job (`python -m hpfem.run`, schema version 
 solver; every other key of the file stays under *Advanced*. *Check* builds the mesh and
 estimates the memory, *Solve* runs the job with progress and Cancel (between the phases of a
 solve) and shows the efficiencies per order, for a sweep ΣR, ΣT, A and the orders as curves.
+Step 2: *Field map* computes one point of the sweep and shows E, H or the Poynting vector S on
+a grid of the cell in the Image window; *Show cell* draws the cell's tags without solving.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
 from nfcad import Param, Plugin, UserError, action
 
 import hpfem_job
+import hpfem_map
 import hpfem_results
 
 _SHAPE = {
@@ -129,6 +133,26 @@ class HpFemPlugin(Plugin):
         "min_efficiency": Param.number(0.01, min=0.0, max=1.0, decimals=4, label="Orders from efficiency",
                                        group="Results", description="a sweep shows an order if it reaches this"),
         "evanescent": Param.boolean(False, label="List evanescent orders", group="Results"),
+        "map_quantity": Param.choice(list(hpfem_map.QUANTITIES), "E", label="Field", group="Field map",
+                                     description="E (incident wave of amplitude 1 V/m), H in A/m or the Poynting "
+                                                 "vector S in W/m² (SI, as hp-FEM samples them)"),
+        "map_show": Param.choice(list(hpfem_map.SHOW), "|F|²", label="Show", group="Field map",
+                                 description="F is the chosen field; real and imaginary parts with a colour scale "
+                                             "symmetric about 0"),
+        "map_point": Param.integer(1, min=1, max=100000, label="Point of the sweep", group="Field map"),
+        "map_scattered": Param.boolean(False, label="Scattered field only", group="Field map"),
+        "map_periods": Param.integer(2, min=1, max=50, label="Periods", group="Field map",
+                                     description="x over this many periods from the cell's left edge (when x from = x to)"),
+        "map_x_from": Param.number(0.0, decimals=6, label="x from", group="Field map",
+                                   description="equal from and to: Periods periods"),
+        "map_x_to": Param.number(0.0, decimals=6, label="x to", group="Field map"),
+        "map_nx": Param.integer(201, min=2, max=4000, label="Points x", group="Field map"),
+        "map_y_from": Param.number(0.0, decimals=6, label="y from", group="Field map",
+                                   description="equal from and to: the cell without the PML layers given in Solver"),
+        "map_y_to": Param.number(0.0, decimals=6, label="y to", group="Field map"),
+        "map_ny": Param.integer(301, min=2, max=4000, label="Points y", group="Field map"),
+        "map_npz": Param.file("", filter="NumPy archive (*.npz)", save=True, label="Also write .npz",
+                              group="Field map", description="the runner's map: x, y in metres, values (ny, nx, 3)"),
         "advanced": Param.json(d["advanced"], label="Further keys (JSON)", group="Advanced",
                                description="every other key of the job file (maps, model.x0, solver tolerances, …), "
                                            "merged into the job"),
@@ -183,9 +207,10 @@ class HpFemPlugin(Plugin):
             return Path(ctx.params["results_file"]).parent
         return Path(tempfile.mkdtemp(prefix="hpfem-"))
 
-    def _run(self, ctx, job: dict, out_dir: Path | None, check_only: bool) -> dict:
+    def _run(self, ctx, job: dict, out_dir: Path | None, check_only: bool, n_points: int | None = None) -> dict:
         hp = _hp()
-        n_points = hpfem_job.points_count(ctx.params) if not check_only else 1
+        if n_points is None:
+            n_points = hpfem_job.points_count(ctx.params) if not check_only else 1
 
         def emit(event: dict) -> None:
             kind = event.get("event")
@@ -228,6 +253,67 @@ class HpFemPlugin(Plugin):
         problems = [k for k in ("tags_without_material", "materials_without_cells", "invalid_cells") if mesh.get(k)]
         return (f"{mesh.get('num_cells', '?')} cells, {hpfem_job.points_count(ctx.params)} points"
                 + (f" – check {', '.join(problems)} in the log" if problems else " – ready to solve"))
+
+    # ------------------------------------------------------------------ field map (step 2)
+    def _grid(self, ctx, job):
+        try:
+            return hpfem_map.grid(job, ctx.params)
+        except (ValueError, KeyError) as e:
+            raise UserError(f"Field map: {e}") from e
+
+    @action("Field map", description="One point of the sweep: E, H or S on a grid of the cell in the Image window")
+    def field_map(self, ctx):
+        job = self.job(ctx)
+        xspec, yspec = self._grid(ctx, job)
+        try:
+            one, wl, th = hpfem_map.point_job(job, ctx.params, int(ctx.params["map_point"]) - 1, xspec, yspec)
+        except ValueError as e:
+            raise UserError(str(e)) from e
+        out_dir = self._out_dir(ctx)
+        res = self._run(ctx, one, out_dir, check_only=False, n_points=1)
+        maps = [m for m in res.get("maps", []) if m.get("file")]
+        if not maps:
+            return "cancelled before the map"
+        import numpy as np
+
+        with np.load(maps[0]["file"]) as data:
+            unit = float(job["unit"])
+            x, y, values = data["x"] / unit, data["y"] / unit, data["values"]
+        quantity, show = ctx.params["map_quantity"], ctx.params["map_show"]
+        pic = hpfem_map.picture(x, y, values, show)
+        name = hpfem_map.label(show, quantity) + (" (scattered)" if ctx.params["map_scattered"] else "")
+        unit_name = ctx.params["unit"]
+        run = ctx.result_set(f"{job.get('name') or 'hp-FEM'}: {name}, λ = {wl:.6g} {unit_name}, θ = {th:.4g}°")
+        ctx.image(run, name, pic.values, pic.width, pic.height, extent=pic.extent, x_label=f"x / {unit_name}",
+                  y_label=f"y / {unit_name}", colormap=pic.colormap, value_range=pic.value_range,
+                  description="incident plane wave of amplitude 1 (hp-FEM); light from +y")
+        if pic.missing:
+            ctx.log(f"{pic.missing} grid points lie outside the cell (no field, shown empty)")
+        if ctx.params.get("map_npz"):
+            shutil.copyfile(maps[0]["file"], ctx.params["map_npz"])
+            ctx.log(f"map written to {Path(ctx.params['map_npz']).name}")
+        points = res.get("points", [])
+        return f"{name}: {pic.width} × {pic.height} points" + (
+            f"; {hpfem_results.summary(points[0])}" if points else "")
+
+    @action("Show cell", description="The cell's tags on the map's grid, without solving (shapes, slabs, background)")
+    def show_cell(self, ctx):
+        job = self.job(ctx)
+        xspec, yspec = self._grid(ctx, job)
+        xs = [xspec[0] + (xspec[1] - xspec[0]) * i / (xspec[2] - 1) for i in range(xspec[2])]
+        ys = [yspec[0] + (yspec[1] - yspec[0]) * j / (yspec[2] - 1) for j in range(yspec[2])]
+        grid, unknown = hpfem_map.tags(job, xs, ys)
+        pic = hpfem_map.picture(xs, ys, grid[:, :, None] + 0j, "Re Fx")
+        unit_name = ctx.params["unit"]
+        run = ctx.result_set(f"{job.get('name') or 'hp-FEM'}: cell")
+        ctx.image(run, "Tags", pic.values, pic.width, pic.height, extent=pic.extent, x_label=f"x / {unit_name}",
+                  y_label=f"y / {unit_name}", colormap="viridis", description="cell tag per point")
+        materials = job.get("materials", {})
+        for tag in sorted({int(t) for t in grid.ravel()}):
+            ctx.log(f"tag {tag}: {hpfem_job.material_text(materials.get(str(tag), '– no material –'))}")
+        if unknown:
+            ctx.log(f"warning: shapes not drawn (unknown form): {', '.join(unknown)}")
+        return f"{len(set(grid.ravel().tolist()))} tags on {len(xs)} × {len(ys)} points"
 
     @action("Solve", description="Run the job: efficiencies per order; for a sweep ΣR, ΣT, A and the orders as curves")
     def solve(self, ctx):

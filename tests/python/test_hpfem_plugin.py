@@ -12,6 +12,7 @@ sys.path.insert(0, str(root / "python"))
 sys.path.insert(0, str(root / "python" / "plugins" / "hpfem"))
 
 import hpfem_job  # noqa: E402
+import hpfem_map  # noqa: E402
 import hpfem_results  # noqa: E402
 from hpfem_plugin import HpFemPlugin  # noqa: E402
 
@@ -124,6 +125,40 @@ assert row[0] == 2 and abs(row[1] - 500.0) < 1e-9 and row[2:4] == [0.0, 0.3], ro
 assert hpfem_results.diagnostic_lines([{"severity": "warning", "text": "thin", "hint": "thicker"}]) == [
     "warning: thin – thicker"]
 
+# field maps without hpfem: grid, the job of one point, pictures, the cell's tags
+assert hpfem_map.sweep_values("400:420:3") == [400.0, 410.0, 420.0] and hpfem_map.sweep_values("5") == [5.0]
+ex = hpfem_job.EXAMPLE
+xs_, ys_ = hpfem_map.grid(ex, {"map_periods": 2, "map_nx": 5, "map_ny": 7})
+assert xs_ == [-200.0, 600.0, 5] and ys_ == [-800 + 419, 950 - 419, 7], (xs_, ys_)
+assert hpfem_map.grid(ex, {"map_x_from": -50, "map_x_to": 50, "map_y_from": 1, "map_y_to": 2})[0] == [-50, 50, 201]
+pp = {"wavelength": "400:420:3", "theta_deg": "50", "map_quantity": "S", "map_scattered": True}
+one, wl1, th1 = hpfem_map.point_job({**ex, "sweep": {"wavelength": {"start": 400, "stop": 420, "count": 3}},
+                                     "maps": [{"quantity": "H"}]}, pp, 2, xs_, ys_)
+assert (wl1, th1) == (420.0, 50.0) and "sweep" not in one and one["incidence"]["wavelength"] == 420
+assert one["maps"] == [{"quantity": "S", "x": xs_, "y": ys_, "scattered": True}]
+try:
+    hpfem_map.point_job(ex, pp, 3, xs_, ys_)
+    raise AssertionError("not refused")
+except ValueError as e:
+    assert "3 points" in str(e)
+import numpy as np  # noqa: E402
+
+vals = np.zeros((2, 3, 3), dtype=complex)
+vals[:, :, 0] = [[1 + 1j, -2, 3], [4, 5j, np.nan]]
+pic = hpfem_map.picture(np.array([0.0, 1.0, 2.0]), np.array([10.0, 20.0]), vals, "Re Fx")
+assert (pic.width, pic.height, pic.missing) == (3, 2, 1) and pic.values[:5] == [1, -2, 3, 4, 0]
+assert pic.extent == (-0.5, 2.5, 5.0, 25.0) and pic.value_range == (-4.0, 4.0) and pic.colormap == "coolwarm"
+pic = hpfem_map.picture(np.array([0.0, 1.0, 2.0]), np.array([10.0, 20.0]), vals, "|F|²")
+assert abs(pic.values[0] - 2.0) < 1e-12 and pic.value_range is None and hpfem_map.label("|F|²", "E") == "|E|²"
+grid_tags, unknown = hpfem_map.tags(ex, [0.0, 150.0, 400.0, 0.0, 0.0], [50.0, 50.0, 50.0, -100.0, 500.0])
+assert [grid_tags[k, k] for k in range(5)] == [3, 1, 3, 2, 1] and unknown == [], grid_tags
+tri = {"model": {"period": 1, "y_bottom": 0, "y_top": 1, "background_tag": 1, "slabs": [],
+                 "shapes": [{"kind": "polygon", "tag": 2, "params": {"points": [[0, 0], [0.4, 0], [0, 0.4]]}},
+                            {"kind": "ellipse", "tag": 3, "params": {"x": 0.25, "y": 0.75, "rx": 0.1, "ry": 0.1}},
+                            {"kind": "star", "tag": 4, "params": {}}]}}
+grid_tags, unknown = hpfem_map.tags(tri, [0.1, 0.3, 0.25], [0.1, 0.3, 0.75])
+assert [grid_tags[k, k] for k in range(3)] == [2, 1, 3] and unknown == ["3 (star)"], (grid_tags, unknown)
+
 # the plugin's actions with hpfem (a coarse cell: a few seconds)
 try:
     import hpfem  # noqa: F401
@@ -155,6 +190,10 @@ class Ctx:
 
     def curve(self, run, name, x=(), y=(), **k):
         self.out.setdefault("curves", {})[name] = (x, y)
+
+    def image(self, run, name, values, width, height, **k):
+        assert len(values) == width * height
+        self.out.setdefault("images", {})[name] = (values, width, height, k)
 
     def set_params(self, values):
         self.params.update(as_panel({**self.params, **values}))
@@ -197,4 +236,26 @@ with tempfile.TemporaryDirectory() as d:
     r_sum = sum(r[2] for r in rows if r[0] == "R")
     assert abs(r_sum - float(message.split()[1].rstrip(","))) < 1e-3, (rows, message)
     assert ctx.out["bars"][0][0].startswith(("R", "T"))
+    # field maps: |E|² over two periods, periodic (inside the cells: on the cell edge the normal component
+    # jumps between the elements of the two sides); the power flow S_y in the substrate points down
+    ctx.params.update({"wavelength": "400:420:2", "map_point": 2, "map_nx": 17, "map_ny": 23, "map_npz": str(Path(d) / "m.npz")})
+    message = plugin.field_map(ctx)
+    values, width, height, k = ctx.out["images"]["|E|²"]
+    assert (width, height) == (17, 23) and all(np.isfinite(values)), message
+    grid = np.array(values).reshape(height, width)
+    assert np.allclose(grid[:, 1], grid[:, 9], rtol=1e-9) and k["extent"][0] == -225.0, k["extent"]
+    assert "λ = 420" in ctx.out["run"] and (Path(d) / "m.npz").exists()
+    ctx.params.update({"map_quantity": "S", "map_show": "Re Fy", "map_y_from": -700, "map_y_to": -300, "map_npz": ""})
+    plugin.field_map(ctx)
+    values, width, height, k = ctx.out["images"]["Re Sy"]
+    assert np.mean(values) < 0 and k["value_range"][0] == -k["value_range"][1], (np.mean(values), k)
+    ctx.params["map_point"] = 3
+    try:
+        plugin.field_map(ctx)
+        raise AssertionError("not refused")
+    except Exception as e:  # noqa: BLE001
+        assert "2 points" in str(e), e
+    ctx.params.update({"map_y_from": 0, "map_y_to": 0})
+    message = plugin.show_cell(ctx)
+    assert message.startswith("3 tags") and any(line.startswith("tag 3: eps=2.25") for line in ctx.out["log"]), message
 print("hp-FEM plugin ok")

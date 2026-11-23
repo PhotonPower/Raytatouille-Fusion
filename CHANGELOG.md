@@ -13,6 +13,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   other key kept under *Advanced*), *Check* (mesh and memory without solving) and *Solve* with
   progress and Cancel: efficiencies per order, for a sweep ΣR, ΣT, A and the orders as curves.
   Needs `hpfem>=0.5` in the plugin environment.
+- **hp-FEM plugin** (step 2): *Field map* – one point of the sweep, E, H or the Poynting vector S
+  (total or scattered) on a grid over several periods in the Image window (|F|², |F_i|, Re, Im),
+  optionally as .npz; *Show cell* – the cell's tags without solving.
 
 ### Fixed
 - **Release drafts for tags**: the RPM lies in an architecture folder of its artifact; the release
