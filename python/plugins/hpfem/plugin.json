@@ -1,0 +1,9 @@
+{
+  "id": "hpfem",
+  "name": "hp-FEM",
+  "version": "0.1.0",
+  "api": 1,
+  "entry": "hpfem_plugin:HpFemPlugin",
+  "requires": ["numpy", "hpfem>=0.5"],
+  "description": "hp-FEM: adaptive hp finite elements for nano-optics – grating jobs (unit cell with slabs and shapes, materials, layer stack, incidence and sweep, mesh, solver) in the panel, run with progress and Cancel, efficiencies per order and spectra."
+}

@@ -17,14 +17,14 @@ lines, fields and images on faces, curves in a plot.
 | AlmaLinux / RHEL 10 | `raytatouille-fusion-<version>.x86_64.rpm` | `sudo dnf install ./raytatouille-fusion-*.rpm` (Qt from the distribution). |
 
 Plugins run in **your** Python environment (3.10 or newer, with numpy and the kernel packages),
-see [Plugins](#plugins). The plugins of the project (Raytracer, Workflow, FourierGrating, Path
-Tracer, Automotive Lighting) are installed with the application.
+see [Plugins](#plugins). The plugins of the project (Raytracer, Workflow, FourierGrating, hp-FEM,
+Path Tracer, Automotive Lighting) are installed with the application.
 
 **First start** – install Python once (Windows: [python.org](https://www.python.org/downloads/),
 tick *Add python.exe to PATH*; macOS: python.org or Homebrew; RHEL: `dnf install python3.12`),
 then *Plugins → Settings… → Create environment…*: it makes a venv and installs numpy and the
 kernel packages from PyPI (raytatouille, rtt-fusion, photonpower-fieldtracing, fouriergrating,
-pathtracer, with prebuilt wheels for Windows, Linux and macOS). Confirm with OK; *Check
+hpfem, pathtracer, with prebuilt wheels for Windows, Linux and macOS). Confirm with OK; *Check
 environment* should then show only ✓.
 
 ## The main window
