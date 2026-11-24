@@ -212,6 +212,14 @@ Danach bauen Sie den Workflow im Editor weiter aus: Blöcke hinzufügen, ersetze
 Parameter ändern, Äste aufnehmen. Der Workflow wird mit dem Dokument in der
 \datei{.rttf}-Datei gespeichert.
 
+\paragraph{Alte Form in ein Modell umwandeln.} Ein Workflow in der alten Form (ein Graph aus
+Sockets, Version~1, wie ihn ältere Versionen oder Skripte schreiben) kennt keine Ports, Äste und
+Gruppen: die Liste \gui{Branches} fehlt, und Baugruppen lassen sich nicht öffnen. \gui{Convert to
+model} im Workflow-Plugin wandelt ihn um; aus den Lichtwegen des Graphen werden die Äste. Gitter
+im Durchlicht, die dort mit \code{out} $\to$ \code{in} hintereinanderhängen, gehen dabei über ihren
+hinteren Port \code{back\_out} weiter (RTT-Fusion ab 0.5.1). Die Umwandlung ist ein
+Bearbeitungsschritt und lässt sich rückgängig machen.
+
 % ---------------------------------------------------------------------------
 \section{Das Fenster \enquote{Node workflow}}\label{sec:workflow-fenster}
 
@@ -228,6 +236,11 @@ Das Dock ist zweigeteilt (die Trennlinie ist verschiebbar):
         Schritten des gewählten Asts (Abschnitt~\ref{sec:workflow-aeste}). Bei Workflows in
         der alten Form fehlt dieser Teil.
 \end{itemize}
+
+Über der Zeichenfläche steht \gui{Update drawing}: Alle laufenden Plugins, die dem Workflow
+folgen, bringen ihre Darstellung sofort auf den Stand des Workflows – der Raytracer zeichnet das
+optische System als CAD-Körper –, wie sonst kurz nach jeder Änderung im Editor. Nützlich nach
+dem Öffnen eines Dokuments, dessen Workflow noch nicht gezeichnet ist.
 
 Während ein Workflow rechnet, heißt das Dock \gui{Node workflow – running}.
 

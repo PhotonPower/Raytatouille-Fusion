@@ -297,6 +297,30 @@ class WorkflowEngine(Plugin):
         except TypeError:  # RTT-Fusion before W2c
             return workflow.model_document(model, registry, None, workflow.kept_fields(wf))
 
+    # ------------------------------------------------------------------ convert
+    @action("Convert to model", description="An old socket graph (version 1, e.g. written by a script) as a "
+                                            "model: ports, connections and branches – then groups, sections "
+                                            "and the branch panel work on it")
+    def convert_to_model(self, ctx):
+        workflow, fg, _, io = _fusion()
+        wf = ctx.workflow()
+        if wf.get("model"):
+            raise UserError("The node workflow is a model already.")
+        if not wf.get("graph"):
+            raise UserError("No node workflow yet – a plugin makes one (Raytracer: Workflow from system, "
+                            "New Raytatouille system).")
+        registry, _ = workflow.registry()
+        _, providers = self._blocks(ctx, registry)
+        try:
+            model = fg.model_from_graph(io.from_dict(wf["graph"]), registry)
+        except ValueError as e:
+            raise UserError(f"This graph cannot become a model:\n{e}") from e
+        rest = {k: v for k, v in wf.items() if k != "graph"}
+        ctx.set_workflow({**rest, **self._document(workflow, model, registry, rest, providers)})
+        self._model_ids = set(model.nodes)
+        return (f"model: {len(model.nodes)} blocks, {len(model.connections)} connections, "
+                f"{len(model.branches)} branches ({', '.join(b.name for b in model.branches)})")
+
     # ------------------------------------------------------------------ check
     @action("Check workflow", description="Check the node workflow and mark problems; the plan per link")
     def check_workflow(self, ctx):

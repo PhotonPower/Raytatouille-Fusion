@@ -305,6 +305,29 @@ assert [d["code"] for d in checked["diagnostics"]] == ["check.no_evaluator"], ch
 empty = workflow_plugin._runnable_only({"types": library, "diagnostics": []}, Graph(), evaluators)
 assert not missing & {t["type"] for t in empty["types"]} and not empty["diagnostics"]
 
+# Convert to model: a version 1 graph with two transmission gratings chained out → in (as scripts
+# write it) becomes a model through the gratings' back ports (RTT-Fusion#120 and its reader)
+topology = importlib.import_module("rtt_fusion.graph.topology")
+if hasattr(topology, "_through_back_ports"):
+    g = Graph()
+    g.add(Node("src", "optics.collimated_source", params={"radius": 0.01, "rings": 2}))
+    for name, z in (("G1", 1.0), ("G2", 2.0)):
+        g.add(Node(name, "fg.grating", params={"side": "transmitted", "point": [0, 0, z],
+                                                "normal": [0, 0, -1]}))
+    g.add(Node("cam", "optics.detector", params={"point": [0, 0, 3.0], "normal": [0, 0, -1]}))
+    g.connect(("src", "out"), ("G1", "in"))
+    g.connect(("G1", "out"), ("G2", "in"))
+    g.connect(("G2", "out"), ("cam", "in"))
+    ctx = Ctx(io.to_dict(g))
+    plugin = workflow_plugin.WorkflowEngine()
+    text = plugin.convert_to_model(ctx)
+    assert "graph" not in ctx.wf and len(ctx.wf["model"]["connections"]) == 3, (text, ctx.wf.keys())
+    try:
+        plugin.convert_to_model(ctx)
+        raise AssertionError("a model converted again")
+    except workflow_plugin.UserError:
+        pass
+
 print("workflow plugin: files stored in the document, failures in the status line, R→H at the link, "
       "glass catalogues stored, kept results not computed again, blocks without evaluator not offered, "
       "spectra at the links (R→S, notes)")

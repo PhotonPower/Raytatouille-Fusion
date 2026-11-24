@@ -131,6 +131,9 @@ class MainWindow : public QMainWindow {
   void onActiveViewChanged(nfcad::viewport::Viewport* view);
   void onToolTriggered(const QString& tool_id);
   void showAbout();
+  /// Runs the actions plugins mark as following the node workflow (e.g. the Raytracer's drawing);
+  /// `forced`: also report plugins that are busy (the Update drawing button)
+  void followWorkflow(bool forced);
   void createPanels();
   void deleteSelection();
   void hideSelection();
