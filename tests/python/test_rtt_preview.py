@@ -52,6 +52,15 @@ r = rtt_preview.preview({"node": m["nodes"][0], "model": m})
 if not r.get("ok"):
     failures.append(f"source overview: {r}")
 
+# a lens behind a fold (axis along x): drawn in its x–z plane, not "nothing to draw"
+folded = copy.deepcopy(LENS)
+folded["pose"] = {"position": [{"param": "Z_L"}, 0.0, 0.0], "rotation_deg": [0.0, 90.0, 0.0]}
+m, lens = model(SYSTEM)
+lens["params"]["rtt"] = {"/root/children/0": folded}
+r = rtt_preview.preview({"node": lens, "model": m})
+if not r.get("ok") or "x–z section" not in r["drawing"]["title"] or not r["drawing"].get("items"):
+    failures.append(f"folded lens: {r.get('error') or r.get('drawing', {}).get('title')}")
+
 newer = copy.deepcopy(SYSTEM)
 newer["schema_version"] = "99.0.0"
 m, lens = model(newer)

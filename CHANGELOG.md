@@ -11,6 +11,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   e.g. written by a script) is drawn as CAD bodies again – after an edit of the workflow or with
   *Update drawing*; before, only a model (version 2) was read and such a document showed no CAD
   model at all.
+- **Raytracer overview of a block behind a fold** (a tube lens, mirror or camera along x): the
+  y–z section misses it, and a lens raised an error ("section plane is not parallel …"), so no
+  overview appeared. Such a block is drawn in its x–z section now (axes z–x, noted); an element
+  tilted against the section no longer stops the drawing.
 
 ### Changed
 - **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
