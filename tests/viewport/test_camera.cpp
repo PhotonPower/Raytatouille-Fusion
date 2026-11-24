@@ -130,6 +130,21 @@ class TestCamera : public QObject {
     QVERIFY(c.up().z() > 0.0F);
   }
 
+  void gridBeforeASmallModelIsNotClipped() {
+    // a small model far from the eye: the grid and the axes in front of it (here a point at a
+    // fifth of the distance) must stay inside the depth range, not be cut by the near plane
+    Camera c = preset_camera(ViewKind::Perspective);
+    c.setSceneRadius(1.0F);
+    const float d = (c.target() - c.eye()).length();
+    QVERIFY(d > 20.0F);
+    const QVector4D clip = c.viewProjection() * QVector4D(c.eye() + c.forward() * (0.2F * d), 1.0F);
+    QVERIFY2(clip.w() > 0.0F && clip.z() >= -clip.w() && clip.z() <= clip.w(),
+             qPrintable(QStringLiteral("z/w = %1").arg(clip.z() / clip.w())));
+    // and the model itself stays inside
+    const QVector4D model = c.viewProjection() * QVector4D(c.target(), 1.0F);
+    QVERIFY(model.z() >= -model.w() && model.z() <= model.w());
+  }
+
   void fitSphereShowsSphere() {
     Camera c = preset_camera(ViewKind::Top);
     c.setViewportSize({400, 800});  // portrait: width limits

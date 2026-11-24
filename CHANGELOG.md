@@ -12,6 +12,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   through gets the front port where the light enters and the back port where it leaves. Before,
   only the same port name or a single new port were mapped – the two-port gratings were no longer
   offered for a mirror or a section.
+- **Perspective view: grid and coordinate axes cut off in front** – the near plane sat just before
+  the model (d − 2R), and the grid and axes, which reach far beyond a small model towards the eye,
+  were clipped there visibly. It now stays within a tenth of the distance from the eye; result
+  lines (rays) count for the depth range too, so they are not cut either.
 
 ### Changed
 - **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
