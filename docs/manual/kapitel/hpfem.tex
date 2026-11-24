@@ -1,0 +1,493 @@
+% Kapitel: Das hp-FEM-Plugin (Gitter mit adaptiven hp-Finiten-Elementen)
+% Quellen: python/plugins/hpfem/ (hpfem_*.py, plugin.json, README.md), CHANGELOG.md,
+% RTT-Fusion src/rtt_fusion/graph/hpfem_grating.py, adapters/hpfem.py (Stufe R35)
+\chapter{Gitter mit hp-FEM}\label{kap:hpfem}
+\index{hp-FEM}\index{Finite Elemente}\index{Beugungsgitter}
+
+Das Plugin \plugin{hp-FEM} rechnet Beugungsgitter mit Finiten Elementen. Es verbindet \produkt{}
+mit dem Rechenkern \emph{hp-FEM}: Nédélec- und H1-Elemente beliebiger Polynomordnung $p$ auf einem
+Netz der Elementarzelle, periodische (Bloch-)Ränder links und rechts, absorbierende Schichten
+(PML) oben und unten. Anders als die Fourier-Modal-Methode von FourierGrating
+(\autoref{kap:fouriergrating}) zerlegt die Finite-Elemente-Methode die Zelle nicht in Schichten
+mit konstantem Querschnitt: Schräge Flanken, Rundungen, Einschlüsse und Metalle mit scharfen
+Kanten rechnet sie direkt auf dem Netz. Dafür kostet eine Rechnung mehr Speicher und Zeit, und
+Netz und Ordnung $p$ bestimmen die Genauigkeit.
+
+Das Plugin arbeitet mit den Aufträgen (Jobs) von hp-FEMs Job-Runner (\code{python -m hpfem.run},
+Schema-Version 1, Problem \code{grating}). Alles, was einen Job ausmacht -- Zelle, Materialien,
+Hintergrundstapel, Einfall, Netz und Löser --, steht im Panel \gui{Plugin}; ein gespeicherter Job
+rechnet auch ohne \produkt{} mit dem Runner. Die Ergebnisse erscheinen als Tabellen, Balken,
+Kurven und Bilder in den Ergebnisfenstern.
+
+Das Kapitel führt durch die Zelle und ihre Koordinaten, Materialien und Stapel, Einfall, Netz
+und Löser, dann durch die Rechnungen (Prüfen, Lösen, Feldkarten), die Zelle aus CAD-Körpern und
+das Gitter als Block im Node-Workflow. Arbeitsabläufe, typische Meldungen und Grenzen schließen
+es ab. Alle Parameter mit Standardwerten stehen im Anhang, \autoref{kap:plugin-hpfem}.
+
+\section{Überblick}\label{sec:hp-ueberblick}
+
+\subsection{Was das Plugin kann}
+
+\begin{itemize}
+  \item \textbf{Jobs laden und speichern} (\gui{Load job}, \gui{Save job}): das JSON-Format von
+    hp-FEMs Job-Runner; Laden und erneutes Speichern ergibt dieselbe Datei.
+  \item \textbf{Prüfen} (\gui{Check}): das Netz bauen und den Speicher einer Faktorisierung
+    schätzen, ohne zu lösen.
+  \item \textbf{Lösen} (\gui{Solve}): die Effizienz jeder reflektierten und transmittierten
+    Ordnung, $\Sigma R$, $\Sigma T$, die Absorption $A$ und die Energiebilanz; für einen Sweep über
+    die Wellenlänge oder den Einfallswinkel dieselben Größen als Kurven.
+  \item \textbf{Feldkarten} (\gui{Field map}): $\vec E$, $\vec H$ oder den Poynting-Vektor
+    $\vec S$ auf einem Raster über eine oder mehrere Perioden im Bildfenster.
+  \item \textbf{Zelle zeigen} (\gui{Show cell}): die Tags der Zelle als Bild, ohne zu rechnen.
+  \item \textbf{Zelle aus CAD-Körpern} (\gui{Shapes from CAD bodies}): im CAD gezeichnete Körper
+    einer Elementarzelle als Polygone der Zelle.
+  \item \textbf{Gitterblock im Node-Workflow}: \block{hpfem.grating} beugt die Strahlen eines
+    optischen Aufbaus mit hp-FEM.
+\end{itemize}
+
+\subsection{Voraussetzungen}\label{sec:hp-voraussetzungen}
+\index{hpfem (Python-Paket)}
+
+Das Plugin wird mit der Anwendung installiert (Kennung \code{hpfem}, Name \plugin{hp-FEM}). Es
+braucht in der Python-Umgebung der Plugins \code{numpy} und \code{hpfem} in Version 0.5 oder neuer
+(\code{pip install hpfem}; Wheels gibt es für Linux x86\_64, Windows x86\_64 und macOS arm64 ab
+macOS~15, sonst wird aus den Quellen gebaut). Fehlt \code{hpfem}, meldet jede rechnende Aktion:
+
+\begin{lstlisting}
+The hp-FEM plugin needs the Python package hpfem (>= 0.5) in the plugin environment
+(pip install hpfem).
+\end{lstlisting}
+
+Laden und Speichern von Jobs, das Bearbeiten im Panel und die beiden Blockaktionen
+funktionieren ohne das Paket. Drei Funktionen haben weitere Voraussetzungen:
+
+\begin{itemize}
+  \item Das Netz \gui{gmsh} braucht das Python-Paket \code{gmsh}.
+  \item \gui{Shapes from CAD bodies} braucht Nurbforges Python-Paket \code{nurbforge} ab
+    Version~0.7 (ebene Schnitte geschlossener Körper).
+  \item Den Block \block{hpfem.grating} bietet das Plugin nur an, wenn \code{rtt-fusion} ab
+    Version~0.5 installiert ist (Modul \code{rtt\_fusion.graph.hpfem\_grating}).
+\end{itemize}
+
+\subsection{Wo Sie das Plugin finden}
+
+Wie jedes Plugin: im Menü \menu{Plugins,hp-FEM}, als eigene Gruppe in der Werkzeugspalte und im
+Dock \gui{Plugin} (oben \gui{hp-FEM} wählen). Die zwei Aktionen für Gitterblöcke stehen nur im
+Kontextmenü eines Blocks \block{hpfem.grating} im Node-Editor (\autoref{sec:hp-block}). Die
+Parameter werden mit dem Dokument gespeichert.
+
+\subsection{Aufbau des Panels}\label{sec:hp-panel}
+
+Ganz oben steht ohne Rahmen die Liste \gui{Shapes (the last on top)}, darunter die Gruppen:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}X}
+\toprule
+Gruppe & Inhalt \\
+\midrule
+\endhead
+\gui{File} & \gui{Job}, \gui{Save as}, \gui{Results in folder of} \\
+\gui{Structure} & \gui{Name}, \gui{Unit}, \gui{Period}, \gui{Cell bottom y}, \gui{Cell top y},
+  \gui{Background tag}, \gui{Slabs (full period)} \\
+\gui{Materials} & \gui{Materials by tag} \\
+\gui{Stack} & \gui{Incidence medium (above)}, \gui{Substrate (below)}, \gui{Background layers (top
+  down)}, \gui{Top interface y} \\
+\gui{Incidence} & \gui{Polarisation}, \gui{Wavelength}, \gui{$\theta$ / deg}, \gui{$\varphi$ / deg} \\
+\gui{Mesh} & \gui{Mesh}, \gui{Columns (structured)}, \gui{Row bands (structured, bottom up)},
+  \gui{Interface factor (gmsh)}, \gui{Mesh file (file)}, \gui{Scale to metres (file)} \\
+\gui{Solver} & \gui{Polynomial order p}, \gui{PML top}, \gui{PML bottom}, \gui{Bottom},
+  \gui{Orders up to |m|}, \gui{Diagnostics before solving} \\
+\gui{Results} & \gui{Orders from efficiency}, \gui{List evanescent orders} \\
+\gui{Field map} & \gui{Field}, \gui{Show}, \gui{Point of the sweep}, \gui{Scattered field only},
+  \gui{Periods}, \gui{x from}/\gui{x to}, \gui{Points x}, \gui{y from}/\gui{y to}, \gui{Points y},
+  \gui{Also write .npz} \\
+\gui{CAD cell} & \gui{Bodies}, \gui{Bodies drawn in}, \gui{Section at CAD y}, \gui{Points per
+  curved edge}, \gui{Shapes} \\
+\gui{Advanced} & \gui{Further keys (JSON)} \\
+\bottomrule
+\end{referenz}
+
+Der Standard ist das Beispiel des Runners: ein dielektrischer Steg ($\varepsilon = 2{,}25$,
+200\,nm breit, 148\,nm hoch) auf SiO$_2$, Periode 400\,nm, p-polarisiert unter $\theta = 50°$,
+$\varphi = 30°$ bei 400\,nm.
+
+% ---------------------------------------------------------------------------------------------
+\section{Die Zelle}\label{sec:hp-zelle}
+
+\subsection{Koordinaten und Einheit}\label{sec:hp-koordinaten}
+\index{hp-FEM!Koordinaten}
+
+hp-FEM rechnet ein Liniengitter in einer zweidimensionalen Zelle:
+
+\begin{itemize}
+  \item $x$ läuft entlang der Periode, die Zelle ist \gui{Period} breit; ohne weitere Angabe reicht
+    sie von $-\Lambda/2$ bis $\Lambda/2$ (ein anderer linker Rand: \code{model.x0} unter
+    \gui{Advanced}).
+  \item $y$ ist die Normale des Stapels; das Licht kommt von $+y$, also von oben. Die Zelle reicht
+    von \gui{Cell bottom y} bis \gui{Cell top y}. Die PML-Schichten liegen \emph{innerhalb} dieser
+    Grenzen.
+  \item $z$ läuft entlang der Linien; in $z$ ist das Gitter unendlich und gleichförmig.
+\end{itemize}
+
+Alle Längen und die Wellenlänge stehen in der \gui{Unit} der Gruppe \gui{Structure} (nm, µm, mm
+oder m).
+
+\subsection{Tags, Schichten und Formen}
+\index{Tag (hp-FEM)}
+
+Jeder Punkt der Zelle hat einen \emph{Tag}, eine ganze Zahl, die über \gui{Materials by tag} sein
+Material bestimmt. Welcher Tag gilt, entscheidet diese Reihenfolge:
+
+\begin{enumerate}
+  \item die letzte Form der Liste \gui{Shapes (the last on top)}, die den Punkt enthält -- Formen
+    wiederholen sich periodisch;
+  \item sonst die Schicht aus \gui{Slabs (full period)}, in deren $y$-Bereich (\gui{y0} bis
+    \gui{y1}) er liegt -- Schichten reichen über die ganze Periode;
+  \item sonst der \gui{Background tag}.
+\end{enumerate}
+
+Formen gibt es in fünf Typen: \code{rectangle} (linke untere Ecke \gui{x}, \gui{y}, \gui{width},
+\gui{height}), \code{trapezoid} (Mitte \gui{x}, Basis \gui{y}, \gui{bottom}, \gui{top},
+\gui{height}), \code{ellipse} (Mitte \gui{x}, \gui{y}, Halbachsen \gui{rx}, \gui{ry}),
+\code{polygon} (\gui{Points (polygon)} gegen den Uhrzeigersinn) und \code{json} für jede andere
+Form des Job-Formats. \gui{Show cell} zeigt das Ergebnis, bevor Sie rechnen
+(\autoref{sec:hp-showcell}).
+
+\subsection{Materialien}\label{sec:hp-materialien}
+\index{hp-FEM!Materialien}
+
+Ein Material schreiben Sie als eine Zeile Text:
+
+\begin{referenz}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}X}
+\toprule
+Eingabe & Bedeutung \\
+\midrule
+\endhead
+\code{SiO2}, \code{Au}, \code{air} & ein Material aus hp-FEMs Bibliothek (dispersiv, für jede
+  Wellenlänge ausgewertet; \gui{Library materials} listet sie im Log: Ag, Al, Al2O3, Au, Cr, GaAs,
+  MAPbI3, Si, SiO2, Ti, TiO2, air, vacuum, water) \\
+\code{1.5}, \code{3.88+0.02i} & Brechzahl $n$ bzw.\ $n + \mathrm i k$, unabhängig von der
+  Wellenlänge \\
+\code{eps=2.25}, \code{eps=-10+1.2i} & Permittivität $\varepsilon$ \\
+\code{\{...\}} & jede andere Form des Job-Formats als JSON \\
+\bottomrule
+\end{referenz}
+
+Bibliotheksmaterialien gelten nur in ihrem Wellenlängenbereich; außerhalb bricht die Rechnung mit
+einer Meldung wie \enquote{TiO2: wavelength 0.4-0.4 um outside the range of validity 0.43-1.53 um}
+ab.
+
+\subsection{Der Hintergrundstapel}
+
+Oberhalb und unterhalb der Formen sieht hp-FEM einen ebenen Schichtstapel: das
+\gui{Incidence medium (above)}, die \gui{Background layers (top down)} mit ihren Dicken, das
+\gui{Substrate (below)}; die oberste Grenzfläche liegt bei \gui{Top interface y}. Der Stapel
+beschreibt die einfallende Welle und das Feld ohne Gitter; die Formen und Schichten der Zelle
+sind die Störung darin. Er muss deshalb zu den Schichten der Zelle passen -- im Beispiel Luft über
+SiO$_2$ mit der Grenzfläche bei $y = 0$, wo auch die SiO$_2$-Schicht der Zelle endet. Das
+Einfallsmedium muss verlustfrei sein.
+
+% ---------------------------------------------------------------------------------------------
+\section{Einfall, Netz und Löser}\label{sec:hp-einfall}
+
+\subsection{Einfall und Sweep}\label{sec:hp-sweep}
+
+\gui{Polarisation} \code{s} ist bei $\varphi = 0$ das Feld $E_z$ entlang der Linien (TE),
+\code{p} das Feld $H_z$ (TM). \gui{$\theta$ / deg} ist der Polarwinkel gegen die Normale,
+\gui{$\varphi$ / deg} der Azimut; $\varphi \neq 0$ ist konischer Einfall.
+
+\gui{Wavelength} und \gui{$\theta$ / deg} nehmen eine Zahl (\code{400}), eine Liste
+(\code{400, 410, 425}) oder einen Bereich \code{Start:Stopp:Anzahl} (\code{400:700:31}). Eine
+Liste oder ein Bereich ist ein \emph{Sweep}; Sie können die Wellenlänge oder $\theta$
+durchfahren, nicht beide zugleich.
+
+\subsection{Das Netz}\label{sec:hp-netz}
+\index{hp-FEM!Netz}
+
+\begin{description}
+  \item[\code{structured}] Spalten mal Zeilenbänder, ohne Gmsh: \gui{Columns (structured)} gleich
+    breite Spalten über die Periode und je Band in \gui{Row bands (structured, bottom up)} von
+    \gui{y0} bis \gui{y1} \gui{rows} Zeilen. Jedes Element bekommt den Tag an seiner Mitte; legen
+    Sie Grenzflächen und Kanten der Formen auf Gitterlinien. Für Rechtecke ist das exakt und
+    schnell.
+  \item[\code{gmsh}] ein Dreiecksnetz, dessen Elementgrößen hp-FEM aus der Wellenlänge im Material
+    und der Ordnung $p$ wählt; an Grenzflächen verfeinert \gui{Interface factor (gmsh)}. Richtig
+    für schräge und runde Formen. Braucht das Paket \code{gmsh}.
+  \item[\code{file}] ein periodisches Gmsh-Netz (\datei{.msh}) aus einer Datei; \gui{Scale to
+    metres (file)} rechnet seine Koordinaten in Meter um. Ein relativer Pfad gilt relativ zur
+    Job-Datei.
+\end{description}
+
+\subsection{Der Löser}\label{sec:hp-loeser}
+
+\begin{description}
+  \item[\gui{Polynomial order p}] Ordnung der Elemente; höher ist genauer und teurer. Sind die
+    Elemente für die Wellenlänge im Material zu grob, sagt es die Diagnose im Log.
+  \item[\gui{PML top}, \gui{PML bottom}] Dicke der absorbierenden Schichten innerhalb der Zelle;
+    beide 0: hp-FEMs Empfehlung.
+  \item[\gui{Bottom}] \code{pml} (offenes Substrat), \code{pec} (Metallwand, keine transmittierten
+    Ordnungen) oder \code{modal} (modaler Abschluss, für Substrate, in denen eine Ordnung rückwärts
+    läuft).
+  \item[\gui{Orders up to |m|}] die Ordnungen $-m \ldots m$, die ausgewertet werden.
+  \item[\gui{Diagnostics before solving}] hp-FEMs Prüfungen (Elemente je Wellenlänge, PML, Lage der
+    Auswertelinien) mit Hinweisen im Log.
+\end{description}
+
+\begin{hinweis}
+Die Genauigkeit hängt an Netz und Ordnung. Rechnen Sie einen Punkt mit $p$ und $p+1$ (oder einem
+feineren Netz): Ändern sich die Effizienzen kaum, ist die Lösung konvergiert. Die Energiebilanz
+(\code{balance}) eines verlustfreien Gitters ist ein zweiter Anhalt.
+\end{hinweis}
+
+% ---------------------------------------------------------------------------------------------
+\section{Rechnen}\label{sec:hp-rechnen}
+
+\subsection{Prüfen: Check}\label{sec:hp-check}
+
+\gui{Check} baut das Netz und schätzt den Speicher einer Faktorisierung, ohne zu lösen. Im Log
+stehen das Netz (Zellen, Knoten, Tags ohne Material, Materialien ohne Zellen, ungültige Zellen)
+und die Schätzung; braucht eine Faktorisierung mehr als 70\,\% des Arbeitsspeichers, warnt eine
+Zeile \enquote{warning: one factorisation needs about … GiB}. Die Statusleiste meldet die Zahl der
+Zellen und Punkte und \enquote{ready to solve} -- oder, was im Log zu prüfen ist.
+
+\subsection{Lösen: Solve}\label{sec:hp-solve}
+
+\gui{Solve} rechnet den Job. Der Fortschrittsbalken zeigt Punkt und Phase (Assemblieren,
+Faktorisieren, Lösen); \gui{Cancel} hält zwischen den Phasen an. Je Punkt steht eine Zeile im Log.
+
+\begin{itemize}
+  \item \textbf{Ein Punkt}: Ergebnissatz \enquote{\textit{Name}: $\lambda$ = …, $\theta$ = …°} mit der Tabelle
+    \gui{Orders} (Spalten \code{side}, \code{m}, \code{efficiency}, \code{propagating}) und den
+    Balken \gui{Efficiency per order}; die Statusleiste zeigt $\Sigma R$, $\Sigma T$, $A$ und die
+    Bilanz. \gui{List evanescent orders} nimmt die abklingenden Ordnungen in die Tabelle auf.
+  \item \textbf{Ein Sweep}: die Kurven $\Sigma R$, $\Sigma T$, $A$ und jede Ordnung
+    (\enquote{R~1}, \enquote{T~0}, …), die irgendwo \gui{Orders from efficiency} erreicht, über
+    $\lambda$ oder $\theta$, dazu die Tabelle \gui{Points} (Punkt, $\lambda$, $\theta$, R, T, A,
+    Bilanz, Freiheitsgrade, Sekunden).
+\end{itemize}
+
+Die Datei \datei{results.json} des Runners landet im Ordner von \gui{Results in folder of} oder
+in einem temporären Ordner; der Pfad steht im Log.
+
+\subsection{Feldkarten: Field map}\label{sec:hp-feldkarte}
+\index{hp-FEM!Feldkarte}
+
+\gui{Field map} rechnet einen Punkt des Sweeps (\gui{Point of the sweep}, von 1 an gezählt) und
+zeigt ein Feld auf einem Raster im Fenster \gui{Image}:
+
+\begin{itemize}
+  \item \gui{Field}: \code{E} (einfallende Welle mit 1\,V/m), \code{H} in A/m oder der
+    Poynting-Vektor \code{S} in W/m²; mit \gui{Scattered field only} nur das Streufeld.
+  \item \gui{Show}: $|F|^2$, die Beträge $|F_x|$, $|F_y|$, $|F_z|$ oder Real- und Imaginärteil einer
+    Komponente (Farbskala symmetrisch um 0). $\mathrm{Re}\,S_y < 0$ ist Leistung, die nach unten
+    fließt.
+  \item Das Raster: in $x$ über \gui{Periods} Perioden vom linken Zellrand (oder von \gui{x from}
+    bis \gui{x to}), in $y$ über die Zelle ohne die PML-Schichten des Lösers (oder von \gui{y from}
+    bis \gui{y to}); \gui{Points x}, \gui{Points y} Punkte. Punkte außerhalb der Zelle bleiben leer.
+  \item \gui{Also write .npz} speichert die Karte des Runners (\code{x}, \code{y} in Metern,
+    \code{values} der Form $(n_y, n_x, 3)$).
+\end{itemize}
+
+\subsection{Die Zelle ansehen: Show cell}\label{sec:hp-showcell}
+
+\gui{Show cell} zeichnet die Tags der Zelle auf demselben Raster wie die Feldkarte, ohne zu
+rechnen, und schreibt das Material jedes Tags ins Log. Formen, die es nicht zeichnen kann
+(JSON-Formen eines unbekannten Typs), nennt eine Warnung.
+
+% ---------------------------------------------------------------------------------------------
+\section{Jobs als Dateien}\label{sec:hp-dateien}
+
+\gui{Load job} liest die Datei aus \gui{Job} ins Panel, \gui{Save job} schreibt das Panel nach
+\gui{Save as} (oder, wenn leer, nach \gui{Job}). Was das Panel nicht zeigt -- zum Beispiel
+Feldkarten des Runners, \code{model.x0} oder Toleranzen des Lösers --, steht unter \gui{Advanced}
+als JSON und wird beim Speichern wieder eingefügt. Ein gespeicherter Job rechnet mit
+
+\begin{lstlisting}
+python -m hpfem.run job.json --out ergebnisse
+\end{lstlisting}
+
+% ---------------------------------------------------------------------------------------------
+\section{Die Zelle aus CAD-Körpern}\label{sec:hp-cad}
+\index{hp-FEM!CAD-Körper}
+
+Eine Zelle mit schrägen Flanken, Rundungen oder Löchern zeichnen Sie bequemer im CAD als in der
+Liste der Formen. \gui{Shapes from CAD bodies} schneidet die gewählten Körper quer zu den Linien
+und macht aus jedem Schnitt Polygone der Zelle.
+
+\subsection{Die Körper zeichnen}
+
+\begin{itemize}
+  \item Die Linien laufen entlang CAD~$+Y$, die Normale des Stapels entlang CAD~$+Z$ (Licht von
+    oben). Das $x$ des Jobs ist CAD~$x$, sein $y$ ist CAD~$z$.
+  \item Zeichnen Sie geschlossene Körper (Schalen) einer Periode, in $y$ lang genug, dass die
+    Schnittebene sie trifft.
+  \item \gui{Bodies drawn in} sagt, was eine CAD-Längeneinheit ist (nm, µm oder mm); sie wird in
+    die \gui{Unit} des Jobs umgerechnet.
+  \item Das Material eines Körpers ist sein Attribut \code{material} (jede Form aus
+    \autoref{sec:hp-materialien}) oder, ohne Attribut, sein Name, wenn er ein Material des Panels
+    oder der Bibliothek ist.
+\end{itemize}
+
+\subsection{Die Formen anlegen}
+
+Wählen Sie die Körper im Modell, übernehmen Sie sie in \gui{Bodies} und starten Sie
+\gui{Shapes from CAD bodies}:
+
+\begin{itemize}
+  \item Nurbforge schneidet jeden Körper exakt mit der Ebene CAD $y$ = \gui{Section at CAD y}.
+    Gerade Kanten des Schnitts behalten ihre Endpunkte, gekrümmte bekommen \gui{Points per curved
+    edge} Punkte.
+  \item Jede Schleife wird ein Polygon gegen den Uhrzeigersinn. Eine Schleife innerhalb einer
+    anderen desselben Körpers ist ein Loch: Es wird ein Polygon obendrauf mit dem Tag, der dort
+    ohne den Körper gilt (Schicht oder Hintergrund).
+  \item Körper desselben Materials teilen sich einen Tag (verglichen wird der Wert:
+    \code{eps=2.25} ist dasselbe wie \code{eps=2.25+0i}); ein neues Material bekommt den nächsten
+    freien Tag in \gui{Materials by tag}.
+  \item \gui{Shapes} ersetzt die Formen des Panels (\code{replace shapes}) oder legt die Körper
+    obendrauf (\code{add shapes}).
+\end{itemize}
+
+Das Log nennt den Bereich der Körper, Körper, die die Ebene verfehlen, und Körper, die die Zelle
+verlassen -- Periode, Zellgrenzen und Stapel bleiben die des Panels. Mit dem strukturierten Netz
+bekommt jedes Element den Tag an seiner Mitte; für schräge oder runde Körper wählen Sie
+\gui{Mesh} \code{gmsh}.
+
+% ---------------------------------------------------------------------------------------------
+\section{Das Gitter als Block im Workflow}\label{sec:hp-block}
+\index{hpfem.grating@\texttt{hpfem.grating} (Block)}
+
+Im Node-Workflow (\autoref{kap:workflow}) liefert das Plugin den Block \block{hpfem.grating}: eine
+periodische Probe, die jede gewünschte Beugungsordnung als eigenen Kanal weitergibt -- wie
+\block{fg.grating} von FourierGrating (\autoref{sec:fg-block}), aber mit hp-FEM gerechnet. Er hat
+die Anschlüsse eines Spiegels (\code{in}, \code{out} \enquote{orders}); \gui{Replace with} (\autoref{sec:workflow-ersetzen})
+behält deshalb die Verbindungen. Die Workflow-Engine schickt seine Auswertung an den Prozess des
+hp-FEM-Plugins.
+
+\subsection{Der Job des Blocks}
+
+Das Gitter des Blocks ist ein hp-FEM-Job ohne Einfall, Sweep und Feldkarten; den Einfall setzen
+die Strahlen, die am Block ankommen. Der Block hält den Job selbst (Parameter \param{job\_data}),
+ein \datei{.rttf}-Dokument rechnet damit auf jedem Rechner; eine Netzdatei (\gui{Mesh}
+\code{file}) bleibt allerdings außerhalb des Dokuments. Zwischen Panel und Block wechseln Sie im
+\textbf{Kontextmenü des Blocks} im Node-Editor:
+
+\begin{description}
+  \item[\gui{Store job in block}] Der Job des Panels wird der des Blocks. Einfall, Sweep und Karten
+    fallen weg (das Log sagt es), ein relativer Netzpfad wird absolut. Die Statusleiste meldet die
+    Zahl der Materialien und Formen.
+  \item[\gui{Load block job into panel}] zeigt den Job des Blocks im Panel zum Bearbeiten, Prüfen
+    oder Lösen; Einfall und Sweep bleiben die des Panels. \gui{Job} wird geleert, damit
+    \gui{Save job} keine fremde Datei überschreibt.
+\end{description}
+
+Im Dialog des Blocks stehen danach die wichtigsten Zahlen des Jobs als Felder: \gui{Period}
+(Gruppe \gui{Grating}), \gui{Polynomial order} (\gui{Solver}) und je Material, das als $n$ oder
+$n, k$ gegeben ist, \gui{Tag $t$: n} bzw.\ \gui{Tag $t$: n, k} (\gui{Materials}).
+
+\subsection{Lage und Ordnungen}
+
+Das $x$ des Jobs ist der \param{grating\_vector} des Blocks, sein $z$ die Linien, sein $y$ die
+\param{normal}. Das $x = 0$ des Jobs liegt im \param{point} des Blocks, und dieser Punkt ist die
+Oberkante der Struktur: der höchste Punkt der Formen und des Stapels. \param{side} wählt die
+reflektierten oder die transmittierten Ordnungen, \param{orders} welche (leer: $-1$, 0, 1).
+
+\subsection{Wie der Block rechnet}
+
+Um die Strahlen einer Wellenlänge baut der Block eine Tabelle der Jones-Matrizen jeder Ordnung
+(wie \block{fg.grating}, \autoref{sec:fg-block}):
+
+\begin{itemize}
+  \item Kollimiertes Licht (eine Richtung) rechnet er genau dort: eine hp-FEM-Rechnung mit zwei
+    Lösungen je Richtung.
+  \item Für einen Kegel von Richtungen legt er Stützstellen im Abstand \gui{$\sigma$ step of the
+    table} über den Bereich der Richtungskosinus $\sigma = n \sin\theta$ plus \gui{$\sigma$ margin
+    of the table}; je Stützstelle zwei Lösungen. Würden es mehr als \gui{Most table nodes} (400),
+    bricht der Block mit einer Meldung ab, bevor hp-FEM rechnet.
+  \item Tabellen und vorbereitete Zellen bleiben erhalten, solange das Plugin läuft; ein zweiter
+    Lauf mit demselben Licht rechnet nicht neu.
+\end{itemize}
+
+Der Block rechnet in Strahlen; Felder und Spektren, die ihn erreichen, wandelt die Workflow-Engine
+vorher in Strahlen um.
+
+% ---------------------------------------------------------------------------------------------
+\section{Arbeitsabläufe Schritt für Schritt}\label{sec:hp-ablaeufe}
+
+\subsection{Die erste Rechnung}
+
+\begin{enumerate}
+  \item Wählen Sie im Dock \gui{Plugin} \gui{hp-FEM}. Das Panel zeigt das Beispiel des Runners.
+  \item \gui{Show cell}: Das Bild zeigt den Steg (Tag 3) auf SiO$_2$ (Tag 2) unter Luft (Tag 1).
+  \item \gui{Check}: Im Log stehen Netz und Speicherschätzung; die Statusleiste meldet
+    \enquote{ready to solve}.
+  \item \gui{Solve}: Die Tabelle \gui{Orders} zeigt die Effizienzen; $\Sigma R + \Sigma T$ ist
+    bis auf die Bilanz 1.
+\end{enumerate}
+
+\subsection{Ein Spektrum}
+
+Setzen Sie \gui{Wavelength} auf \code{400:700:31} und starten Sie \gui{Solve}. Die Kurven zeigen
+$\Sigma R$, $\Sigma T$ und jede Ordnung, die 1\,\% erreicht, über $\lambda$; die Tabelle
+\gui{Points} hat eine Zeile je Wellenlänge. Mit \gui{Cancel} behalten Sie die bis dahin
+gerechneten Punkte.
+
+\subsection{Das Feld am Steg}
+
+Setzen Sie \gui{Point of the sweep} auf einen Punkt des Spektrums, \gui{Field} \code{E},
+\gui{Show} $|F|^2$ und starten Sie \gui{Field map}. Mit \gui{Field} \code{S} und \gui{Show}
+\code{Re Fy} sehen Sie, wohin die Leistung fließt.
+
+\subsection{Eine Zelle aus dem CAD}
+
+\begin{enumerate}
+  \item Zeichnen Sie einen Körper einer Periode mit den Linien entlang CAD~$+Y$ -- etwa einen
+    Zylinder mit der Achse in $Y$ als runden Draht -- und geben Sie ihm das Attribut
+    \code{material} (z.\,B.\ \code{Au}).
+  \item Wählen Sie ihn, übernehmen Sie ihn in \gui{CAD cell} $\to$ \gui{Bodies}, setzen Sie
+    \gui{Bodies drawn in} und \gui{Section at CAD y}.
+  \item \gui{Shapes from CAD bodies}, dann \gui{Show cell}. Stellen Sie \gui{Mesh} auf \code{gmsh}
+    und rechnen Sie.
+\end{enumerate}
+
+\subsection{Ein hp-FEM-Gitter im Linnik}
+
+\begin{enumerate}
+  \item Ersetzen Sie im Node-Workflow den Probenspiegel durch einen Block \block{hpfem.grating}
+    (\gui{Replace with}).
+  \item Stellen Sie das Gitter im Panel ein und prüfen Sie es mit \gui{Solve}.
+  \item \maus{Rechtsklick} auf den Block $\to$ \gui{Store job in block}.
+  \item Setzen Sie im Dialog des Blocks \param{side} \code{reflected} und die gewünschten
+    \param{orders}; \gui{Run workflow}.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------------------------
+\section{Typische Meldungen}\label{sec:hp-fehler}
+
+\begin{description}
+  \item[\enquote{The panel does not give a valid job: …}] Eine Eingabe passt nicht, z.\,B.\ ein
+    Polygon mit weniger als drei Punkten, Wellenlänge und $\theta$ zugleich als Sweep oder ein
+    Material wie \code{eps=x}.
+  \item[\enquote{hp-FEM: …}] eine Meldung des Rechenkerns, etwa ein unbekanntes Material, eine
+    Wellenlänge außerhalb des Gültigkeitsbereichs eines Bibliotheksmaterials oder PML-Dicken, die
+    nicht in die Zelle passen.
+  \item[\enquote{tags without material} im Log] Ein Tag der Zelle hat keine Zeile in
+    \gui{Materials by tag}.
+  \item[\enquote{warning: one factorisation needs about … GiB}] Die Rechnung passt kaum in den
+    Speicher: Ordnung oder Netz verkleinern.
+  \item[\enquote{body … has no material}] Ein CAD-Körper hat weder das Attribut \code{material}
+    noch einen Namen, der ein Material ist.
+  \item[\enquote{… table nodes (2 hp-FEM solves each) are more than …}] Das Strahlenbündel am
+    Gitterblock ist zu breit für die Tabelle: \gui{$\sigma$ step of the table} oder \gui{Most table
+    nodes} erhöhen.
+\end{description}
+
+\section{Grenzen}\label{sec:hp-grenzen}
+
+\begin{itemize}
+  \item Das Plugin rechnet Liniengitter (2D-Zelle, auch konischer Einfall), keine Kreuzgitter.
+  \item Das Panel zeigt Jobs der Aufgabe \code{scattering}; andere Aufgaben des Runners (Resonanzen,
+    Bänder, Emitter, Studien) laufen nur mit dem Runner selbst.
+  \item Konvergenz in Netz und Ordnung prüft das Plugin nicht; das ist Sache der Rechnung
+    (\autoref{sec:hp-loeser}).
+  \item Der Gitterblock rechnet Strahlen einer Wellenlänge je Tabelle; ein Feld oder Spektrum wird
+    vorher zu Strahlen.
+\end{itemize}

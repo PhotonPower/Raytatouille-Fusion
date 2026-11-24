@@ -811,6 +811,7 @@ Programmordner und werden ohne Signaturprüfung geladen, weil sie Teil der Insta
   \code{raytatouille>=0.9} \\
 \plugin{FourierGrating} & \code{fg} & 0.1.0 & \code{numpy}, \code{scipy},
   \code{fouriergrating>=0.18} \\
+\plugin{hp-FEM} & \code{hpfem} & 0.4.0 & \code{numpy}, \code{hpfem>=0.5} \\
 \plugin{Path Tracer} & \code{pathtracer} & 0.1.0 & \code{numpy}, \code{pathtracer>=0.3} \\
 \plugin{Automotive Lighting} & \code{al} & 0.22.0 & \code{numpy}, \code{pathtracer>=0.3} \\
 \bottomrule
@@ -841,6 +842,14 @@ Winkel oder Polarisation als Kurven, \gui{Near field} das Feld im Gitter als Bil
 kommen das Laden und Speichern von Konfigurationen, Schichten aus CAD-Körpern und die Blöcke
 \code{fg.grating} und \code{fg.stack} für den Node-Workflow. Kapitel~\ref{kap:fouriergrating},
 Anhang~\ref{kap:plugin-fouriergrating}.
+
+\paragraph{hp-FEM.} Beugungsgitter mit adaptiven hp-Finiten-Elementen. Im Panel beschreiben
+Sie die Zelle (Schichten und Formen mit Tags), Materialien, Hintergrundstapel, Einfall, Netz und
+Löser eines Jobs von hp-FEMs Job-Runner; \gui{Check} baut das Netz und schätzt den Speicher,
+\gui{Solve} zeigt die Effizienzen je Ordnung oder über einen Sweep als Kurven, \gui{Field map}
+$\vec E$, $\vec H$ oder $\vec S$ als Bild. Dazu kommen die Zelle aus CAD-Körpern und der Block
+\code{hpfem.grating} für den Node-Workflow. Kapitel~\ref{kap:hpfem},
+Anhang~\ref{kap:plugin-hpfem}.
 
 \paragraph{Path Tracer.} Lichttransport direkt auf dem CAD-Modell: Objekte werden zu
 Lichtquellen, die übrigen bekommen Materialien (diffus, Spiegel, glänzend, Glas, Metall,

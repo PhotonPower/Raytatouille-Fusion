@@ -2,7 +2,7 @@
 
 Dieser Anhang beschreibt alle Blocktypen, die der Node-Workflow (Kapitel~\ref{kap:workflow})
 in der vorliegenden Version kennt: die eingebauten Typen der Workflow-Maschine (RTT-Fusion) und die
-Typen, die die Plugins \plugin{Raytracer} und \plugin{FourierGrating} liefern. Die Angaben stammen
+Typen, die die Plugins \plugin{Raytracer}, \plugin{FourierGrating} und \plugin{hp-FEM} liefern. Die Angaben stammen
 aus der Blockbibliothek, die die Workflow-Maschine dem Editor übergibt; im Editor finden Sie
 die Typen unter \gui{Add block}, geordnet nach Kategorie -- dort aber nur die, die Ihre
 Installation rechnen kann (Abschnitt~\ref{sec:bloecke-auswertung}).
@@ -92,6 +92,7 @@ Dialog nicht direkt zeigt.
 \block{optics.beam\_splitter} & splitter & Workflow & ebener Strahlteiler \\
 \block{optics.splitter} & splitter & Workflow & Teiler mit vier Ports \\
 \block{fg.grating} & splitter & FourierGrating & Gitter \\
+\block{hpfem.grating} & splitter & hp-FEM & Gitter (hp-FEM) \\
 \block{rtt.detector} & detector & Raytracer & Detektor eines Systems \\
 \block{rtt.part.detector} & detector & Raytracer & neuer Detektor \\
 \block{optics.detector} & detector & Workflow & ebener Detektor \\
@@ -623,6 +624,43 @@ einer Log-Zeile verworfen.
 \param{field\_\allowbreak{}transfer} & Auswahl & \code{exact} & \code{exact}, \code{interpolated} & \code{exact}: FourierGrating je ebener Welle; \code{interpolated}: aus einem geprüften Teilraster des Spektrums ($10^{-8}$), viel schneller für breite Bündel. \\
 \param{field\_\allowbreak{}threshold} & Zahl & $10^{-10}$ & -- & Ebene Wellen unter diesem Anteil der größten Amplitude werden weggelassen (H). \\
 \param{field\_\allowbreak{}grid\_\allowbreak{}max} & Ganzzahl & \code{1024} & -- & Höchstens so viele Gitterpunkte je Achse für ein Feld (H). \\
+\bottomrule
+\end{referenz}
+
+\subsection{\block{hpfem.grating}}\label{sec:block-hpfem-grating}\index{hpfem.grating@\texttt{hpfem.grating} (Block)}
+
+\textbf{Kategorie:} \code{splitter} \quad \textbf{Anbieter:} \plugin{hp-FEM} (gerechnet in seinem Prozess; braucht \code{rtt-fusion} ab 0.5)
+
+\textit{Periodic sample computed by hp-FEM (finite elements): diffraction orders as channels}
+
+Eine periodische Probe wie \block{fg.grating}, gerechnet mit hp-FEM: Jede Beugungsordnung wird ein
+eigener Kanal. Das Gitter ist ein hp-FEM-Job (Zelle, Netz, Materialien, Stapel, Löser) ohne
+Einfall, Sweep und Karten; den Einfall setzen die Strahlen. Um die Strahlen einer Wellenlänge
+baut der Block eine Jones-Tabelle: für eine Richtung genau dort, sonst Stützstellen im Abstand
+\param{sigma\_step}, höchstens \param{max\_nodes}, je Stützstelle zwei hp-FEM-Lösungen. Der Block
+rechnet in Strahlen (nativ R); Felder und Spektren werden vorher zu Strahlen. \gui{Check workflow}
+speichert den Job im Block (\param{job\_data}) und leert den Pfad; eine Netzdatei bleibt außerhalb
+und wird gemeldet. Bedienung: \autoref{sec:hp-block}.
+
+\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS, \enquote{orders}).
+
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{job} & Datei & leer & -- & hp-FEM-Job (JSON, Problem \code{grating}); \gui{Check workflow} speichert ihn im Block (\param{job\_data}) und leert den Pfad. \\
+\param{job\_\allowbreak{}data} & Daten & -- & -- & Der im Block gehaltene Job (hat Vorrang vor der Datei); \gui{Store job in block} setzt ihn. \\
+\param{side} & Auswahl & \code{reflected} & \code{reflected}, \code{transmitted} & Weitergegebene Ordnungen: reflektiert oder durchgelassen. \\
+\param{orders} & Zahlenliste & leer & -- & Weitergegebene Ordnungen; leer: $-1$, 0, 1. \\
+\param{sigma\_\allowbreak{}step} \newline\small\gui{$\sigma$ step of the table} & Zahl & \code{0.01} & $\geq$ $10^{-5}$ & Abstand der Stützstellen in den Richtungskosinus $\sigma = n \sin\theta$ (kubisch interpoliert); jede Stützstelle sind zwei hp-FEM-Lösungen. \\
+\param{sigma\_\allowbreak{}margin} \newline\small\gui{$\sigma$ margin of the table} & Zahl & \code{0.01} & $\geq$ 0.0 & Wie weit die Tabelle über den $\sigma$-Bereich der Strahlen hinausreicht. \\
+\param{max\_\allowbreak{}nodes} \newline\small\gui{Most table nodes} & Ganzzahl & \code{400} & $\geq$ 16 & Ein breiteres Bündel bricht mit einer Meldung ab, statt so viele Lösungen zu starten. \\
+\param{point} & Vektor & \code{0.0, 0.0, 0.0} & mm & Oberkante des Gitters; dort liegt $x = 0$ des Jobs. \\
+\param{normal} & Vektor & \code{0.0, 0.0, 1.0} & -- & Flächennormale (das $y$ des Jobs). \\
+\param{grating\_\allowbreak{}vector} & Vektor & \code{1.0, 0.0, 0.0} & -- & Lokale x-Achse (das $x$ des Jobs), senkrecht zu den Linien. \\
 \bottomrule
 \end{referenz}
 
