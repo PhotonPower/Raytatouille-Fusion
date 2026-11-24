@@ -600,9 +600,17 @@ Tabelle und Konfiguration im Block und leert die Pfade. Der frühere Typname
 verschwindet oder die außerhalb der Tabelle bzw.\ nahe einer Rayleigh-Anomalie liegen, werden mit
 einer Log-Zeile verworfen.
 
-\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS, \enquote{orders}).
+\textbf{Licht:} \code{in} (ein, RHS, vorn); \code{out} (aus, RHS, vorn, \enquote{orders});
+\code{back\_out} (aus, RHS, hinten, \enquote{transmitted orders}).
 
-\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}); \code{back} (aus \code{back\_out}).
+Streutabelle: \code{front} $\to$ \code{front} und \code{front} $\to$ \code{back}.
+
+\code{out} gibt die Ordnungen der mit \param{side} gewählten Seite weiter (wie bisher, ein
+Port). \code{back\_out} gibt immer die durchgelassenen Ordnungen: So liegt ein
+Transmissionsgitter im Modell als Schritt zwischen zwei Nachbarn, etwa zwei Gitter hintereinander
+(Licht in \code{in}, weiter aus \code{back\_out}). Eine Tabelle nur reflektierter Ordnungen am
+hinteren Port meldet der Block (RTT-Fusion ab 0.5.1).
 
 \begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
 \toprule
@@ -613,7 +621,7 @@ einer Log-Zeile verworfen.
 \param{fouriergrating} & Datei & leer & -- & FourierGrating-Konfiguration: Der Block baut seine Tabelle um die Strahlen (R) oder rechnet jede ebene Welle eines Felds (H); wird beim Prüfen im Block gespeichert (\param{config}). \\
 \param{config} & Daten & -- & -- & Die im Block gehaltene Konfiguration (hat Vorrang vor der Datei). \\
 \param{table\_\allowbreak{}data} & Daten & -- & -- & Die im Block gehaltene Jones-Tabelle (hat Vorrang vor der Datei). \\
-\param{side} & Auswahl & \code{reflected} & \code{reflected}, \code{transmitted} & Weitergegebene Ordnungen (mit einer Konfiguration): reflektiert oder durchgelassen. \\
+\param{side} & Auswahl & \code{reflected} & \code{reflected}, \code{transmitted} & Ordnungen an \code{out} (mit einer Konfiguration): reflektiert oder durchgelassen; \code{back\_out} gibt immer die durchgelassenen. \\
 \param{orders} & Zahlenliste & leer & -- & Weitergegebene Ordnungen; leer: alle der Tabelle. \\
 \param{n\_\allowbreak{}in} & Zahl & \code{1.0} & -- & Brechzahl des Einfallsmediums (R, selbst gebaute Tabelle). \\
 \param{sigma\_\allowbreak{}step} \newline\small\gui{$\sigma$ step of the table} & Zahl & \code{0.01} & $\geq$ $10^{-5}$ & Abstand der Stützstellen der Jones-Tabelle in den Richtungskosinus $\sigma = n \sin\theta$ (kubisch interpoliert); kleiner ist genauer und braucht mehr FourierGrating-Rechnungen. \\
@@ -642,9 +650,17 @@ rechnet in Strahlen (nativ R); Felder und Spektren werden vorher zu Strahlen. \g
 speichert den Job im Block (\param{job\_data}) und leert den Pfad; eine Netzdatei bleibt außerhalb
 und wird gemeldet. Bedienung: \autoref{sec:hp-block}.
 
-\textbf{Licht:} \code{in} (ein, RHS); \code{out} (aus, RHS, \enquote{orders}).
+\textbf{Licht:} \code{in} (ein, RHS, vorn); \code{out} (aus, RHS, vorn, \enquote{orders});
+\code{back\_out} (aus, RHS, hinten, \enquote{transmitted orders}).
 
-\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}).
+\textbf{Ports:} \code{front} (ein \code{in}, aus \code{out}); \code{back} (aus \code{back\_out}).
+Streutabelle: \code{front} $\to$ \code{front} und \code{front} $\to$ \code{back}.
+
+\code{out} gibt die Ordnungen der mit \param{side} gewählten Seite weiter (wie bisher, ein
+Port). \code{back\_out} gibt immer die durchgelassenen Ordnungen: So liegt ein
+Transmissionsgitter im Modell als Schritt zwischen zwei Nachbarn, etwa zwei Gitter hintereinander
+(Licht in \code{in}, weiter aus \code{back\_out}). Eine Tabelle nur reflektierter Ordnungen am
+hinteren Port meldet der Block (RTT-Fusion ab 0.5.1).
 
 \begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
 \toprule
@@ -653,7 +669,7 @@ und wird gemeldet. Bedienung: \autoref{sec:hp-block}.
 \endhead
 \param{job} & Datei & leer & -- & hp-FEM-Job (JSON, Problem \code{grating}); \gui{Check workflow} speichert ihn im Block (\param{job\_data}) und leert den Pfad. \\
 \param{job\_\allowbreak{}data} & Daten & -- & -- & Der im Block gehaltene Job (hat Vorrang vor der Datei); \gui{Store job in block} setzt ihn. \\
-\param{side} & Auswahl & \code{reflected} & \code{reflected}, \code{transmitted} & Weitergegebene Ordnungen: reflektiert oder durchgelassen. \\
+\param{side} & Auswahl & \code{reflected} & \code{reflected}, \code{transmitted} & Ordnungen an \code{out}: reflektiert oder durchgelassen; \code{back\_out} gibt immer die durchgelassenen. \\
 \param{orders} & Zahlenliste & leer & -- & Weitergegebene Ordnungen; leer: $-1$, 0, 1. \\
 \param{sigma\_\allowbreak{}step} \newline\small\gui{$\sigma$ step of the table} & Zahl & \code{0.01} & $\geq$ $10^{-5}$ & Abstand der Stützstellen in den Richtungskosinus $\sigma = n \sin\theta$ (kubisch interpoliert); jede Stützstelle sind zwei hp-FEM-Lösungen. \\
 \param{sigma\_\allowbreak{}margin} \newline\small\gui{$\sigma$ margin of the table} & Zahl & \code{0.01} & $\geq$ 0.0 & Wie weit die Tabelle über den $\sigma$-Bereich der Strahlen hinausreicht. \\

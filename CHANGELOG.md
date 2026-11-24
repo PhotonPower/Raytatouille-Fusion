@@ -6,6 +6,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Changed
+- **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
+  `back_out` with the transmitted orders (RTT-Fusion 0.5.1, RTT-Fusion#120): a transmission
+  grating is a step between two neighbours in the model, e.g. two gratings in a row.
+
 ## [1.2.0] - 2026-11-24
 
 ### Added
