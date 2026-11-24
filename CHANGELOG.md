@@ -6,6 +6,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-24
+
 ### Added
 - **hp-FEM plugin** (step 1): grating jobs of hp-FEM's job runner in the panel – unit cell with
   slabs and shapes, materials by tag, layer stack, incidence and sweep (wavelength or θ), mesh
