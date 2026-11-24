@@ -6,6 +6,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Fixed
+- **Perspective view: grid and coordinate axes cut off in front** – the near plane sat just before
+  the model (d − 2R), and the grid and axes, which reach far beyond a small model towards the eye,
+  were clipped there visibly. It now stays within a tenth of the distance from the eye; result
+  lines (rays) count for the depth range too, so they are not cut either.
+
 ### Changed
 - **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
   `back_out` with the transmitted orders (RTT-Fusion 0.5.1, RTT-Fusion#120): a transmission

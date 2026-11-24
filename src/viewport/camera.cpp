@@ -70,8 +70,11 @@ QMatrix4x4 Camera::projectionMatrix() const {
   } else {
     const float d = distance();
     // The model lies within scene_radius_ of the target: a near plane close to it keeps the
-    // depth buffer precise (the grid may be clipped near the eye, which is harmless).
-    const float near_plane = std::max(d * 5e-3F, d - 2.0F * scene_radius_);
+    // depth buffer precise – but no further than a tenth of the distance from the eye: the grid
+    // and the coordinate axes reach far beyond a small model towards the eye, and a near plane
+    // at d − 2R cut them off visibly in front (at 0.1·d the 24-bit depth still resolves about
+    // 1e-5 of the model's size).
+    const float near_plane = std::max(d * 5e-3F, std::min(d - 2.0F * scene_radius_, 0.1F * d));
     m.perspective(fieldOfView(), aspect(), near_plane, d + extent);
   }
   return m;
