@@ -1075,17 +1075,64 @@ QSet<QString> connected_ports(const QJsonObject& model, const QString& id) {
   return out;
 }
 
-/// Port map old -> new for the connected ports: the same name, else the only port of the new
-/// type; empty optional if not unique (or two would share a port).
-std::optional<QHash<QString, QString>> port_map(const QJsonArray& new_ports, const QSet<QString>& connected) {
+/// The ports of `id` the branches enter through (entries) and leave through (exits).
+std::pair<QSet<QString>, QSet<QString>> branch_ports(const QJsonObject& model, const QString& id) {
+  QSet<QString> entries, exits;
+  for (const QJsonValue& b : model["branches"].toArray()) {
+    for (const QJsonValue& st : b.toObject()["steps"].toArray()) {
+      const QJsonArray step = st.toArray();
+      if (step.at(0).toString() != id) continue;
+      if (step.at(1).isString()) entries.insert(step.at(1).toString());
+      if (step.at(2).isString()) exits.insert(step.at(2).toString());
+    }
+  }
+  return {entries, exits};
+}
+
+/// Port map old -> new for the connected ports: the same name; else the only port of the new
+/// type; else by the branches (as RTT-Fusion's replace_block on a model): the port the light
+/// enters through becomes the new type's port with an in channel (a grating's front) – a mirror's
+/// single port, entered and left, too –, the port it leaves through the one the new type scatters
+/// into from there (back). Empty optional if not unique (or two would share a port).
+std::optional<QHash<QString, QString>> port_map(const QJsonObject& type, const QSet<QString>& connected,
+                                                const QSet<QString>& entries, const QSet<QString>& exits) {
+  const QJsonArray new_ports = type["ports"].toArray();
   QStringList names;
-  for (const QJsonValue& p : new_ports) names << p.toObject()["name"].toString();
+  QJsonArray ins;
+  for (const QJsonValue& p : new_ports) {
+    names << p.toObject()["name"].toString();
+    if (!p.toObject()["in"].toString().isEmpty()) ins.append(p);
+  }
+  QString front;
+  for (const QJsonValue& p : ins) {
+    if (p.toObject()["side"].toString() == QLatin1String("front")) front = p.toObject()["name"].toString();
+  }
+  if (front.isEmpty() && ins.size() == 1) front = ins.first().toObject()["name"].toString();
+  QStringList onward;  // ports the type scatters into from the front port
+  if (!front.isEmpty()) {
+    QSet<QString> scattered;
+    bool has_table = false;
+    for (const QJsonValue& v : type["scatter"].toArray()) {
+      const QJsonArray e = v.toArray();
+      has_table = true;
+      if (e.at(0).toString() == front && e.at(2).toString() != QLatin1String("none")) scattered.insert(e.at(1).toString());
+    }
+    for (const QJsonValue& p : new_ports) {
+      const QJsonObject o = p.toObject();
+      const QString n = o["name"].toString();
+      if (n != front && !o["out"].toString().isEmpty() && (!has_table || scattered.contains(n))) onward << n;
+    }
+  }
   QHash<QString, QString> map;
   for (const QString& old : connected) {
     if (names.contains(old)) {
       map[old] = old;
     } else if (names.size() == 1) {
       map[old] = names.first();
+    } else if (!front.isEmpty() && entries.contains(old)) {
+      map[old] = front;
+    } else if (onward.size() == 1 && exits.contains(old)) {
+      map[old] = onward.first();
     } else {
       return std::nullopt;
     }
@@ -1105,11 +1152,12 @@ QStringList NodeEditor::replacementsFor(const QString& id) const {
   if (modelMode()) {
     QStringList out;
     const QSet<QString> connected = connected_ports(g, id);
+    const auto [entries, exits] = branch_ports(g, id);
     for (const QJsonValue& v : workflow_.value(QStringLiteral("types")).toArray()) {
       const QJsonObject t = v.toObject();
       if (t["type"].toString() == old["type"].toString() || t["ports"].toArray().isEmpty()) continue;
       if (t["category"].toString() == QLatin1String("meta") || t["category"].toString() == QLatin1String("analysis")) continue;
-      if (port_map(t["ports"].toArray(), connected)) out << t["type"].toString();
+      if (port_map(t, connected, entries, exits)) out << t["type"].toString();
     }
     return out;
   }
@@ -1135,7 +1183,8 @@ bool NodeEditor::replaceNode(const QString& id, const QString& type) {
   const QJsonObject t = type_of(workflow_, type);
   if (old.isEmpty() || t.isEmpty()) return false;
   if (modelMode()) {  // R24: the connections and the branch steps move to the new ports
-    const auto map = port_map(t["ports"].toArray(), connected_ports(g, id));
+    const auto [entries, exits] = branch_ports(g, id);
+    const auto map = port_map(t, connected_ports(g, id), entries, exits);
     if (!map) return false;
     QJsonObject node{{"id", id}, {"type", type}, {"position", old["position"]}, {"ports", t["ports"]}, {"sockets", t["sockets"]}};
     if (old.contains("name")) node["name"] = old["name"];
