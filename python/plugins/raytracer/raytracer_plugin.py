@@ -180,6 +180,10 @@ class RaytracerPlugin(Plugin):
         Raytatouille system, or no RTT-Fusion). Kept while the workflow's data stay the same."""
         wf = ctx.workflow()
         model = wf.get("model") if isinstance(wf, dict) else None
+        graph = None
+        if not model and isinstance(wf, dict) and isinstance(wf.get("graph"), dict):
+            # a socket graph (version 1, e.g. written by a script): the same system data
+            model = graph = wf["graph"]
         if not model or not any("rtt_system" in n.get("params", {}) for n in model.get("nodes", [])):
             return None
 
@@ -206,14 +210,19 @@ class RaytracerPlugin(Plugin):
                                   for k in ("rtt", "runs", "rtt_system", "rtt_tree", "rtt_paths", "rtt_new")},
                     n.get("variant"), {v: data(b) for v, b in (n.get("variants") or {}).items()}]
                    for n in body.get("nodes", [])]
-            return out + [body.get("branches")]
+            return out + [body.get("branches"), (body.get("meta") or {}).get("branches")]
 
         stamp = str(abs(hash(json.dumps(data(model), sort_keys=True))))
         cached = getattr(self, "_made", None)
         if cached is not None and cached[1] == stamp:
             return cached
         registry, _ = self._registry(fg)
-        d = importer.system_from_model(io.model_from_dict(model, registry))
+        if graph is not None:
+            d = importer.system_from_graph(io.from_dict(graph))
+            if d is None:
+                return None
+        else:
+            d = importer.system_from_model(io.model_from_dict(model, registry))
         if self.library is None:
             self.library = self._library(ctx, ctx.params.get("system") or "")
         try:

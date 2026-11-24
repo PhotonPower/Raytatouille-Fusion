@@ -6,6 +6,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Fixed
+- **Raytracer: the system of a workflow saved as a socket graph** (version 1, `workflow.graph`,
+  e.g. written by a script) is drawn as CAD bodies again – after an edit of the workflow or with
+  *Update drawing*; before, only a model (version 2) was read and such a document showed no CAD
+  model at all.
+
 ### Changed
 - **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
   `back_out` with the transmitted orders (RTT-Fusion 0.5.1, RTT-Fusion#120): a transmission
