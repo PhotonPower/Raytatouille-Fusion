@@ -7,10 +7,15 @@ estimates the memory, *Solve* runs the job with progress and Cancel (between the
 solve) and shows the efficiencies per order, for a sweep ΣR, ΣT, A and the orders as curves.
 Step 2: *Field map* computes one point of the sweep and shows E, H or the Poynting vector S on
 a grid of the cell in the Image window; *Show cell* draws the cell's tags without solving.
+Step 3: the plugin offers the block `hpfem.grating` to the node workflow (RTT-Fusion R35: a
+rigorous grating in the place of a mirror, its diffraction orders as channels, computed in this
+plugin's process); *Store job in block* gives a block the panel's job, *Load block job into
+panel* brings it back to edit.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shutil
@@ -19,6 +24,7 @@ from pathlib import Path
 
 from nfcad import Param, Plugin, UserError, action
 
+import hpfem_block
 import hpfem_job
 import hpfem_map
 import hpfem_results
@@ -196,6 +202,66 @@ class HpFemPlugin(Plugin):
         names = sorted(hp.materials.library)
         ctx.log("hp-FEM materials: " + ", ".join(names))
         return f"{len(names)} library materials (in the log)"
+
+    # ------------------------------------------------------------------ blocks (RTT-Fusion R35)
+    def _block_provider(self):
+        """RTT-Fusion's provider of the block `hpfem.grating`, evaluated in this process with
+        RTT-Fusion's evaluator; None without an RTT-Fusion that has it (from 0.5)."""
+        if getattr(self, "_provider", None) is None:
+            try:
+                remote = importlib.import_module("rtt_fusion.graph.remote")
+                module = importlib.import_module("rtt_fusion.graph.hpfem_grating")
+            except ImportError:
+                return None
+            self._provider = remote.BlockProvider([module.TYPE], dict(module.EVALUATORS))
+        return self._provider
+
+    def blocks(self) -> list:
+        provider = self._block_provider()
+        return provider.catalogue() if provider is not None else []
+
+    def evaluate_block(self, request: dict) -> dict:
+        provider = self._block_provider()
+        if provider is None:
+            return {"ok": False, "error": "the hp-FEM plugin needs RTT-Fusion with the block hpfem.grating (0.5)"}
+        return provider.handle(request)
+
+    @action("Store job in block",
+            description="The panel's job becomes this block's grating (saved with the document; period, order "
+                        "and indices in its dialog); the rays at the block set the incidence",
+            block_types=hpfem_block.BLOCK_TYPES)
+    def job_to_block(self, ctx):
+        job, notes = hpfem_block.for_block(self.job(ctx), self._base(ctx))
+        wf = ctx.workflow()
+        node = hpfem_block.target_block(wf, ctx.target)
+        hpfem_block.set_job(node, job, ctx.params["unit"])
+        ctx.set_workflow(wf)
+        for note in notes:
+            ctx.log(note)
+        name = node.get("name") or node.get("id")
+        return (f"{name}: job stored in the block ({len(job.get('materials', {}))} materials, "
+                f"{len((job.get('model') or {}).get('shapes', []))} shapes)")
+
+    @action("Load block job into panel",
+            description="Show this block's job in the panel to edit, check or solve it; Store job in block writes "
+                        "it back",
+            block_types=hpfem_block.BLOCK_TYPES)
+    def block_to_job(self, ctx):
+        node = hpfem_block.target_block(ctx.workflow(), ctx.target)
+        name = node.get("name") or node.get("id")
+        job = hpfem_block.block_job(node)
+        if job is None:
+            raise UserError(f"{name} holds no hp-FEM job yet – fill the panel, then Store job in block.")
+        try:
+            values = hpfem_job.to_params(job)
+        except (ValueError, KeyError, TypeError) as e:
+            raise UserError(f"{name}: its job cannot be shown in the panel: {e}") from e
+        values["job_file"] = ""  # Save job must not overwrite a file the block came from
+        for key in ("polarisation", "wavelength", "theta_deg", "phi_deg"):  # the block holds none
+            values.pop(key, None)
+        ctx.set_params(values)
+        return (f"{name}: job in the panel ({len(values['materials'])} materials, {len(values['shapes'])} shapes; "
+                "incidence and sweep are the panel's own)")
 
     # ------------------------------------------------------------------ running
     def _base(self, ctx) -> Path:

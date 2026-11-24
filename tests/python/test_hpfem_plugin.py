@@ -11,6 +11,7 @@ root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / "python"))
 sys.path.insert(0, str(root / "python" / "plugins" / "hpfem"))
 
+import hpfem_block  # noqa: E402
 import hpfem_job  # noqa: E402
 import hpfem_map  # noqa: E402
 import hpfem_results  # noqa: E402
@@ -141,6 +142,68 @@ try:
     raise AssertionError("not refused")
 except ValueError as e:
     assert "3 points" in str(e)
+
+# step 3: the job a block holds (pure Python) – stored from the panel, loaded back, the block in a group
+
+
+class BlockCtx:
+    """A panel ctx with a workflow and the block an action was chosen on."""
+
+    def __init__(self, params, wf, target):
+        self.params, self.wf, self.target, self.lines = params, wf, target, []
+
+    def workflow(self):
+        return json.loads(json.dumps(self.wf))
+
+    def set_workflow(self, wf):
+        self.wf = wf
+
+    def set_params(self, values):
+        self.params.update(as_panel({**self.params, **values}))
+
+    def log(self, m):
+        self.lines.append(m)
+
+
+mirror_fields = [{"name": "/rtt/surface/radius", "type": "number", "label": "Radius"}]
+grating_node = {"id": "gr", "type": "hpfem.grating", "params": {"job": "/gone/job.json"}, "fields": mirror_fields}
+wf = {"model": {"nodes": [{"id": "g1", "variant": 0, "variants": [{"nodes": [grating_node]}]},
+                          {"id": "src", "type": "optics.collimated_source", "params": {}}]}}
+with_file = copy.deepcopy(hpfem_job.EXAMPLE)
+with_file["mesh"] = {"file": "cell.msh", "scale": 1e-9}
+with_file["materials"]["2"] = {"n": [1.45, 0.0]}
+plugin0 = HpFemPlugin()
+bctx = BlockCtx(as_panel({**hpfem_job.to_params(with_file), "job_file": "/data/jobs/job.json"}), wf,
+                {"block": "gr", "scope": ["g1"]})
+message = plugin0.job_to_block(bctx)
+held = bctx.wf["model"]["nodes"][0]["variants"][0]["nodes"][0]
+assert message.startswith("gr: job stored in the block (3 materials, 1 shapes)"), message
+assert held["params"]["job"] == "" and "incidence" not in held["params"]["job_data"], held["params"]
+assert held["params"]["job_data"]["mesh"]["file"] == str(Path("/data/jobs/cell.msh").resolve())
+assert held["params"]["job_data"]["model"]["period"] == 400
+assert [f["name"] for f in held["fields"]] == ["/rtt/surface/radius", "/job_data/model/period",
+                                               "/job_data/solver/order", "/job_data/materials/2/n"], held["fields"]
+assert held["fields"][1]["unit"] == "nm" and held["fields"][3]["type"] == "numbers"
+assert any("stays outside" in line for line in bctx.lines) and any("left out" in line for line in bctx.lines)
+# back into a panel with another job: the block's cell, the panel's incidence
+other = as_panel({**hpfem_job.to_params(hpfem_job.EXAMPLE), "period": 999.0, "wavelength": "500:600:3",
+                  "job_file": "/x/other.json"})
+bctx2 = BlockCtx(other, bctx.wf, {"block": "gr", "scope": ["g1"]})
+message = plugin0.block_to_job(bctx2)
+assert bctx2.params["period"] == 400 and bctx2.params["wavelength"] == "500:600:3", message
+assert bctx2.params["job_file"] == "" and bctx2.params["mesh_kind"] == "file", bctx2.params["mesh_kind"]
+for target, text in (({"block": "src", "scope": []}, "is gone"), ({"block": "gr", "scope": ["nope"]}, "group nope")):
+    try:
+        plugin0.block_to_job(BlockCtx(other, bctx.wf, target))
+        raise AssertionError("not refused")
+    except Exception as e:  # noqa: BLE001
+        assert text in str(e), e
+try:
+    plugin0.block_to_job(BlockCtx(other, wf, {"block": "gr", "scope": ["g1"]}))  # names a file that is gone
+    raise AssertionError("not refused")
+except Exception as e:  # noqa: BLE001
+    assert "cannot be read" in str(e), e
+
 try:
     import numpy as np
 except ImportError:  # CI without numpy: the pure part only
@@ -262,4 +325,37 @@ with tempfile.TemporaryDirectory() as d:
     ctx.params.update({"map_y_from": 0, "map_y_to": 0})
     message = plugin.show_cell(ctx)
     assert message.startswith("3 tags") and any(line.startswith("tag 3: eps=2.25") for line in ctx.out["log"]), message
+
+# step 3: the block through the plugin's provider (as the workflow runs it in this plugin's process) equals
+# RTT-Fusion's evaluator in the engine's process
+try:
+    from rtt_fusion.graph import Graph, Node, builtin_registry, hpfem_grating, optics
+    from rtt_fusion.graph.execute import Context, Executor
+    from rtt_fusion.graph.remote import RemoteEvaluator
+except ImportError:
+    print("rtt_fusion without hpfem.grating (before 0.5): block part skipped")
+    sys.exit(77)
+assert [e["type"] for e in plugin.blocks()] == ["hpfem.grating"] and plugin.blocks()[0]["representations"] == ["R"]
+block_job, _ = hpfem_block.for_block(coarse, Path.cwd())
+reg = builtin_registry()
+evaluators = optics.register(reg)
+local = hpfem_grating.register(reg)
+g = Graph()
+g.add(Node("src", "optics.collimated_source",
+           params={"radius": 0.01, "rings": 2, "center": [0, 0, -0.1], "wavelengths_um": [0.41],
+                   "field_angles_deg": [[20.0, 0.0]], "polarisation": [0, 1, 0]}))
+g.add(Node("gr", "hpfem.grating", params={"job_data": block_job, "side": "transmitted", "orders": [-1, 0]}))
+g.connect(("src", "out"), ("gr", "in"))
+beam = Executor(g, reg, evaluators).evaluate("src", "out")
+near = local["hpfem.grating"](Context(g, shared={}, operators={}), g.nodes["gr"], "out", {"in": beam})
+with tempfile.TemporaryDirectory() as d:
+    remote = RemoteEvaluator("hpfem", lambda _p, r: plugin.evaluate_block(r), frozenset("R"), d)
+    far = remote(Context(g, shared={}), g.nodes["gr"], "out", {"in": beam})
+assert [b.path[-1] for b in far] == [b.path[-1] for b in near] == ["gr[-1]", "gr[0]"]
+for a, b in zip(far, near):
+    assert np.allclose(np.asarray(a.amplitude), np.asarray(b.amplitude), rtol=0, atol=1e-12)
+    assert np.allclose(np.asarray(a.direction), np.asarray(b.direction), rtol=0, atol=1e-12)
+    assert np.allclose(np.asarray(a.prt), np.asarray(b.prt), rtol=0, atol=1e-12)
+power = sum(float(np.mean(np.abs(np.asarray(b.amplitude)) ** 2)) for b in near)
+assert 0.5 < power < 1.0, power  # most light passes the glass; order -1 propagates in it
 print("hp-FEM plugin ok")

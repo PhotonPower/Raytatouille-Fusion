@@ -5,7 +5,7 @@ elements for nano-optics) in Raytatouille Fusion. Needs the Python package `hpfe
 plugin environment: `pip install hpfem` (wheels for Linux x86_64, Windows x86_64 and macOS arm64
 from macOS 15; elsewhere a source build).
 
-**Step 1 (this version): grating jobs in the panel.**
+**Step 1: grating jobs in the panel.**
 
 The panel holds a job of hp-FEM's job runner (`python -m hpfem.run`, schema version 1, task
 *scattering*); the default is the runner's example, a dielectric bar on SiO2.
@@ -54,5 +54,24 @@ Actions:
 - **Show cell:** the cell's tags on the same grid without solving – shapes (the last on top,
   repeated periodically), slabs, background – with the material of every tag in the log.
 
-**Next steps:** the block `hpfem.grating` in the node workflow (RTT-Fusion's adapter R9); the
-unit cell from CAD bodies.
+**Step 3: the grating block in the node workflow.**
+
+With RTT-Fusion (≥ 0.5, stage R35) in the plugin environment the plugin offers the block
+`hpfem.grating` to the *Workflow* plugin: a periodic sample in the place of a mirror (the same
+sockets, so *Replace block* keeps the links) that sends every requested diffraction order on as a
+channel of its own, computed in this plugin's process.
+
+- The block's grating is an hp-FEM job without incidence, sweep and maps – the rays at the block
+  set the incidence. **Store job in block** (on the block in the node editor) gives it the
+  panel's job; period, polynomial order and the indices of materials given as n or n, k appear
+  in its dialog. **Load block job into panel** brings the job back to edit, check or solve
+  (the panel keeps its own incidence and sweep). A mesh file stays outside the document.
+- Frames: the job's x is the block's *grating vector*, its z the lines, its y the block's
+  normal; the job's x = 0 lies at the block's *point*, which is the top of the structure. The
+  block's *side* (reflected, transmitted) and *orders* choose what goes on.
+- Around the rays of one wavelength the block builds a Jones table: for collimated light (one
+  direction) exactly there – one hp-FEM computation (2 solves) per direction –, for a cone of
+  directions nodes every *σ step* up to *Most table nodes*. Tables are kept while the plugin runs.
+  Fields and spectra reach the block as rays.
+
+**Next step:** the unit cell from CAD bodies.

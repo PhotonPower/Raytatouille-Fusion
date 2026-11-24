@@ -16,6 +16,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 - **hp-FEM plugin** (step 2): *Field map* – one point of the sweep, E, H or the Poynting vector S
   (total or scattered) on a grid over several periods in the Image window (|F|², |F_i|, Re, Im),
   optionally as .npz; *Show cell* – the cell's tags without solving.
+- **hp-FEM plugin** (step 3): the block `hpfem.grating` in the node workflow – a rigorous grating
+  computed by hp-FEM in the place of a mirror, its diffraction orders as channels (RTT-Fusion
+  R35, needs RTT-Fusion 0.5 in the plugin environment). *Store job in block* gives a block the
+  panel's job (period, order and indices in its dialog), *Load block job into panel* brings it
+  back to edit; the rays at the block set the incidence.
 
 ### Fixed
 - **Release drafts for tags**: the RPM lies in an architecture folder of its artifact; the release
