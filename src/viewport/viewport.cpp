@@ -153,10 +153,12 @@ void Viewport::setResults(const results::ResultStore* results) {
   results_ = results;
   if (results_ != nullptr) {
     connect(results_, &results::ResultStore::changed, this, [this] {
+      result_bounds_dirty_ = true;
       updateLegend();
       update();
     });
   }
+  result_bounds_dirty_ = true;
   updateLegend();
   update();
 }
@@ -408,9 +410,29 @@ void Viewport::releaseResources() {
 void Viewport::render(QRhiCommandBuffer* cb) {
   QRhi* r = rhi();
   camera_.setViewportSize(size());
+  if (result_bounds_dirty_) {
+    // the visible result lines where they are shown (placement): rays may leave the model far
+    // behind, towards the eye – outside the depth range the near plane cut them off
+    result_bounds_ = {};
+    if (results_ != nullptr) {
+      for (const results::ResultItem* item : results_->visibleItems(results::ResultItem::Kind::Lines)) {
+        if (!item->lines) continue;
+        const auto& m = item->placement.matrix();
+        const std::vector<float>& p = item->lines->points;
+        for (std::size_t k = 0; k + 2 < p.size(); k += 3) {
+          const double x = p[k], y = p[k + 1], z = p[k + 2];
+          result_bounds_.add(QVector3D(static_cast<float>(m[0] * x + m[1] * y + m[2] * z + m[3]),
+                                       static_cast<float>(m[4] * x + m[5] * y + m[6] * z + m[7]),
+                                       static_cast<float>(m[8] * x + m[9] * y + m[10] * z + m[11])));
+        }
+      }
+    }
+    result_bounds_dirty_ = false;
+  }
   if (scene_ != nullptr) {
-    // Keep the whole model inside the depth range.
-    const tessellation::Box3 box = scene_->bounds();
+    // Keep the whole model and the result lines inside the depth range.
+    tessellation::Box3 box = scene_->bounds();
+    box.add(result_bounds_);
     if (box.valid()) {
       camera_.setSceneRadius(std::max(box.radius() + (box.center() - camera_.target()).length(),
                                       1.0F));

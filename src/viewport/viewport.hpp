@@ -9,6 +9,7 @@
 #include "render/result_renderer.hpp"
 #include "pick/picking.hpp"
 #include "render/scene_renderer.hpp"
+#include "tessellation/box3.hpp"
 #include "snap/snap_engine.hpp"
 #include "viewport/camera.hpp"
 #include "viewport/grid.hpp"
@@ -157,6 +158,10 @@ class Viewport : public QRhiWidget {
   render::SceneRenderer scene_renderer_;
   render::ResultRenderer result_renderer_;
   const results::ResultStore* results_ = nullptr;
+  /// Bounds of the visible result lines (rays …), kept for the depth range; renewed when the
+  /// results change (they may reach beyond the model and must not be cut by the near plane).
+  tessellation::Box3 result_bounds_;
+  bool result_bounds_dirty_ = true;
   class FieldLegend* legend_ = nullptr;
   void updateLegend();
   render::LineRenderer lines_;
