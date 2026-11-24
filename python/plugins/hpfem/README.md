@@ -74,4 +74,21 @@ channel of its own, computed in this plugin's process.
   directions nodes every *σ step* up to *Most table nodes*. Tables are kept while the plugin runs.
   Fields and spectra reach the block as rays.
 
-**Next step:** the unit cell from CAD bodies.
+**Step 4: the unit cell from CAD bodies.**
+
+- Draw the bodies of one unit cell in the CAD with the grating lines along CAD +Y and the stack
+  normal along CAD +Z (light from above): the job's x is CAD x, its y is CAD z. *Bodies drawn in*
+  says what one CAD length unit is (nm, µm, mm); it is converted to the job's unit.
+- Give every body its material: the attribute `material` (a library name, n + i k, `eps=…`), or
+  name the body after a material of the panel or of hp-FEM's library. Bodies with the same
+  material share a tag; a material the panel lacks gets a new tag in *Materials*.
+- **Shapes from CAD bodies** cuts the chosen closed bodies with the plane CAD y = *Section at*
+  (Nurbforge's exact planar section) and makes every section loop a polygon: straight edges keep
+  their end points, curved ones get *Points per curved edge* points. A hole in a body becomes a
+  polygon on top with the tag found there without the body. *Shapes* replaces the panel's shapes
+  or adds the bodies on top. The log names bodies the plane misses and bodies that leave the
+  cell (period, cell bottom and top stay the panel's). *Show cell* draws the result.
+- For slanted or curved bodies choose *Mesh → gmsh*: the structured mesh gives every element the
+  tag at its centre.
+- Needs Nurbforge's Python package (`nurbforge` ≥ 0.7) in the plugin
+  environment; the other steps run without it.

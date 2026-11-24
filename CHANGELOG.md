@@ -21,6 +21,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   R35, needs RTT-Fusion 0.5 in the plugin environment). *Store job in block* gives a block the
   panel's job (period, order and indices in its dialog), *Load block job into panel* brings it
   back to edit; the rays at the block set the incidence.
+- **hp-FEM plugin** (step 4): *Shapes from CAD bodies* – closed CAD bodies (lines along CAD +Y,
+  stack normal CAD +Z) cut exactly by Nurbforge across the lines become polygons of the unit cell,
+  holes included, with a tag per material (attribute `material` or the body's name).
 
 ### Fixed
 - **Release drafts for tags**: the RPM lies in an architecture folder of its artifact; the release
