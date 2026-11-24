@@ -176,7 +176,10 @@ def _draw_element(d: Drawing, compiled, index: int, element, node: dict, layouts
                   label: bool) -> None:
     kind = str(node.get("type", ""))
     surfaces = list(range(element.first_surface, element.first_surface + element.surface_count))
-    outlines = rt.layout.outlines(compiled, index, "yz", 121) if element.segmented else []
+    try:
+        outlines = rt.layout.outlines(compiled, index, "yz", 121) if element.segmented else []
+    except ValueError:  # an element tilted against the section: its surfaces' profiles, if any
+        outlines = []
     names = node.get("material")
     names = names if isinstance(names, list) else [names] * max(1, len(element.media))
     if outlines:
@@ -413,6 +416,33 @@ def _parse_problem(e: Exception) -> str:
             "plugin environment: pip install -U raytatouille")
 
 
+#: a view of the x–z plane in the drawing's y–z section: a quarter turn about z (global x → y)
+XZ_VIEW = {"rotation_deg": [0.0, 0.0, 90.0]}
+
+
+def _cut_surfaces(top: dict, source: dict | None) -> int:
+    """How many surfaces of the tree the y–z plane cuts."""
+    compiled, _ = _compile(_system(top, _wavelength(source), None, source), source)
+    count = 0
+    for i, _layout in enumerate(rt.layout.surfaces(compiled)):
+        try:
+            rt.layout.profile(compiled, i, "yz", 5)
+            count += 1
+        except ValueError:
+            pass
+    return count
+
+
+def _section_plane(top: dict, source: dict | None) -> tuple[dict, str]:
+    """The tree to draw and the axis across the section ("y" or "x"): a block behind a fold whose
+    surfaces the y–z plane misses (a tube lens along x) is drawn in its x–z plane, turned a
+    quarter about z into the drawing's section."""
+    if _cut_surfaces(top, source) > 0:
+        return top, "y"
+    turned = {"type": "assembly", "name": "x–z view", "pose": XZ_VIEW, "children": [top]}
+    return (turned, "x") if _cut_surfaces(turned, source) > 0 else (top, "y")
+
+
 def preview(request: dict) -> dict:
     node = request.get("node") or {}
     kind = str(node.get("type", ""))
@@ -433,11 +463,14 @@ def preview(request: dict) -> dict:
         top = tree(items) if isinstance(items, dict) else None
     if top is None:
         return unsupported(f"{name} holds no Raytatouille elements")
-    d = Drawing(f"{name} – y–z section", unit="mm", axes=("z", "y"))
     try:
+        top, across = _section_plane(top, source)
+        d = Drawing(f"{name} – {across}–z section", unit="mm", axes=("z", across))
         draw_system(d, top, source, params, rays=kind in ("rtt.section", "rtt.part.lens"), labels=True)
     except rt.errors.ParseError as e:
         return {"ok": False, "error": _parse_problem(e)}
+    if across == "x":
+        d.note("the block lies in the x–z plane (behind a fold): drawn in that section")
     if kind.startswith("rtt.part."):
         d.note("a new part: drawn where its pose puts it in the system's root")
     return answer(d)

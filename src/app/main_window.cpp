@@ -20,6 +20,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QUrl>
+#include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
 
@@ -478,7 +479,21 @@ void MainWindow::createPanels() {
   workflow_split->addWidget(branches);
   workflow_split->setStretchFactor(0, 4);
   workflow_split->setStretchFactor(1, 1);
-  workflow->setWidget(workflow_split);
+  // above the editor: Update drawing – every plugin that follows the workflow draws it now (the
+  // Raytracer its system as CAD bodies), as after an edit
+  auto* workflow_box = new QWidget(workflow);
+  auto* workflow_layout = new QVBoxLayout(workflow_box);
+  workflow_layout->setContentsMargins(0, 0, 0, 0);
+  workflow_layout->setSpacing(0);
+  auto* workflow_bar = new QToolBar(workflow_box);
+  workflow_bar->setIconSize(QSize(16, 16));
+  QAction* update_drawing = workflow_bar->addAction(tr("Update drawing"));
+  update_drawing->setToolTip(tr("Every plugin that follows the node workflow updates what it shows now "
+                                "(the Raytracer draws the system as CAD bodies) – as after an edit"));
+  connect(update_drawing, &QAction::triggered, this, [this] { followWorkflow(true); });
+  workflow_layout->addWidget(workflow_bar);
+  workflow_layout->addWidget(workflow_split, 1);
+  workflow->setWidget(workflow_box);
   addDockWidget(Qt::BottomDockWidgetArea, workflow);
   workflow->hide();
   auto show_workflow = [this, workflow](bool fit) {
@@ -503,15 +518,7 @@ void MainWindow::createPanels() {
   follow->setSingleShot(true);
   follow->setInterval(600);
   connect(node_editor_, &ui::NodeEditor::edited, follow, qOverload<>(&QTimer::start));
-  connect(follow, &QTimer::timeout, this, [this] {
-    if (plugins_ == nullptr) return;
-    for (const auto& host : plugins_->plugins()) {
-      if (!host->running() || !host->ready() || host->activeJob()) continue;
-      for (const auto& a : host->actions()) {
-        if (a.on_workflow_edit) plugins_->run(host.get(), a.id, doc_->pluginParameters(host->manifest().id));
-      }
-    }
-  });
+  connect(follow, &QTimer::timeout, this, [this] { followWorkflow(false); });
   // the plugins' actions on one block (context menu of the node editor)
   node_editor_->block_actions = [this](const QString& id, const QString& type) {
     std::vector<ui::NodeEditor::BlockAction> out;
@@ -649,6 +656,34 @@ void MainWindow::reportPreviousCrash() {
   QPushButton* open = box.addButton(tr("Show report"), QMessageBox::ActionRole);
   box.exec();
   if (box.clickedButton() == open) QDesktopServices::openUrl(QUrl::fromLocalFile(reports.front()));
+}
+
+void MainWindow::followWorkflow(bool forced) {
+  if (plugins_ == nullptr) return;
+  QStringList busy;
+  int started = 0;
+  for (const auto& host : plugins_->plugins()) {
+    if (!host->running() || !host->ready()) continue;
+    bool follows = false;
+    for (const auto& a : host->actions()) follows = follows || a.on_workflow_edit;
+    if (!follows) continue;
+    if (host->activeJob()) {
+      busy << host->manifest().name;
+      continue;
+    }
+    for (const auto& a : host->actions()) {
+      if (a.on_workflow_edit) {
+        plugins_->run(host.get(), a.id, doc_->pluginParameters(host->manifest().id));
+        ++started;
+      }
+    }
+  }
+  if (!forced) return;
+  if (!busy.isEmpty()) {
+    statusBar()->showMessage(tr("Update drawing: %1 busy – try again when it has finished").arg(busy.join(QStringLiteral(", "))), 6000);
+  } else if (started == 0) {
+    statusBar()->showMessage(tr("Update drawing: no running plugin follows the workflow"), 6000);
+  }
 }
 
 void MainWindow::showAbout() {

@@ -6,7 +6,24 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Added
+- **Update drawing in the node workflow**: a button above the editor – every running plugin that
+  follows the workflow updates what it shows now (the Raytracer draws the system as CAD bodies), as
+  shortly after an edit; useful after opening a document whose workflow is not drawn yet.
+- **Workflow: Convert to model** – an old socket graph (version 1, as older versions or scripts
+  write it) becomes a model: ports, connections, its light ways as branches; groups, sections and
+  the branch panel then work on it. Transmission gratings chained `out` → `in` go on through their
+  back port `back_out` (needs RTT-Fusion 0.5.1).
+
 ### Fixed
+- **Raytracer: the system of a workflow saved as a socket graph** (version 1, `workflow.graph`,
+  e.g. written by a script) is drawn as CAD bodies again – after an edit of the workflow or with
+  *Update drawing*; before, only a model (version 2) was read and such a document showed no CAD
+  model at all.
+- **Raytracer overview of a block behind a fold** (a tube lens, mirror or camera along x): the
+  y–z section misses it, and a lens raised an error ("section plane is not parallel …"), so no
+  overview appeared. Such a block is drawn in its x–z section now (axes z–x, noted); an element
+  tilted against the section no longer stops the drawing.
 - **Node workflow: Replace with for blocks with a front and a back port** (the gratings of
   RTT-Fusion 0.5.1): a mirror's single port goes to the front port; a block the branches pass
   through gets the front port where the light enters and the back port where it leaves. Before,
