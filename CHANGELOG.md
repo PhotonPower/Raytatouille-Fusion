@@ -28,6 +28,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   holes included, with a tag per material (attribute `material` or the body's name).
 
 ### Fixed
+- **Raytracer overview of blocks whose poses name parameters**: the y–z section of an imported
+  system's block (e.g. an objective at `{"param": "Z_MO"}`) failed with "no parameter row"; the
+  preview's system now carries the source's parameter rows and schema version. A system the
+  installed raytatouille cannot read (schema 0.11 with apertures as parameters needs
+  raytatouille 1.0) says so and how to update, instead of an exception.
 - **Release drafts for tags**: the RPM lies in an architecture folder of its artifact; the release
   job now finds it (the draft of v1.1.0 was made by hand from the same artifacts).
 

@@ -84,13 +84,20 @@ def _wavelength(source: dict | None) -> float:
     return float(first["um"]) if isinstance(first, dict) and isinstance(first.get("um"), int | float) else 0.5876
 
 
-def _system(top: dict, wavelength: float, events: list | None) -> dict:
-    """A system of the block's tree alone (pose kept: coordinates of its parent assembly)."""
+def _system(top: dict, wavelength: float, events: list | None, source: dict | None = None) -> dict:
+    """A system of the block's tree alone (pose kept: coordinates of its parent assembly), with the
+    schema version and the parameter rows of the source's system: poses and apertures may name
+    them ({"param": "Z_MO"})."""
+    system = (source or {}).get("params", {}).get("rtt_system") or {}
     path: dict[str, Any] = {"name": "preview", "events": events if events else "auto"}
-    return {"schema_version": "0.9.0", "name": "preview", "units": {"length": "mm", "wavelength": "um"},
-            "wavelengths": [{"um": wavelength, "reference": True}], "aperture": {"type": "epd", "value": 1.0},
-            "fields": {"points": [{}]},
-            "root": {"type": "assembly", "name": "preview", "children": [top]}, "paths": [path]}
+    out = {"schema_version": str(system.get("schema_version") or "0.9.0"), "name": "preview",
+           "units": {"length": "mm", "wavelength": "um"},
+           "wavelengths": [{"um": wavelength, "reference": True}], "aperture": {"type": "epd", "value": 1.0},
+           "fields": {"points": [{}]},
+           "root": {"type": "assembly", "name": "preview", "children": [top]}, "paths": [path]}
+    if isinstance(system.get("parameters"), list) and system["parameters"]:
+        out["parameters"] = copy.deepcopy(system["parameters"])
+    return out
 
 
 def _without_glass(node: Any) -> Any:
@@ -334,10 +341,10 @@ def _rays(d: Drawing, compiled, layouts, events: list | None) -> str:
 def draw_system(d: Drawing, top: dict, source: dict | None, params: dict, *, rays: bool, labels: bool) -> None:
     """Draws the tree `top` (an element or an assembly) in the y–z section."""
     wavelength = _wavelength(source)
-    probe, _ = _compile(_system(top, wavelength, None), source)
+    probe, _ = _compile(_system(top, wavelength, None, source), source)
     ids = {L.id for L in rt.layout.surfaces(probe)}
     events = _run_events(params, ids)
-    system = _system(top, wavelength, events)
+    system = _system(top, wavelength, events, source)
     compiled, problem = _compile(system, source)
     known = not problem
     layouts = rt.layout.surfaces(compiled)
@@ -398,6 +405,14 @@ def _dimensions(d: Drawing, compiled, elements, nodes, layouts, below: float) ->
 
 
 # ------------------------------------------------------------------ the blocks
+def _parse_problem(e: Exception) -> str:
+    """The message of a system the installed raytatouille cannot read (e.g. one written by a newer
+    Raytatouille: schema 0.11 with apertures as parameters needs raytatouille 1.0)."""
+    version = getattr(rt, "__version__", "?")
+    return (f"the installed raytatouille {version} cannot read this system ({e}); update it in the "
+            "plugin environment: pip install -U raytatouille")
+
+
 def preview(request: dict) -> dict:
     node = request.get("node") or {}
     kind = str(node.get("type", ""))
@@ -419,7 +434,10 @@ def preview(request: dict) -> dict:
     if top is None:
         return unsupported(f"{name} holds no Raytatouille elements")
     d = Drawing(f"{name} – y–z section", unit="mm", axes=("z", "y"))
-    draw_system(d, top, source, params, rays=kind in ("rtt.section", "rtt.part.lens"), labels=True)
+    try:
+        draw_system(d, top, source, params, rays=kind in ("rtt.section", "rtt.part.lens"), labels=True)
+    except rt.errors.ParseError as e:
+        return {"ok": False, "error": _parse_problem(e)}
     if kind.startswith("rtt.part."):
         d.note("a new part: drawn where its pose puts it in the system's root")
     return answer(d)
@@ -442,7 +460,10 @@ def _source_preview(node: dict, model: dict, name: str) -> dict:
              if isinstance((n.get("params") or {}).get("rtt_new"), dict)]
     if parts:  # new parts (rtt.part.*) are elements of the system's root
         top = dict(top, children=[*(top.get("children") or []), *parts])
-    draw_system(d, top, node, {}, rays=False, labels=True)
+    try:
+        draw_system(d, top, node, {}, rays=False, labels=True)
+    except rt.errors.ParseError as e:
+        return {"ok": False, "error": _parse_problem(e)}
     waves = ", ".join(fmt(w["um"]) for w in system.get("wavelengths") or [] if isinstance(w, dict) and "um" in w)
     fields = len((system.get("fields") or {}).get("points") or [])
     if waves:
