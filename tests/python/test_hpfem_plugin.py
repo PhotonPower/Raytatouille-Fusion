@@ -12,6 +12,7 @@ sys.path.insert(0, str(root / "python"))
 sys.path.insert(0, str(root / "python" / "plugins" / "hpfem"))
 
 import hpfem_block  # noqa: E402
+import hpfem_cad  # noqa: E402
 import hpfem_job  # noqa: E402
 import hpfem_map  # noqa: E402
 import hpfem_results  # noqa: E402
@@ -204,6 +205,38 @@ try:
 except Exception as e:  # noqa: BLE001
     assert "cannot be read" in str(e), e
 
+
+# step 4: the cell from CAD bodies – the pure part (nesting, orientation, tags, panel rows, materials)
+square = [(0.0, 0.0), (0.0, 4.0), (4.0, 4.0), (4.0, 0.0)]  # clockwise
+hole = [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]
+island = [(1.5, 1.5), (2.5, 1.5), (2.5, 2.5), (1.5, 2.5)]
+assert hpfem_cad.signed_area(square) == -16.0 and hpfem_cad.signed_area(hpfem_cad.ccw(square)) == 16.0
+assert hpfem_cad.nesting([island, square, hole]) == [2, 0, 1]
+assert [d for d, _ in hpfem_cad.body_polygons([island, square, hole])] == [0, 1, 2]
+assert all(hpfem_cad.signed_area(q) > 0 for _, q in hpfem_cad.body_polygons([island, square, hole]))
+c_shape = [(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1.0, 1.0), (1.0, 2.0), (3.0, 2.0), (3.0, 3.0), (0.0, 3.0)]
+probe = hpfem_cad.inner_point(c_shape)
+assert hpfem_cad.contains(c_shape, probe) and not hpfem_cad.contains(c_shape, (2.0, 1.5)), probe
+assert hpfem_cad.drop_duplicates([(0, 0), (1, 0), (1, 1e-12), (0, 1), (0, 0)], 1e-9) == [(0, 0), (1, 0), (0, 1)]
+rows = [{"tag": 1, "material": "air"}, {"tag": 3, "material": "eps=2.25+0i"}]
+assert hpfem_cad.tag_for(rows, "eps=2.25") == (3, rows)
+assert hpfem_cad.tag_for(rows, "1.5+0.01i") == (4, [*rows, {"tag": 4, "material": "1.5+0.01i"}])
+assert hpfem_cad.tag_for(rows, " air ")[0] == 1
+row = hpfem_cad.polygon_row(4, [(0.0, 0.0), (2.0, 0.0), (1.0, 1.0)])
+job_rows = hpfem_job.to_job(as_panel({**hpfem_job.to_params(hpfem_job.EXAMPLE), "shapes": [row]}))
+assert job_rows["model"]["shapes"] == [{"kind": "polygon", "tag": 4, "params": {"points": [[0, 0], [2, 0], [1, 1]]}}]
+assert hpfem_cad.material_of({"id": "7", "name": "SiO2"}, ["air"], ["SiO2", "air"]) == "SiO2"
+assert hpfem_cad.material_of({"id": "7", "name": "x", "attributes": {"material": "eps=4"}}, [], None) == "eps=4"
+assert hpfem_cad.material_of({"id": "7", "name": "rib", "attributes": {"material": "Glass"}}, ["Glass"], ["air"]) == "Glass"
+for entity, text in (({"id": "7", "name": "Body 1"}, "has no material"),
+                     ({"id": "7", "name": "b", "attributes": {"material": "Unobtainium"}}, "neither"),
+                     ({"id": "7", "name": "b", "attributes": {"material": "eps=x"}}, "eps=")):
+    try:
+        hpfem_cad.material_of(entity, ["air"], ["air", "SiO2"])
+        raise AssertionError("not refused")
+    except ValueError as e:
+        assert text in str(e), e
+
 try:
     import numpy as np
 except ImportError:  # CI without numpy: the pure part only
@@ -225,6 +258,73 @@ tri = {"model": {"period": 1, "y_bottom": 0, "y_top": 1, "background_tag": 1, "s
                             {"kind": "star", "tag": 4, "params": {}}]}}
 grid_tags, unknown = hpfem_map.tags(tri, [0.1, 0.3, 0.25], [0.1, 0.3, 0.75])
 assert [grid_tags[k, k] for k in range(3)] == [2, 1, 3] and unknown == ["3 (star)"], (grid_tags, unknown)
+
+# step 4 with Nurbforge: bodies as the CAD holds them (shells of trimmed NURBS faces) cut exactly
+try:
+    import nurbforge as nf
+    from nfcad.geometry import from_nurbforge
+except ImportError:
+    nf = None
+    print("nurbforge not installed: CAD cell skipped")
+if nf is not None and hasattr(nf, "section"):
+    def body(shell, name, material=None):
+        faces = []
+        for f in shell.faces:
+            face = {"type": "trimmed_surface", "surface": from_nurbforge(f.surface)}
+            if not f.is_untrimmed:
+                face["outer"] = [from_nurbforge(c) for c in f.outer.curves]
+                face["holes"] = [[from_nurbforge(c) for c in h.curves] for h in f.holes]
+            faces.append(face)
+        return {"id": name, "name": name, "attributes": {"material": material} if material else {},
+                "geometry": {"type": "shell", "faces": faces}}
+
+    V = nf.Vec3
+    bodies = {"1": body(nf.make_box(V(-0.1, -5, 0), V(0.2, 10, 0.148)), "bar", "eps=2.25"),   # the example's bar, µm
+              "2": body(nf.make_torus(V(0, 0, 0.5), V(0, 1, 0), 0.12, 0.04), "ring", "1.5"),  # a ring with a hole
+              "3": body(nf.make_box(V(-0.1, 2, 0), V(0.2, 1, 0.1)), "elsewhere", "1.5"),        # misses y = 0
+              "4": body(nf.make_box(V(-0.3, -5, 0), V(0.1, 10, 0.1)), "nameless")}
+
+    class CadCtx:
+        def __init__(self, params):
+            self.params, self.lines = params, []
+
+        def entities(self, ids):
+            return [json.loads(json.dumps(bodies[str(i)])) for i in ids]
+
+        def set_params(self, values):
+            self.params.update(as_panel({**self.params, **values}))
+
+        def log(self, m):
+            self.lines.append(m)
+
+    cctx = CadCtx(as_panel({**hpfem_job.to_params(hpfem_job.EXAMPLE), "cad_bodies": [1, 2, 3], "cad_points": 64}))
+    message = HpFemPlugin().shapes_from_cad(cctx)
+    assert message.startswith("2 bodies → 3 polygons (1 holes), 4 materials"), message
+    assert [(r["tag"], r["material"]) for r in cctx.params["materials"]][-1] == (4, "1.5"), cctx.params["materials"]
+    assert [r["tag"] for r in cctx.params["shapes"]] == [3, 4, 1], cctx.params["shapes"]
+    bar = sorted((q["x"], q["y"]) for q in cctx.params["shapes"][0]["points"])
+    assert bar == [(-100.0, 0.0), (-100.0, 148.0), (100.0, 0.0), (100.0, 148.0)], bar
+    cad_job = hpfem_job.to_job(cctx.params)
+    cell_tags, _ = hpfem_map.tags(cad_job, [0.0, 140.0, 0.0, 0.0, 190.0], [74.0, 500.0, 500.0, -400.0, 500.0])
+    assert [cell_tags[k, k] for k in range(5)] == [3, 4, 1, 2, 1], cell_tags
+    ring = cctx.params["shapes"][1]["points"]
+    area = hpfem_cad.signed_area([(q["x"], q["y"]) for q in ring])
+    assert abs(area - np.pi * 160.0**2) < 0.01 * np.pi * 160.0**2, area  # 64 points: within 1 %
+    assert any("not cut by the plane" in line and "elsewhere" in line for line in cctx.lines), cctx.lines
+    assert any("structured mesh" in line for line in cctx.lines), cctx.lines
+    # adding on top keeps the shapes; a body that leaves the cell is reported; one without material refused
+    cctx.params.update({"cad_bodies": [2], "cad_mode": "add shapes", "cad_section_y": 0.0})
+    assert HpFemPlugin().shapes_from_cad(cctx).startswith("1 bodies → 2 polygons") and len(cctx.params["shapes"]) == 5
+    cctx.params.update({"cad_bodies": [4], "cad_mode": "replace shapes", "materials": [{"tag": 1, "material": "air"},
+                        {"tag": 2, "material": "nameless"}]})
+    HpFemPlugin().shapes_from_cad(cctx)
+    assert any("leave the cell x -200" in line for line in cctx.lines), cctx.lines
+    cctx.params["materials"] = [{"tag": 1, "material": "air"}]
+    try:
+        HpFemPlugin().shapes_from_cad(cctx)
+        raise AssertionError("not refused")
+    except Exception as e:  # noqa: BLE001
+        assert "nameless" in str(e) and "has no material" in str(e), e
 
 # the plugin's actions with hpfem (a coarse cell: a few seconds)
 try:
@@ -325,6 +425,19 @@ with tempfile.TemporaryDirectory() as d:
     ctx.params.update({"map_y_from": 0, "map_y_to": 0})
     message = plugin.show_cell(ctx)
     assert message.startswith("3 tags") and any(line.startswith("tag 3: eps=2.25") for line in ctx.out["log"]), message
+
+# step 4 end to end: the example's bar drawn as a CAD box gives the efficiencies of the rectangle
+if nf is not None and hasattr(nf, "section"):
+    class CadSolveCtx(Ctx):
+        def entities(self, ids):
+            return [json.loads(json.dumps(bodies[str(i)])) for i in ids]
+
+    single = {**hpfem_job.to_params(coarse), "wavelength": "400"}
+    rect, drawn = CadSolveCtx(as_panel(single)), CadSolveCtx(as_panel({**single, "cad_bodies": [1]}))
+    plugin.shapes_from_cad(drawn)
+    assert plugin.solve(rect) == plugin.solve(drawn)
+    a, b = rect.out["tables"]["Orders"][1], drawn.out["tables"]["Orders"][1]
+    assert len(a) == len(b) and all(abs(x[2] - y[2]) < 1e-8 for x, y in zip(a, b)), (a, b)
 
 # step 3: the block through the plugin's provider (as the workflow runs it in this plugin's process) equals
 # RTT-Fusion's evaluator in the engine's process

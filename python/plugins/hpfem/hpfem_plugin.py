@@ -11,6 +11,8 @@ Step 3: the plugin offers the block `hpfem.grating` to the node workflow (RTT-Fu
 rigorous grating in the place of a mirror, its diffraction orders as channels, computed in this
 plugin's process); *Store job in block* gives a block the panel's job, *Load block job into
 panel* brings it back to edit.
+Step 4: *Shapes from CAD bodies* cuts closed CAD bodies across the grating lines (Nurbforge's
+exact planar section) and makes their sections polygons of the cell, with tags for their materials.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from pathlib import Path
 from nfcad import Param, Plugin, UserError, action
 
 import hpfem_block
+import hpfem_cad
 import hpfem_job
 import hpfem_map
 import hpfem_results
@@ -159,6 +162,19 @@ class HpFemPlugin(Plugin):
         "map_ny": Param.integer(301, min=2, max=4000, label="Points y", group="Field map"),
         "map_npz": Param.file("", filter="NumPy archive (*.npz)", save=True, label="Also write .npz",
                               group="Field map", description="the runner's map: x, y in metres, values (ny, nx, 3)"),
+        "cad_bodies": Param.entity(kinds=["shell"], multiple=True, label="Bodies", group="CAD cell",
+                                   description="closed bodies of one unit cell, drawn with the lines along CAD +Y and "
+                                               "the stack normal along CAD +Z (light from above); the material from "
+                                               "the body's attribute 'material' or its name"),
+        "cad_unit": Param.choice(list(hpfem_cad.CAD_UNITS), "µm", label="Bodies drawn in", group="CAD cell",
+                                 description="what one CAD length unit is; converted to the job's unit"),
+        "cad_section_y": Param.number(0.0, decimals=6, label="Section at CAD y", group="CAD cell",
+                                      description="the plane across the lines where the bodies are cut (CAD units)"),
+        "cad_points": Param.integer(48, min=4, max=2000, label="Points per curved edge", group="CAD cell",
+                                    description="curved edges of a section become polygons with this many points; "
+                                                "straight edges keep their end points"),
+        "cad_mode": Param.choice(["replace shapes", "add shapes"], "replace shapes", label="Shapes",
+                                 group="CAD cell", description="replace the panel's shapes or add the bodies on top"),
         "advanced": Param.json(d["advanced"], label="Further keys (JSON)", group="Advanced",
                                description="every other key of the job file (maps, model.x0, solver tolerances, …), "
                                            "merged into the job"),
@@ -361,6 +377,66 @@ class HpFemPlugin(Plugin):
         points = res.get("points", [])
         return f"{name}: {pic.width} × {pic.height} points" + (
             f"; {hpfem_results.summary(points[0])}" if points else "")
+
+    @action("Shapes from CAD bodies",
+            description="Cut the chosen bodies across the lines (CAD y = Section at) and make their sections "
+                        "polygons of the cell, with a tag per material; Show cell draws the result")
+    def shapes_from_cad(self, ctx):
+        ids = [int(i) for i in ctx.params["cad_bodies"]]
+        if not ids:
+            raise UserError("Choose the bodies first: CAD cell → Bodies (select them, then take the selection).")
+        try:
+            library = sorted(_hp().materials.library)
+        except UserError:
+            library = None  # without hpfem a body's name must be one of the panel's materials
+        scale = hpfem_cad.CAD_UNITS[ctx.params["cad_unit"]] / hpfem_job.UNITS[ctx.params["unit"]]
+        y_cut, points = float(ctx.params["cad_section_y"]), int(ctx.params["cad_points"])
+        materials = [dict(r) for r in ctx.params["materials"]]
+        shapes = [] if ctx.params["cad_mode"] == "replace shapes" else [dict(r) for r in ctx.params["shapes"]]
+        made, holes, polys, missed = 0, 0, [], []
+        for entity in ctx.entities(ids):
+            label = entity.get("name") or entity.get("id")
+            try:
+                material = hpfem_cad.material_of(entity, [str(r["material"]) for r in materials], library)
+                loops = hpfem_cad.section_loops(hpfem_cad.shell_of(entity.get("geometry") or {}), y_cut, scale, points)
+            except ValueError as e:
+                raise UserError(f"{label}: {e}") from e
+            if not loops:
+                missed.append(str(label))
+                continue
+            tag, materials = hpfem_cad.tag_for(materials, material)
+            before = list(shapes)  # what lies under the body: its holes show that
+            for depth, poly in hpfem_cad.body_polygons(loops):
+                fill = tag
+                if depth % 2:
+                    job = hpfem_job.to_job({**ctx.params, "shapes": before, "materials": materials})
+                    px, py = hpfem_cad.inner_point(poly)
+                    fill = int(hpfem_map.tags(job, [px], [py])[0][0, 0])
+                    holes += 1
+                shapes.append(hpfem_cad.polygon_row(fill, poly))
+                polys.append(poly)
+            made += 1
+        if not made:
+            raise UserError(f"No body reaches the plane CAD y = {y_cut:g} – set CAD cell → Section at.")
+        ctx.set_params({"shapes": shapes, "materials": materials})
+        unit = ctx.params["unit"]
+        x0, x1, y0, y1 = hpfem_cad.bounds(polys)
+        ctx.log(f"bodies span x {x0:.6g} … {x1:.6g} {unit}, y {y0:.6g} … {y1:.6g} {unit}")
+        period = float(ctx.params["period"])
+        left = float((ctx.params.get("advanced") or {}).get("model", {}).get("x0", -period / 2))
+        if x0 < left - 1e-9 * period or x1 > left + period + 1e-9 * period:
+            ctx.log(f"warning: the bodies leave the cell x {left:.6g} … {left + period:.6g} {unit} – set the period "
+                    "(Structure) or move the bodies")
+        if y0 < float(ctx.params["y_bottom"]) or y1 > float(ctx.params["y_top"]):
+            ctx.log(f"warning: the bodies leave the cell y {ctx.params['y_bottom']:.6g} … {ctx.params['y_top']:.6g} "
+                    f"{unit} – set Cell bottom / top (Structure)")
+        if ctx.params["mesh_kind"] == "structured":
+            ctx.log("note: the structured mesh gives every element the tag at its centre – for slanted or curved "
+                    "bodies choose Mesh → gmsh")
+        if missed:
+            ctx.log(f"not cut by the plane CAD y = {y_cut:g}: {', '.join(missed)}")
+        return (f"{made} bodies → {len(polys)} polygons" + (f" ({holes} holes)" if holes else "")
+                + f", {len(materials)} materials; Show cell draws the cell")
 
     @action("Show cell", description="The cell's tags on the map's grid, without solving (shapes, slabs, background)")
     def show_cell(self, ctx):
