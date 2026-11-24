@@ -6,6 +6,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Fixed
+- **Node workflow: Replace with for blocks with a front and a back port** (the gratings of
+  RTT-Fusion 0.5.1): a mirror's single port goes to the front port; a block the branches pass
+  through gets the front port where the light enters and the back port where it leaves. Before,
+  only the same port name or a single new port were mapped – the two-port gratings were no longer
+  offered for a mirror or a section.
+
 ### Changed
 - **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
   `back_out` with the transmitted orders (RTT-Fusion 0.5.1, RTT-Fusion#120): a transmission

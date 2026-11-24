@@ -587,6 +587,48 @@ class TestNodeEditor : public QObject {
     }
   }
 
+  void replaceByTheBranchesWithTwoPorts() {
+    // a grating with a front and a back port (RTT-Fusion#120): a mirror's single port becomes
+    // front; a block the branches pass through (the tube lens: entered from the beam splitter,
+    // left towards the camera) gets front where the light enters and back where it leaves; a block
+    // passed both ways (an objective of the Linnik) has no unique map and is not offered
+    QJsonObject wf = model_linnik();
+    QJsonArray types = wf["types"].toArray();
+    for (int k = 0; k < types.size(); ++k) {
+      QJsonObject t = types[k].toObject();
+      if (t["type"].toString() != QStringLiteral("fusion.grating")) continue;
+      t["ports"] = QJsonArray{QJsonObject{{"name", "front"}, {"in", "in"}, {"out", "out"}, {"side", "front"}},
+                              QJsonObject{{"name", "back"}, {"out", "back_out"}, {"side", "back"}}};
+      t["scatter"] = QJsonArray{QJsonArray{"front", "front", "full", QJsonArray{}},
+                                QJsonArray{"front", "back", "full", QJsonArray{}}};
+      types[k] = t;
+    }
+    wf["types"] = types;
+    NodeEditor e;
+    e.setWorkflow(wf);
+    const QString tube = QStringLiteral("Tube_and_camera_Tube_lens_Tube_lens");
+    QVERIFY(e.replacementsFor(QStringLiteral("Sample")).contains(QStringLiteral("fusion.grating")));
+    QVERIFY(e.replacementsFor(tube).contains(QStringLiteral("fusion.grating")));
+    QVERIFY(!e.replacementsFor(QStringLiteral("Objective_A")).contains(QStringLiteral("fusion.grating")));
+    QVERIFY(e.replaceNode(QStringLiteral("Sample"), QStringLiteral("fusion.grating")));
+    QVERIFY(e.replaceNode(tube, QStringLiteral("fusion.grating")));
+    const QJsonObject m = e.workflow()["model"].toObject();
+    for (const QJsonValue& b : m["branches"].toArray()) {
+      for (const QJsonValue& st : b.toObject()["steps"].toArray()) {
+        const QJsonArray step = st.toArray();
+        if (step.at(0).toString() == QStringLiteral("Sample")) QCOMPARE(step, (QJsonArray{"Sample", "front", "front"}));
+        if (step.at(0).toString() == tube) QCOMPARE(step, (QJsonArray{tube, "front", "back"}));
+      }
+    }
+    QSet<QString> tube_ports;
+    for (const QJsonValue& v : m["connections"].toArray()) {
+      for (const QJsonValue& end : v.toObject()["ports"].toArray()) {
+        if (end.toArray().at(0).toString() == tube) tube_ports.insert(end.toArray().at(1).toString());
+      }
+    }
+    QCOMPARE(tube_ports, (QSet<QString>{"front", "back"}));
+  }
+
   void fieldsOfAPluginNode() {
     // ADR Nachtrag 1: the plugin describes the data of a node (JSON pointers into its params);
     // the dialog edits them in a tab per element and writes back only what was changed
