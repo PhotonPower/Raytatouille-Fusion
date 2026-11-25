@@ -50,8 +50,11 @@ BLOCK_TYPES = ("fg.grating", "fg.stack")
 def target_block(wf: dict, target: dict) -> dict:
     """The block an action was chosen on (`ctx.target`: its id and the groups it lies in), as the
     node dict inside `wf` – changing it changes `wf`."""
-    container = wf.get("model") or wf.get("graph")
+    container = wf.get("model")
     if not container:
+        if wf.get("graph"):  # version 1: CAD converts it when it opens the document
+            raise UserError("The node workflow is an old socket graph (version 1) – Convert to model "
+                            "(Workflow plugin) makes it a model.")
         raise UserError("The document has no node workflow.")
     nodes = container.get("nodes", [])
     for gid in target.get("scope", []):  # the block may lie inside groups (their active variant)

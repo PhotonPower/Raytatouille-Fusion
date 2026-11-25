@@ -127,7 +127,7 @@ class RaytracerPlugin(Plugin):
         list) that no file gave: the document computes without the .agf files. Their names."""
         try:
             embedded = importlib.import_module("rtt_fusion.graph.embedded")
-            nodes = (ctx.workflow().get("model") or ctx.workflow().get("graph") or {}).get("nodes", [])
+            nodes = (ctx.workflow().get("model") or {}).get("nodes", [])
         except Exception:  # noqa: BLE001 - an older RTT-Fusion or CAD: the files only
             return []
         have = set(lib.catalogs())
@@ -180,10 +180,6 @@ class RaytracerPlugin(Plugin):
         Raytatouille system, or no RTT-Fusion). Kept while the workflow's data stay the same."""
         wf = ctx.workflow()
         model = wf.get("model") if isinstance(wf, dict) else None
-        graph = None
-        if not model and isinstance(wf, dict) and isinstance(wf.get("graph"), dict):
-            # a socket graph (version 1, e.g. written by a script): the same system data
-            model = graph = wf["graph"]
         if not model or not any("rtt_system" in n.get("params", {}) for n in model.get("nodes", [])):
             return None
 
@@ -217,12 +213,7 @@ class RaytracerPlugin(Plugin):
         if cached is not None and cached[1] == stamp:
             return cached
         registry, _ = self._registry(fg)
-        if graph is not None:
-            d = importer.system_from_graph(io.from_dict(graph))
-            if d is None:
-                return None
-        else:
-            d = importer.system_from_model(io.model_from_dict(model, registry))
+        d = importer.system_from_model(io.model_from_dict(model, registry))
         if self.library is None:
             self.library = self._library(ctx, ctx.params.get("system") or "")
         try:
@@ -773,35 +764,6 @@ class RaytracerPlugin(Plugin):
                 pass
         return registry, extra
 
-    @staticmethod
-    def _available(execute) -> frozenset:
-        """Representations the workflow can run: R, and with fieldtracing H (fields, RTT-Fusion R18b)
-        and S (plane-wave spectra, R30a) – RTT-Fusion's `workflow.available()` where it has one."""
-        try:
-            return frozenset(importlib.import_module("rtt_fusion.graph.workflow").available())
-        except (ImportError, AttributeError):
-            pass
-        try:
-            import fieldtracing  # noqa: F401
-        except ImportError:
-            return execute.EXECUTABLE
-        return getattr(execute, "WITH_SPECTRA", getattr(execute, "WITH_FIELDS", execute.EXECUTABLE))
-
-    @classmethod
-    def _checked(cls, fg, execute, validate, graph, registry) -> tuple[list[dict], dict]:
-        """Diagnostics of the graph check and of the planner (R17, with what can run and what the
-        blocks take natively, R30a), and the plan."""
-        try:
-            checked = importlib.import_module("rtt_fusion.graph.workflow").checked
-        except (ImportError, AttributeError):
-            checked = None
-        if checked is not None:
-            return checked(graph, registry)
-        diagnostics = [d.__dict__ for d in validate.validate(graph, registry)]
-        plan = fg.plan(graph, registry, fg.Requirements(available=cls._available(execute)))
-        diagnostics += [d.__dict__ for d in plan.diagnostics]
-        return diagnostics, plan.to_dict()
-
     @action("New Raytatouille system", description="Start a system in the node workflow without a file: "
                                                     "source, stop and detector (insert parts in between)")
     def new_rtt_system(self, ctx):
@@ -821,62 +783,18 @@ class RaytracerPlugin(Plugin):
     def workflow_from_system(self, ctx):
         _require_rt()
         fg, _, execute, io, validate = self._fusion()
+        if not self._has_model(fg):  # the workflow is a model (version 2) – never a socket graph
+            raise UserError("Workflow from system needs RTT-Fusion 0.5.1 or newer (models with ports and "
+                            "branches) in the plugin environment: pip install -U rtt-fusion")
         system, _ = self._current(ctx)
-        if self._has_model(fg):  # RTT-Fusion R24: ports, connections, the system's paths as branches
-            registry, _ = self._registry(fg)
-            model = fg.model_from_raytatouille(system)
-            kept = self._keep_model_edits(fg, io, model, ctx.workflow(), registry)
-            wf = self._model_workflow(fg, execute, io, validate, model, registry, ctx)
-            ctx.set_workflow(wf)
-            return (f"workflow: {len(model.nodes)} blocks, {len(model.connections)} connections, "
-                    f"{len(model.branches)} branches" + (f"; kept {kept}" if kept else ""))
-        graph = fg.graph_from_raytatouille(system)
+        # RTT-Fusion R24: ports, connections, the system's paths as branches
         registry, _ = self._registry(fg)
-        # every node with its effective sockets, so the editor needs no type knowledge
-        for node in graph.nodes.values():
-            if not node.sockets:
-                node.sockets = validate.node_sockets(node, registry)
-        kept = self._keep_edits(io, graph, ctx.workflow().get("graph"))
-        diagnostics, plan = self._checked(fg, execute, validate, graph, registry)
-        ctx.set_workflow({"graph": io.to_dict(graph), "types": self._catalogue(registry),
-                          "diagnostics": diagnostics, "plan": plan})
-        return f"workflow: {len(graph.nodes)} blocks, {len(graph.links)} links" + (f"; kept {kept}" if kept else "")
-
-    @staticmethod
-    def _keep_edits(io, graph, old) -> str:
-        """Carries the user's edits of the previous workflow over to a new import of the same system:
-        positions, muted blocks, parameters and type of blocks that were replaced (same id), link
-        transports, and blocks the import does not make (e.g. meta blocks) with their links."""
-        if not old:
-            return ""
-        try:
-            previous = io.from_dict(old)
-        except Exception:  # noqa: BLE001 - an unreadable old workflow is simply replaced
-            return ""
-        counts = {"blocks": 0, "transports": 0, "added": 0}
-        for nid, node in previous.nodes.items():
-            if nid in graph.nodes:
-                new = graph.nodes[nid]
-                new.position = node.position
-                new.muted = node.muted
-                if node.type_id != new.type_id or node.params != new.params:
-                    if node.type_id != new.type_id:  # replaced in the editor (e.g. grating)
-                        new.type_id, new.sockets, new.through = node.type_id, node.sockets, node.through
-                    new.params = dict(node.params)
-                    counts["blocks"] += 1
-            else:
-                graph.add(node)
-                counts["added"] += 1
-        existing = {(lk.source, lk.target) for lk in graph.links}
-        for lk in previous.links:
-            match = next((x for x in graph.links if (x.source, x.target) == (lk.source, lk.target)), None)
-            if match is not None and lk.transport != match.transport:
-                graph.set_transport(match, lk.transport)
-                counts["transports"] += 1
-            elif match is None and (lk.source, lk.target) not in existing \
-                    and lk.source[0] in graph.nodes and lk.target[0] in graph.nodes:
-                graph.connect(lk.source, lk.target, lk.transport)
-        return ", ".join(f"{v} {k}" for k, v in counts.items() if v)
+        model = fg.model_from_raytatouille(system)
+        kept = self._keep_model_edits(fg, io, model, ctx.workflow(), registry)
+        wf = self._model_workflow(fg, execute, io, validate, model, registry, ctx)
+        ctx.set_workflow(wf)
+        return (f"workflow: {len(model.nodes)} blocks, {len(model.connections)} connections, "
+                f"{len(model.branches)} branches" + (f"; kept {kept}" if kept else ""))
 
     # ------------------------------------------------------------------ the model (RTT-Fusion R24)
     @staticmethod

@@ -61,7 +61,7 @@ assert workflow_plugin.with_notes(plan, []) is plan
 
 try:
     import numpy as np
-    from rtt_fusion.graph import Graph, Node, io, workflow
+    from rtt_fusion.graph import Graph, Node, io, model_from_graph, workflow
     from rtt_fusion.results import FIELD_REFERENCE, to_json
 except ImportError as e:
     print(f"skipped: {e}")
@@ -72,13 +72,13 @@ if not hasattr(workflow, "embed_files"):
 
 
 def write_mirror_table(path: Path) -> str:
-    """A Jones table of a plain mirror (order 0, amplitude −1) around normal incidence."""
+    """A Jones table of a plain window (order 0 transmitted, amplitude 1) around normal incidence."""
     lam = np.linspace(0.59, 0.61, 4)
     s = np.linspace(-0.03, 0.03, 7)
     jones = np.zeros((1, len(lam), len(s), len(s), 2, 2), dtype=complex)
-    jones[...] = -np.eye(2)
+    jones[...] = np.eye(2)
     data = {
-        "parameters": {"orders": [0], "side": "reflected", "period_um": 0.7, "n_in": 1.0, "n_out": 1.0},
+        "parameters": {"orders": [0], "side": "transmitted", "period_um": 0.7, "n_in": 1.0, "n_out": 1.0},
         "inputs": {"wavelengths_um": lam, "sigma_x": s, "sigma_y": s, "jones": jones},
     }
     path.write_text(to_json(FIELD_REFERENCE, data), encoding="utf-8")
@@ -90,9 +90,10 @@ def socket_graph(table: str) -> dict:
     g.add(Node("src", "optics.collimated_source", params={
         "radius": 0.01, "rings": 3, "center": [0, 0, -0.1], "wavelengths_um": [0.6],
         "field_angles_deg": [[0.0, 0.0]]}))
-    g.add(Node("gr", "fg.grating", params={"table": table}))
+    g.add(Node("gr", "fg.grating", params={"table": table, "side": "transmitted", "point": [0, 0, 0],
+                                           "normal": [0, 0, -1]}))
     g.add(Node("cam", "optics.detector", params={
-        "point": [0, 0, -0.05], "normal": [0, 0, 1], "half_size": [0.02, 0.02], "pixels": [16, 16]}))
+        "point": [0, 0, 0.05], "normal": [0, 0, -1], "half_size": [0.02, 0.02], "pixels": [16, 16]}))
     g.add(Node("show", "display.image", name="Camera"))
     g.connect(("src", "out"), ("gr", "in"))
     g.connect(("gr", "out"), ("cam", "in"))
@@ -100,10 +101,16 @@ def socket_graph(table: str) -> dict:
     return io.to_dict(g)
 
 
+def as_model(graph: dict) -> dict:
+    """The workflow of a socket graph written as a script would: its model (version 2) – what CAD
+    makes of it when it opens the document (Convert to model)."""
+    return {"model": io.model_to_dict(model_from_graph(io.from_dict(graph), workflow.registry()[0]))}
+
+
 class Ctx:
-    def __init__(self, graph: dict):
+    def __init__(self, wf: dict):
         self.params = {"rays": 37, "pixels": 16, "window": 0.0, "gaussian_waist": 0.0}
-        self.wf = {"graph": graph}
+        self.wf = wf
         self.lines: list[str] = []
         self.images: list[str] = []
 
@@ -142,18 +149,18 @@ class Ctx:
 
 
 def grating_params(ctx: Ctx) -> dict:
-    return next(n for n in ctx.wf["graph"]["nodes"] if n["id"] == "gr")["params"]
+    return next(n for n in ctx.wf["model"]["nodes"] if n["id"] == "gr")["params"]
 
 
 with tempfile.TemporaryDirectory() as tmp:
     # the table goes into the document at the check; the run works after the file is gone
     table = write_mirror_table(Path(tmp) / "mirror.json")
-    ctx = Ctx(socket_graph(table))
+    ctx = Ctx(as_model(socket_graph(table)))
     engine = workflow_plugin.WorkflowEngine()
     engine.check_workflow(ctx)
     params = grating_params(ctx)
     assert params["table"] == "" and params["table_data"]["format"] == "raytatouille-result", params
-    assert tmp not in str(ctx.wf["graph"])
+    assert tmp not in str(ctx.wf["model"])
     assert any("stored in the workflow" in line for line in ctx.lines), ctx.lines
     Path(table).unlink()
     message = engine.run_workflow(ctx)
@@ -162,7 +169,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # a path that cannot be read: a warning at the check, the reason in the run's status line
     missing = str(Path(tmp) / "elsewhere" / "grating.fg.json")
-    ctx = Ctx(socket_graph(missing))
+    ctx = Ctx(as_model(socket_graph(missing)))
     engine = workflow_plugin.WorkflowEngine()
     engine.check_workflow(ctx)
     codes = [d["code"] for d in ctx.wf["diagnostics"]]
@@ -184,26 +191,26 @@ with tempfile.TemporaryDirectory() as tmp:
             camera = evaluators["optics.detector"]
 
             def detector(ctx_, node, socket, inputs):
-                ctx_.used["gr.out -> cam.in"] = {"representation": "H", "reason": "a focus"}
+                ctx_.used["gr.back_out -> cam.in"] = {"representation": "H", "reason": "a focus"}
                 return camera(ctx_, node, socket, inputs)
 
             return {**evaluators, "optics.detector": detector}
 
         workflow_plugin._evaluators = deciding
         try:
-            ctx = Ctx(socket_graph(table))
+            ctx = Ctx(as_model(socket_graph(table)))
             engine = workflow_plugin.WorkflowEngine()
             engine.check_workflow(ctx)
-            assert "used" not in ctx.wf["plan"]["links"]["gr.out -> cam.in"]
+            assert "used" not in ctx.wf["plan"]["links"]["gr.back_out -> cam.in"]
             engine.run_workflow(ctx)
-            shown = ctx.wf["plan"]["links"]["gr.out -> cam.in"]
+            shown = ctx.wf["plan"]["links"]["gr.back_out -> cam.in"]
             assert shown["representation"] == "R" and shown["used"] == "H", shown
             assert shown["used_reason"] == "a focus", shown
             engine.check_workflow(ctx)  # the result is still up to date: the check keeps it
-            assert ctx.wf["plan"]["links"]["gr.out -> cam.in"]["used"] == "H"
+            assert ctx.wf["plan"]["links"]["gr.back_out -> cam.in"]["used"] == "H"
             ctx.params["pixels"] = 32  # out of date: only the plan
             engine.check_workflow(ctx)
-            assert "used" not in ctx.wf["plan"]["links"]["gr.out -> cam.in"]
+            assert "used" not in ctx.wf["plan"]["links"]["gr.back_out -> cam.in"]
         finally:
             workflow_plugin._evaluators = plain
 
@@ -217,7 +224,7 @@ with tempfile.TemporaryDirectory() as tmp:
                        encoding="utf-8")
         g = Graph()
         g.add(Node("source", "rtt.source", params={"rtt_system": {}, "rtt_catalogs": ["k.agf"]}))
-        ctx = Ctx(io.to_dict(g))
+        ctx = Ctx(as_model(io.to_dict(g)))
         engine = workflow_plugin.WorkflowEngine()
         stored, problems = engine._embed(ctx, workflow, g)
         assert not stored and problems[0]["code"] == "graph.file_unreadable", problems
@@ -227,15 +234,15 @@ with tempfile.TemporaryDirectory() as tmp:
         assert g.nodes["source"].params["rtt_catalogs"] == []
         agf.unlink()
         lines: list[str] = []
-        lib = engine._materials({"graph": io.to_dict(g)}, lines.append)
+        lib = engine._materials({"model": io.to_dict(g)}, lines.append)  # the nodes, as in a model
         if lib is not None:  # with raytatouille
             assert lib.catalogs() == ["K"] and not lines, lines
-        assert engine._materials({"graph": io.to_dict(Graph())}, lines.append) is None or not lines
+        assert engine._materials({"model": io.to_dict(Graph())}, lines.append) is None or not lines
 
     # results kept with their fingerprint (CAD: saved in the .rttf): an unchanged display is not
     # computed again – also with a new engine, as after reopening the document – a changed one is
     table = write_mirror_table(Path(tmp) / "mirror3.json")
-    ctx = Ctx(socket_graph(table))
+    ctx = Ctx(as_model(socket_graph(table)))
     kept: dict[str, str] = {}
 
     def image(run, title, *args, key="", stamp="", **kwargs):
@@ -277,7 +284,7 @@ if "S" in workflow.available() and hasattr(execute.Executor, "_record_used"):
     g.connect(("lens", "out"), ("toS", "in"))
     g.connect(("toS", "out"), ("cam", "in"))
     g.connect(("cam", "image"), ("show", "in"))
-    ctx = Ctx(io.to_dict(g))
+    ctx = Ctx(as_model(io.to_dict(g)))
     ctx.params["pixels"] = 9
     engine = workflow_plugin.WorkflowEngine()
     engine.check_workflow(ctx)
@@ -318,9 +325,15 @@ if hasattr(topology, "_through_back_ports"):
     g.connect(("src", "out"), ("G1", "in"))
     g.connect(("G1", "out"), ("G2", "in"))
     g.connect(("G2", "out"), ("cam", "in"))
-    ctx = Ctx(io.to_dict(g))
+    ctx = Ctx({"graph": io.to_dict(g)})
     plugin = workflow_plugin.WorkflowEngine()
+    try:  # Check and Run work on models only: an old graph that could not be converted says so
+        plugin.check_workflow(ctx)
+        raise AssertionError("an old socket graph checked")
+    except workflow_plugin.UserError as e:
+        assert "Convert to model" in str(e), e
     text = plugin.convert_to_model(ctx)
+    assert text.startswith("old workflow (version 1) converted to a model"), text
     assert "graph" not in ctx.wf and len(ctx.wf["model"]["connections"]) == 3, (text, ctx.wf.keys())
     try:
         plugin.convert_to_model(ctx)

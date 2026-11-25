@@ -249,11 +249,19 @@ with tempfile.TemporaryDirectory() as d:
     back = BlockCtx(ctx.written, ctx.target, {"config_file": ""})
     fgp.block_to_config(back)
     assert fg_config.to_config(back.params)["period_um"] == {"x": 0.8}
-    # a stack keeps no table; a socket graph (R16) works the same
+    # a stack keeps no table; an old socket graph (version 1) is not edited – it is converted first
     stack = {"id": "S", "type": "fg.stack", "params": {"fouriergrating": ""}}
-    ctx = BlockCtx({"graph": {"nodes": [stack]}}, {"block": "S", "scope": []}, fg_config.to_params(LAMELLAR))
+    ctx = BlockCtx({"model": {"nodes": [stack]}}, {"block": "S", "scope": []}, fg_config.to_params(LAMELLAR))
     assert "table" not in fgp.config_to_block(ctx)
-    assert ctx.written["graph"]["nodes"][0]["params"] == {"fouriergrating": "", "config": LAMELLAR}
+    assert ctx.written["model"]["nodes"][0]["params"] == {"fouriergrating": "", "config": LAMELLAR}
+    old = {"id": "S", "type": "fg.stack", "params": {"fouriergrating": ""}}
+    try:
+        fgp.config_to_block(BlockCtx({"graph": {"nodes": [old]}}, {"block": "S", "scope": []},
+                                     fg_config.to_params(LAMELLAR)))
+        raise AssertionError("an old socket graph edited")
+    except UserError as e:
+        assert "Convert to model" in str(e), e
+    assert old["params"] == {"fouriergrating": ""}
     for wf_, target, why in (({"model": {"nodes": [stack]}}, {"block": "x"}, "is gone"),
                              ({"model": {"nodes": [stack]}}, {"block": "S", "scope": ["G"]}, "group G is gone"),
                              ({"model": {"nodes": [grating_node()]}}, {"block": "Probe"}, "holds no"),
