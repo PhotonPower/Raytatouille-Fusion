@@ -4,7 +4,7 @@
 %global nurbforge_tag_opt %{?nurbforge_tag:-DNFCAD_NURBFORGE_TAG=%{nurbforge_tag}}
 
 Name:           raytatouille-fusion
-Version:        1.2.0
+Version:        1.2.1
 Release:        1%{?dist}
 Summary:        Desktop CAD front end for the Nurbforge NURBS kernel
 License:        MIT AND MPL-2.0
@@ -44,6 +44,8 @@ DESTDIR=%{buildroot} cmake --install build --component app
 %{_datadir}/raytatouille-fusion/
 
 %changelog
+* Wed Nov 25 2026 Raytatouille Fusion developers - 1.2.1-1
+- Release 1.2.1: Update drawing, Convert to model, Replace with for two-port gratings, near-plane fix
 * Tue Nov 24 2026 Raytatouille Fusion developers - 1.2.0-1
 - Release 1.2.0: hp-FEM plugin (gratings, field maps, workflow block, unit cell from CAD bodies)
 * Sun Nov 22 2026 Raytatouille Fusion developers - 1.1.0-1

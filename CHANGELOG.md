@@ -6,6 +6,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-25
+
 ### Added
 - **Update drawing in the node workflow**: a button above the editor – every running plugin that
   follows the workflow updates what it shows now (the Raytracer draws the system as CAD bodies), as
