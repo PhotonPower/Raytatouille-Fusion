@@ -86,9 +86,9 @@ class TestMainWindowPlugins : public QObject {
     auto* dock = w.findChild<QDockWidget*>(QStringLiteral("workflowDock"));
     QVERIFY(doc != nullptr && dock != nullptr);
     QVERIFY(!dock->isVisible());
-    const QJsonObject wf{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1},
+    const QJsonObject wf{{"model", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 2},
                                                {"nodes", QJsonArray{QJsonObject{{"id", "a"}, {"type", "rtt.source"}}}},
-                                               {"links", QJsonArray{}}}}};
+                                               {"connections", QJsonArray{}}}}};
     doc->setWorkflow(wf);
     doc->requestWorkflowShown();
     QVERIFY(dock->isVisible());
@@ -110,10 +110,10 @@ class TestMainWindowPlugins : public QObject {
     QStandardPaths::setTestModeEnabled(true);
     QTemporaryDir dir;
     const QString path = dir.filePath(QStringLiteral("with_workflow.rttf"));
-    const QJsonObject wf{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1},
+    const QJsonObject wf{{"model", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 2},
                                                {"nodes", QJsonArray{QJsonObject{{"id", "a"}, {"type", "rtt.source"}},
                                                                     QJsonObject{{"id", "b"}, {"type", "rtt.detector"}}}},
-                                               {"links", QJsonArray{}}}}};
+                                               {"connections", QJsonArray{}}}}};
     {
       nfcad::document::Document saved;
       saved.setWorkflow(wf);
@@ -136,6 +136,35 @@ class TestMainWindowPlugins : public QObject {
     doc->setWorkflow(doc->workflow());  // unchanged: no workflowChanged
     doc->requestWorkflowShown();
     QVERIFY(editor->nodeItem(QStringLiteral("a")) != nullptr);
+  }
+
+  void oldWorkflowOfAnOpenedFile() {
+    // a document with an old socket graph (version 1): the editor does not edit it but says that
+    // it is converted (Workflow plugin, Convert to model); until then the graph stays as it is
+    QStandardPaths::setTestModeEnabled(true);
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("old_workflow.rttf"));
+    const QJsonObject wf{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1},
+                                               {"nodes", QJsonArray{QJsonObject{{"id", "a"}, {"type", "rtt.source"}}}},
+                                               {"links", QJsonArray{}}}}};
+    {
+      nfcad::document::Document saved;
+      saved.setWorkflow(wf);
+      QVERIFY(nfcad::document::save_nfcad(saved, path).isEmpty());
+    }
+    nfcad::app::MainWindow w;
+    w.setAttribute(Qt::WA_DontShowOnScreen);
+    w.show();
+    QVERIFY(w.openFile(path, true));
+    auto* doc = w.findChild<nfcad::document::Document*>();
+    auto* editor = w.findChild<nfcad::ui::NodeEditor*>();
+    QVERIFY(doc != nullptr && editor != nullptr);
+    QVERIFY(editor->oldGraph());
+    QVERIFY(editor->nodeItem(QStringLiteral("a")) == nullptr);  // a note instead of the blocks
+    QCOMPARE(doc->workflow()["graph"], wf["graph"]);
+    editor->addNode(QStringLiteral("rtt.detector"), QPointF(0, 0));  // not edited: no model beside it
+    QVERIFY(!doc->workflow().contains(QStringLiteral("model")));
+    QCOMPARE(doc->workflow()["graph"], wf["graph"]);
   }
 
   void escapeLeavesAGroup() {
@@ -343,18 +372,18 @@ class TestMainWindowPlugins : public QObject {
     auto* doc = w.findChild<nfcad::document::Document*>();
     auto* editor = w.findChild<nfcad::ui::NodeEditor*>();
     QVERIFY(doc != nullptr && editor != nullptr);
-    const QJsonObject wf{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1},
+    const QJsonObject wf{{"model", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 2},
                                                {"nodes", QJsonArray{QJsonObject{{"id", "a"}, {"type", "rtt.source"},
                                                                                 {"position", QJsonArray{0, 0}}},
                                                                     QJsonObject{{"id", "b"}, {"type", "rtt.detector"},
                                                                                 {"position", QJsonArray{400, 160}}}}},
-                                               {"links", QJsonArray{}}}}};
+                                               {"connections", QJsonArray{}}}}};
     doc->setWorkflow(wf);
     doc->requestWorkflowShown();
     doc->markSaved();
     QApplication::processEvents();  // fitAll
     auto node = [](const QJsonObject& workflow, const QString& id) {
-      for (const QJsonValue& v : workflow["graph"].toObject()["nodes"].toArray()) {
+      for (const QJsonValue& v : workflow["model"].toObject()["nodes"].toArray()) {
         if (v.toObject()["id"].toString() == id) return v.toObject();
       }
       return QJsonObject{};

@@ -134,6 +134,10 @@ class MainWindow : public QMainWindow {
   /// Runs the actions plugins mark as following the node workflow (e.g. the Raytracer's drawing);
   /// `forced`: also report plugins that are busy (the Update drawing button)
   void followWorkflow(bool forced);
+  /// An opened document whose node workflow is an old socket graph (version 1): the Workflow
+  /// plugin converts it into a model (Convert to model); the document is then modified and is
+  /// saved as version 2. Without the plugin the editor says so and the graph stays as it is.
+  void convertOldWorkflow();
   void createPanels();
   void deleteSelection();
   void hideSelection();
