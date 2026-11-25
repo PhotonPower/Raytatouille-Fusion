@@ -38,6 +38,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 - **Manual: the grating blocks' back port** – `fg.grating` and `hpfem.grating` have the output
   `back_out` with the transmitted orders (RTT-Fusion 0.5.1, RTT-Fusion#120): a transmission
   grating is a step between two neighbours in the model, e.g. two gratings in a row.
+- **The Workflow and Raytracer plugins require `rtt_fusion>=0.5.1`** – Convert to model reads
+  chains of transmission gratings through their back port, and Replace with maps the gratings'
+  front and back ports; *Check environment* shows the `pip install` command for an older version.
 
 ## [1.2.0] - 2026-11-24
 
