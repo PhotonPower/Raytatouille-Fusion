@@ -268,6 +268,50 @@ with tempfile.TemporaryDirectory() as tmp:
     assert message == "workflow: Camera", message
     assert len(ctx.images) == 2
 
+    # Recompute (context menu of a block): the block and everything behind it computed again, the
+    # kept and the cached result dropped – also where the kept one counts as up to date (a result
+    # an older plugin version saved); a block no display depends on says so
+    calls: list[str] = []
+    plain = workflow_plugin._evaluators
+
+    def counting(extra):
+        evaluators = plain(extra)
+        if "optics.detector" not in evaluators:
+            return evaluators
+        camera = evaluators["optics.detector"]
+
+        def detector(ctx_, node, socket, inputs):
+            calls.append(node.id)
+            return camera(ctx_, node, socket, inputs)
+
+        return {**evaluators, "optics.detector": detector}
+
+    workflow_plugin._evaluators = counting
+    try:
+        engine = workflow_plugin.WorkflowEngine()
+        assert engine.run_workflow(ctx) == "workflow: Camera (unchanged)" and not calls
+        ctx.target = {"block": "cam", "scope": []}
+        message = engine.recompute_block(ctx)
+        assert message == "workflow: Camera", (message, ctx.lines)
+        assert calls == ["cam"] and len(ctx.images) == 3, (calls, ctx.images)
+        assert engine.run_workflow(ctx) == "workflow: Camera (unchanged)"  # kept again
+        engine.recompute_block(ctx)  # the same engine: its cached result goes too
+        assert calls == ["cam", "cam"], calls
+        ctx.target = {"block": "src"}  # in front of the camera: the camera again
+        engine.recompute_block(ctx)
+        assert calls == ["cam"] * 3, calls
+        g = io.model_from_dict(ctx.wf["model"], workflow.registry()[0])
+        g.nodes["spare"] = type(g.nodes["src"])("spare", "optics.collimated_source", params={"radius": 0.01})
+        ctx.wf = {**ctx.wf, "model": io.model_to_dict(g)}
+        ctx.target = {"block": "spare"}
+        try:
+            engine.recompute_block(ctx)
+            raise AssertionError("a block no display shows should not compute")
+        except workflow_plugin.UserError as e:
+            assert "nothing to compute again" in str(e), e
+    finally:
+        workflow_plugin._evaluators = plain
+
 # a spectrum on a link planned R (fusion.convert to S in front of a camera): R→S at the link after
 # the run, with the chain; the transports the editor offers in the document (R30e)
 execute = importlib.import_module("rtt_fusion.graph.execute")
@@ -342,5 +386,5 @@ if hasattr(topology, "_through_back_ports"):
         pass
 
 print("workflow plugin: files stored in the document, failures in the status line, R→H at the link, "
-      "glass catalogues stored, kept results not computed again, blocks without evaluator not offered, "
+      "glass catalogues stored, kept results not computed again, Recompute of a block, blocks without evaluator not offered, "
       "spectra at the links (R→S, notes)")

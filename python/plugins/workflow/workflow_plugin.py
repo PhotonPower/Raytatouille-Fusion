@@ -176,6 +176,21 @@ def _evaluators(extra: dict) -> dict:
     return {**base, **extra}
 
 
+def _discard(cache, key: str) -> None:
+    """Removes one result from the executor's cache (RTT-Fusion's ResultCache, which has no
+    method for it yet)."""
+    if cache is None:
+        return
+    discard = getattr(cache, "discard", None)
+    if discard is not None:
+        discard(key)
+        return
+    items = getattr(cache, "_items", None)
+    if items is not None and key in items:
+        _, size = items.pop(key)
+        cache.size_bytes -= size
+
+
 #: types the engine runs without an evaluator of their own (a junction adds what arrives; a group
 #: is unrolled into its blocks)
 _STRUCTURAL = frozenset({"fusion.sum", "group"})
@@ -377,6 +392,20 @@ class WorkflowEngine(Plugin):
     @action("Run workflow", description="Compute what the display blocks of the node workflow show: camera "
                                          "images, sweep curves, beam probes; links set to H as fields")
     def run_workflow(self, ctx):
+        return self._run(ctx)
+
+    @action("Recompute", description="Compute this block and everything behind it again, also where the "
+                                     "shown result counts as up to date (e.g. one the document kept from "
+                                     "an older version of a plugin)", block_types=("*",))
+    def recompute_block(self, ctx):
+        block = str(ctx.target.get("block", ""))
+        if not block:
+            raise UserError("Recompute: no block named.")
+        return self._run(ctx, "/".join([*(str(g) for g in ctx.target.get("scope", [])), block]))
+
+    def _run(self, ctx, force: str | None = None):
+        """Run the displays; `force`: a block of the model (path "group/…/block") whose results and
+        those of everything behind it are computed again, kept or cached ones dropped."""
         workflow, fg, execute, io = _fusion()
         wf = ctx.workflow()
         self._require_model(wf)
@@ -414,7 +443,8 @@ class WorkflowEngine(Plugin):
         run = ctx.result_set(f"Workflow {name or 'run'}")
         self._notes = []
         self._failures = []
-        made, fresh = self._run_displays(ctx, run, graph, registry, _evaluators(extra), execute, wf, displays)
+        made, fresh = self._run_displays(ctx, run, graph, registry, _evaluators(extra), execute, wf, displays,
+                                         force)
         ctx.workflow_running("")
         self._show_used(ctx, workflow, graph, model, registry, providers, fresh)
         if made:
@@ -510,16 +540,22 @@ class WorkflowEngine(Plugin):
             ex.context.progress = progress
             ex.context.on_node = on_node
 
-    def _run_displays(self, ctx, run, graph, registry, evaluators, execute, wf, displays) -> list:
+    def _run_displays(self, ctx, run, graph, registry, evaluators, execute, wf, displays, force=None) -> list:
         """Display blocks (R21) and everything in front of them, in one executor (shared blocks are
         computed once); their views as results with the key "workflow:<block>", shown in the
-        block's window (double-click)."""
+        block's window (double-click). `force`: see `_run`."""
         workflow, _, _, _ = _fusion()
         made = []
         failed: list[dict] = []
         ex = self._executor(ctx, graph, registry, evaluators, execute, wf)
         self._ran = set()
         kept = self._kept(ctx)
+        if force:
+            again = self._forget(ex, force, [n.id for n in displays])
+            if not again:
+                raise UserError(f"No display shows a result of {force} – nothing to compute again.")
+            kept = {k: v for k, v in kept.items() if k.removeprefix("workflow:") not in again}
+            displays = [n for n in displays if n.id in again]
         for k, node in enumerate(displays):
             ctx.check_cancel()
             a, b = k / len(displays), (k + 1) / len(displays)
@@ -584,6 +620,24 @@ class WorkflowEngine(Plugin):
         except Exception:  # noqa: BLE001 - only a hint
             fresh = set()
         return made, fresh
+
+    @staticmethod
+    def _forget(ex, block: str, displays: list) -> set:
+        """Drops the cached results of `block` (a block of the model, "group/…/block") and of
+        everything that depends on it on the way to `displays`; the displays that do (whose kept
+        results are then not up to date either)."""
+        ex.check()  # the plan is part of the keys
+        start = {nid for nid in ex.graph.nodes
+                 if nid.split("@")[0] == block or nid.split("@")[0].startswith(block + "/")}
+        needed = {d: ex.needed([(d, "view")]) for d in displays}
+        again = {d for d, deps in needed.items() if start & set(deps)}
+        cache = getattr(ex, "cache", None)
+        for d in again:
+            for node_id, sockets in needed[d].items():
+                for socket in sockets:
+                    if start & set(ex.needed([(node_id, socket)])):
+                        _discard(cache, ex._key(node_id, socket))
+        return again
 
     @staticmethod
     def _fresh(ex) -> set:

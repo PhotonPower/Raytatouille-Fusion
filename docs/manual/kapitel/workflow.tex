@@ -893,6 +893,14 @@ selbst sind aber im Dokument gespeichert (Abschnitt~\ref{sec:workflow-gespeicher
 unveränderte Anzeige gilt daher weiter als aktuell.
 \end{hinweis}
 
+\paragraph{Neu berechnen.} \gui{Recompute} im Kontextmenü eines Blocks rechnet diesen Block und
+alles dahinter neu, bis zu den Anzeigen, die von ihm abhängen – auch wenn sie als aktuell gelten.
+Das gespeicherte und das zwischengespeicherte Ergebnis werden dabei verworfen. Das brauchen Sie,
+wenn sich etwas außerhalb des Workflows geändert hat, das der Fingerabdruck nicht erfasst: vor
+allem eine neue Version eines Plugins oder von RTT-Fusion, die einen Fehler behebt. Ein Dokument,
+das mit der alten Version gespeichert wurde, zeigt sonst weiter das alte Ergebnis. Hängt keine
+Anzeige von dem Block ab, sagt das die Statuszeile, und es wird nichts gerechnet.
+
 % ---------------------------------------------------------------------------
 \section{Anzeigefenster}\label{sec:workflow-anzeigen}\index{Anzeigeblock}
 

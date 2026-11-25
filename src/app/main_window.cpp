@@ -527,7 +527,7 @@ void MainWindow::createPanels() {
     if (plugins_ == nullptr) return out;
     for (const auto& host : plugins_->plugins()) {
       for (const auto& a : host->actions()) {
-        if (!a.block_types.contains(type)) continue;
+        if (!a.block_types.contains(type) && !a.block_types.contains(QStringLiteral("*"))) continue;  // "*": every block
         QJsonArray scope;
         for (const QString& g : node_editor_->scope()) scope.append(g);
         out.emplace_back(a.label, [this, h = host.get(), action = a.id, target = QJsonObject{{"block", id}, {"scope", scope}}] {
