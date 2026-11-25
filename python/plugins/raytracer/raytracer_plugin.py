@@ -201,10 +201,11 @@ class RaytracerPlugin(Plugin):
             fg = importlib.import_module("rtt_fusion.graph")
         except ImportError:
             return None
-        def data(body: dict) -> list:  # what the system depends on, also inside groups
+        def data(body: dict) -> list:  # what the system depends on, also inside groups (and actuators)
             out = [[n.get("id"), {k: n.get("params", {}).get(k)
                                   for k in ("rtt", "runs", "rtt_system", "rtt_tree", "rtt_paths", "rtt_new")},
-                    n.get("variant"), {v: data(b) for v, b in (n.get("variants") or {}).items()}]
+                    n.get("variant"), {v: data(b) for v, b in (n.get("variants") or {}).items()},
+                    [n.get("params"), n.get("muted")] if n.get("type") == "fusion.actuator" else None]
                    for n in body.get("nodes", [])]
             return out + [body.get("branches"), (body.get("meta") or {}).get("branches")]
 
@@ -213,7 +214,9 @@ class RaytracerPlugin(Plugin):
         if cached is not None and cached[1] == stamp:
             return cached
         registry, _ = self._registry(fg)
-        d = importer.system_from_model(io.model_from_dict(model, registry))
+        made = io.model_from_dict(model, registry)
+        self._actuate(ctx, made)
+        d = importer.system_from_model(made)
         if self.library is None:
             self.library = self._library(ctx, ctx.params.get("system") or "")
         try:
@@ -222,6 +225,22 @@ class RaytracerPlugin(Plugin):
             raise UserError(f"The system of the node workflow is not valid:\n{e}") from e
         self._made = (system, stamp)
         return self._made
+
+    @staticmethod
+    def _actuate(ctx, model) -> None:
+        """The actuators of the workflow into its system parameters (RTT-Fusion fusion.actuator):
+        the drawing shows the stages where they stand. One that cannot be applied is reported and
+        the system drawn as the model gives it."""
+        if not any(n.type_id == "fusion.actuator" for n in model.nodes.values()):
+            return
+        try:
+            apply = importlib.import_module("rtt_fusion.graph.actuator").apply_actuators
+        except (ImportError, AttributeError):
+            return
+        try:
+            apply(model)
+        except Exception as e:  # noqa: BLE001 - the drawing goes on without them
+            ctx.log(f"actuators not applied to the drawing: {e}")
 
     def _new_revision(self, system) -> int:
         rev = self.next_revision

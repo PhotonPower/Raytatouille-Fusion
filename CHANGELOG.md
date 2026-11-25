@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Actuators** (RTT-Fusion `fusion.actuator`, under *Add block → meta*): one value for a stage
+  of the setup. It sets a free parameter of the Raytatouille system and moves the blocks the stage
+  carries. The Raytracer draws the system with the actuators applied. Manual: workflow chapter
+  (*Aktuatoren*) and the block reference.
 - **Recompute** in the context menu of every block of the node workflow: the block and everything
   behind it up to the displays are computed again, and their kept and cached results are dropped.
   That is needed after an update that fixes a computation: a document saved with the older version
