@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(RaytatouilleFusion
-  VERSION 1.2.0
+  VERSION 1.2.1
   DESCRIPTION "Desktop CAD front end for the Nurbforge NURBS kernel"
   HOMEPAGE_URL "https://github.com/PhotonPower/Raytatouille-Fusion"
   LANGUAGES C CXX)

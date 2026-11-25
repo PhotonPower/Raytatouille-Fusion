@@ -17,6 +17,7 @@
     <mediatype>application/x-raytatouille-fusion-plugin</mediatype>
   </provides>
   <releases>
+    <release version="1.2.1" date="2026-11-25"/>
     <release version="1.2.0" date="2026-11-24"/>
     <release version="1.1.0" date="2026-11-22"/>
     <release version="1.0.0" date="2026-11-11"/>
