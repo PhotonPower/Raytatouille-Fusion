@@ -6,6 +6,16 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Changed
+- **The node workflow is a model (version 2) only** – an old document whose workflow is a socket
+  graph (version 1) is converted into a model when it is opened (Workflow plugin, *Convert to
+  model*; reported in the status line); the document is then modified and is saved with the
+  model. Without the Workflow plugin or RTT-Fusion 0.5.1 the node editor shows a note instead of
+  the blocks and leaves the graph unchanged. Nothing writes or edits version 1 any more: the
+  Raytracer's *Workflow from system* writes models only, *Check* and *Run workflow* and the block
+  actions of the FourierGrating and hp-FEM plugins work on models, and the editor's socket-graph
+  mode is gone (a new workflow in the editor is a model).
+
 ## [1.2.1] - 2026-11-25
 
 ### Added

@@ -23,7 +23,7 @@ Geometry is stored exactly: degrees, knot vectors, control points and weights â€
                   "attributes": { "rtt.role": "mirror", "sim.inactive": true },   // v2, optional
                   "geometry": { "type": "shell", "faces": [ ... ] } } ],
   "plugins":  { "demo": { "params": { "rays": 300, "origin": [0, 0, 0] } } },  // v2, optional
-  "workflow": { "graph": { "format": "rtt-fusion-graph", ... }, "types": [], "diagnostics": [], "plan": {} },  // v2, optional
+  "workflow": { "model": { "format": "rtt-fusion-graph", "version": 2, ... }, "types": [], "diagnostics": [], "plan": {} },  // v2, optional
   "results":  [ { "key": "workflow:Kamerabild", "name": "Kamera", "kind": "image", "stamp": "3f1câ€¦",
                   "image": { "width": 512, "height": 512, "values": "<base64>", "extent": [-1, 1, -1, 1], ... } } ]  // v2, optional
 }
@@ -51,6 +51,14 @@ excludes an object from computations ([plugins.md](plugins.md), D11).
 
 `plugins` holds the values of each plugin's parameter panel by plugin id (P4,
 [plugin-api.md](plugin-api.md)); readers that do not know a plugin keep its entry unchanged.
+
+`workflow` holds the node workflow as a model of RTT-Fusion (`rtt-fusion-graph` version 2:
+blocks with ports, connections, branches, groups), with the block library, the diagnostics and
+the plan of the last check. Older documents may hold a socket graph instead (`"graph"`, version
+1): when such a document is opened, the Workflow plugin converts it into a model (*Convert to
+model*, RTT-Fusion 0.5.1 or newer); the document is then modified and is saved with the model.
+Without the plugin the graph is kept unchanged and the node editor only says so. Raytatouille
+Fusion writes no version 1.
 
 `results` keeps the newest result of every keyed display window, e.g. `workflow:<block>`, the
 display blocks of the node workflow. It holds images, curves, tables and bars, each with the
