@@ -31,6 +31,7 @@
 #include <QGraphicsPathItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
+#include <QGraphicsTextItem>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QMenu>
@@ -481,7 +482,7 @@ void NodeEditor::setWorkflow(const QJsonObject& workflow) {
   QJsonObject g = graph();
   if (!g.isEmpty() && !hasPositions(g)) {
     // imported graphs have no layout yet: arrange them (not an edit of the document)
-    const QHash<QString, QPointF> pos = modelMode() ? layoutModel(g) : layoutColumns(g);
+    const QHash<QString, QPointF> pos = layoutModel(g);
     QJsonArray nodes = g["nodes"].toArray();
     for (int k = 0; k < nodes.size(); ++k) {
       QJsonObject n = nodes[k].toObject();
@@ -509,87 +510,9 @@ bool NodeEditor::hasPositions(const QJsonObject& graph) {
   return n <= 1 || ys.size() > 1;
 }
 
-QHash<QString, QPointF> NodeEditor::layoutColumns(const QJsonObject& graph) const {
-  // longest path from the sources on the level of sockets (links out -> in, inside a block
-  // in -> out); a block's column is where light first arrives at it
-  QHash<QString, QStringList> edges;
-  QHash<QString, int> indegree;
-  QStringList order;
-  auto vertex = [&](const QString& v) {
-    if (!indegree.contains(v)) {
-      indegree.insert(v, 0);
-      order << v;
-    }
-  };
-  auto edge = [&](const QString& a, const QString& b) {
-    vertex(a);
-    vertex(b);
-    edges[a] << b;
-    ++indegree[b];
-  };
-  QStringList ids;
-  for (const QJsonValue& v : graph["nodes"].toArray()) {
-    const QJsonObject n = v.toObject();
-    const QString id = n["id"].toString();
-    ids << id;
-    QStringList ins, outs;
-    for (const QJsonValue& s : socketsOf(n)) {
-      const QJsonObject o = s.toObject();
-      (o["direction"].toString() == QLatin1String("in") ? ins : outs) << o["name"].toString();
-    }
-    QJsonObject through = n["through"].toObject();
-    if (through.isEmpty()) {  // the type's dependencies are not in the catalogue: all to all
-      for (const QString& o : outs) through[o] = QJsonArray::fromStringList(ins);
-    }
-    for (auto it = through.begin(); it != through.end(); ++it) {
-      for (const QJsonValue& i : it.value().toArray()) edge(id + QLatin1Char('.') + i.toString(), id + QLatin1Char('.') + it.key());
-    }
-    for (const QString& o : outs) vertex(id + QLatin1Char('.') + o);
-  }
-  for (const QJsonValue& v : graph["links"].toArray()) {
-    const QJsonObject l = v.toObject();
-    edge(l["from"].toArray().at(0).toString() + QLatin1Char('.') + l["from"].toArray().at(1).toString(),
-         l["to"].toArray().at(0).toString() + QLatin1Char('.') + l["to"].toArray().at(1).toString());
-  }
-  QHash<QString, int> depth;
-  QStringList queue;
-  for (const QString& v : order) {
-    if (indegree.value(v) == 0) queue << v;
-  }
-  QHash<QString, int> remaining = indegree;
-  while (!queue.isEmpty()) {
-    const QString v = queue.takeFirst();
-    for (const QString& w : edges.value(v)) {
-      depth[w] = std::max(depth.value(w), depth.value(v) + 1);
-      if (--remaining[w] == 0) queue << w;
-    }
-  }
-  QHash<QString, int> column;
-  for (const QString& id : ids) {
-    int first = -1;
-    for (const QString& v : order) {
-      if (!v.startsWith(id + QLatin1Char('.'))) continue;
-      const int d = depth.value(v);
-      if (first < 0 || d < first) first = d;
-    }
-    column[id] = std::max(first, 0);
-  }
-  QList<int> distinct(column.begin(), column.end());
-  std::sort(distinct.begin(), distinct.end());
-  distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
-  QHash<int, int> rows;
-  QHash<QString, QPointF> out;
-  for (const QString& id : ids) {
-    const int c = static_cast<int>(distinct.indexOf(column[id]));
-    const int r = rows[c]++;
-    out[id] = QPointF(c * (kWidth + 70.0), r * 130.0);
-  }
-  return out;
-}
-
 void NodeEditor::arrange() {
   QJsonObject g = graph();
-  const QHash<QString, QPointF> pos = modelMode() ? layoutModel(g) : layoutColumns(g);
+  const QHash<QString, QPointF> pos = layoutModel(g);
   QJsonArray nodes = g["nodes"].toArray();
   for (int k = 0; k < nodes.size(); ++k) {
     QJsonObject n = nodes[k].toObject();
@@ -686,6 +609,17 @@ void NodeEditor::rebuild() {
   links_.clear();
   connections_.clear();
   drag_line_ = nullptr;
+  if (oldGraph()) {  // version 1, not converted (no Workflow plugin or RTT-Fusion): a note only
+    QGraphicsTextItem* note = scene()->addText(
+        tr("This document holds an old node workflow (version 1). Raytatouille Fusion converts it "
+           "into a model when it opens the document; that needs the Workflow plugin and RTT-Fusion "
+           "0.5.1 or newer in the plugin environment (Plugins → Settings… → Check environment). Then "
+           "open the document again, or run Convert to model in the Workflow plugin. Until then the "
+           "workflow stays in the document unchanged."));
+    note->setDefaultTextColor(QColor(225, 225, 225));
+    note->setTextWidth(480.0);
+    return;
+  }
   const QJsonObject g = graph();
   // problems per node from the last check
   QHash<QString, QString> problems;
@@ -735,13 +669,12 @@ void NodeEditor::rebuild() {
     NodeItem* b = nodes_.value(l["to"].toArray().at(0).toString());
     SocketItem* sa = a != nullptr ? a->socket(l["from"].toArray().at(1).toString()) : nullptr;
     SocketItem* sb = b != nullptr ? b->socket(l["to"].toArray().at(1).toString()) : nullptr;
-    if (modelMode()) {  // a light channel is drawn at its port (an observer: port -> display)
-      if (sa == nullptr && a != nullptr) {
-        sa = a->socket(portOfSocket(node_of(g, a->id()), l["from"].toArray().at(1).toString()));
-      }
-      if (sb == nullptr && b != nullptr) {
-        sb = b->socket(portOfSocket(node_of(g, b->id()), l["to"].toArray().at(1).toString()));
-      }
+    // a light channel is drawn at its port (an observer: port -> display)
+    if (sa == nullptr && a != nullptr) {
+      sa = a->socket(portOfSocket(node_of(g, a->id()), l["from"].toArray().at(1).toString()));
+    }
+    if (sb == nullptr && b != nullptr) {
+      sb = b->socket(portOfSocket(node_of(g, b->id()), l["to"].toArray().at(1).toString()));
     }
     if (sa == nullptr || sb == nullptr) continue;  // reported by the check of the plugin
     const QString key = link_key(l);
@@ -752,7 +685,6 @@ void NodeEditor::rebuild() {
     scene()->addItem(link);
     links_.append(link);
   }
-  if (!modelMode()) return;
   // connections of two ports (R24): no direction; the planned representation per direction
   const QJsonObject planned_connections = plan["connections"].toObject();
   const QJsonArray connections = g["connections"].toArray();
@@ -879,6 +811,7 @@ void NodeEditor::nodeMoved() {
 }
 
 void NodeEditor::setGraph(const QJsonObject& graph) {
+  if (oldGraph()) return;  // version 1 is not edited (no model beside it): converted on opening
   // what changed (not the position): those blocks and everything behind them are out of date
   const QJsonObject before = this->graph();
   QSet<QString> seeds;
@@ -901,33 +834,28 @@ void NodeEditor::setGraph(const QJsonObject& graph) {
   for (const QJsonValue& v : old_links) {
     if (!new_links.contains(v)) seeds.insert(v.toObject()["to"].toArray().at(0).toString());
   }
-  if (modelMode()) {  // connections (both ends) and branches (their blocks) that changed
-    const QJsonArray old_c = before["connections"].toArray();
-    const QJsonArray new_c = graph["connections"].toArray();
-    for (const QJsonValue& v : new_c) {
-      if (old_c.contains(v)) continue;
-      for (const QJsonValue& e : v.toObject()["ports"].toArray()) seeds.insert(e.toArray().at(0).toString());
-    }
-    for (const QJsonValue& v : old_c) {
-      if (new_c.contains(v)) continue;
-      for (const QJsonValue& e : v.toObject()["ports"].toArray()) seeds.insert(e.toArray().at(0).toString());
-    }
-    const QJsonArray old_b = before["branches"].toArray();
-    const QJsonArray new_b = graph["branches"].toArray();
-    for (const QJsonArray* list : {&old_b, &new_b}) {
-      for (const QJsonValue& v : *list) {
-        if (old_b.contains(v) && new_b.contains(v)) continue;
-        const QJsonArray steps = v.toObject()["steps"].toArray();
-        if (!steps.isEmpty()) seeds.insert(steps.last().toArray().at(0).toString());  // its detector
-      }
+  // connections (both ends) and branches (their blocks) that changed
+  const QJsonArray old_c = before["connections"].toArray();
+  const QJsonArray new_c = graph["connections"].toArray();
+  for (const QJsonValue& v : new_c) {
+    if (old_c.contains(v)) continue;
+    for (const QJsonValue& e : v.toObject()["ports"].toArray()) seeds.insert(e.toArray().at(0).toString());
+  }
+  for (const QJsonValue& v : old_c) {
+    if (new_c.contains(v)) continue;
+    for (const QJsonValue& e : v.toObject()["ports"].toArray()) seeds.insert(e.toArray().at(0).toString());
+  }
+  const QJsonArray old_b = before["branches"].toArray();
+  const QJsonArray new_b = graph["branches"].toArray();
+  for (const QJsonArray* list : {&old_b, &new_b}) {
+    for (const QJsonValue& v : *list) {
+      if (old_b.contains(v) && new_b.contains(v)) continue;
+      const QJsonArray steps = v.toObject()["steps"].toArray();
+      if (!steps.isEmpty()) seeds.insert(steps.last().toArray().at(0).toString());  // its detector
     }
   }
   writeGraph(graph);
-  if (modelMode()) {
-    if (!states_.isEmpty() && !seeds.isEmpty()) invalidateModel(seeds);
-  } else {
-    invalidate(seeds);
-  }
+  if (!states_.isEmpty() && !seeds.isEmpty()) invalidateModel(seeds);
   workflow_.remove(QStringLiteral("diagnostics"));  // stale after an edit; the next check renews it
   if (workflow_.contains(QStringLiteral("plan"))) {  // the last plan stays visible, marked out of date
     QJsonObject plan = workflow_["plan"].toObject();
@@ -1005,15 +933,14 @@ void NodeEditor::removeNode(const QString& id) {
   }
   g["nodes"] = nodes;
   g["links"] = links;
-  if (modelMode()) {  // its connections go; branches through it stay (the check reports them)
-    QJsonArray connections;
-    for (const QJsonValue& v : g["connections"].toArray()) {
-      bool touches = false;
-      for (const QJsonValue& e : v.toObject()["ports"].toArray()) touches = touches || e.toArray().at(0).toString() == id;
-      if (!touches) connections.append(v);
-    }
-    g["connections"] = connections;
+  // its connections go; branches through it stay (the check reports them)
+  QJsonArray connections;
+  for (const QJsonValue& v : g["connections"].toArray()) {
+    bool touches = false;
+    for (const QJsonValue& e : v.toObject()["ports"].toArray()) touches = touches || e.toArray().at(0).toString() == id;
+    if (!touches) connections.append(v);
   }
+  g["connections"] = connections;
   setGraph(g);
 }
 
@@ -1033,35 +960,6 @@ void NodeEditor::setMuted(const QString& id, bool muted) {
   g["nodes"] = nodes;
   setGraph(g);
 }
-
-namespace {
-/// Socket map old -> new for the linked sockets of `id`; empty optional if not unique.
-std::optional<QHash<QString, QString>> socket_map(const QJsonArray& old_sockets, const QJsonArray& new_sockets,
-                                                  const QSet<QString>& linked) {
-  QHash<QString, QString> map;
-  QSet<QString> names;
-  for (const QJsonValue& s : new_sockets) names.insert(s.toObject()["name"].toString());
-  for (const QJsonValue& v : old_sockets) {
-    const QJsonObject o = v.toObject();
-    const QString name = o["name"].toString();
-    if (!linked.contains(name)) continue;
-    if (names.contains(name)) {
-      map[name] = name;
-      continue;
-    }
-    QStringList fit;
-    for (const QJsonValue& s : new_sockets) {
-      const QJsonObject n = s.toObject();
-      if (n["direction"] == o["direction"] && n["kind"] == o["kind"]) fit << n["name"].toString();
-    }
-    if (fit.size() != 1) return std::nullopt;
-    map[name] = fit.front();
-  }
-  QSet<QString> targets(map.begin(), map.end());
-  if (targets.size() != map.size()) return std::nullopt;
-  return map;
-}
-}  // namespace
 
 namespace {
 /// Ports with a connection of block `id` (R24).
@@ -1149,30 +1047,14 @@ std::optional<QHash<QString, QString>> port_map(const QJsonObject& type, const Q
 QStringList NodeEditor::replacementsFor(const QString& id) const {
   const QJsonObject g = graph();
   const QJsonObject old = node_of(g, id);
-  if (modelMode()) {
-    QStringList out;
-    const QSet<QString> connected = connected_ports(g, id);
-    const auto [entries, exits] = branch_ports(g, id);
-    for (const QJsonValue& v : workflow_.value(QStringLiteral("types")).toArray()) {
-      const QJsonObject t = v.toObject();
-      if (t["type"].toString() == old["type"].toString() || t["ports"].toArray().isEmpty()) continue;
-      if (t["category"].toString() == QLatin1String("meta") || t["category"].toString() == QLatin1String("analysis")) continue;
-      if (port_map(t, connected, entries, exits)) out << t["type"].toString();
-    }
-    return out;
-  }
-  QSet<QString> linked;
-  for (const QJsonValue& v : g["links"].toArray()) {
-    const QJsonObject l = v.toObject();
-    if (l["from"].toArray().at(0).toString() == id) linked.insert(l["from"].toArray().at(1).toString());
-    if (l["to"].toArray().at(0).toString() == id) linked.insert(l["to"].toArray().at(1).toString());
-  }
   QStringList out;
+  const QSet<QString> connected = connected_ports(g, id);
+  const auto [entries, exits] = branch_ports(g, id);
   for (const QJsonValue& v : workflow_.value(QStringLiteral("types")).toArray()) {
     const QJsonObject t = v.toObject();
-    if (t["type"].toString() == old["type"].toString()) continue;
-    if (t["sockets"].toArray().isEmpty()) continue;  // types with their own sockets (imported)
-    if (socket_map(socketsOf(old), t["sockets"].toArray(), linked)) out << t["type"].toString();
+    if (t["type"].toString() == old["type"].toString() || t["ports"].toArray().isEmpty()) continue;
+    if (t["category"].toString() == QLatin1String("meta") || t["category"].toString() == QLatin1String("analysis")) continue;
+    if (port_map(t, connected, entries, exits)) out << t["type"].toString();
   }
   return out;
 }
@@ -1182,113 +1064,81 @@ bool NodeEditor::replaceNode(const QString& id, const QString& type) {
   const QJsonObject old = node_of(g, id);
   const QJsonObject t = type_of(workflow_, type);
   if (old.isEmpty() || t.isEmpty()) return false;
-  if (modelMode()) {  // R24: the connections and the branch steps move to the new ports
-    const auto [entries, exits] = branch_ports(g, id);
-    const auto map = port_map(t, connected_ports(g, id), entries, exits);
-    if (!map) return false;
-    QJsonObject node{{"id", id}, {"type", type}, {"position", old["position"]}, {"ports", t["ports"]}, {"sockets", t["sockets"]}};
-    if (old.contains("name")) node["name"] = old["name"];
-    QJsonObject params;
-    for (const QJsonValue& p : t["params"].toArray()) params[p.toObject()["name"].toString()] = p.toObject()["default"];
-    // a block of another kind in place of a Raytatouille block keeps its data (ADR Nachtrag 1, as
-    // RTT-Fusion's replace_block): the element stays in the system the Raytracer draws, its
-    // traversals keyed by the new ports like the branch steps below (an old channel goes)
-    const QJsonObject before = old["params"].toObject();
-    if (!type.startsWith(QLatin1String("rtt.")) && before.contains(QLatin1String("rtt"))) {
-      params[QStringLiteral("rtt")] = before["rtt"];
-      QJsonObject runs;
-      const QJsonObject old_runs = before["runs"].toObject();
-      for (auto it = old_runs.begin(); it != old_runs.end(); ++it) {
-        const QString traversal = it.key().section(QLatin1Char('|'), 0, 0);
-        const QString in = traversal.section(QLatin1Char('>'), 0, 0);
-        const QString out = traversal.section(QLatin1Char('>'), 1);
-        const QString key = map->value(in, in) + QLatin1Char('>') + (out.isEmpty() ? out : map->value(out, out)) +
-                            QLatin1Char('|');
-        if (!runs.contains(key)) runs[key] = it.value();
-      }
-      if (!runs.isEmpty()) params[QStringLiteral("runs")] = runs;
-    }
-    if (!params.isEmpty()) node["params"] = params;
-    QJsonArray nodes = g["nodes"].toArray();
-    for (int k = 0; k < nodes.size(); ++k) {
-      if (nodes[k].toObject()["id"].toString() == id) nodes[k] = node;
-    }
-    QJsonArray connections = g["connections"].toArray();
-    for (int k = 0; k < connections.size(); ++k) {
-      QJsonObject c = connections[k].toObject();
-      QJsonArray ends = c["ports"].toArray();
-      for (int e = 0; e < 2; ++e) {
-        QJsonArray end = ends[e].toArray();
-        if (end.at(0).toString() == id) end[1] = map->value(end.at(1).toString(), end.at(1).toString());
-        ends[e] = end;
-      }
-      c["ports"] = ends;
-      connections[k] = c;
-    }
-    QJsonArray branches = g["branches"].toArray();
-    for (int k = 0; k < branches.size(); ++k) {
-      QJsonObject b = branches[k].toObject();
-      QJsonArray steps = b["steps"].toArray();
-      for (int s = 0; s < steps.size(); ++s) {
-        QJsonArray step = steps[s].toArray();
-        if (step.at(0).toString() != id) continue;
-        for (int i : {1, 2}) {
-          if (!step.at(i).isNull()) step[i] = map->value(step.at(i).toString(), step.at(i).toString());
-        }
-        while (step.size() > 3) step.removeLast();  // a channel of the old block means nothing here
-        steps[s] = step;
-      }
-      b["steps"] = steps;
-      branches[k] = b;
-    }
-    QJsonArray links;  // data links of the old block that the new one has no socket for go
-    QSet<QString> sockets;
-    for (const QJsonValue& s : t["sockets"].toArray()) sockets.insert(s.toObject()["name"].toString());
-    for (const QJsonValue& v : g["links"].toArray()) {
-      const QJsonObject l = v.toObject();
-      const bool from = l["from"].toArray().at(0).toString() == id;
-      const bool to = l["to"].toArray().at(0).toString() == id;
-      if ((from && !sockets.contains(l["from"].toArray().at(1).toString())) ||
-          (to && !sockets.contains(l["to"].toArray().at(1).toString()))) {
-        continue;
-      }
-      links.append(v);
-    }
-    g["nodes"] = nodes;
-    g["connections"] = connections;
-    g["branches"] = branches;
-    g["links"] = links;
-    setGraph(g);
-    return true;
-  }
-  QSet<QString> linked;
-  for (const QJsonValue& v : g["links"].toArray()) {
-    const QJsonObject l = v.toObject();
-    if (l["from"].toArray().at(0).toString() == id) linked.insert(l["from"].toArray().at(1).toString());
-    if (l["to"].toArray().at(0).toString() == id) linked.insert(l["to"].toArray().at(1).toString());
-  }
-  const auto map = socket_map(socketsOf(old), t["sockets"].toArray(), linked);
+  // R24: the connections and the branch steps move to the new ports
+  const auto [entries, exits] = branch_ports(g, id);
+  const auto map = port_map(t, connected_ports(g, id), entries, exits);
   if (!map) return false;
-  QJsonObject node{{"id", id}, {"type", type}, {"position", old["position"]}};
+  QJsonObject node{{"id", id}, {"type", type}, {"position", old["position"]}, {"ports", t["ports"]}, {"sockets", t["sockets"]}};
   if (old.contains("name")) node["name"] = old["name"];
   QJsonObject params;
   for (const QJsonValue& p : t["params"].toArray()) params[p.toObject()["name"].toString()] = p.toObject()["default"];
+  // a block of another kind in place of a Raytatouille block keeps its data (ADR Nachtrag 1, as
+  // RTT-Fusion's replace_block): the element stays in the system the Raytracer draws, its
+  // traversals keyed by the new ports like the branch steps below (an old channel goes)
+  const QJsonObject before = old["params"].toObject();
+  if (!type.startsWith(QLatin1String("rtt.")) && before.contains(QLatin1String("rtt"))) {
+    params[QStringLiteral("rtt")] = before["rtt"];
+    QJsonObject runs;
+    const QJsonObject old_runs = before["runs"].toObject();
+    for (auto it = old_runs.begin(); it != old_runs.end(); ++it) {
+      const QString traversal = it.key().section(QLatin1Char('|'), 0, 0);
+      const QString in = traversal.section(QLatin1Char('>'), 0, 0);
+      const QString out = traversal.section(QLatin1Char('>'), 1);
+      const QString key = map->value(in, in) + QLatin1Char('>') + (out.isEmpty() ? out : map->value(out, out)) +
+                          QLatin1Char('|');
+      if (!runs.contains(key)) runs[key] = it.value();
+    }
+    if (!runs.isEmpty()) params[QStringLiteral("runs")] = runs;
+  }
   if (!params.isEmpty()) node["params"] = params;
   QJsonArray nodes = g["nodes"].toArray();
   for (int k = 0; k < nodes.size(); ++k) {
     if (nodes[k].toObject()["id"].toString() == id) nodes[k] = node;
   }
-  QJsonArray links = g["links"].toArray();
-  for (int k = 0; k < links.size(); ++k) {
-    QJsonObject l = links[k].toObject();
-    for (const char* end : {"from", "to"}) {
-      QJsonArray e = l[QLatin1String(end)].toArray();
-      if (e.at(0).toString() == id) e[1] = map->value(e.at(1).toString(), e.at(1).toString());
-      l[QLatin1String(end)] = e;
+  QJsonArray connections = g["connections"].toArray();
+  for (int k = 0; k < connections.size(); ++k) {
+    QJsonObject c = connections[k].toObject();
+    QJsonArray ends = c["ports"].toArray();
+    for (int e = 0; e < 2; ++e) {
+      QJsonArray end = ends[e].toArray();
+      if (end.at(0).toString() == id) end[1] = map->value(end.at(1).toString(), end.at(1).toString());
+      ends[e] = end;
     }
-    links[k] = l;
+    c["ports"] = ends;
+    connections[k] = c;
+  }
+  QJsonArray branches = g["branches"].toArray();
+  for (int k = 0; k < branches.size(); ++k) {
+    QJsonObject b = branches[k].toObject();
+    QJsonArray steps = b["steps"].toArray();
+    for (int s = 0; s < steps.size(); ++s) {
+      QJsonArray step = steps[s].toArray();
+      if (step.at(0).toString() != id) continue;
+      for (int i : {1, 2}) {
+        if (!step.at(i).isNull()) step[i] = map->value(step.at(i).toString(), step.at(i).toString());
+      }
+      while (step.size() > 3) step.removeLast();  // a channel of the old block means nothing here
+      steps[s] = step;
+    }
+    b["steps"] = steps;
+    branches[k] = b;
+  }
+  QJsonArray links;  // data links of the old block that the new one has no socket for go
+  QSet<QString> sockets;
+  for (const QJsonValue& s : t["sockets"].toArray()) sockets.insert(s.toObject()["name"].toString());
+  for (const QJsonValue& v : g["links"].toArray()) {
+    const QJsonObject l = v.toObject();
+    const bool from = l["from"].toArray().at(0).toString() == id;
+    const bool to = l["to"].toArray().at(0).toString() == id;
+    if ((from && !sockets.contains(l["from"].toArray().at(1).toString())) ||
+        (to && !sockets.contains(l["to"].toArray().at(1).toString()))) {
+      continue;
+    }
+    links.append(v);
   }
   g["nodes"] = nodes;
+  g["connections"] = connections;
+  g["branches"] = branches;
   g["links"] = links;
   setGraph(g);
   return true;
@@ -1302,64 +1152,6 @@ void NodeEditor::setStates(const QJsonObject& states) {
 
 int NodeEditor::state(const QString& id) const {
   return states_.contains(id) ? (states_.value(id) ? 1 : 0) : -1;
-}
-
-void NodeEditor::invalidate(const QSet<QString>& seeds) {
-  if (states_.isEmpty() || seeds.isEmpty()) return;
-  const QJsonObject g = graph();
-  // outputs of a block and, per output, the inputs it depends on ("through" of the block or of
-  // its type; without it every output depends on every input)
-  auto outputs = [this, &g](const QString& id) {
-    QStringList out;
-    for (const QJsonValue& s : socketsOf(node_of(g, id))) {
-      if (s.toObject()["direction"].toString() == QLatin1String("out")) out << s.toObject()["name"].toString();
-    }
-    return out;
-  };
-  auto depends = [this, &g](const QString& id, const QString& out, const QString& in) {
-    const QJsonObject n = node_of(g, id);
-    QJsonObject through = n["through"].toObject();
-    if (through.isEmpty()) through = type_of(workflow_, n["type"].toString())["through"].toObject();
-    if (through.isEmpty() || !through.contains(out)) return through.isEmpty();
-    return through[out].toArray().contains(in);
-  };
-  auto is_drive = [this, &g](const QString& id, const QString& socket) {
-    for (const QJsonValue& s : socketsOf(node_of(g, id))) {
-      const QJsonObject o = s.toObject();
-      if (o["name"].toString() == socket) return o["accepts"].toArray().contains(QStringLiteral("drive"));
-    }
-    return false;
-  };
-  QSet<QString> stale(seeds.begin(), seeds.end());
-  QSet<QString> done;
-  QStringList todo;  // "node\nsocket" of out-of-date outputs
-  for (const QString& id : seeds) {
-    for (const QString& o : outputs(id)) todo << id + QLatin1Char('\n') + o;
-  }
-  while (!todo.isEmpty()) {
-    const QString item = todo.takeLast();
-    if (done.contains(item)) continue;
-    done.insert(item);
-    const QString id = item.section(QLatin1Char('\n'), 0, 0);
-    const QString socket = item.section(QLatin1Char('\n'), 1);
-    if (is_drive(id, socket)) continue;  // a drive carries no value between runs
-    for (const QJsonValue& v : g["links"].toArray()) {
-      const QJsonObject l = v.toObject();
-      if (l["from"].toArray().at(0).toString() != id || l["from"].toArray().at(1).toString() != socket) continue;
-      const QString to = l["to"].toArray().at(0).toString();
-      const QString in = l["to"].toArray().at(1).toString();
-      const QStringList outs = outputs(to);
-      bool any = outs.isEmpty();
-      for (const QString& o : outs) {
-        if (depends(to, o, in)) {
-          todo << to + QLatin1Char('\n') + o;
-          any = true;
-        }
-      }
-      if (any) stale.insert(to);
-    }
-  }
-  for (const QString& id : stale) states_.insert(id, false);
 }
 
 void NodeEditor::setRunning(const QString& id) {
@@ -1660,7 +1452,7 @@ QString NodeEditor::addNode(const QString& type, const QPointF& position) {
     }
   }
   if (!params.isEmpty()) node["params"] = params;
-  if (modelMode()) {  // the editor draws ports from the node (R24)
+  {  // the editor draws ports from the node (R24)
     const QJsonObject t = type_of(workflow_, type);
     if (!t["ports"].toArray().isEmpty()) node["ports"] = t["ports"];
     if (!t["sockets"].toArray().isEmpty()) node["sockets"] = t["sockets"];
@@ -1670,7 +1462,7 @@ QString NodeEditor::addNode(const QString& type, const QPointF& position) {
   g["nodes"] = nodes;
   if (!g.contains("format")) {
     g["format"] = QStringLiteral("rtt-fusion-graph");
-    g["version"] = modelMode() ? 2 : 1;
+    g["version"] = 2;
   }
   setGraph(g);
   return id;
@@ -1932,6 +1724,7 @@ void NodeEditor::contextMenuEvent(QContextMenuEvent* event) {
 }
 
 void NodeEditor::showMenu(const QPoint& view_pos, const QPoint& global_pos) {
+  if (oldGraph()) return;  // not edited: converted when the document is opened
   QMenu menu(this);
   const QPointF at = mapToScene(view_pos);
   NodeItem* node = nullptr;
@@ -2135,7 +1928,6 @@ bool NodeEditor::portOnLeft(const QString& node, const QString& port) const {
 
 QJsonArray NodeEditor::shownSockets(const QJsonObject& node) const {
   const QJsonArray sockets = socketsOf(node);
-  if (!modelMode()) return sockets;
   QJsonArray out;
   for (const QJsonValue& s : sockets) {
     if (s.toObject()["kind"].toString() != QLatin1String("light")) out.append(s);
@@ -2479,7 +2271,7 @@ void NodeEditor::showScope() {
     crumb_->installEventFilter(this);
   }
   QStringList parts{tr("Workflow")};
-  QJsonObject level = workflow_[key()].toObject();
+  QJsonObject level = workflow_.value(key()).toObject();  // value(): [] would add the key
   for (const QString& id : scope_) {
     const QJsonObject n = node_of(level, id);
     parts << QStringLiteral("%1 (%2)").arg(n["name"].toString(id), n["variant"].toString());

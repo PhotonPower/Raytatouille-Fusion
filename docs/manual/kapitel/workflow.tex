@@ -212,13 +212,17 @@ Danach bauen Sie den Workflow im Editor weiter aus: Blöcke hinzufügen, ersetze
 Parameter ändern, Äste aufnehmen. Der Workflow wird mit dem Dokument in der
 \datei{.rttf}-Datei gespeichert.
 
-\paragraph{Alte Form in ein Modell umwandeln.} Ein Workflow in der alten Form (ein Graph aus
-Sockets, Version~1, wie ihn ältere Versionen oder Skripte schreiben) kennt keine Ports, Äste und
-Gruppen: die Liste \gui{Branches} fehlt, und Baugruppen lassen sich nicht öffnen. \gui{Convert to
-model} im Workflow-Plugin wandelt ihn um; aus den Lichtwegen des Graphen werden die Äste. Gitter
-im Durchlicht, die dort mit \code{out} $\to$ \code{in} hintereinanderhängen, gehen dabei über ihren
-hinteren Port \code{back\_out} weiter (RTT-Fusion ab 0.5.1). Die Umwandlung ist ein
-Bearbeitungsschritt und lässt sich rückgängig machen.
+\paragraph{Alte Dokumente.}\label{sec:workflow-alte-form} Ältere Versionen und Skripte
+haben den Workflow als Graphen aus Sockets gespeichert (Version~1). Öffnen Sie ein solches
+Dokument, wandelt das Workflow-Plugin ihn sofort in ein Modell um (\gui{Convert to model}, in der
+Statuszeile gemeldet); aus den Lichtwegen des Graphen werden die Äste. Gitter im Durchlicht, die
+dort mit \code{out} $\to$ \code{in} hintereinanderhängen, gehen dabei über ihren hinteren Port
+\code{back\_out} weiter. Das Dokument gilt danach als geändert und wird beim Speichern als Modell
+geschrieben; die Umwandlung lässt sich wie ein Bearbeitungsschritt rückgängig machen. Fehlt das
+Workflow-Plugin oder RTT-Fusion ab 0.5.1 in der Plugin-Umgebung, zeigt der Editor statt der
+Blöcke einen Hinweis und lässt den Graphen unverändert; nach der Installation öffnen Sie das
+Dokument erneut oder wählen \gui{Convert to model}. Raytatouille Fusion schreibt keine
+Version~1 mehr.
 
 % ---------------------------------------------------------------------------
 \section{Das Fenster \enquote{Node workflow}}\label{sec:workflow-fenster}
@@ -587,8 +591,7 @@ innerer Ast, und der Schritt durch die Gruppe nennt ihn als Kanal. Abgelehnt wir
 Begründung in einem Meldungsfenster –, wenn
 
 \begin{itemize}
-  \item die Auswahl leer ist oder der Workflow die alte Form hat
-        (\gui{Select blocks of a model first.}),
+  \item die Auswahl leer ist (\gui{Select blocks of a model first.}),
   \item eine Quelle oder ein Detektor dabei ist (\gui{… is a source or a detector: branches
         begin and end outside a group.}),
   \item ein Daten-Link den Rand kreuzt (\gui{The data link … crosses the group's border; group

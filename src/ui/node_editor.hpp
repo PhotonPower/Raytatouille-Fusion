@@ -19,19 +19,18 @@ class NodeItem;
 class SocketItem;
 class LinkItem;
 
-/// Node editor of the RTT-Fusion workflow (RTT-Fusion docs/konzept-node-workflow.md, R16).
+/// Node editor of the RTT-Fusion workflow (RTT-Fusion docs/konzept-node-workflow.md).
 ///
-/// With a model (RTT-Fusion R24: {"model": rtt-fusion-graph version 2, …}) a block shows one
-/// point per light port, connections join two ports without a direction, data links stay
-/// directed, and the branches of the model can be listed, highlighted, recorded (click the port
-/// the light leaves each block by) and deleted – the modeller gives every branch.
-///
-/// Shows the working graph of the document – {"graph": rtt-fusion-graph, "types": [...],
-/// "diagnostics": [...], "plan": planner result} – as blocks with sockets and links, and lets the user edit it: move blocks
-/// (links follow), drag a link from an output to an input socket, delete links and blocks, mute a
-/// block, fix the transport of a link, add blocks from the type catalogue (context menu). Every
-/// edit emits `edited` with the whole workflow; the checks and the computation live in RTT-Fusion
-/// (the plugin), the editor only refuses obvious nonsense (input to input, light to data).
+/// Shows the model of the document (RTT-Fusion R24: {"model": rtt-fusion-graph version 2,
+/// "types": [...], "diagnostics": [...], "plan": planner result}): a block shows one point per
+/// light port and its data sockets, connections join two ports without a direction, data links
+/// stay directed, and the branches of the model can be listed, highlighted, recorded (click the
+/// port the light leaves each block by) and deleted – the modeller gives every branch. The user
+/// moves blocks, joins ports, deletes connections and blocks, mutes a block, fixes transports and
+/// adds blocks from the type catalogue (context menu). Every edit emits `edited` with the whole
+/// workflow; the checks and the computation live in RTT-Fusion (the plugin), the editor only
+/// refuses obvious nonsense. An old socket graph (version 1, {"graph": …}) is not edited: CAD
+/// converts it when it opens the document; until then the editor says so.
 class NodeEditor : public QGraphicsView {
   Q_OBJECT
  public:
@@ -117,8 +116,13 @@ class NodeEditor : public QGraphicsView {
                            const std::function<void(const QString&)>& choose) const;
 
   // ---- model (RTT-Fusion R24): ports, connections, branches
-  /// The workflow is a model (ports and branches) rather than a socket graph.
-  [[nodiscard]] bool modelMode() const { return workflow_.contains(QStringLiteral("model")); }
+  /// The workflow has a model (ports and branches).
+  [[nodiscard]] bool modelMode() const { return workflow_.value(QStringLiteral("model")).isObject(); }
+  /// The workflow is an old socket graph (version 1) that was not converted into a model: shown
+  /// as a note only, not edited.
+  [[nodiscard]] bool oldGraph() const {
+    return !modelMode() && workflow_.contains(QStringLiteral("graph"));
+  }
   /// Joins two ports (each port has at most one connection).
   bool addConnection(const QString& a, const QString& port_a, const QString& b, const QString& port_b);
   void removeConnection(int index);
@@ -208,7 +212,7 @@ class NodeEditor : public QGraphicsView {
   void updateLinks();
   void commit();  ///< writes the graph back into workflow_ and emits `edited`
   [[nodiscard]] QJsonArray socketsOf(const QJsonObject& node) const;
-  [[nodiscard]] QString key() const { return modelMode() ? QStringLiteral("model") : QStringLiteral("graph"); }
+  [[nodiscard]] static QString key() { return QStringLiteral("model"); }
   /// The level shown: the model, or the active variant of the group in `scope_`.
   [[nodiscard]] QJsonObject graph() const;
   /// Writes the level shown back into the workflow.
@@ -226,8 +230,6 @@ class NodeEditor : public QGraphicsView {
   void setGraph(const QJsonObject& graph);
   void nodeMoved();
   void showMenu(const QPoint& view_pos, const QPoint& global_pos);
-  /// Column layout of a graph (positions per node id); used for graphs without positions.
-  [[nodiscard]] QHash<QString, QPointF> layoutColumns(const QJsonObject& graph) const;
   [[nodiscard]] static bool hasPositions(const QJsonObject& graph);
 
   QJsonObject workflow_;
@@ -252,8 +254,6 @@ class NodeEditor : public QGraphicsView {
   QJsonArray recorded_;  ///< steps [node, port in | null, port out | null]
   QStringList scope_;
   QLabel* crumb_ = nullptr;
-  /// Marks `seeds` and every block behind them (along links, not along "drive") out of date.
-  void invalidate(const QSet<QString>& seeds);  ///< first key of the sequences Z E (extents) and Z S (selected)
 };
 
 }  // namespace nfcad::ui

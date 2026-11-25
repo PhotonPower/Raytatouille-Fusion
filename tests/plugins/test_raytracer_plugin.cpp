@@ -200,8 +200,8 @@ class TestRaytracerPlugin : public QObject {
   }
 
   /// Attaches a display block to an output of the workflow in the document.
-  /// The part of the workflow with the blocks: the model (RTT-Fusion R24) or the socket graph.
-  QString part() const { return doc_.workflow().contains("model") ? QStringLiteral("model") : QStringLiteral("graph"); }
+  /// The part of the workflow with the blocks: the model (RTT-Fusion R24, version 2).
+  static QString part() { return QStringLiteral("model"); }
 
   void attachDisplay(const QString& id, const QString& type, const QString& from, const QString& socket) {
     QJsonObject wf = doc_.workflow();
@@ -226,17 +226,14 @@ class TestRaytracerPlugin : public QObject {
   void workflow() {
     // RTT-Fusion node workflow: graph from the system's paths, then a coherent camera image
     QProcess probe;
-    probe.start(python_, {QStringLiteral("-c"), QStringLiteral("import rtt_fusion.graph")});
-    if (!probe.waitForFinished(30000) || probe.exitCode() != 0) QSKIP("rtt_fusion not installed in the plugin Python");
+    probe.start(python_, {QStringLiteral("-c"), QStringLiteral("from rtt_fusion.graph import model_from_raytatouille")});
+    if (!probe.waitForFinished(30000) || probe.exitCode() != 0) QSKIP("rtt_fusion with models not installed in the plugin Python");
     doc_.setWorkflow(QJsonObject{});  // a fresh import (the action keeps edits of an old one)
     run(QStringLiteral("workflow_from_system"));
     const QJsonObject wf = doc_.workflow();
     const QJsonArray nodes = wf[part()].toObject()["nodes"].toArray();
     QVERIFY(nodes.size() >= 3);  // source, sections, detector
-    QProcess has_model;
-    has_model.start(python_, {QStringLiteral("-c"), QStringLiteral("from rtt_fusion.graph import model_from_raytatouille")});
-    if (has_model.waitForFinished(30000) && has_model.exitCode() == 0) QCOMPARE(part(), QStringLiteral("model"));
-    if (part() == QStringLiteral("model")) {  // RTT-Fusion R24: the system's paths are the branches
+    {  // RTT-Fusion R24: the system's paths are the branches
       QVERIFY(!wf["model"].toObject()["branches"].toArray().isEmpty());
       QVERIFY(!wf["model"].toObject()["connections"].toArray().isEmpty());
       // ADR Nachtrag 1: the data of the system are in the nodes, the plugin describes the fields
@@ -306,25 +303,15 @@ class TestRaytracerPlugin : public QObject {
     QJsonObject fwf = doc_.workflow();
     QJsonObject graph = fwf[part()].toObject();
     const QString det_id = detectorId();
-    if (part() == QStringLiteral("model")) {  // the connection into the camera carries fields
-      QJsonArray connections = graph["connections"].toArray();
-      for (int k = 0; k < connections.size(); ++k) {
-        QJsonObject c = connections[k].toObject();
-        for (const QJsonValue& e : c["ports"].toArray()) {
-          if (e.toArray()[0].toString() == det_id) c["transport"] = QStringLiteral("H");
-        }
-        connections[k] = c;
+    QJsonArray connections = graph["connections"].toArray();  // the one into the camera carries fields
+    for (int k = 0; k < connections.size(); ++k) {
+      QJsonObject c = connections[k].toObject();
+      for (const QJsonValue& e : c["ports"].toArray()) {
+        if (e.toArray()[0].toString() == det_id) c["transport"] = QStringLiteral("H");
       }
-      graph["connections"] = connections;
-    } else {
-      QJsonArray links = graph["links"].toArray();
-      for (int k = 0; k < links.size(); ++k) {
-        QJsonObject l = links[k].toObject();
-        if (l["to"].toArray()[0].toString() == det_id) l["transport"] = QStringLiteral("H");
-        links[k] = l;
-      }
-      graph["links"] = links;
+      connections[k] = c;
     }
+    graph["connections"] = connections;
     fwf[part()] = graph;
     doc_.setWorkflow(fwf);
     engine_params_.insert(QStringLiteral("window"), 0.02);
@@ -346,14 +333,13 @@ class TestRaytracerPlugin : public QObject {
   void workflowKeepsEdits() {
     // "Workflow from system" again keeps the user's transports, added blocks and branches
     QProcess probe;
-    probe.start(python_, {QStringLiteral("-c"), QStringLiteral("import rtt_fusion.graph")});
-    if (!probe.waitForFinished(30000) || probe.exitCode() != 0) QSKIP("rtt_fusion not installed in the plugin Python");
+    probe.start(python_, {QStringLiteral("-c"), QStringLiteral("from rtt_fusion.graph import model_from_raytatouille")});
+    if (!probe.waitForFinished(30000) || probe.exitCode() != 0) QSKIP("rtt_fusion with models not installed in the plugin Python");
     doc_.setWorkflow(QJsonObject{});  // a fresh import (the action keeps edits of an old one)
     run(QStringLiteral("workflow_from_system"));
     QJsonObject wf = doc_.workflow();
     QJsonObject graph = wf[part()].toObject();
-    const bool model = part() == QStringLiteral("model");
-    const QString list = model ? QStringLiteral("connections") : QStringLiteral("links");
+    const QString list = QStringLiteral("connections");
     QJsonArray items = graph[list].toArray();
     QJsonObject last = items.last().toObject();
     last["transport"] = QStringLiteral("H");
@@ -363,7 +349,7 @@ class TestRaytracerPlugin : public QObject {
     nodes.append(QJsonObject{{"id", "my_sweep"}, {"type", "meta.sweep"}, {"params", QJsonObject{{"values", QJsonArray{1.0}}}}});
     graph["nodes"] = nodes;
     QJsonObject mine;
-    if (model) {  // a branch of the user's: a copy of the first under another name
+    {  // a branch of the user's: a copy of the first under another name
       QJsonArray branches = graph["branches"].toArray();
       mine = branches.first().toObject();
       mine["name"] = QStringLiteral("my branch");
@@ -380,11 +366,11 @@ class TestRaytracerPlugin : public QObject {
     bool fixed = false;
     for (const QJsonValue& l : again[list].toArray()) {
       const QJsonObject o = l.toObject();
-      const bool same = model ? o["ports"] == last["ports"] : (o["from"] == last["from"] && o["to"] == last["to"]);
+      const bool same = o["ports"] == last["ports"];
       fixed = fixed || (same && o["transport"].toString() == QStringLiteral("H"));
     }
     QVERIFY(fixed);
-    if (model) QVERIFY(again["branches"].toArray().contains(mine));
+    QVERIFY(again["branches"].toArray().contains(mine));
   }
 
   void workflowDisplays() {

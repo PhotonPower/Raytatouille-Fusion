@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QFile>
 #include <QGraphicsRectItem>
+#include <QGraphicsTextItem>
 #include <QImage>
 #include <QJsonArray>
 #include <QListWidget>
@@ -28,7 +29,8 @@ using nfcad::ui::NodeEditor;
 
 namespace {
 QJsonObject linnik() {
-  // made by RTT-Fusion from its Linnik structure (graph_from_raytatouille + catalogue)
+  // an old socket graph (version 1), made by RTT-Fusion from its Linnik structure
+  // (graph_from_raytatouille + catalogue): CAD converts such a workflow when it opens it
   QFile f(QStringLiteral(NFCAD_TEST_DATA "/workflow_linnik.json"));
   if (!f.open(QIODevice::ReadOnly)) return {};
   return QJsonDocument::fromJson(f.readAll()).object();
@@ -42,7 +44,7 @@ QJsonObject model_linnik() {
 }
 
 QJsonObject node(const QJsonObject& wf, const QString& id) {
-  for (const QJsonValue& v : wf["graph"].toObject()["nodes"].toArray()) {
+  for (const QJsonValue& v : wf["model"].toObject()["nodes"].toArray()) {
     if (v.toObject()["id"].toString() == id) return v.toObject();
   }
   return {};
@@ -52,45 +54,51 @@ QJsonObject node(const QJsonObject& wf, const QString& id) {
 class TestNodeEditor : public QObject {
   Q_OBJECT
  private slots:
-  void showsTheGraph() {
+  void oldGraphIsANote() {
+    // an old socket graph (version 1) that was not converted into a model: a note instead of the
+    // blocks, and no edit (no model beside it) – CAD converts it when it opens the document
     NodeEditor e;
     e.setWorkflow(linnik());
-    QVERIFY(e.nodeItem(QStringLiteral("Beam_splitter")) != nullptr);
-    QVERIFY(e.nodeItem(QStringLiteral("Sample")) != nullptr);
-    QCOMPARE(e.linkCount(), 13);
+    QVERIFY(e.oldGraph() && !e.modelMode());
+    QVERIFY(e.nodeItem(QStringLiteral("Sample")) == nullptr);
+    bool note = false;
+    for (QGraphicsItem* item : e.scene()->items()) {
+      if (auto* t = dynamic_cast<QGraphicsTextItem*>(item)) note = note || t->toPlainText().contains(QStringLiteral("version 1"));
+    }
+    QVERIFY(note);
+    QSignalSpy edited(&e, &NodeEditor::edited);
+    e.addNode(QStringLiteral("rtt.detector"), QPointF(0, 0));
+    e.setMuted(QStringLiteral("Sample"), true);
+    QCOMPARE(edited.count(), 0);
+    QCOMPARE(e.workflow(), linnik());
   }
 
   void editing() {
     NodeEditor e;
-    e.setWorkflow(linnik());
+    e.setWorkflow(model_linnik());
     QSignalSpy edited(&e, &NodeEditor::edited);
-    // one link per input: the sample's input is taken
-    QVERIFY(!e.addLink(QStringLiteral("Beam_splitter"), QStringLiteral("to_Objective_A"), QStringLiteral("Sample"),
-                       QStringLiteral("from_Objective_A")));
-    QCOMPARE(edited.count(), 0);
-    // a new detector from the catalogue, with the type's default parameters, fed by the splitter
+    // a new detector from the catalogue, with the type's default parameters
     const QString det = e.addNode(QStringLiteral("rtt.detector"), QPointF(100, 300));
     QCOMPARE(node(e.workflow(), det)["params"].toObject()["pixels"].toInt(), 512);
-    QVERIFY(e.addLink(QStringLiteral("Beam_splitter"), QStringLiteral("to_Pupil_camera"), det, QStringLiteral("in")));
-    QCOMPARE(e.linkCount(), 14);
-    // transport fixed and back to auto
-    e.setTransport(0, QStringLiteral("H"));
-    QCOMPARE(e.workflow()["graph"].toObject()["links"].toArray()[0].toObject()["transport"].toString(), QStringLiteral("H"));
-    e.setTransport(0, QStringLiteral("auto"));
-    QVERIFY(!e.workflow()["graph"].toObject()["links"].toArray()[0].toObject().contains("transport"));
-    // mute, then remove the sample: its two links go with it
+    // mute, then remove the sample: its connection goes with it
     e.setMuted(QStringLiteral("Sample"), true);
     QVERIFY(node(e.workflow(), QStringLiteral("Sample"))["muted"].toBool());
     e.removeNode(QStringLiteral("Sample"));
-    QCOMPARE(e.linkCount(), 12);
+    QCOMPARE(e.connectionCount(), 8);
     QVERIFY(e.nodeItem(QStringLiteral("Sample")) == nullptr);
-    QCOMPARE(edited.count(), 6);  // addNode, addLink, 2 × transport, mute, remove
+    QCOMPARE(edited.count(), 3);  // addNode, mute, remove
+    // a new workflow is a model (version 2)
+    NodeEditor fresh;
+    fresh.setWorkflow(QJsonObject{{"types", model_linnik()["types"]}});
+    fresh.addNode(QStringLiteral("rtt.source"), QPointF(0, 0));
+    QVERIFY(fresh.modelMode() && !fresh.workflow().contains(QStringLiteral("graph")));
+    QCOMPARE(fresh.workflow()["model"].toObject()["version"].toInt(), 2);
   }
 
   void diagnosticsAreMarked() {
-    QJsonObject wf = linnik();
+    QJsonObject wf = model_linnik();
     wf["diagnostics"] = QJsonArray{QJsonObject{{"code", "graph.cycle"}, {"severity", "error"},
-                                               {"message", "feedback"}, {"location", "Sample.from_Objective_A"}}};
+                                               {"message", "feedback"}, {"location", "Sample.Objective_A"}}};
     NodeEditor e;
     e.setWorkflow(wf);
     QVERIFY(e.nodeItem(QStringLiteral("Sample"))->pen().widthF() > 2.0);
@@ -102,90 +110,26 @@ class TestNodeEditor : public QObject {
   }
 
   void planIsShown() {
-    // the planner's result (RTT-Fusion R17): representation per link, conversions per block
-    QJsonObject wf = linnik();
-    const QJsonObject l0 = wf["graph"].toObject()["links"].toArray()[0].toObject();
-    const QString key = QStringLiteral("%1.%2 -> %3.%4")
-                            .arg(l0["from"].toArray()[0].toString(), l0["from"].toArray()[1].toString(),
-                                 l0["to"].toArray()[0].toString(), l0["to"].toArray()[1].toString());
-    const QString node = l0["to"].toArray()[0].toString();
-    wf["plan"] = QJsonObject{
-        {"links", QJsonObject{{key, QJsonObject{{"representation", "H"}, {"reason", "only H admissible"}}}}},
-        {"conversions", QJsonArray{QJsonObject{{"node", node}, {"from", "a"}, {"to", "b"}, {"chain", "HR"},
-                                               {"operators", QJsonArray{"field_to_rays"}}}}}};
-    wf["diagnostics"] = QJsonArray{QJsonObject{{"code", "plan.no_operator"}, {"severity", "error"},
-                                               {"message", "no operator"}, {"location", key}}};
+    // the planner's conversions per block (RTT-Fusion R17) and the warnings of the last run at the
+    // block (R30); the representations per connection: connectionDirections
+    QJsonObject wf = model_linnik();
+    QJsonObject plan = wf["plan"].toObject();
+    plan["conversions"] = QJsonArray{QJsonObject{{"node", "Sample"}, {"from", "a"}, {"to", "b"}, {"chain", "HR"},
+                                                 {"operators", QJsonArray{"field_to_rays"}}}};
+    plan["node_notes"] = QJsonObject{{"Sample", QJsonArray{"exec.spectrum_rays: the orders overlap"}}};
+    wf["plan"] = plan;
     NodeEditor e;
     e.setWorkflow(wf);
-    QCOMPARE(e.plannedRepresentation(0), QStringLiteral("H"));
-    QCOMPARE(e.plannedRepresentation(1), QString());
-    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("planned: H – only H admissible")));
-    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("plan.no_operator")));
-    QCOMPARE(e.linkItem(0)->pen().style(), Qt::DashLine);
-    QCOMPARE(e.linkItem(1)->pen().style(), Qt::SolidLine);
-    QVERIFY(e.nodeItem(node)->toolTip().contains(QStringLiteral("a → b: HR (field_to_rays)")));
+    QVERIFY(e.nodeItem(QStringLiteral("Sample"))->toolTip().contains(QStringLiteral("a → b: HR (field_to_rays)")));
+    QVERIFY(e.nodeItem(QStringLiteral("Sample"))->toolTip().contains(QStringLiteral("exec.spectrum_rays: the orders overlap")));
     // an edit makes the plan stale: it stays visible, grey, until the next check
-    e.setMuted(node, true);
+    e.setMuted(QStringLiteral("Sample"), true);
     QVERIFY(e.workflow()["plan"].toObject()["stale"].toBool());
-    QCOMPARE(e.plannedRepresentation(0), QStringLiteral("H"));
-    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("before the last edit")));
-  }
-
-  void spectraAtTheLinks() {
-    // R30e: what a link carried in the last run – a spectrum on a link planned R (R→S), the
-    // conversions in the tooltip (also on a fixed link), the warnings of the spectrum
-    // conversions at the link and the block
-    QJsonObject wf = linnik();
-    QJsonObject g = wf["graph"].toObject();
-    QJsonArray links = g["links"].toArray();
-    QJsonObject l1 = links[1].toObject();
-    l1["transport"] = "S";
-    links[1] = l1;
-    g["links"] = links;
-    wf["graph"] = g;
-    auto key_of = [](const QJsonObject& l) {
-      return QStringLiteral("%1.%2 -> %3.%4")
-          .arg(l["from"].toArray()[0].toString(), l["from"].toArray()[1].toString(), l["to"].toArray()[0].toString(),
-               l["to"].toArray()[1].toString());
-    };
-    const QString k0 = key_of(links[0].toObject());
-    const QString k1 = key_of(l1);
-    const QString block = links[0].toObject()["to"].toArray()[0].toString();
-    wf["plan"] = QJsonObject{
-        {"links", QJsonObject{{k0, QJsonObject{{"representation", "R"},
-                                               {"reason", "cheapest"},
-                                               {"used", "S"},
-                                               {"used_chain", "S"},
-                                               {"used_reason", "toS gave spectra; cam takes them as they are"},
-                                               {"notes", QJsonArray{"exec.spectrum_cut: 1.2e-02 of the power left out"}}}},
-                              {k1, QJsonObject{{"representation", "S"},
-                                               {"reason", "fixed"},
-                                               {"used", "S"},
-                                               {"used_chain", "R→H→S"},
-                                               {"used_reason", "lens gave rays; spectra on the link"}}}}},
-        {"conversions", QJsonArray{}},
-        {"node_notes", QJsonObject{{block, QJsonArray{"exec.spectrum_rays: the orders overlap"}}}}};
-    NodeEditor e;
-    e.setWorkflow(wf);
-    auto label = [&e](int k) {
-      for (QGraphicsItem* child : e.linkItem(k)->childItems()) {
-        if (auto* t = dynamic_cast<QGraphicsSimpleTextItem*>(child)) return t->text();
-      }
-      return QString();
-    };
-    QCOMPARE(label(0), QStringLiteral("R→S ⚠"));  // planned R, a spectrum flowed, with a warning
-    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("last run: S – toS gave spectra; cam takes them as they are")));
-    QVERIFY(e.linkItem(0)->toolTip().contains(QStringLiteral("⚠ exec.spectrum_cut: 1.2e-02")));
-    QCOMPARE(label(1), QStringLiteral("S*"));  // fixed: the setting, the conversions in the tooltip
-    QVERIFY(e.linkItem(1)->toolTip().contains(QStringLiteral("last run: S (R→H→S) – lens gave rays")));
-    QVERIFY(e.nodeItem(block)->toolTip().contains(QStringLiteral("exec.spectrum_rays: the orders overlap")));
-    // a plain link of the plan: no "last run"
-    QVERIFY(!e.linkItem(2)->toolTip().contains(QStringLiteral("last run")));
   }
 
   void transportMenuOffersWhatRuns() {
     // the transports with what they are; those the installation cannot compute are disabled
-    QJsonObject wf = linnik();
+    QJsonObject wf = model_linnik();
     wf["available"] = QJsonArray{"H", "R", "S"};
     NodeEditor e;
     e.setWorkflow(wf);
@@ -205,9 +149,9 @@ class TestNodeEditor : public QObject {
     QVERIFY(!actions[4]->isEnabled() && actions[4]->toolTip().contains(QStringLiteral("not computed")));
     s->trigger();
     QCOMPARE(chosen, QStringLiteral("S"));
-    // a link set to S through the editor
-    e.setTransport(0, chosen);
-    QCOMPARE(e.workflow()["graph"].toObject()["links"].toArray()[0].toObject()["transport"].toString(), QStringLiteral("S"));
+    // a connection set to S (both directions) through the editor
+    e.setConnectionTransport(0, QStringLiteral("both"), chosen);
+    QCOMPARE(e.workflow()["model"].toObject()["connections"].toArray()[0].toObject()["transport"].toString(), QStringLiteral("S"));
     // without fieldtracing only R (and auto); a document without the list offers everything
     wf["available"] = QJsonArray{"R"};
     e.setWorkflow(wf);
@@ -218,27 +162,18 @@ class TestNodeEditor : public QObject {
   }
 
   void replaceAndParameters() {
-    // concept 1: the sample mirror becomes a FourierGrating sample, the links stay
+    // concept 1: the sample mirror becomes a FourierGrating sample; its parameters directly and
+    // through the dialog (the ports: modelReplaceKeepsPorts)
     NodeEditor e;
-    e.setWorkflow(linnik());
+    e.setWorkflow(model_linnik());
     QVERIFY(e.replacementsFor(QStringLiteral("Sample")).contains(QStringLiteral("fusion.grating")));
-    QVERIFY(!e.replacementsFor(QStringLiteral("Beam_splitter")).contains(QStringLiteral("fusion.grating")));
     QSignalSpy edited(&e, &NodeEditor::edited);
     QVERIFY(e.replaceNode(QStringLiteral("Sample"), QStringLiteral("fusion.grating")));
     QCOMPARE(edited.count(), 1);
-    QCOMPARE(e.linkCount(), 13);
+    QCOMPARE(e.connectionCount(), 9);
     const QJsonObject sample = node(e.workflow(), QStringLiteral("Sample"));
     QCOMPARE(sample["type"].toString(), QStringLiteral("fusion.grating"));
     QVERIFY(sample["params"].toObject().contains(QStringLiteral("table")));
-    int into = 0, out_of = 0;
-    for (const QJsonValue& v : e.workflow()["graph"].toObject()["links"].toArray()) {
-      const QJsonObject l = v.toObject();
-      if (l["to"].toArray() == QJsonArray{QStringLiteral("Sample"), QStringLiteral("in")}) ++into;
-      if (l["from"].toArray() == QJsonArray{QStringLiteral("Sample"), QStringLiteral("out")}) ++out_of;
-    }
-    QCOMPARE(into, 1);
-    QCOMPARE(out_of, 1);
-    // parameters: set directly and through the dialog
     e.setParams(QStringLiteral("Sample"), QJsonObject{{"table", "/tmp/grating.json"}, {"orders", QJsonArray{-1, 0, 1}}});
     QCOMPARE(node(e.workflow(), QStringLiteral("Sample"))["params"].toObject()["table"].toString(), QStringLiteral("/tmp/grating.json"));
     QTimer::singleShot(0, &e, [] {
@@ -257,39 +192,28 @@ class TestNodeEditor : public QObject {
     QCOMPARE(p["orders"].toArray(), (QJsonArray{-1, 0, 1}));
   }
 
-  void linksCanBeHit() {
-    // a link is hit a few pixels beside the curve and on its label (right-click: transport)
+  void connectionsCanBeHit() {
+    // a connection is hit on its curve (right-click: transport), not on the empty canvas
     NodeEditor e;
     e.resize(1500, 420);
     e.setAttribute(Qt::WA_DontShowOnScreen);
-    e.setWorkflow(linnik());
+    e.setWorkflow(model_linnik());
     e.show();
     e.fitAll();
-    auto* link = e.linkItem(0);
-    QVERIFY(link != nullptr);
-    const QPointF mid = link->path().pointAtPercent(0.5);
-    const QPoint at = e.mapFromScene(mid);
-    QCOMPARE(e.linkAt(at), 0);
-    QCOMPARE(e.linkAt(at + QPoint(0, 4)), 0);
-    // the label of the planned representation sits in the middle of the link
-    QVERIFY(!link->childItems().isEmpty());
-    const QPoint on_label = e.mapFromScene(link->childItems().front()->sceneBoundingRect().center());
-    QCOMPARE(e.linkAt(on_label), 0);
-    QCOMPARE(e.linkAt(QPoint(5, 5)), -1);
+    auto* connection = e.connectionItem(0);
+    QVERIFY(connection != nullptr);
+    const QPoint at = e.mapFromScene(connection->path().pointAtPercent(0.5));
+    QCOMPARE(e.connectionAt(at), 0);
+    QCOMPARE(e.connectionAt(QPoint(5, 5)), -1);
   }
 
   void displayBlocksAndRunning() {
-    QJsonObject wf = linnik();
-    QJsonObject g = wf["graph"].toObject();
+    QJsonObject wf = model_linnik();
+    QJsonObject g = wf["model"].toObject();
     QJsonArray nodes = g["nodes"].toArray();
     nodes.append(QJsonObject{{"id", "show"}, {"type", "display.image"}, {"name", "Camera window"}, {"position", QJsonArray{0, 600}}});
     g["nodes"] = nodes;
-    wf["graph"] = g;
-    QJsonArray types = wf["types"].toArray();
-    types.append(QJsonObject{{"type", "display.image"}, {"category", "analysis"},
-                             {"sockets", QJsonArray{QJsonObject{{"name", "in"}, {"direction", "in"}, {"kind", "data"}, {"accepts", QJsonArray{"result"}}},
-                                                    QJsonObject{{"name", "view"}, {"direction", "out"}, {"kind", "data"}, {"accepts", QJsonArray{"result"}}}}}});
-    wf["types"] = types;
+    wf["model"] = g;
     NodeEditor e;
     e.resize(1500, 600);
     e.setAttribute(Qt::WA_DontShowOnScreen);
@@ -310,11 +234,12 @@ class TestNodeEditor : public QObject {
   }
 
   void upToDateMarks() {
-    // green tick / red cross: an edit marks the block and everything behind it out of date
+    // green tick / red cross: an edit marks the block and everything behind it on its branches
+    // out of date
     NodeEditor e;
-    e.setWorkflow(linnik());
+    e.setWorkflow(model_linnik());
     QJsonObject all;
-    for (const QJsonValue& v : e.workflow()["graph"].toObject()["nodes"].toArray()) all[v.toObject()["id"].toString()] = true;
+    for (const QJsonValue& v : e.workflow()["model"].toObject()["nodes"].toArray()) all[v.toObject()["id"].toString()] = true;
     e.setStates(all);
     QCOMPARE(e.state(QStringLiteral("Sample")), 1);
     e.setParams(QStringLiteral("Sample"), QJsonObject{{"offset", QJsonArray{0, 0, 0.001}}});
@@ -324,7 +249,7 @@ class TestNodeEditor : public QObject {
     QCOMPARE(e.state(QStringLiteral("source")), 1);  // in front of the change
     QCOMPARE(e.state(QStringLiteral("Illumination_stop")), 1);
     // moving a block changes nothing
-    QJsonObject g = e.workflow()["graph"].toObject();
+    QJsonObject g = e.workflow()["model"].toObject();
     e.setStates(all);
     QJsonArray nodes = g["nodes"].toArray();
     QJsonObject n0 = nodes[0].toObject();
@@ -332,12 +257,12 @@ class TestNodeEditor : public QObject {
     nodes[0] = n0;
     g["nodes"] = nodes;
     QJsonObject wf = e.workflow();
-    wf["graph"] = g;
+    wf["model"] = g;
     e.setWorkflow(wf);  // not an edit
     e.setStates(all);
     e.setMuted(QStringLiteral("Reference"), true);
     QCOMPARE(e.state(QStringLiteral("Reference")), 0);
-    QCOMPARE(e.state(QStringLiteral("Sample")), 1);  // the other arm
+    QCOMPARE(e.state(QStringLiteral("Illumination_stop")), 1);  // in front of the reference arm
     e.setStates({});
     QCOMPARE(e.state(QStringLiteral("Sample")), -1);
   }
@@ -527,20 +452,6 @@ class TestNodeEditor : public QObject {
     QVERIFY(e.branchNames().contains(QStringLiteral("branch 1")));
   }
 
-  void modelUpToDateMarks() {
-    NodeEditor e;
-    e.setWorkflow(model_linnik());
-    QJsonObject all;
-    for (const QJsonValue& v : e.workflow()["model"].toObject()["nodes"].toArray()) all[v.toObject()["id"].toString()] = true;
-    e.setStates(all);
-    e.setParams(QStringLiteral("Sample"), QJsonObject{{"offset", QJsonArray{0, 0, 0.001}}});
-    for (const char* stale : {"Sample", "Objective_A", "Beam_splitter", "Camera", "Pupil_camera"}) {
-      QCOMPARE(e.state(QString::fromLatin1(stale)), 0);
-    }
-    QCOMPARE(e.state(QStringLiteral("source")), 1);
-    QCOMPARE(e.state(QStringLiteral("Illumination_stop")), 1);
-  }
-
   void modelReplaceKeepsPorts() {
     // the mirror's Raytatouille data (element and traversals) go with it, keyed by the new port
     QJsonObject wf = model_linnik();
@@ -693,7 +604,7 @@ class TestNodeEditor : public QObject {
     }
     QVERIFY(e.nodeItem(gid) != nullptr && e.nodeItem(QStringLiteral("Sample")) == nullptr);
     const QJsonObject model = e.workflow()["model"].toObject();
-    const QJsonObject group = node(QJsonObject{{"graph", model}}, gid);
+    const QJsonObject group = node(QJsonObject{{"model", model}}, gid);
     const QJsonObject inner = group["variants"].toObject()["main"].toObject();
     QCOMPARE(inner["nodes"].toArray().size(), 2);
     QCOMPARE(inner["connections"].toArray().size(), 1);  // objective – sample
@@ -714,7 +625,7 @@ class TestNodeEditor : public QObject {
     e.setParams(QStringLiteral("Sample"), QJsonObject{{"offset", QJsonArray{0, 0, 0.002}}});
     e.leaveGroup();
     QVERIFY(e.scope().isEmpty());
-    const QJsonObject edited = node(QJsonObject{{"graph", e.workflow()["model"].toObject()}}, gid);
+    const QJsonObject edited = node(QJsonObject{{"model", e.workflow()["model"].toObject()}}, gid);
     const QJsonArray inner_nodes = edited["variants"].toObject()["main"].toObject()["nodes"].toArray();
     bool offset = false;
     for (const QJsonValue& n : inner_nodes) offset = offset || n.toObject()["params"].toObject().contains("offset");
@@ -747,18 +658,18 @@ class TestNodeEditor : public QObject {
     e.setWorkflow(wf);
     QCOMPARE(e.variants(gid), (QStringList{"copy", "main"}));
     e.setVariant(gid, QStringLiteral("copy"));
-    QCOMPARE(node(QJsonObject{{"graph", e.workflow()["model"].toObject()}}, gid)["variant"].toString(), QStringLiteral("copy"));
+    QCOMPARE(node(QJsonObject{{"model", e.workflow()["model"].toObject()}}, gid)["variant"].toString(), QStringLiteral("copy"));
     e.setCondensed(gid, true);
-    QVERIFY(node(QJsonObject{{"graph", e.workflow()["model"].toObject()}}, gid).contains("condense"));
+    QVERIFY(node(QJsonObject{{"model", e.workflow()["model"].toObject()}}, gid).contains("condense"));
     e.setCondensed(gid, false);
-    QVERIFY(!node(QJsonObject{{"graph", e.workflow()["model"].toObject()}}, gid).contains("condense"));
+    QVERIFY(!node(QJsonObject{{"model", e.workflow()["model"].toObject()}}, gid).contains("condense"));
   }
 
   void newRenameDeleteVariants() {
     NodeEditor e;
     e.setWorkflow(model_linnik());
     const QString gid = e.groupBlocks({QStringLiteral("Objective_B"), QStringLiteral("Reference")}, QStringLiteral("ref"));
-    auto group = [&] { return node(QJsonObject{{"graph", e.workflow()["model"].toObject()}}, gid); };
+    auto group = [&] { return node(QJsonObject{{"model", e.workflow()["model"].toObject()}}, gid); };
     // a new variant: a copy of the active one, then active
     QCOMPARE(e.addVariant(gid, QStringLiteral("ideal")), QStringLiteral("ideal"));
     QCOMPARE(group()["variant"].toString(), QStringLiteral("ideal"));
@@ -854,14 +765,14 @@ class TestNodeEditor : public QObject {
 
   void savedWithTheDocument() {
     nfcad::document::Document doc;
-    doc.setWorkflow(linnik());
+    doc.setWorkflow(model_linnik());
     QVERIFY(doc.isModified());
     QTemporaryDir dir;
     const QString path = dir.filePath(QStringLiteral("w.rttf"));
     QVERIFY(nfcad::document::save_nfcad(doc, path).isEmpty());
     nfcad::document::Document back;
     QCOMPARE(nfcad::document::load_nfcad(back, path), QString());
-    QCOMPARE(back.workflow(), linnik());
+    QCOMPARE(back.workflow(), model_linnik());
   }
 
   void navigation() {
@@ -869,7 +780,7 @@ class TestNodeEditor : public QObject {
     NodeEditor e;
     e.resize(800, 400);
     e.setAttribute(Qt::WA_DontShowOnScreen);
-    e.setWorkflow(linnik());
+    e.setWorkflow(model_linnik());
     e.show();
     e.fitAll();
     const QPoint cursor(200, 150);
@@ -912,7 +823,7 @@ class TestNodeEditor : public QObject {
     NodeEditor e;
     e.resize(800, 400);
     e.setAttribute(Qt::WA_DontShowOnScreen);
-    e.setWorkflow(linnik());
+    e.setWorkflow(model_linnik());
     e.show();
     e.fitAll();
     const double all = e.zoom();
@@ -939,7 +850,7 @@ class TestNodeEditor : public QObject {
   void snapshot() {
     NodeEditor e;
     e.resize(1500, 420);
-    QJsonObject wf = linnik();
+    QJsonObject wf = model_linnik();
     // optional: the workflow of a document (.rttf) for a look at a real case
     if (const QByteArray doc = qgetenv("NFCAD_SNAPSHOT_WORKFLOW_DOC"); !doc.isEmpty()) {
       QFile f(QString::fromLocal8Bit(doc));

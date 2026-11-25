@@ -133,8 +133,9 @@ class Document : public QObject {
   void markKeptChanged();
   void setAllPluginParameters(const QJsonObject& all);  ///< loading
 
-  // ---- node workflow (RTT-Fusion R16): {"graph": rtt-fusion-graph, "types": [...],
-  // "diagnostics": [...]}, saved with the document; edited in the node editor and by plugins
+  // ---- node workflow (RTT-Fusion R24): {"model": rtt-fusion-graph version 2, "types": [...],
+  // "diagnostics": [...], "plan": ...}, saved with the document; edited in the node editor and by
+  // plugins. An old document may hold {"graph": version 1} instead: converted when it is opened.
   [[nodiscard]] const QJsonObject& workflow() const { return workflow_; }
   /// Sets the workflow without an undo step (a plugin's live changes, which become part of the
   /// run's undo step, and what it derives for the editor); marks the document modified.

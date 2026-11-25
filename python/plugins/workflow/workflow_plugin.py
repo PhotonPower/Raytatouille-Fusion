@@ -297,10 +297,23 @@ class WorkflowEngine(Plugin):
         except TypeError:  # RTT-Fusion before W2c
             return workflow.model_document(model, registry, None, workflow.kept_fields(wf))
 
+    @staticmethod
+    def _require_model(wf: dict) -> None:
+        """Check and Run work on a model (version 2); an old socket graph (version 1) is converted
+        when CAD opens the document – here only if that was not possible."""
+        if wf.get("model"):
+            return
+        if wf.get("graph"):
+            raise UserError("The node workflow is an old socket graph (version 1). Convert to model makes "
+                            "it a model (CAD does that when it opens the document; it needs RTT-Fusion 0.5.1 "
+                            "or newer in the plugin environment).")
+        raise UserError("No node workflow yet – a plugin makes one (Raytracer: Workflow from system, "
+                        "New Raytatouille system).")
+
     # ------------------------------------------------------------------ convert
     @action("Convert to model", description="An old socket graph (version 1, e.g. written by a script) as a "
-                                            "model: ports, connections and branches – then groups, sections "
-                                            "and the branch panel work on it")
+                                            "model: ports, connections and branches. CAD runs it when it "
+                                            "opens such a document; saving then writes version 2")
     def convert_to_model(self, ctx):
         workflow, fg, _, io = _fusion()
         wf = ctx.workflow()
@@ -318,37 +331,28 @@ class WorkflowEngine(Plugin):
         rest = {k: v for k, v in wf.items() if k != "graph"}
         ctx.set_workflow({**rest, **self._document(workflow, model, registry, rest, providers)})
         self._model_ids = set(model.nodes)
-        return (f"model: {len(model.nodes)} blocks, {len(model.connections)} connections, "
-                f"{len(model.branches)} branches ({', '.join(b.name for b in model.branches)})")
+        return (f"old workflow (version 1) converted to a model: {len(model.nodes)} blocks, "
+                f"{len(model.connections)} connections, {len(model.branches)} branches "
+                f"({', '.join(b.name for b in model.branches)}) – saving writes version 2")
 
     # ------------------------------------------------------------------ check
     @action("Check workflow", description="Check the node workflow and mark problems; the plan per link")
     def check_workflow(self, ctx):
         workflow, fg, execute, io = _fusion()
         wf = ctx.workflow()
-        if not wf.get("graph") and not wf.get("model"):
-            raise UserError("No node workflow yet – a plugin makes one (Raytracer: Workflow from system, "
-                            "New Raytatouille system).")
+        self._require_model(wf)
         registry, extra = workflow.registry()
         remote, providers = self._blocks(ctx, registry)
         extra = {**extra, **remote}
-        graph = model = None
-        if wf.get("model"):
-            model = io.model_from_dict(wf["model"], registry)
-            _, files = self._embed(ctx, workflow, model)
-            wf = {**wf, **self._document(workflow, model, registry, wf, providers)}
-            if not any(d["severity"] == "error" for d in wf["diagnostics"]):
-                graph = fg.unroll(model, registry)
-            self._model_ids = set(model.nodes)
-        else:  # an old socket graph (R16)
-            graph = io.from_dict(wf["graph"])
-            _, files = self._embed(ctx, workflow, graph)
-            wf["graph"] = io.to_dict(graph)
-            wf["types"] = workflow.catalogue(registry)
-            wf["diagnostics"], wf["plan"] = workflow.checked(graph, registry)
-            self._model_ids = None
+        graph = None
+        model = io.model_from_dict(wf["model"], registry)
+        _, files = self._embed(ctx, workflow, model)
+        wf = {**wf, **self._document(workflow, model, registry, wf, providers)}
+        if not any(d["severity"] == "error" for d in wf["diagnostics"]):
+            graph = fg.unroll(model, registry)
+        self._model_ids = set(model.nodes)
         wf["diagnostics"] = list(wf["diagnostics"]) + files
-        wf = _runnable_only(wf, model if model is not None else graph, _evaluators(extra))
+        wf = _runnable_only(wf, model, _evaluators(extra))
         ex = None
         if graph is not None and not any(d["severity"] == "error" for d in wf["diagnostics"]):
             try:  # which blocks the kept results still cover
@@ -375,35 +379,24 @@ class WorkflowEngine(Plugin):
     def run_workflow(self, ctx):
         workflow, fg, execute, io = _fusion()
         wf = ctx.workflow()
-        if not wf.get("graph") and not wf.get("model"):
-            raise UserError("No node workflow yet – a plugin makes one (Raytracer: Workflow from system, "
-                            "New Raytatouille system).")
+        self._require_model(wf)
         registry, extra = workflow.registry()
         remote, providers = self._blocks(ctx, registry)
         extra = {**extra, **remote}
-        model = None
-        if wf.get("model"):  # RTT-Fusion R24: exactly the branches of the model, unrolled
-            model = io.model_from_dict(wf["model"], registry)
-            stored, files = self._embed(ctx, workflow, model)
-            if stored:  # the files are in the document from now on (saved with it), and this run uses them
-                wf = {**wf, **self._document(workflow, model, registry, wf, providers)}
-                ctx.set_workflow(wf)
-            self._log_files(ctx, files)
-            try:
-                graph = fg.unroll(model, registry)
-            except fg.ModelError as e:
-                for d in e.diagnostics:
-                    ctx.log(f"{d.severity}: {d.code} – {d.message} ({d.location})")
-                raise UserError(f"The workflow has errors – Check workflow marks them: {e}") from e
-            self._model_ids = set(model.nodes)
-        else:
-            graph = io.from_dict(wf["graph"])
-            stored, files = self._embed(ctx, workflow, graph)
-            if stored:
-                wf = {**wf, "graph": io.to_dict(graph)}
-                ctx.set_workflow(wf)
-            self._log_files(ctx, files)
-            self._model_ids = None
+        # RTT-Fusion R24: exactly the branches of the model, unrolled
+        model = io.model_from_dict(wf["model"], registry)
+        stored, files = self._embed(ctx, workflow, model)
+        if stored:  # the files are in the document from now on (saved with it), and this run uses them
+            wf = {**wf, **self._document(workflow, model, registry, wf, providers)}
+            ctx.set_workflow(wf)
+        self._log_files(ctx, files)
+        try:
+            graph = fg.unroll(model, registry)
+        except fg.ModelError as e:
+            for d in e.diagnostics:
+                ctx.log(f"{d.severity}: {d.code} – {d.message} ({d.location})")
+            raise UserError(f"The workflow has errors – Check workflow marks them: {e}") from e
+        self._model_ids = set(model.nodes)
         self._require_data(graph)
         displays = [n for n in graph.nodes.values() if n.type_id.startswith("display.")]
         if not displays:
@@ -467,7 +460,7 @@ class WorkflowEngine(Plugin):
         except (ImportError, AttributeError):  # an RTT-Fusion before the stored catalogues
             load = None
         lib = rt.MaterialLibrary()
-        for node in (wf.get("model") or wf.get("graph") or {}).get("nodes", []):
+        for node in (wf.get("model") or {}).get("nodes", []):
             if node.get("type") != "rtt.source":
                 continue
             params = node.get("params", {})
@@ -489,7 +482,7 @@ class WorkflowEngine(Plugin):
     def _catalogues(wf: dict) -> list:
         """What the results depend on of the glass catalogues: the files and the stored ones (a
         hash of their content)."""
-        for node in (wf.get("model") or wf.get("graph") or {}).get("nodes", []):
+        for node in (wf.get("model") or {}).get("nodes", []):
             if node.get("type") == "rtt.source":
                 params = node.get("params", {})
                 held = [f"{c.get('name')}:{hashlib.sha1(str(c.get('base64', '')).encode()).hexdigest()[:12]}"
@@ -613,24 +606,23 @@ class WorkflowEngine(Plugin):
         used = {k: v for k, v in self._used.items() if _link_target(k) in fresh}
         shown = plan
         if with_used is not None and used and plan:
-            shown = with_used(plan, used) if model is None else with_used(plan, used, graph, model, registry)
+            shown = with_used(plan, used, graph, model, registry)
         notes = [d for d in self._run_notes if self._note_block(d) in fresh]
         per_connection = None
         connection_plan = getattr(workflow, "connection_plan", None)
-        if model is not None and connection_plan is not None:
+        if connection_plan is not None:
             def per_connection(texts: dict) -> dict:
                 return connection_plan(graph, model, registry,
                                        {"links": {k: {"representation": v} for k, v in texts.items()}})
-        model_id = getattr(workflow, "model_id", None) if model is not None else None
+        model_id = getattr(workflow, "model_id", None)
         return with_notes(shown, notes, model_id, per_connection)
 
     def _show_used(self, ctx, workflow, graph, model, registry, providers, fresh) -> None:
         """After a run: the plan of the current workflow with what the blocks used (R→H)."""
         try:
             wf = ctx.workflow()
-            plan = wf.get("plan") or {}
-            if model is not None:  # the plan of the model as it is now (a transport set since)
-                plan = self._document(workflow, model, registry, wf, providers)["plan"]
+            # the plan of the model as it is now (a transport set since)
+            plan = self._document(workflow, model, registry, wf, providers)["plan"]
             shown = self._plan_with_used(workflow, plan, graph, model, registry, fresh)
             if shown is not plan or plan is not wf.get("plan"):
                 ctx.set_workflow({**wf, "plan": shown, "available": sorted(workflow.available())})

@@ -21,6 +21,20 @@
 using namespace nfcad;
 
 namespace {
+/// A model (RTT-Fusion R24, version 2) of one light path a → b → c: its connections and branch,
+/// and the display link of the camera c.
+QJsonObject model(const QJsonArray& nodes, const QString& a, const QString& b, const QString& b_in, const QString& b_out,
+                  const QString& c) {
+  const QJsonArray connections{QJsonObject{{"ports", QJsonArray{QJsonArray{a, "out"}, QJsonArray{b, b_in}}}},
+                               QJsonObject{{"ports", QJsonArray{QJsonArray{b, b_out}, QJsonArray{c, "in"}}}}};
+  const QJsonArray branches{QJsonObject{
+      {"name", "main"},
+      {"steps", QJsonArray{QJsonArray{a, QJsonValue(), "out"}, QJsonArray{b, b_in, b_out}, QJsonArray{c, "in", QJsonValue()}}}}};
+  const QJsonArray links{QJsonObject{{"from", QJsonArray{c, "image"}}, {"to", QJsonArray{"show", "in"}}}};
+  return QJsonObject{{"model", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 2}, {"nodes", nodes},
+                                           {"connections", connections}, {"links", links}, {"branches", branches}}}};
+}
+
 QJsonObject workflow(const QString& lens_type, bool crash = false) {
   QJsonObject lens_params{{"point", QJsonArray{0, 0, 0}}, {"focal_length", 40.0}};
   if (crash) lens_params["crash"] = true;
@@ -32,32 +46,26 @@ QJsonObject workflow(const QString& lens_type, bool crash = false) {
                   {"params", QJsonObject{{"point", QJsonArray{0, 0, 20.0}}, {"normal", QJsonArray{0, 0, -1}},
                                          {"half_size", QJsonArray{1.5, 1.5}}, {"pixels", QJsonArray{32, 32}}}}},
       QJsonObject{{"id", "show"}, {"type", "display.image"}}};
-  const QJsonArray links{
-      QJsonObject{{"from", QJsonArray{"src", "out"}}, {"to", QJsonArray{"lens", "in"}}},
-      QJsonObject{{"from", QJsonArray{"lens", "out"}}, {"to", QJsonArray{"cam", "in"}}},
-      QJsonObject{{"from", QJsonArray{"cam", "image"}}, {"to", QJsonArray{"show", "in"}}}};
-  return QJsonObject{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1}, {"nodes", nodes}, {"links", links}}}};
+  return model(nodes, "src", "lens", "in", "out", "cam");
 }
 
 /// A collimated beam on a lamellar grating (RTT-Fusion's reference Jones table, λ 0.6 µm, period
-/// 0.7 µm), its orders on a camera 2 µm behind (as RTT-Fusion's test_grating).
+/// 0.7 µm), its transmitted orders on a camera 2 µm behind (as RTT-Fusion's test_grating): the
+/// grating is a step of the branch from its front to its back port.
 QJsonObject gratingWorkflow(const QString& grating_type) {
   const QJsonArray nodes{
       QJsonObject{{"id", "src"}, {"type", "optics.collimated_source"},
                   {"params", QJsonObject{{"radius", 0.01}, {"rings", 12}, {"center", QJsonArray{0, 0, -0.1}},
                                          {"wavelengths_um", QJsonArray{0.6}},
-                                         {"field_angles_deg", QJsonArray{QJsonArray{3.0, 0.0}}}}}},
+                                         {"field_angles_deg", QJsonArray{QJsonValue(QJsonArray{3.0, 0.0})}}}}},
       QJsonObject{{"id", "gr"}, {"type", grating_type},
-                  {"params", QJsonObject{{"table", QStringLiteral(NFCAD_SOURCE_DIR "/tests/data/jones_table_lamellar.result.json")}}}},
+                  {"params", QJsonObject{{"table", QStringLiteral(NFCAD_SOURCE_DIR "/tests/data/jones_table_lamellar.result.json")},
+                                         {"side", "transmitted"}, {"normal", QJsonArray{0, 0, -1}}}}},
       QJsonObject{{"id", "cam"}, {"type", "optics.detector"},
                   {"params", QJsonObject{{"point", QJsonArray{0, 0, 0.002}}, {"normal", QJsonArray{0, 0, -1}},
                                          {"half_size", QJsonArray{0.0035, 0.0035}}, {"pixels", QJsonArray{64, 4}}}}},
       QJsonObject{{"id", "show"}, {"type", "display.image"}}};
-  const QJsonArray links{
-      QJsonObject{{"from", QJsonArray{"src", "out"}}, {"to", QJsonArray{"gr", "in"}}},
-      QJsonObject{{"from", QJsonArray{"gr", "out"}}, {"to", QJsonArray{"cam", "in"}}},
-      QJsonObject{{"from", QJsonArray{"cam", "image"}}, {"to", QJsonArray{"show", "in"}}}};
-  return QJsonObject{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1}, {"nodes", nodes}, {"links", links}}}};
+  return model(nodes, "src", "gr", "front", "back", "cam");
 }
 /// A collimated beam through a window with a two-layer coating (fg.stack) onto a camera.
 QJsonObject stackWorkflow(const QString& config) {
@@ -65,18 +73,14 @@ QJsonObject stackWorkflow(const QString& config) {
       QJsonObject{{"id", "src"}, {"type", "optics.collimated_source"},
                   {"params", QJsonObject{{"radius", 0.5}, {"rings", 6}, {"center", QJsonArray{0, 0, -1}},
                                          {"wavelengths_um", QJsonArray{0.55}},
-                                         {"field_angles_deg", QJsonArray{QJsonArray{20.0, 0.0}}}}}},
+                                         {"field_angles_deg", QJsonArray{QJsonValue(QJsonArray{20.0, 0.0})}}}}},
       QJsonObject{{"id", "st"}, {"type", "fg.stack"},
                   {"params", QJsonObject{{"fouriergrating", config}, {"normal", QJsonArray{0, 0, -1}}}}},
       QJsonObject{{"id", "cam"}, {"type", "optics.detector"},
                   {"params", QJsonObject{{"point", QJsonArray{0, 0, 1.0}}, {"normal", QJsonArray{0, 0, -1}},
                                          {"half_size", QJsonArray{1.5, 1.5}}, {"pixels", QJsonArray{16, 16}}}}},
       QJsonObject{{"id", "show"}, {"type", "display.image"}}};
-  const QJsonArray links{
-      QJsonObject{{"from", QJsonArray{"src", "out"}}, {"to", QJsonArray{"st", "front_in"}}},
-      QJsonObject{{"from", QJsonArray{"st", "back_out"}}, {"to", QJsonArray{"cam", "in"}}},
-      QJsonObject{{"from", QJsonArray{"cam", "image"}}, {"to", QJsonArray{"show", "in"}}}};
-  return QJsonObject{{"graph", QJsonObject{{"format", "rtt-fusion-graph"}, {"version", 1}, {"nodes", nodes}, {"links", links}}}};
+  return model(nodes, "src", "st", "front", "back", "cam");
 }
 }  // namespace
 
@@ -185,6 +189,7 @@ class TestMultiPluginWorkflow : public QObject {
     const std::vector<float> local = lastImage();
     QVERIFY(!fg_->running());  // not asked
     with_fg_ = true;
+    results_.clear();  // no kept result (R23): the block is computed again, in the plugin's process
     auto [ok_fg, msg_fg] = run();
     with_fg_ = false;
     QVERIFY2(ok_fg, qPrintable(msg_fg));
@@ -221,6 +226,7 @@ class TestMultiPluginWorkflow : public QObject {
     QVERIFY2(ok_local, qPrintable(msg_local + QLatin1Char('\n') + log_.join(QLatin1Char('\n'))));
     const std::vector<float> local = lastImage();
     with_fg_ = true;
+    results_.clear();  // no kept result (R23): the block is computed again, in the plugin's process
     auto [ok_fg, msg_fg] = run();
     with_fg_ = false;
     QVERIFY2(ok_fg, qPrintable(msg_fg));

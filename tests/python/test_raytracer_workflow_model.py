@@ -1,7 +1,7 @@
-"""The Raytracer draws the system of a node workflow also when the document holds it as a socket
-graph (version 1, `workflow.graph`, e.g. written by a script) instead of a model (version 2):
-before, such a document showed no CAD model at all. Exit code 77 (ctest: skipped) without
-numpy, raytatouille or rtt_fusion."""
+"""The Raytracer draws the system of a node workflow from its model (version 2) – the same surfaces
+as the system it was made from. An old socket graph (version 1, `workflow.graph`) is not read
+any more: CAD converts it into a model when it opens the document (Workflow plugin, Convert to
+model). Exit code 77 (ctest: skipped) without numpy, raytatouille or rtt_fusion."""
 import json
 import sys
 from pathlib import Path
@@ -11,7 +11,7 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT / "python" / "plugins" / "raytrac
 try:
     import numpy  # noqa: F401
     import raytatouille as rt
-    from rtt_fusion.graph import graph_from_raytatouille, io
+    from rtt_fusion.graph import graph_from_raytatouille, io, model_from_raytatouille
 except ImportError as e:
     print(f"skipped: {e}")
     sys.exit(77)
@@ -39,18 +39,25 @@ def plugin():
     return cls()
 
 
+def surfaces(system) -> list:
+    return [L.id for L in rt.layout.surfaces(rt.compile(system, rt.MaterialLibrary()))]
+
+
 failures = []
 d = json.loads(SYSTEM.read_text(encoding="utf-8"))
-graph = io.to_dict(graph_from_raytatouille(d))
-made = plugin()._workflow_system(Ctx({"graph": graph}))
+system = rt.System.from_json(json.dumps(d))
+expected = surfaces(system)
+
+model = io.model_to_dict(model_from_raytatouille(system))
+made = plugin()._workflow_system(Ctx({"model": model}))
 if made is None:
-    failures.append("no system from a version-1 workflow graph")
-else:
-    expected = [L.id for L in rt.layout.surfaces(rt.compile(rt.System.from_json(json.dumps(d)),
-                                                             rt.MaterialLibrary()))]
-    got = [L.id for L in rt.layout.surfaces(rt.compile(made[0], rt.MaterialLibrary()))]
-    if got != expected:
-        failures.append(f"surfaces {got} != {expected}")
+    failures.append("no system from a workflow model")
+elif surfaces(made[0]) != expected:
+    failures.append(f"surfaces {surfaces(made[0])} != {expected}")
+
+graph = io.to_dict(graph_from_raytatouille(d))  # version 1: converted on opening, not read here
+if plugin()._workflow_system(Ctx({"graph": graph})) is not None:
+    failures.append("a system from an old socket graph (version 1)")
 if plugin()._workflow_system(Ctx({})) is not None:
     failures.append("a system from an empty workflow")
 

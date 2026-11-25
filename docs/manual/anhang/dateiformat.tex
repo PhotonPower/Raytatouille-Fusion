@@ -47,7 +47,7 @@ Eine Datei ist ein JSON-Objekt mit diesen Abschnitten (gekürzt):
                   "attributes": { "rtt.role": "mirror", "sim.inactive": true },
                   "geometry": { "type": "shell", "faces": [ ... ] } } ],
   "plugins":  { "raytracer": { "params": { ... } } },
-  "workflow": { "graph": { "format": "rtt-fusion-graph", ... }, ... },
+  "workflow": { "model": { "format": "rtt-fusion-graph", "version": 2, ... }, ... },
   "results":  [ { "key": "workflow:Kamerabild", "name": "Kamera", "kind": "image",
                   "stamp": "3f1c...", "image": { ... } } ]
 }
@@ -72,9 +72,11 @@ Eine Datei ist ein JSON-Objekt mit diesen Abschnitten (gekürzt):
 \param{plugins} & Die Werte der Parameterformulare je Plugin, nach Plugin-Kennung.
   Einträge von Plugins, die das Programm nicht kennt, bleiben beim Speichern unverändert
   erhalten. \\
-\param{workflow} & Der Node-Workflow: Graph mit Blöcken, Verbindungen, Varianten und
-  eingebetteten Dateien (zum Beispiel Glaskatalogen), dazu Diagnosen und Plan
-  (\autoref{kap:workflow}). \\
+\param{workflow} & Der Node-Workflow als Modell (\code{rtt-fusion-graph} Version~2): Blöcke
+  mit Ports, Verbindungen, Äste, Gruppen mit Varianten und eingebettete Dateien (zum Beispiel
+  Glaskataloge), dazu Diagnosen und Plan (\autoref{kap:workflow}). Ältere Dokumente enthalten
+  statt des Modells einen Graphen aus Sockets (\param{graph}, Version~1); er wird beim Öffnen
+  umgewandelt (\autoref{sec:workflow-alte-form}). Version~1 wird nicht mehr geschrieben. \\
 \param{results} & Die gespeicherten Ergebnisse der Anzeigefenster (siehe unten). \\
 \bottomrule
 \end{referenz}

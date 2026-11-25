@@ -498,8 +498,7 @@ void MainWindow::createPanels() {
   workflow->hide();
   auto show_workflow = [this, workflow](bool fit) {
     if (node_editor_->workflow() == doc_->workflow()) return;  // our own edit
-    const bool first = node_editor_->workflow()["graph"].toObject().isEmpty() &&
-                       node_editor_->workflow()["model"].toObject().isEmpty();
+    const bool first = node_editor_->workflow()["model"].toObject().isEmpty();
     node_editor_->setWorkflow(doc_->workflow());
     if (doc_->workflow().isEmpty()) return;
     if (!workflow->isVisible()) {
@@ -510,6 +509,9 @@ void MainWindow::createPanels() {
   };
   connect(doc_, &document::Document::workflowChanged, this, [show_workflow] { show_workflow(false); });
   connect(doc_, &document::Document::documentReset, this, [show_workflow] { show_workflow(true); });
+  // an old socket graph (version 1) becomes a model when the document is opened
+  connect(doc_, &document::Document::documentReset, this,
+          [this] { QTimer::singleShot(0, this, &MainWindow::convertOldWorkflow); });
   // every edit in the node editor is one undo step (a dragged block: one at the release)
   connect(node_editor_, &ui::NodeEditor::edited, doc_, [this](const QJsonObject& w) { doc_->editWorkflow(w); });
   // plugins that follow the workflow (e.g. the Raytracer draws what an edit changed): shortly
@@ -684,6 +686,24 @@ void MainWindow::followWorkflow(bool forced) {
   } else if (started == 0) {
     statusBar()->showMessage(tr("Update drawing: no running plugin follows the workflow"), 6000);
   }
+}
+
+void MainWindow::convertOldWorkflow() {
+  const QJsonObject wf = doc_->workflow();
+  if (wf.contains(QStringLiteral("model")) || !wf.contains(QStringLiteral("graph"))) return;
+  plugins::PluginHost* engine = nullptr;
+  if (plugins_ != nullptr) {
+    for (const auto& host : plugins_->plugins()) {
+      if (host->manifest().id == QLatin1String("workflow")) engine = host.get();
+    }
+  }
+  if (engine == nullptr) {
+    statusBar()->showMessage(tr("This document holds an old node workflow (version 1); the Workflow plugin "
+                                "converts it into a model, but it is not loaded"));
+    return;
+  }
+  statusBar()->showMessage(tr("Old node workflow (version 1): converting it into a model …"));
+  plugins_->run(engine, QStringLiteral("convert_to_model"), doc_->pluginParameters(engine->manifest().id));
 }
 
 void MainWindow::showAbout() {
