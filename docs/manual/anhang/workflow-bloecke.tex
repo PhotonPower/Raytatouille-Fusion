@@ -1014,6 +1014,33 @@ ihr Maximum oder Minimum erreicht: erst ein grobes Raster, dann eine eindimensio
 \bottomrule
 \end{referenz}
 
+\subsection{\block{fusion.actuator}}\label{sec:block-fusion-actuator}\index{fusion.actuator@\texttt{fusion.actuator} (Block)}
+
+\textbf{Kategorie:} \code{meta} \quad \textbf{Anbieter:} \plugin{Workflow} (RTT-Fusion, eingebaut)
+
+\textit{Actuator: a stage that sets a system parameter and carries blocks along}
+
+Ein Tisch des Aufbaus (Verschiebetisch, Drehhalter, Fokusantrieb) mit einem Wert
+(Abschnitt~\ref{sec:workflow-aktuatoren}). Der Wert setzt einen freien Parameter des
+Raytatouille-Systems und verschiebt die Blöcke, die der Tisch trägt. Der Block rechnet nichts
+selbst; die Workflow-Maschine wendet ihn vor jedem Lauf an.
+
+\textbf{Daten:} \code{drive} (ein, \code{drive}).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{0.2\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.13\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Typ} & \textbf{Standard} & \textbf{Einheit / Bereich} & \textbf{Bedeutung} \\
+\midrule
+\endhead
+\param{value} & Zahl & \code{0.0} & -- & Stellung des Tischs. \\
+\param{unit} & Auswahl & \code{mm} & \code{mm}, \code{deg}, \code{rad}, \code{µm} & Einheit des Werts; \code{deg}: Drehungen der getragenen Blöcke in Grad. \\
+\param{parameter} & Text & leer & -- & Freier Parameter des Raytatouille-Systems, der den Wert erhält, z.\,B.\ \code{DX}; innerhalb \code{min}/\code{max} seiner Zeile. \\
+\param{moves} & Text & leer & -- & Getragene Blöcke: \code{Block.Komponente} oder \code{Block.Komponente*Faktor}, durch Kommas getrennt (\code{dx}, \code{dy}, \code{dz} in mm; \code{rx}, \code{ry}, \code{rz}), z.\,B.\ \code{G1.dx, G2.dx}. \\
+\param{zero} & Zahl & \code{0.0} & -- & Wert, bei dem die getragenen Blöcke dort stehen, wo das Modell sie hinstellt. \\
+\param{drive} & Zahl & \code{0.0} & -- & Wird zum Wert addiert (vom \code{drive} eines Meta-Blocks gesetzt). \\
+\bottomrule
+\end{referenz}
+
 \section{Strukturblöcke}\label{sec:bloecke-struktur}
 
 

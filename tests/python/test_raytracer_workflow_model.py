@@ -55,6 +55,29 @@ if made is None:
 elif surfaces(made[0]) != expected:
     failures.append(f"surfaces {surfaces(made[0])} != {expected}")
 
+# an actuator (RTT-Fusion fusion.actuator) sets a system parameter: the drawing shows the stage
+# where it stands, and a new value draws again
+try:
+    import rtt_fusion.graph.actuator  # noqa: F401
+except ImportError:
+    print("actuators skipped: rtt_fusion without fusion.actuator")
+else:
+    with_parameter = {**d, "parameters": [{"name": "T", "value": 1.0, "variable": True, "min": 0, "max": 10}]}
+    model = io.model_to_dict(model_from_raytatouille(rt.System.from_json(json.dumps(with_parameter))))
+    model["nodes"].append({"id": "stage", "type": "fusion.actuator", "params": {"value": 2.5, "parameter": "T"}})
+    engine = plugin()
+
+    def value_of_t(made) -> float:
+        return next(p["value"] for p in json.loads(made[0].to_json())["parameters"] if p["name"] == "T")
+
+    first = engine._workflow_system(Ctx({"model": model}))
+    if first is None or value_of_t(first) != 2.5:
+        failures.append(f"actuator not in the drawn system: {first and value_of_t(first)}")
+    model["nodes"][-1]["params"]["value"] = 4.0
+    again = engine._workflow_system(Ctx({"model": model}))
+    if again is None or again is first or value_of_t(again) != 4.0:
+        failures.append("a new value of the actuator is not drawn")
+
 graph = io.to_dict(graph_from_raytatouille(d))  # version 1: converted on opening, not read here
 if plugin()._workflow_system(Ctx({"graph": graph})) is not None:
     failures.append("a system from an old socket graph (version 1)")

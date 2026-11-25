@@ -953,6 +953,41 @@ $3 \times 3$ mittleren Pixel) und \code{power} (Summe). Verbinden Sie \code{resu
 \block{display.plot}, um das Ergebnis zu sehen. Dank des Caches rechnet jede Wiederholung nur, was
 hinter dem geänderten Block liegt.
 
+\subsection{Aktuatoren}\label{sec:workflow-aktuatoren}\index{Aktuator}
+
+Ein \block{fusion.actuator} steht für einen Tisch des Aufbaus: einen Verschiebetisch unter dem
+Belichtungskopf, einen Drehhalter, einen Fokusantrieb. Er hat \emph{einen} Wert
+(\param{value}), und der bewegt alles, was zu dem Tisch gehört:
+
+\begin{itemize}
+  \item \param{parameter} nennt einen freien Parameter des Raytatouille-Systems (z.\,B.\
+        \code{DX}). Der Aktuator setzt ihn auf seinen Wert, innerhalb des Bereichs
+        (\code{min}, \code{max}), den die Parameterzeile des Systems angibt. Alle Elemente, deren
+        Lage den Parameter verwendet, folgen, ebenso Ausdrücke wie \code{Z\_G2 = Z\_G1 + DP}.
+  \item \param{moves} nennt die Blöcke, die der Tisch trägt, mit der Komponente ihrer Lage, z.\,B.\
+        \code{E1.dx, G1.dx, G2.dx, E2.dx}. Jeder wird um (Wert $-$ \param{zero}) verschoben, mit
+        \code{*Faktor} um ein Vielfaches davon. Drehungen (\code{rx}, \code{ry}, \code{rz}) nimmt
+        der Aktuator in Grad, wenn \param{unit} \code{deg} ist. \param{zero} ist die Stellung, in
+        der die getragenen Blöcke dort stehen, wo das Modell sie hinstellt, beim Gitterabstand
+        also der Nennwert.
+\end{itemize}
+
+Ein Gitter, das ein Raytatouille-Element ersetzt hat, steht sonst dort, wo das System das Element
+hinstellt. Trägt es ein Aktuator, behält es seine eigene Lage (\code{keep\_pose}), damit die
+Bewegung nur einmal zählt. Der Aktuator ändert nur die Rechnung, nicht das Modell: Der
+Parameter im System behält seinen Wert, und \param{value} gilt, solange der Aktuator nicht stumm
+ist. Die Zeichnung des Raytracers zeigt die Elemente in der Stellung der Aktuatoren.
+
+Ein Meta-Block kann einen Aktuator fahren: \code{drive} des Meta-Blocks in den Eingang
+\code{drive} des Aktuators. Der Wert des Meta-Blocks kommt zu \param{value} hinzu, und nach dem
+Lauf steht der Aktuator wieder auf \param{value}.
+
+\begin{hinweis}
+Das Beispiel \datei{belichtungskopf\_frobsy\_fg-4.rttf} hat Aktuatoren für den Kopf (X, Y,
+Drehung; sie tragen die Gitter G1 und G2 mit ihren Flächen E1 und E2), den Gitterabstand (trägt
+G2 und E2) und die Fokusantriebe von Substrat, FrObSy und NPMM.
+\end{hinweis}
+
 % ---------------------------------------------------------------------------
 \section{Gespeicherte Ergebnisse}\label{sec:workflow-gespeichert}
 
