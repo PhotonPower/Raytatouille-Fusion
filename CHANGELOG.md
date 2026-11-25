@@ -6,6 +6,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ## [Unreleased]
 
+### Added
+- **Recompute** in the context menu of every block of the node workflow: the block and everything
+  behind it up to the displays are computed again, and their kept and cached results are dropped.
+  That is needed after an update that fixes a computation: a document saved with the older version
+  otherwise keeps showing the old result as up to date (an empty camera image, RTT-Fusion #137). A
+  plugin action can now be offered on every block (`block_types=("*",)`).
+
 ### Changed
 - **The node workflow is a model (version 2) only** – an old document whose workflow is a socket
   graph (version 1) is converted into a model when it is opened (Workflow plugin, *Convert to

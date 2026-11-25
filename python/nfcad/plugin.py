@@ -15,8 +15,8 @@ def action(label: str, *, description: str = "", on_workflow_edit: bool = False,
     (e.g. to draw what the edit changed); it should be quick and raise nothing.
 
     ``block_types``: an action on one block of the node workflow – CAD shows it in the context menu
-    of blocks of these types (not in the menu or the tool column); ``ctx.target`` names the block
-    ({"block": id, "scope": [group ids from the top level]})."""
+    of blocks of these types (not in the menu or the tool column); ``"*"`` stands for every type.
+    ``ctx.target`` names the block ({"block": id, "scope": [group ids from the top level]})."""
 
     def mark(f: Callable) -> Callable:
         f._nfcad_action = {"label": label, "description": description}
