@@ -118,6 +118,10 @@ void MainWindow::createPlugins() {
 
 void MainWindow::connectPlugin(plugins::PluginHost* host) {
   connect(host, &plugins::PluginHost::readyChanged, this, &MainWindow::rebuildPluginUi);
+  connect(host, &plugins::PluginHost::readyChanged, this, [this](bool ready) {
+    // a plugin started after the document was opened describes its blocks too
+    if (ready && follow_timer_ != nullptr && !doc_->workflow().isEmpty()) follow_timer_->start();
+  });
   connect(host, &plugins::PluginHost::logLine, this, [this, host](const QString& line) {
     plugin_log_->appendPlainText(QStringLiteral("[%1] %2").arg(host->manifest().id, line));
   });

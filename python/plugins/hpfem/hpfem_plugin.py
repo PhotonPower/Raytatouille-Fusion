@@ -242,6 +242,18 @@ class HpFemPlugin(Plugin):
             return {"ok": False, "error": "the hp-FEM plugin needs RTT-Fusion with the block hpfem.grating (0.5)"}
         return provider.handle(request)
 
+    @action("Describe blocks", description="The numbers of every hp-FEM block's job in its dialog – period, "
+                                           "order, mesh, indices (run by CAD after every edit of the workflow "
+                                           "and when a document is opened)", on_workflow_edit=True)
+    def follow_workflow(self, ctx):
+        """Quiet: sets the dialog fields of this plugin's blocks where they are missing or out of date;
+        never fails."""
+        try:
+            ctx.set_block_fields(hpfem_block.described(ctx.workflow()))
+        except Exception as e:  # noqa: BLE001 - only the dialog's fields
+            ctx.log(f"fields not updated: {e}")
+        return ""
+
     @action("Store job in block",
             description="The panel's job becomes this block's grating (saved with the document; period, order "
                         "and indices in its dialog); the rays at the block set the incidence",

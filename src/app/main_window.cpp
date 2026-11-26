@@ -514,13 +514,15 @@ void MainWindow::createPanels() {
           [this] { QTimer::singleShot(0, this, &MainWindow::convertOldWorkflow); });
   // every edit in the node editor is one undo step (a dragged block: one at the release)
   connect(node_editor_, &ui::NodeEditor::edited, doc_, [this](const QJsonObject& w) { doc_->editWorkflow(w); });
-  // plugins that follow the workflow (e.g. the Raytracer draws what an edit changed): shortly
-  // after the last edit, if the plugin runs and is idle
-  auto* follow = new QTimer(this);
-  follow->setSingleShot(true);
-  follow->setInterval(600);
-  connect(node_editor_, &ui::NodeEditor::edited, follow, qOverload<>(&QTimer::start));
-  connect(follow, &QTimer::timeout, this, [this] { followWorkflow(false); });
+  // plugins that follow the workflow (e.g. the Raytracer draws what an edit changed, the grating
+  // plugins describe their blocks' dialogs): shortly after the last edit and after a document was
+  // opened (a plugin that becomes ready later starts it too), if the plugin runs and is idle
+  follow_timer_ = new QTimer(this);
+  follow_timer_->setSingleShot(true);
+  follow_timer_->setInterval(600);
+  connect(node_editor_, &ui::NodeEditor::edited, follow_timer_, qOverload<>(&QTimer::start));
+  connect(doc_, &document::Document::documentReset, follow_timer_, qOverload<>(&QTimer::start));
+  connect(follow_timer_, &QTimer::timeout, this, [this] { followWorkflow(false); });
   // the plugins' actions on one block (context menu of the node editor)
   node_editor_->block_actions = [this](const QString& id, const QString& type) {
     std::vector<ui::NodeEditor::BlockAction> out;

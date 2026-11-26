@@ -9,7 +9,7 @@ import importlib
 import json
 from pathlib import Path
 
-from nfcad import Param, Plugin, UserError, action
+from nfcad import Param, Plugin, UserError, action, workflow_blocks
 
 import fg_cad
 import fg_config
@@ -113,6 +113,23 @@ def set_config(node: dict, cfg: dict) -> None:
     node.setdefault("params", {})["config"] = cfg
     kept = [f for f in node.get("fields") or [] if not str(f.get("name", "")).startswith("/config/")]
     node["fields"] = kept + config_fields(cfg)
+
+
+def described(workflow: dict) -> list[dict]:
+    """The grating and stack blocks whose dialog fields differ from what their configuration gives
+    (`config_fields`; the fields of other data, e.g. the element a block replaced, stay) – for
+    `Context.set_block_fields`."""
+    out = []
+    for scope, node in workflow_blocks(workflow):
+        if node.get("type") not in BLOCK_TYPES:
+            continue
+        have = list(node.get("fields") or [])
+        kept = [f for f in have if not str(f.get("name", "")).startswith("/config/")]
+        cfg = (node.get("params") or {}).get("config")
+        want = kept + (config_fields(cfg) if isinstance(cfg, dict) and cfg else [])
+        if want != have:
+            out.append({"block": node.get("id"), "scope": scope, "fields": want})
+    return out
 
 
 def block_config(node: dict) -> dict | None:
@@ -265,6 +282,18 @@ class FourierGratingPlugin(Plugin):
             return {"ok": False, "error": str(e)}
 
     # ------------------------------------------------------------------ the configuration a block holds
+    @action("Describe blocks", description="The numbers of every grating's and stack's configuration in its "
+                                           "dialog (run by CAD after every edit of the workflow and when a "
+                                           "document is opened)", on_workflow_edit=True)
+    def follow_workflow(self, ctx):
+        """Quiet: sets the dialog fields of this plugin's blocks where they are missing or out of date
+        (a configuration that came with the document, an import, a file embedded); never fails."""
+        try:
+            ctx.set_block_fields(described(ctx.workflow()))
+        except Exception as e:  # noqa: BLE001 - only the dialog's fields
+            ctx.log(f"fields not updated: {e}")
+        return ""
+
     @action("Store panel configuration in block",
             description="The panel's configuration becomes this block's own (saved with the document, no file "
                         "needed; period, orders, layers and indices in its dialog): import a configuration "

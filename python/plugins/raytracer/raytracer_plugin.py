@@ -27,7 +27,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nfcad import Param, Plugin, UserError, action
+from nfcad import Param, Plugin, UserError, action, workflow_blocks
 
 import rtt_nurbs
 
@@ -1133,27 +1133,15 @@ class RaytracerPlugin(Plugin):
 
     def _describe_workflow(self, ctx) -> bool:
         """The editable fields of the Raytatouille blocks in the workflow (also inside groups), set
-        where they differ; True if the workflow was written."""
-        wf = ctx.workflow()
-        model = wf.get("model") if isinstance(wf, dict) else None
-        if not model:
-            return False
-        changed = False
-
-        def walk(nodes) -> None:
-            nonlocal changed
-            for nd in nodes:
-                if str(nd.get("type", "")).startswith("rtt."):
-                    fields = self._rtt_fields(nd)
-                    if fields and nd.get("fields") != fields:
-                        nd["fields"] = fields
-                        changed = True
-                for body in (nd.get("variants") or {}).values():
-                    walk(body.get("nodes", []))
-
-        walk(model.get("nodes", []))
-        if changed:
-            ctx.set_workflow(wf)
+        where they differ – only the fields (ctx.set_block_fields: the other plugins that describe
+        their blocks after the same edit are not overwritten); True if a block changed."""
+        blocks = []
+        for scope, nd in workflow_blocks(ctx.workflow()):
+            if str(nd.get("type", "")).startswith("rtt."):
+                fields = self._rtt_fields(nd)
+                if fields and nd.get("fields") != fields:
+                    blocks.append({"block": nd.get("id"), "scope": scope, "fields": fields})
+        changed = bool(blocks) and ctx.set_block_fields(blocks) > 0
         return changed
 
     @action("Update drawing", description="Draw the system of the node workflow now (it is also drawn "
