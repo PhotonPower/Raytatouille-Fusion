@@ -18,6 +18,14 @@ one undo step.
 | Circle (3 points) | `c3` | three points on the circle |
 | Arc | `a` | start, end, point on the arc |
 | Helix | `h` | (number of turns,) axis start, axis end, radius point or radius |
+| Ellipse | `el` | centre, end of the first axis (or its length), second semi-axis (point or length); exact |
+| Spiral | `spi` | (number of turns,) centre, start radius, end radius (points or numbers); planar, Archimedean |
+| Curve (control points) | `crv` | control points (Enter: done; clicking the first one closes); cubic B-spline |
+| Sketch | `sk` | click the start, move the cursor along the curve, click / Enter: a cubic fit of the path (0.5 % of its length) |
+| Curve through points | `crvpts` | the selected point objects in selection order (immediately); interpolating cubic |
+| Conic | `conic` | start, end, apex (where the end tangents meet), rho in (0, 1) or a point; exact |
+| Parabola | `para` | vertex, focus (or focal length), end point (or half width); exact |
+| Hyperbola | `hyp` | centre, vertex, a point of the branch; exact |
 | Distance | `dist` | two points; the result appears in the status bar |
 | Angle | `ang` | vertex, a point on each leg |
 | **Solids** (M6a) | | |
@@ -38,7 +46,7 @@ one undo step.
 | Polar array | `arraypolar` | (count,) centre, total angle (Enter: 360°) |
 
 | **Curves and surfaces** (M6b) | | |
-| Spline | `sp` | points (Enter: done); interpolating cubic |
+| Spline (Interpolated curve) | `sp`, `interpcrv` | points (Enter: done); interpolating cubic |
 | Offset curve | `offset` | (distance,) click the side; on the selection, in the construction plane |
 | Fillet curves | `fillet` | radius; two selected curves (arc + both trimmed) or one curve (all corners) |
 | Plane | `plane` | two corners in the construction plane |
