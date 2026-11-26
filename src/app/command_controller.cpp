@@ -116,12 +116,17 @@ bool CommandController::start(const QString& name) {
     std::vector<document::Entity> parts;
     std::vector<commands::GripSet> grips;
     std::vector<commands::GripSet> edges;
+    std::vector<commands::GripSet> faces;
     if (selection_ != nullptr) {
       for (const document::SelectionItem& i : selection_->ordered()) {
         const document::Entity* e = doc_->entity(i.entity);
         if (e == nullptr) continue;
         if (i.sub.kind == document::SubElement::Kind::None) {
           picked.push_back(*e);
+        } else if (i.sub.kind == document::SubElement::Kind::Face && cmd->usesFaces()) {
+          auto same = std::find_if(faces.begin(), faces.end(), [&](const commands::GripSet& g) { return g.id == e->id; });
+          if (same == faces.end()) same = faces.insert(faces.end(), {e->id, e->geometry, {}});
+          same->indices.push_back(i.sub.index);
         } else if (i.sub.kind == document::SubElement::Kind::Edge && cmd->usesEdges()) {
           // the picked edges of a shell, per shell
           auto same = std::find_if(edges.begin(), edges.end(), [&](const commands::GripSet& g) { return g.id == e->id; });
@@ -147,6 +152,7 @@ bool CommandController::start(const QString& name) {
     picked.insert(picked.end(), parts.begin(), parts.end());
     if (!grips.empty()) cmd->setGrips(std::move(grips));
     if (!edges.empty()) cmd->setEdges(std::move(edges));
+    if (!faces.empty()) cmd->setFaces(std::move(faces));
     // commands that need the view's plane already in begin() / finish() (Project: its direction)
     if (grid_->activeView() != nullptr) cmd->setViewPlane(frameOf(grid_->activeView()));
     if (picked.empty() && !drawings.empty() && !cmd->movesDrawings()) {
