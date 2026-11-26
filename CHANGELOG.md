@@ -8,9 +8,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 
 ### Added
 - **Control points of curves**: Points on / off show a curve's control points as grips with its
-  control polygon (saved with the document). Grips are picked by a click or a window, Move, Rotate
-  and Scale move the selected ones (the curve follows), Weight sets their weights, Select points
-  selects all of them; the property panel shows a grip's position and weight.
+  control polygon (saved with the document). Grips are picked by a click or a window and dragged
+  with the mouse; Move, Rotate and Scale move the selected ones (the curve follows), Weight sets
+  their weights, Select points selects all of them, Insert control point adds one on the control
+  polygon; the property panel shows a grip's position and weight.
 - **Editing curves** (tool group *Edit curves*): Extend, Divide and Divide by length (points),
   Rebuild, Change degree, Flip direction (also surface normals), Close, Seam, Insert and Remove
   knot, Smooth and Fair; Match (G0 / G1 / G2 to another curve), Simplify (exact lines and arcs)
