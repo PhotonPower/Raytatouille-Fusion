@@ -7,6 +7,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Curves from objects** (tool group *Curves from objects*): Project and Pull curves onto
+  surfaces, Section and Contour of surfaces and solids, Duplicate edge and Duplicate border, Extract
+  isocurve and Extract wireframe, Offset curve on surface (geodesic) and Curve Boolean (union,
+  intersection, difference of closed planar curves). Commands can now take picked edges and faces
+  of solids (Ctrl+Shift-click) as curves and surfaces.
 - **Curves**: Curve from control points (`crv`), Ellipse (`el`), Spiral (`spi`), Parabola
   (`para`), Hyperbola (`hyp`), Conic by start, end, apex and rho (`conic`), Sketch – a freehand
   curve fitted to the cursor's path (`sk`) – and Curve through the selected points (`crvpts`);

@@ -47,6 +47,16 @@ one undo step.
 | Grid array | `array_grid` | (count a, count b,) base, step a, step b |
 | Polar array | `arraypolar` | (count,) centre, total angle (Enter: 360°) |
 
+| **Curves from objects** | | |
+| Project / Pull curves | `project` / `pull` | selected curves and surfaces (faces of solids may be picked as parts); immediately: along the view direction / the surface normal; the trim is not applied |
+| Section | `section` | selected surfaces / solids; two points of the section line (plane perpendicular to the view): closed loops of solids, trimmed pieces of faces |
+| Contour | `contour` | selected surfaces / solids; base point, direction of the planes' normal, spacing (≤ 1000 planes) |
+| Duplicate edge / border | `dupedge` / `dupborder` | picked edges (Ctrl+Shift-click) as curves / the boundary loops of surfaces, the free edges of open shells, joined into loops |
+| Extract isocurve | `iso` | selected surfaces; points: the isocurves through them (1: u, 2: v, 3: both; Enter: done) |
+| Extract wireframe | `extractwireframe` | selected surfaces; their isocurves at all knot lines, borders included |
+| Offset curve on surface | `offsetcrvonsrf` | one curve and its surface; distance (sign: side), geodesic |
+| Curve Boolean | `crvboolean` | closed curves in the construction plane; 1 union, 2 intersection, 3 difference (first minus the others) |
+
 | **Curves and surfaces** (M6b) | | |
 | Spline (Interpolated curve) | `sp`, `interpcrv` | points (Enter: done); interpolating cubic |
 | Offset curve | `offset` | (distance,) click the side; on the selection, in the construction plane |

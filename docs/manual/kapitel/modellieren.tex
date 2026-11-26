@@ -48,6 +48,9 @@ Gruppe & Standard & Befehle \\
   Spiral, Curve (control points), Interpolated curve, Sketch (freehand), Curve through points,
   Conic, Parabola, Hyperbola, Offset curve, Fillet curves, Chamfer curves, Blend curves,
   Tween curves \\
+\gui{Curves from objects} & zugeklappt & Project curves, Pull curves, Section, Contour,
+  Duplicate edge, Duplicate border, Extract isocurve, Extract wireframe, Offset curve on surface,
+  Curve Boolean \\
 \gui{Surfaces} & zugeklappt & Plane, Extrude, Revolve, Loft, Sweep 1 rail, Sweep 2 rails,
   Coons patch, Gordon surface, Offset surface, Fillet surfaces, Cap planar holes \\
 \gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Boolean union,
@@ -108,6 +111,9 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{conic} & Conic & & \code{para}, \code{hyp} & Parabola, Hyperbola & \\
 \code{blend} & Blend curves & & \code{cha} & Chamfer curves & \\
 \code{tan} & Tangent line & & \code{perp} & Perpendicular line & \\
+\code{project}, \code{pull} & Project / Pull curves & & \code{section}, \code{contour} & Section, Contour & \\
+\code{dupedge}, \code{dupborder} & Duplicate edge / border & & \code{iso} & Extract isocurve & \\
+\code{offsetcrvonsrf} & Offset curve on surface & & \code{crvboolean} & Curve Boolean & \\
 \code{tween} & Tween curves & & \code{filletcorners} & Fillet curves & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
@@ -936,6 +942,62 @@ ausgewählten Kurve überblenden.
   \keys{Enter} für eine Kurve in der Mitte.
 \end{schritte}
 Läuft die zweite Kurve andersherum als die erste, wird sie vorher umgedreht.
+
+\section{Kurven aus Objekten (Gruppe Curves from objects)}\label{sec:gruppe-derive}
+
+Diese Befehle leiten Kurven aus vorhandenen Flächen, Körpern und Kurven ab. Sie arbeiten auf der
+Auswahl; Flächen eines Körpers und Kanten können Sie auch einzeln als Teilobjekte wählen
+(\keys{Strg+Shift}-Klick, Abschnitt~\ref{sec:teilobjekte}). Die Originale bleiben erhalten.
+
+\subsection{Project curves, Pull curves -- Kurven auf Flächen abbilden}\label{sec:cmd-project}
+\cmd{project} (Alias \code{proj}) und \cmd{pull}. Wählen Sie Kurven und die Flächen, auf die sie
+sollen, und starten Sie den Befehl: Jede Kurve wird sofort auf jede Fläche abgebildet --
+\gui{Project} entlang der Blickrichtung der aktiven Ansicht (Normale ihrer Konstruktionsebene),
+\gui{Pull} senkrecht zur Fläche (nächste Punkte). Die neue Kurve liegt auf der ganzen Fläche; den
+Beschnitt einer getrimmten Fläche berücksichtigt sie nicht. Trifft ein Teil der Kurve die Fläche
+nicht, entsteht für dieses Paar keine Kurve.
+
+\subsection{Section -- Schnitt}\label{sec:cmd-section}
+\cmd{section}. Wählen Sie Flächen oder Körper und klicken Sie zwei Punkte einer Schnittlinie:
+Geschnitten wird mit der Ebene durch diese Linie, senkrecht zur Ansicht. Ein geschlossener Körper
+gibt geschlossene Schnittkurven, eine Fläche ihre Schnittkurven innerhalb ihres Beschnitts.
+
+\subsection{Contour -- Höhenlinien}\label{sec:cmd-contour}
+\cmd{contour}. Parallele Schnitte im festen Abstand über die ganze Auswahl.
+\begin{schritte}
+\item \code{Contour: base point} -- ein Punkt, durch den eine der Ebenen geht.
+\item \code{Contour: direction of the contour planes' normal} -- die Richtung, in der die Ebenen
+  aufeinander folgen.
+\item \code{Contour: spacing (number)} -- der Abstand der Ebenen.
+\end{schritte}
+Höchstens 1000 Ebenen; liegt eine Ebene genau in einer ebenen Fläche eines Körpers, werden seine
+Flächen einzeln geschnitten.
+
+\subsection{Duplicate edge, Duplicate border -- Kanten und Ränder als Kurven}\label{sec:cmd-dupedge}
+\cmd{dupedge}: Wählen Sie Kanten als Teilobjekte (\keys{Strg+Shift}-Klick) und starten Sie den
+Befehl; jede wird eine eigenständige Kurve. \cmd{dupborder}: die Randkurven der ausgewählten
+Flächen (der Außenrand und die Löcher, jeweils zu einer Kurve verbunden) bzw.\ die offenen
+Kanten einer offenen Hülle.
+
+\subsection{Extract isocurve, Extract wireframe -- Isokurven}\label{sec:cmd-iso}
+\cmd{extract\_isocurve}, Aliasse \code{iso}, \code{extractisocurve}: Wählen Sie Flächen und
+klicken Sie Punkte auf ihnen -- jeder Klick erzeugt die Isokurven durch den Punkt (Vorschau am
+Cursor); eine getippte 1 nur die in $u$-Richtung konstante, 2 nur die in $v$, 3 beide.
+\keys{Enter} beendet. \cmd{extract\_wireframe} (Alias \code{extractwireframe}) erzeugt sofort die
+Isokurven an allen Knotenlinien der ausgewählten Flächen, die Ränder eingeschlossen. Beide
+gelten für die ganze zugrunde liegende Fläche, auch bei getrimmten Flächen.
+
+\subsection{Offset curve on surface -- Parallelkurve auf einer Fläche}\label{sec:cmd-offset-on-surface}
+\cmd{offset\_on\_surface}, Aliasse \code{offsetcrvonsrf}, \code{offsetonsrf}. Wählen Sie eine
+Kurve und die Fläche, auf der sie liegt, und tippen Sie den Abstand: Die neue Kurve hält ihn
+\emph{auf der Fläche} (geodätisch), links der Kurve von der Flächennormalen aus gesehen; ein
+negativer Abstand legt sie auf die andere Seite.
+
+\subsection{Curve Boolean -- Boolesche Operationen mit Kurven}\label{sec:cmd-curve-boolean}
+\cmd{curve\_boolean}, Aliasse \code{crvboolean}, \code{curveboolean}. Wählen Sie zwei oder mehr
+geschlossene Kurven, die in der Konstruktionsebene der Ansicht liegen, und tippen Sie: 1
+Vereinigung, 2 Schnittmenge, 3 Differenz (die zuerst gewählte minus die anderen). Die Ränder des
+Ergebnisses entstehen als neue geschlossene Kurven; die Kurvenstücke bleiben exakt.
 
 \section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
 \index{Fläche}
