@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Blends and continuity**: Blend surface and Match surface (G0 / G1 / G2 at clicked edges), Merge
+  surfaces (across a common edge), Connect surfaces (extended and trimmed to meet), Tween surfaces,
+  Fillet / Chamfer edges of solids (`blendedge`, `bevel`), Variable fillet, Merge faces. Commands can
+  take picked edges of a solid.
 - **Creating surfaces**: Surface from points (3 or 4 corners), Edge surface (2 to 4 edges),
   Planar surface (with holes), Patch (fitted to curves and points), Surface from point grid, Rail
   revolve, Extrude along curve, Extrude to point, Extrude tapered, Extrude surface (a solid), Pipe,

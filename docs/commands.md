@@ -107,6 +107,13 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Drape | `drape` | selected surfaces / solids; (grid, default 20,) two corners; from above along the plane normal |
 | Heightfield | `heightfield` | an image file (dialog), two corners, height of white |
 | Developable loft | `devloft` | two selected curves; rulings between points with coplanar tangents |
+| Blend surface / Match surface | `blendsrf` / `matchsrf` | two surfaces; (0 / 1 / 2: continuity, default 2,) click near the edge of each; a new surface / the first changed |
+| Merge surfaces | `mergesrf` | two untrimmed surfaces sharing an edge: one surface |
+| Connect surfaces | `connectsrf` | two untrimmed surfaces: extended at their facing edges and trimmed at their intersection |
+| Tween surfaces | `tweensrf` | two surfaces; number (Enter: 1) |
+| Fillet / Chamfer edges | `filletedge`, `blendedge` / `chamferedge`, `bevel` | picked edges of one solid (Ctrl+Shift-click); radius / distance |
+| Variable fillet | `variableblend` | picked edges; points on them, each followed by its radius; Enter: apply |
+| Merge faces | `merge` | selected solids: faces that continue each other merged |
 | Ellipsoid / Paraboloid | `ellipsoid` / `paraboloid` | centre, first axis end, 2nd and 3rd semi-axis / vertex, focus, rim radius; exact |
 
 | **Editing and analysis** (M6c) | | |

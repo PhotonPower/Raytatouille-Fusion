@@ -40,6 +40,7 @@ add_library(nfcad_core STATIC
   src/commands/derived_curve_commands.cpp
   src/commands/curve_edit_commands.cpp
   src/commands/surface_create_commands.cpp
+  src/commands/surface_blend_commands.cpp
   src/commands/edit_commands.cpp
   src/commands/input_parser.cpp
   src/commands/solid_commands.cpp

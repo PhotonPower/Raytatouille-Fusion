@@ -115,12 +115,18 @@ bool CommandController::start(const QString& name) {
     std::vector<document::Entity> picked;
     std::vector<document::Entity> parts;
     std::vector<commands::GripSet> grips;
+    std::vector<commands::GripSet> edges;
     if (selection_ != nullptr) {
       for (const document::SelectionItem& i : selection_->ordered()) {
         const document::Entity* e = doc_->entity(i.entity);
         if (e == nullptr) continue;
         if (i.sub.kind == document::SubElement::Kind::None) {
           picked.push_back(*e);
+        } else if (i.sub.kind == document::SubElement::Kind::Edge && cmd->usesEdges()) {
+          // the picked edges of a shell, per shell
+          auto same = std::find_if(edges.begin(), edges.end(), [&](const commands::GripSet& g) { return g.id == e->id; });
+          if (same == edges.end()) same = edges.insert(edges.end(), {e->id, e->geometry, {}});
+          same->indices.push_back(i.sub.index);
         } else if (i.sub.kind == document::SubElement::Kind::ControlPoint) {
           if (!cmd->usesGrips()) continue;
           // the selected control points, per curve (grips)
@@ -140,6 +146,7 @@ bool CommandController::start(const QString& name) {
     }
     picked.insert(picked.end(), parts.begin(), parts.end());
     if (!grips.empty()) cmd->setGrips(std::move(grips));
+    if (!edges.empty()) cmd->setEdges(std::move(edges));
     // commands that need the view's plane already in begin() / finish() (Project: its direction)
     if (grid_->activeView() != nullptr) cmd->setViewPlane(frameOf(grid_->activeView()));
     if (picked.empty() && !drawings.empty() && !cmd->movesDrawings()) {

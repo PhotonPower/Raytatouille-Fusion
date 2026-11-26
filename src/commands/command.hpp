@@ -92,6 +92,10 @@ class Command {
   /// setGrips() before begin(); begin() may then get no whole entities.
   [[nodiscard]] virtual bool usesGrips() const { return false; }
   void setGrips(std::vector<GripSet> grips) { grips_ = std::move(grips); }
+  /// Commands that act on picked edges of solids (fillet / chamfer edges): the controller hands
+  /// over the selected edges per shell (GripSet with edge indices) before begin().
+  [[nodiscard]] virtual bool usesEdges() const { return false; }
+  void setEdges(std::vector<GripSet> edges) { edges_ = std::move(edges); }
   /// Commands that read a file (Heightfield: an image): a non-empty file-dialog filter makes the
   /// controller ask for the file before begin() and hand it over with setFile().
   [[nodiscard]] virtual QString fileFilter() const { return {}; }
@@ -132,6 +136,7 @@ class Command {
   std::vector<std::pair<document::EntityId, document::GeometryPtr>> replace_;
   std::vector<std::pair<document::EntityId, QVariantMap>> attributes_;
   std::vector<GripSet> grips_;
+  std::vector<GripSet> edges_;
   const document::Document* doc_ = nullptr;
   std::optional<std::vector<document::SelectionItem>> select_;
   QString file_;
@@ -157,6 +162,8 @@ QStringList curve_command_ids();
 std::unique_ptr<Command> create_derived_curve_command(const QString& name);
 std::unique_ptr<Command> create_curve_edit_command(const QString& name);
 std::unique_ptr<Command> create_surface_create_command(const QString& name);
+std::unique_ptr<Command> create_surface_blend_command(const QString& name);
+QStringList surface_blend_command_ids();
 QStringList surface_create_command_ids();
 QStringList curve_edit_command_ids();
 QStringList derived_curve_command_ids();
