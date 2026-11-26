@@ -56,7 +56,7 @@ std::vector<ToolGroupDef> build() {
         t("coons", "Coons patch", "Cns", "coons"), t("gordon", "Gordon surface", "Gor", "gordon"),
         t("offset_surface", "Offset surface", "OfS", "offsetsrf"),
         t("fillet_surface", "Fillet surfaces", "FiS", "filletsrf"),
-        t("chamfersrf", "Chamfer surfaces", "ChS", "chamfersrf"), t("blendsrf", "Blend surface", "BlS", "blendsrf"),
+        t("blendsrf", "Blend surface", "BlS", "blendsrf"),
         t("matchsrf", "Match surface", "MaS", "matchsrf"), t("mergesrf", "Merge surfaces", "MgS", "mergesrf"),
         t("connectsrf", "Connect surfaces", "CoS", "connectsrf"), t("tweensrf", "Tween surfaces", "TwS", "tweensrf"),
         t("cap", "Cap planar holes", "Cap", "cap")}},

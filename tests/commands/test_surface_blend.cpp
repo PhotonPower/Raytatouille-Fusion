@@ -69,16 +69,6 @@ class TestSurfaceBlend : public QObject {
     QVERIFY(nf::closest_point(m, {0, 0.5, 0}).distance < 1e-9);      // the far edge stays
   }
 
-  void chamferPerpendicularPlates() {
-    auto c = started("chamfersrf", {rect({-1, -1, 0}, {2, 0, 0}, {0, 2, 0}, 1), rect({0, -1, -1}, {0, 2, 0}, {0, 0, 2}, 2)});
-    QVERIFY(c);
-    QCOMPARE(c->number(0.3), R::Done);
-    const auto made = c->takeEntities();
-    const auto& ch = std::get<nf::NurbsSurface>(*made.front().geometry);
-    // a strip at 0.3 from the intersection on both: width 0.3·√2, length 2
-    QVERIFY(std::abs(nf::area(ch) - 0.3 * std::sqrt(2.0) * 2) < 1e-6);
-  }
-
   void mergeSurfacesAndFaces() {
     // the second plate runs the other way: merged, its inputs removed
     auto c = started("mergesrf", {rect({0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 1), rect({2, 1, 0}, {-1, 0, 0}, {0, -1, 0}, 2)});

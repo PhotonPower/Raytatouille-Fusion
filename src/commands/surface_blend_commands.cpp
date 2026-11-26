@@ -1,5 +1,5 @@
 // Transitions between surfaces (docs/commands.md, "Blends and continuity"): Blend surface,
-// Match surface, Chamfer surfaces, Merge surfaces, Merge faces, Fillet / Chamfer / Variable
+// Match surface, Merge surfaces, Merge faces, Fillet / Chamfer / Variable
 // fillet of solid edges, Connect surfaces, Tween surfaces.
 #include <QObject>
 #include <algorithm>
@@ -153,34 +153,6 @@ class BlendMatchCommand : public SurfacesCommand {
   bool match_;
   int continuity_ = 2;
   std::optional<nf::SurfaceSide> side0_;
-};
-
-// ------------------------------------------------------------------------------ Chamfer surfaces
-/// Chamfer surfaces: a ruled chamfer between two intersecting surfaces at the typed distance
-/// from their intersection on both (the wedge as for Fillet surfaces: the first that works).
-class ChamferSurfacesCommand : public SurfacesCommand {
- public:
-  ChamferSurfacesCommand() : SurfacesCommand(2, QObject::tr("two intersecting surfaces")) {}
-  QString id() const override { return QStringLiteral("chamfersrf"); }
-  QString title() const override { return QObject::tr("Chamfer surfaces"); }
-  QString prompt() const override { return QObject::tr("Chamfer surfaces: distance from the intersection"); }
-  Result number(double d) override {
-    if (d <= 0) return Result::Rejected;
-    std::string last;
-    for (const auto& [s1, s2] : {std::pair{1, 1}, {-1, -1}, {1, -1}, {-1, 1}}) {
-      try {
-        nf::SurfaceChamferOptions o;
-        o.side1 = s1;
-        o.side2 = s2;
-        o.tolerance = 1e-6 * std::max(size_of(surfaces_[0]), size_of(surfaces_[1]));
-        entities_.push_back(document::make_entity(nf::chamfer_surfaces(surfaces_[0], surfaces_[1], d, d, o).surface));
-        return Result::Done;
-      } catch (const std::exception& e) {
-        last = e.what();
-      }
-    }
-    return failed(std::runtime_error(last));
-  }
 };
 
 // ------------------------------------------------------------------------------ Merge
@@ -502,7 +474,6 @@ const std::vector<Entry>& registry() {
   static const std::vector<Entry> r = {
       {"blendsrf", {}, [] { return std::make_unique<BlendMatchCommand>(false); }},
       {"matchsrf", {}, [] { return std::make_unique<BlendMatchCommand>(true); }},
-      {"chamfersrf", {}, [] { return std::make_unique<ChamferSurfacesCommand>(); }},
       {"mergesrf", {}, [] { return std::make_unique<MergeSurfacesCommand>(); }},
       {"merge", {"mergefaces", "mergeallfaces"}, [] { return std::make_unique<MergeFacesCommand>(); }},
       {"filletedge", {"blendedge"}, [] { return std::make_unique<EdgeBlendCommand>(EdgeBlendCommand::Kind::Fillet); }},
