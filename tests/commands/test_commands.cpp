@@ -71,7 +71,7 @@ class TestCommands : public QObject {
     QVERIFY(create_command(QStringLiteral("L")));
     QCOMPARE(create_command(QStringLiteral("pl"))->id(), QStringLiteral("polyline"));
     QVERIFY(!create_command(QStringLiteral("nonsense")));
-    QCOMPARE(nfcad::commands::command_ids().size(), 49);
+    QCOMPARE(nfcad::commands::command_ids().size(), 57);
     for (const QString& id : nfcad::commands::command_ids()) {
       QVERIFY2(create_command(id), qPrintable(id));
       QCOMPARE(create_command(id)->id(), id);
@@ -187,7 +187,8 @@ class TestCommands : public QObject {
     }
     QCOMPARE(c->preview({4, 0, 0}, kTop).size(), std::size_t{2});  // curve and control polygon
     QCOMPARE(c->finish(), R::Done);
-    const auto& crv = curve_of(c->takeEntities());
+    const auto made_crv = c->takeEntities();
+    const auto& crv = curve_of(made_crv);
     QCOMPARE(crv.degree(), std::size_t{3});
     QVERIFY(nf::distance(crv.control_points()[1], {1, 1, 0}) < 1e-12);  // control points, not passed
     QVERIFY(nf::distance(crv.evaluate(crv.domain_end()), {3, 1, 0}) < 1e-12);
@@ -195,7 +196,8 @@ class TestCommands : public QObject {
     c = create_command(QStringLiteral("curve"));
     for (const Point3& p : {Point3{0, 0, 0}, Point3{1, 0, 0}, Point3{1, 1, 0}}) c->point(p, kTop);
     QCOMPARE(c->point({0, 0, 0}, kTop), R::Done);
-    const auto& closed = curve_of(c->takeEntities());
+    const auto made_closed = c->takeEntities();
+    const auto& closed = curve_of(made_closed);
     QVERIFY(nf::distance(closed.evaluate(closed.domain_start()), closed.evaluate(closed.domain_end())) < 1e-12);
     QCOMPARE(create_command(QStringLiteral("interpcrv"))->id(), QStringLiteral("spline"));
   }
@@ -205,7 +207,8 @@ class TestCommands : public QObject {
     c->point({1, 1, 0}, kTop);
     c->point({4, 1, 0}, kTop);                // a = 3 along x
     QCOMPARE(c->number(2.0), R::Done);        // b = 2
-    const auto& e = curve_of(c->takeEntities());
+    const auto made_e = c->takeEntities();
+    const auto& e = curve_of(made_e);
     QVERIFY(e.is_rational());
     for (const auto& q : e.sample(50)) {
       QVERIFY(std::abs((q.x - 1) * (q.x - 1) / 9 + (q.y - 1) * (q.y - 1) / 4 - 1) < 1e-12);
@@ -216,7 +219,8 @@ class TestCommands : public QObject {
     c->point({0, 0, 0}, kFront);
     c->point({2, 0, 0}, kFront);
     QCOMPARE(c->point({5, 0, 1}, kFront), R::Done);  // b = 1, in the XZ plane
-    const auto& f = curve_of(c->takeEntities());
+    const auto made_f = c->takeEntities();
+    const auto& f = curve_of(made_f);
     for (const auto& q : f.sample(20)) QVERIFY(std::abs(q.x * q.x / 4 + q.z * q.z - 1) < 1e-12);
   }
 
@@ -227,7 +231,8 @@ class TestCommands : public QObject {
     QCOMPARE(c->number(1.0), R::Continue);  // start radius
     QVERIFY(!c->preview({3, 0, 0}, kTop).empty());
     QCOMPARE(c->number(3.0), R::Done);      // end radius
-    const auto& s = curve_of(c->takeEntities());
+    const auto made_s = c->takeEntities();
+    const auto& s = curve_of(made_s);
     const auto a = s.evaluate(s.domain_start());
     const auto b = s.evaluate(s.domain_end());
     QVERIFY(std::abs(std::hypot(a.x, a.y) - 1.0) < 1e-6);
@@ -240,7 +245,8 @@ class TestCommands : public QObject {
     c->point({0, 0, 0}, kTop);
     c->point({0, 1, 0}, kTop);             // focus: f = 1, opening along +y
     QCOMPARE(c->number(2.0), R::Done);    // half width
-    const auto& p = curve_of(c->takeEntities());
+    const auto made_p = c->takeEntities();
+    const auto& p = curve_of(made_p);
     for (const auto& q : p.sample(40)) QVERIFY(std::abs(q.y - q.x * q.x / 4) < 1e-12);
     QVERIFY(nf::distance(p.evaluate(p.domain_end()), {2, 1, 0}) < 1e-12);
   }
@@ -251,7 +257,8 @@ class TestCommands : public QObject {
     c->point({1, 0, 0}, kTop);                        // vertex: a = 1
     QCOMPARE(c->point({0.5, 1, 0}, kTop), R::Rejected);  // not beyond the vertex
     QCOMPARE(c->point({2, 1.5, 0}, kTop), R::Done);
-    const auto& h = curve_of(c->takeEntities());
+    const auto made_h = c->takeEntities();
+    const auto& h = curve_of(made_h);
     const double b2 = 1.5 * 1.5 / 3.0;
     for (const auto& q : h.sample(40)) QVERIFY(std::abs(q.x * q.x - q.y * q.y / b2 - 1) < 1e-12);
     const auto mid = h.evaluate(0.5 * (h.domain_start() + h.domain_end()));
@@ -265,7 +272,8 @@ class TestCommands : public QObject {
     c->point({1, 1, 0}, kTop);  // apex
     QCOMPARE(c->number(1.5), R::Rejected);
     QCOMPARE(c->number(0.5), R::Done);  // a parabola: the shoulder halfway to the apex
-    const auto& k = curve_of(c->takeEntities());
+    const auto made_k = c->takeEntities();
+    const auto& k = curve_of(made_k);
     QVERIFY(nf::distance(k.evaluate(0.5 * (k.domain_start() + k.domain_end())), {1, 0.5, 0}) < 1e-12);
     // rho from a point: its position between the chord's midpoint and the apex
     c = create_command(QStringLiteral("conic"));
@@ -273,7 +281,8 @@ class TestCommands : public QObject {
     c->point({2, 0, 0}, kTop);
     c->point({1, 1, 0}, kTop);
     QCOMPARE(c->point({1, 0.7, 0}, kTop), R::Done);
-    const auto& h = curve_of(c->takeEntities());
+    const auto made_h = c->takeEntities();
+    const auto& h = curve_of(made_h);
     QVERIFY(std::abs(h.weights()[1] - 0.7 / 0.3) < 1e-12);  // a hyperbola
   }
 
@@ -282,10 +291,11 @@ class TestCommands : public QObject {
     c->point({1, 0, 0}, kTop);
     for (int i = 1; i < 60; ++i) {  // the cursor moves along a quarter circle
       const double t = 0.5 * std::numbers::pi * i / 60.0;
-      c->preview({std::cos(t), std::sin(t), 0}, kTop);
+      (void)c->preview({std::cos(t), std::sin(t), 0}, kTop);
     }
     QCOMPARE(c->point({0, 1, 0}, kTop), R::Done);
-    const auto& s = curve_of(c->takeEntities());
+    const auto made_s = c->takeEntities();
+    const auto& s = curve_of(made_s);
     QVERIFY(nf::distance(s.evaluate(s.domain_start()), {1, 0, 0}) < 1e-12);
     QVERIFY(nf::distance(s.evaluate(s.domain_end()), {0, 1, 0}) < 1e-12);
     for (const auto& q : s.sample(30)) QVERIFY(std::abs(std::hypot(q.x, q.y) - 1.0) < 0.01);
@@ -301,9 +311,11 @@ class TestCommands : public QObject {
     QVERIFY(c->usesSelection() && c->immediate());
     QVERIFY(c->begin(sel));
     QCOMPARE(c->finish(), R::Done);
-    const auto& crv = curve_of(c->takeEntities());
+    const auto made_crv = c->takeEntities();
+    const auto& crv = curve_of(made_crv);
     QVERIFY(nf::closest_point(crv, {3, 2, 1}).distance < 1e-9);  // passes the points
-    QVERIFY(!create_command(QStringLiteral("crvpts"))->begin({sel[0]}));
+    auto single = create_command(QStringLiteral("crvpts"));
+    QVERIFY(!single->begin({sel[0]}));
   }
 
   void distanceMessage() {

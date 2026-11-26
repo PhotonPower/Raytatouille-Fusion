@@ -43,13 +43,6 @@ std::vector<Polyline3> try_sample(const std::function<nf::NurbsCurve()>& make, s
   }
 }
 
-/// Unit vector of the component of d in the plane; zero if d is (nearly) along the normal.
-nf::Vec3 in_plane_dir(const nf::Vec3& d, const PlaneFrame& f) {
-  const nf::Vec3 t = d - V(f.n) * nf::dot(d, V(f.n));
-  const double l = nf::norm(t);
-  return l > kEps ? t / l : nf::Vec3{0, 0, 0};
-}
-
 // ------------------------------------------------------------------------------ Curve
 /// A B-spline from its control points (degree 3, lower with fewer points); clicking the first
 /// point again closes it.
