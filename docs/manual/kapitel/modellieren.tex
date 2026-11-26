@@ -53,7 +53,7 @@ Gruppe & Standard & Befehle \\
   Curve Boolean \\
 \gui{Surfaces} & zugeklappt & Plane, Surface from points, Edge surface, Planar surface, Patch,
   Surface from point grid, Extrude, Revolve, Rail revolve, Extrude along curve, Extrude to point,
-  Extrude tapered, Extrude surface, Pipe, Loft, Sweep 1 rail, Sweep 2 rails, Coons patch, Gordon
+  Extrude tapered, Extrude surface, Pipe, Drape, Heightfield, Developable loft, Loft, Sweep 1 rail, Sweep 2 rails, Coons patch, Gordon
   surface, Offset surface, Fillet surfaces, Cap planar holes \\
 \gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Ellipsoid, Paraboloid, Boolean union,
   Boolean difference, Boolean intersection \\
@@ -1288,6 +1288,18 @@ Bedarf mit Trim.
   einem Körper geschlossen.
 \item[\cmd{pipe}] Massive Rohre entlang der ausgewählten Kurven: Anfangsradius, dann Endradius
   (\keys{Enter}: gleich).
+\item[\cmd{drape}] Eine Fläche, die sich von oben (entlang der Normalen der Konstruktionsebene)
+  über die ausgewählten Flächen und Körper legt: zwei Ecken eines Rechtecks klicken (vorher eine
+  Zahl tippen ändert das Raster, Voreinstellung $20 \times 20$ Strahlen). Jeder Strahl nimmt die
+  höchste Fläche; Strahlen, die nichts treffen, liegen auf der niedrigsten getroffenen Höhe.
+\item[\cmd{heightfield}] Eine Fläche aus den Grauwerten eines Bildes: Der Befehl fragt nach der
+  Bilddatei (PNG, JPEG, BMP, TIFF, PGM), dann nach zwei Ecken und der Höhe für Weiß -- Schwarz
+  liegt in der Ebene. Das Bild wird mit höchstens $64 \times 64$ Punkten abgetastet und geglättet
+  angenähert.
+\item[\cmd{devloft}] (Developable loft): eine abwickelbare Regelfläche zwischen zwei ausgewählten
+  Kurven -- die Erzeugenden verbinden Punkte, deren Tangenten in einer Ebene liegen, so dass sich
+  die Fläche ohne Dehnung in die Ebene abrollen lässt (Blech, Papier). Nicht zu jedem Kurvenpaar
+  gibt es eine solche Fläche; wo keine passende Gegenstelle existiert, wird gleichmäßig verbunden.
 \end{description}
 Die Aliasse \code{extrudecrv} (Extrude), \code{birail} (Sweep 2 rails) und \code{networksrf}
 (Gordon surface) starten die vorhandenen Befehle.

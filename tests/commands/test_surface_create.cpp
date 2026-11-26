@@ -1,4 +1,6 @@
 // Creating surfaces (surface_create_commands.cpp), each against a closed form.
+#include <QImage>
+#include <QTemporaryDir>
 #include <QTest>
 #include <cmath>
 #include <numbers>
@@ -188,6 +190,83 @@ class TestSurfaceCreate : public QObject {
         QVERIFY(std::abs(q.z - (q.x * q.x + q.y * q.y) / 4.0) < 1e-12);  // exact
       }
     }
+  }
+
+  void drapeOverASphere() {
+    auto c = started("drape", {make_entity(nf::make_sphere({0, 0, 0}, 1.0))});
+    QVERIFY(c);
+    QCOMPARE(c->number(13), R::Continue);  // 13 × 13 rays: one through the centre
+    QCOMPARE(c->point({-2, -2, 0}, kTop), R::Continue);
+    QCOMPARE(c->point({2, 2, 0}, kTop), R::Done);
+    const auto s = only<nf::NurbsSurface>(*c);
+    const auto du = s.domain_u(), dv = s.domain_v();
+    const nf::Vec3 top = s.evaluate(0.5 * (du[0] + du[1]), 0.5 * (dv[0] + dv[1]));
+    QVERIFY(nf::distance(top, {0, 0, 1}) < 1e-6);  // the ray through the centre meets the pole
+    const nf::Vec3 corner = s.evaluate(du[0], dv[0]);
+    QVERIFY(corner.z < 0.9 && corner.z > -1e-9);  // a missed ray: the lowest height hit
+    c = started("drape", {make_entity(nf::make_sphere({0, 0, 0}, 1.0))});
+    c->point({5, 5, 0}, kTop);
+    QCOMPARE(c->point({6, 6, 0}, kTop), R::Rejected);  // nothing below
+  }
+
+  void heightfieldFromAnImage() {
+    QImage image(8, 4, QImage::Format_Grayscale8);
+    for (int x = 0; x < 8; ++x) {
+      for (int y = 0; y < 4; ++y) image.setPixel(x, y, qRgb(x * 255 / 7, x * 255 / 7, x * 255 / 7));  // black → white
+    }
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("ramp.png"));
+    QVERIFY(image.save(path));
+    auto c = create_command(QStringLiteral("heightfield"));
+    QVERIFY(!c->fileFilter().isEmpty());
+    c->setFile(path);
+    c->point({0, 0, 0}, kTop);
+    c->point({7, 3, 0}, kTop);
+    QCOMPARE(c->number(2), R::Done);
+    const auto s = only<nf::NurbsSurface>(*c);
+    const auto du = s.domain_u(), dv = s.domain_v();
+    QVERIFY(std::abs(s.evaluate(du[0], dv[0]).z) < 1e-6);        // black corner on the plane
+    QVERIFY(std::abs(s.evaluate(du[1], dv[1]).z - 2.0) < 1e-6);  // white at the height
+    QVERIFY(std::abs(s.evaluate(0.5 * (du[0] + du[1]), dv[0]).z - 1.0) < 0.05);  // a ramp
+    c = create_command(QStringLiteral("heightfield"));
+    c->setFile(dir.filePath(QStringLiteral("missing.png")));
+    c->point({0, 0, 0}, kTop);
+    c->point({1, 1, 0}, kTop);
+    QCOMPARE(c->number(1), R::Rejected);
+  }
+
+  void developableLoft() {
+    // two half circles in parallel planes, not on one axis: the plain ruled surface (equal
+    // parameters) is curved, the developable one not
+    const nf::NurbsCurve arc = nf::make_arc_3pt({2, 0, 0}, {0, 2, 0}, {-2, 0, 0});
+    // (the upper one reparametrised: its point at t is the circle's at t², so equal parameters
+    // do not pair points with parallel tangents)
+    const nf::NurbsCurve circle = nf::make_arc_3pt({1.5, 0, 2}, {0.5, 1, 2}, {-0.5, 0, 2});
+    std::vector<nf::Vec3> pts;
+    std::vector<double> params;
+    for (int i = 0; i <= 24; ++i) {
+      const double t = i / 24.0;
+      const double cu = circle.domain_start() + t * t * (circle.domain_end() - circle.domain_start());
+      pts.push_back(circle.evaluate(cu));
+      params.push_back(t);
+    }
+    const nf::NurbsCurve top = nf::interpolate_curve(pts, 3, params);
+    auto c = started("devloft", {make_entity(arc), make_entity(top)});
+    QCOMPARE(c->finish(), R::Done);
+    const auto dev = only<nf::NurbsSurface>(*c);
+    const auto plain = nf::ruled(arc, top);
+    double k_dev = 0, k_plain = 0;
+    for (double u : {0.25, 0.5, 0.75}) {
+      for (double v : {0.3, 0.7}) {
+        auto at = [&](const nf::NurbsSurface& s) {
+          const auto du = s.domain_u(), dv = s.domain_v();
+          return std::abs(nf::curvature(s, du[0] + u * (du[1] - du[0]), dv[0] + v * (dv[1] - dv[0])).gaussian);
+        };
+        k_dev = std::max(k_dev, at(dev));
+        k_plain = std::max(k_plain, at(plain));
+      }
+    }
+    QVERIFY2(k_dev < 0.02 * k_plain, qPrintable(QStringLiteral("%1 vs %2").arg(k_dev).arg(k_plain)));
   }
 
   void aliases() {

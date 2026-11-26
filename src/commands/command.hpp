@@ -92,6 +92,10 @@ class Command {
   /// setGrips() before begin(); begin() may then get no whole entities.
   [[nodiscard]] virtual bool usesGrips() const { return false; }
   void setGrips(std::vector<GripSet> grips) { grips_ = std::move(grips); }
+  /// Commands that read a file (Heightfield: an image): a non-empty file-dialog filter makes the
+  /// controller ask for the file before begin() and hand it over with setFile().
+  [[nodiscard]] virtual QString fileFilter() const { return {}; }
+  void setFile(QString path) { file_ = std::move(path); }
   /// The document, read-only (commands that look beyond the selection, e.g. Points off for all).
   void setDocument(const document::Document* doc) { doc_ = doc; }
   /// The selection the command asks for when it is done (e.g. Select points); empty: unchanged.
@@ -130,6 +134,7 @@ class Command {
   std::vector<GripSet> grips_;
   const document::Document* doc_ = nullptr;
   std::optional<std::vector<document::SelectionItem>> select_;
+  QString file_;
   QString message_;
   PlaneFrame view_plane_;
   std::vector<std::vector<nf::Vec3>> drawing_wire_;

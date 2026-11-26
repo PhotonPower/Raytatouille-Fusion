@@ -1,5 +1,6 @@
 #include "app/command_controller.hpp"
 
+#include <QFileDialog>
 #include <QLineEdit>
 #include <QStatusBar>
 #include <algorithm>
@@ -89,6 +90,14 @@ bool CommandController::start(const QString& name) {
   drawings_.clear();
   drawing_note_.clear();
   cmd->setDocument(doc_);
+  if (const QString filter = cmd->fileFilter(); !filter.isEmpty()) {
+    const QString path = QFileDialog::getOpenFileName(line_->window(), cmd->title(), QString(), filter);
+    if (path.isEmpty()) {
+      status_->showMessage(tr("%1 cancelled").arg(cmd->title()), 4000);
+      return true;
+    }
+    cmd->setFile(path);
+  }
   if (cmd->usesSelection()) {
     // selected result drawings (rays, a plugin's camera): Move and Rotate take them along
     std::vector<std::uint64_t> drawings;

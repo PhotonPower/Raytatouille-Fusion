@@ -1,6 +1,7 @@
 // Creating surfaces (docs/commands.md, "Creating surfaces"): Surface from points, Edge surface,
 // Planar surface, Patch, Rail revolve, Extrude along curve / to point / tapered, Extrude surface,
-// Pipe, Surface from point grid, Ellipsoid, Paraboloid.
+// Pipe, Surface from point grid, Ellipsoid, Paraboloid, Drape, Heightfield, Developable loft.
+#include <QImage>
 #include <QObject>
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,7 @@
 #include <functional>
 #include <limits>
 #include <numbers>
+#include <nurbforge/analysis/intersect.hpp>
 #include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/geometry/primitives.hpp>
 #include <nurbforge/geometry/transform.hpp>
@@ -586,6 +588,246 @@ class ParaboloidCommand : public Command {
   std::optional<Point3> vertex_, focus_;
 };
 
+// ------------------------------------------------------------------------------ Drape, Heightfield
+/// The rectangle of two corners in the construction plane (edges along its axes): corner and
+/// edge vectors.
+struct Rect {
+  nf::Vec3 origin, u, v;
+};
+Rect rect_of(const Point3& a, const Point3& b, const PlaneFrame& f) {
+  const nf::Vec3 d = V(b) - V(a);
+  return {V(a), V(f.u) * nf::dot(d, V(f.u)), V(f.v) * nf::dot(d, V(f.v))};
+}
+
+/// Drape: a surface laid over the selected surfaces and solids from above (along the plane's
+/// normal) – a grid of rays over a rectangle (two corners; type a number first for the grid,
+/// default 20 × 20), each meeting the highest face; rays that miss take the lowest height hit.
+class DrapeCommand : public InputCommand {
+ public:
+  QString id() const override { return QStringLiteral("drape"); }
+  QString title() const override { return QObject::tr("Drape"); }
+  QString prompt() const override {
+    return corner_ ? QObject::tr("Drape: opposite corner")
+                   : QObject::tr("Drape (%1 × %1 rays): first corner (type a number to change the grid)").arg(n_);
+  }
+  Result number(double v) override {
+    if (corner_ || std::floor(v) != v || v < 4 || v > 200) return Result::Rejected;
+    n_ = static_cast<std::size_t>(v);
+    return Result::Continue;
+  }
+  Result point(const Point3& p, const PlaneFrame& plane) override {
+    if (!corner_) {
+      corner_ = p;
+      plane_ = plane;
+      return Result::Continue;
+    }
+    const Rect r = rect_of(*corner_, p, plane_);
+    if (nf::norm(r.u) < kEps || nf::norm(r.v) < kEps) return Result::Rejected;
+    return create<nf::NurbsSurface>([&] { return draped(faces_, r, V(plane_.n), n_); });
+  }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    if (!corner_) return {};
+    const Rect r = rect_of(*corner_, c, plane_);
+    return {{P(r.origin), P(r.origin + r.u), P(r.origin + r.u + r.v), P(r.origin + r.v), P(r.origin)}};
+  }
+  std::optional<Point3> basePoint() const override { return corner_; }
+
+  static nf::NurbsSurface draped(const std::vector<nf::TrimmedSurface>& faces, const Rect& r, const nf::Vec3& n,
+                                 std::size_t count) {
+    // how far the rays reach: the faces' control points along the normal
+    double lo = 1e300, hi = -1e300;
+    for (const nf::TrimmedSurface& f : faces) {
+      for (const nf::Vec3& q : f.surface().control_points()) {
+        const double h = nf::dot(q - r.origin, n);
+        lo = std::min(lo, h);
+        hi = std::max(hi, h);
+      }
+    }
+    const double margin = 1.0 + (hi - lo);
+    std::vector<double> height(count * count, std::numeric_limits<double>::quiet_NaN());
+    double lowest = std::numeric_limits<double>::infinity();
+    for (std::size_t i = 0; i < count; ++i) {
+      for (std::size_t j = 0; j < count; ++j) {
+        const nf::Vec3 g = r.origin + r.u * (double(i) / double(count - 1)) + r.v * (double(j) / double(count - 1));
+        const nf::NurbsCurve ray = nf::make_line(g + n * (hi + margin), g + n * (lo - margin));
+        for (const nf::TrimmedSurface& f : faces) {
+          for (const nf::CurveSurfaceIntersection& x : nf::intersect(ray, f.surface())) {
+            if (!f.is_untrimmed() && !f.contains(x.u, x.v)) continue;
+            const double h = nf::dot(x.point - r.origin, n);
+            double& slot = height[i * count + j];
+            if (std::isnan(slot) || h > slot) slot = h;
+          }
+        }
+        if (!std::isnan(height[i * count + j])) lowest = std::min(lowest, height[i * count + j]);
+      }
+    }
+    if (!std::isfinite(lowest)) throw std::invalid_argument("the rectangle does not lie over the selection");
+    std::vector<nf::Vec3> pts;
+    for (std::size_t i = 0; i < count; ++i) {
+      for (std::size_t j = 0; j < count; ++j) {
+        const double h = std::isnan(height[i * count + j]) ? lowest : height[i * count + j];
+        pts.push_back(r.origin + r.u * (double(i) / double(count - 1)) + r.v * (double(j) / double(count - 1)) + n * h);
+      }
+    }
+    return nf::interpolate_surface(pts, count, count, 3, 3);
+  }
+
+ protected:
+  bool accepts() const override { return !faces_.empty(); }
+  QString requirement() const override { return QObject::tr("the surfaces or solids to drape over"); }
+
+ private:
+  std::optional<Point3> corner_;
+  PlaneFrame plane_;
+  std::size_t n_ = 20;
+};
+
+/// Heightfield: a surface from the grey values of an image (chosen in a file dialog) over a
+/// rectangle (two corners), white at the typed height above the plane, black on it.
+class HeightfieldCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("heightfield"); }
+  QString title() const override { return QObject::tr("Heightfield"); }
+  QString fileFilter() const override {
+    return QObject::tr("Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.pgm *.ppm)");
+  }
+  QString prompt() const override {
+    if (!corner_) return QObject::tr("Heightfield: first corner");
+    if (!rect_) return QObject::tr("Heightfield: opposite corner");
+    return QObject::tr("Heightfield: height of white (number)");
+  }
+  Result point(const Point3& p, const PlaneFrame& plane) override {
+    if (!corner_) {
+      corner_ = p;
+      plane_ = plane;
+      return Result::Continue;
+    }
+    if (rect_) return Result::Rejected;
+    const Rect r = rect_of(*corner_, p, plane_);
+    if (nf::norm(r.u) < kEps || nf::norm(r.v) < kEps) return Result::Rejected;
+    rect_ = r;
+    return Result::Continue;
+  }
+  Result number(double h) override {
+    if (!rect_ || h == 0) return Result::Rejected;
+    QImage image(file_);
+    if (image.isNull()) {
+      message_ = QObject::tr("Heightfield: cannot read the image %1").arg(file_);
+      return Result::Rejected;
+    }
+    return add<nf::NurbsSurface>(entities_, message_, title(), [&] { return field(image, *rect_, V(plane_.n), h); })
+               ? Result::Done
+               : Result::Rejected;
+  }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    if (!corner_ || rect_) return {};
+    const Rect r = rect_of(*corner_, c, plane_);
+    return {{P(r.origin), P(r.origin + r.u), P(r.origin + r.u + r.v), P(r.origin + r.v), P(r.origin)}};
+  }
+
+  /// The image sampled on at most 64 × 64 points (grey 0 … 1 times the height), approximated.
+  static nf::NurbsSurface field(const QImage& image, const Rect& r, const nf::Vec3& n, double height) {
+    const QImage grey = image.convertToFormat(QImage::Format_Grayscale8);
+    const std::size_t nu = std::clamp<std::size_t>(static_cast<std::size_t>(grey.width()), 2, 64);
+    const std::size_t nv = std::clamp<std::size_t>(static_cast<std::size_t>(grey.height()), 2, 64);
+    std::vector<nf::Vec3> pts;
+    for (std::size_t i = 0; i < nu; ++i) {
+      for (std::size_t j = 0; j < nv; ++j) {
+        const double s = double(i) / double(nu - 1), t = double(j) / double(nv - 1);
+        const int x = std::clamp(static_cast<int>(std::lround(s * (grey.width() - 1))), 0, grey.width() - 1);
+        const int y = std::clamp(static_cast<int>(std::lround((1.0 - t) * (grey.height() - 1))), 0, grey.height() - 1);
+        const double g = qGray(grey.pixel(x, y)) / 255.0;  // image rows run downwards
+        pts.push_back(r.origin + r.u * s + r.v * t + n * (g * height));
+      }
+    }
+    return nf::approximate_surface(pts, nu, nv, std::min<std::size_t>(3, nu - 1), std::min<std::size_t>(3, nv - 1),
+                                   std::min<std::size_t>(nu, 32), std::min<std::size_t>(nv, 32));
+  }
+
+ private:
+  std::optional<Point3> corner_;
+  std::optional<Rect> rect_;
+  PlaneFrame plane_;
+};
+
+// ------------------------------------------------------------------------------ Developable loft
+/// Developable loft: a ruled surface between two selected curves whose rulings join points with
+/// tangents in one plane, so it can be unrolled flat (sheet metal, paper): for samples of the
+/// first curve the matching point of the second is found by continuation; the second curve is
+/// refitted with those parameters and ruled to the first.
+class DevLoftCommand : public InputCommand {
+ public:
+  QString id() const override { return QStringLiteral("devloft"); }
+  QString title() const override { return QObject::tr("Developable loft"); }
+  QString prompt() const override { return title(); }
+  bool immediate() const override { return true; }
+  Result finish() override {
+    return create<nf::NurbsSurface>([&] { return developable(curves_[0], curves_[1]); });
+  }
+
+  static nf::NurbsSurface developable(const nf::NurbsCurve& a, nf::NurbsCurve b) {
+    if (nf::distance(start_of(a), end_of(b)) + nf::distance(end_of(a), start_of(b)) <
+        nf::distance(start_of(a), start_of(b)) + nf::distance(end_of(a), end_of(b))) {
+      b = b.reversed();
+    }
+    const double s0 = a.domain_start(), s1 = a.domain_end(), t0 = b.domain_start(), t1 = b.domain_end();
+    const std::size_t n = 48;
+    // coplanarity of the tangents and the ruling: det(a'(s), b'(t), b(t) - a(s))
+    auto f = [&](double s, double t) {
+      const nf::Vec3 as = a.evaluate(s), da = a.tangent(s), bt = b.evaluate(t), db = b.tangent(t);
+      return nf::dot(nf::cross(da, db), bt - as) / std::max(nf::norm(bt - as), 1e-300);
+    };
+    std::vector<double> ts(n + 1);
+    ts[0] = t0;
+    ts[n] = t1;
+    for (std::size_t i = 1; i < n; ++i) {
+      const double s = s0 + (s1 - s0) * double(i) / double(n);
+      const double guess = t0 + (t1 - t0) * double(i) / double(n);
+      // the root nearest the even guess after the previous match (continuation, monotone)
+      const double lo = ts[i - 1], hi = t1;
+      const int steps = 200;
+      double best = std::numeric_limits<double>::quiet_NaN();
+      double prev_t = lo, prev_f = f(s, lo);
+      for (int k = 1; k <= steps; ++k) {
+        const double t = lo + (hi - lo) * k / steps;
+        const double ft = f(s, t);
+        if ((prev_f <= 0) != (ft <= 0)) {
+          double x0 = prev_t, x1 = t, f0 = prev_f;
+          for (int it = 0; it < 60; ++it) {
+            const double xm = 0.5 * (x0 + x1);
+            const double fm = f(s, xm);
+            if ((f0 <= 0) == (fm <= 0)) {
+              x0 = xm;
+              f0 = fm;
+            } else {
+              x1 = xm;
+            }
+          }
+          const double root = 0.5 * (x0 + x1);
+          if (std::isnan(best) || std::abs(root - guess) < std::abs(best - guess)) best = root;
+        }
+        prev_t = t;
+        prev_f = ft;
+      }
+      ts[i] = std::isnan(best) ? std::max(guess, ts[i - 1]) : best;
+    }
+    // the second curve refitted with the first curve's parameters at the matched points
+    std::vector<nf::Vec3> pts;
+    std::vector<double> params;
+    for (std::size_t i = 0; i <= n; ++i) {
+      pts.push_back(b.evaluate(ts[i]));
+      params.push_back(s0 + (s1 - s0) * double(i) / double(n));
+    }
+    const nf::NurbsCurve matched = nf::interpolate_curve(pts, 3, params);
+    const nf::NurbsCurve first = nf::rebuild_curve(a, n + 1, 3).curve;  // the same parameter
+    return nf::ruled(first, matched);
+  }
+
+ protected:
+  bool accepts() const override { return curves_.size() == 2; }
+  QString requirement() const override { return QObject::tr("two curves"); }
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -607,6 +849,9 @@ const std::vector<Entry>& registry() {
       {"srfptgrid", {"frompointgrid", "pointgrid"}, [] { return std::make_unique<PointGridCommand>(); }},
       {"ellipsoid", {}, [] { return std::make_unique<EllipsoidCommand>(); }},
       {"paraboloid", {}, [] { return std::make_unique<ParaboloidCommand>(); }},
+      {"drape", {}, [] { return std::make_unique<DrapeCommand>(); }},
+      {"heightfield", {}, [] { return std::make_unique<HeightfieldCommand>(); }},
+      {"devloft", {"developableloft"}, [] { return std::make_unique<DevLoftCommand>(); }},
   };
   return r;
 }

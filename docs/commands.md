@@ -104,6 +104,9 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Extrude along / to point / tapered | `extrudealong` / `extrudetopoint` / `extrudetapered` | profile + path / curves + apex / planar curves, draft angle (Enter: 5°), height |
 | Extrude surface | `extrudesrf` | selected surfaces; distance along the plane normal or two points; a solid |
 | Pipe | `pipe` | selected curves; start radius, end radius (Enter: the same); solids |
+| Drape | `drape` | selected surfaces / solids; (grid, default 20,) two corners; from above along the plane normal |
+| Heightfield | `heightfield` | an image file (dialog), two corners, height of white |
+| Developable loft | `devloft` | two selected curves; rulings between points with coplanar tangents |
 | Ellipsoid / Paraboloid | `ellipsoid` / `paraboloid` | centre, first axis end, 2nd and 3rd semi-axis / vertex, focus, rim radius; exact |
 
 | **Editing and analysis** (M6c) | | |
