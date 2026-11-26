@@ -57,6 +57,17 @@ one undo step.
 | Offset curve on surface | `offsetcrvonsrf` | one curve and its surface; distance (sign: side), geodesic |
 | Curve Boolean | `crvboolean` | closed curves in the construction plane; 1 union, 2 intersection, 3 difference (first minus the others) |
 
+| **Editing curves** | | |
+| Extend curve | `extendcrv` | selected curves; click near an end, length (number or point); natural continuation |
+| Divide / Divide by length | `divide` / `divlen` | selected curves; number of segments / segment length; point objects |
+| Rebuild curve | `rebuild` | selected curves; number of control points, degree (Enter: 3); reports the deviation |
+| Change degree | `changedegree` | selected curves; degree (raising exact, lowering within 0.1 % of the size, else rebuilt) |
+| Flip direction | `flip`, `dir` | selected curves and surfaces (immediately) |
+| Close curve | `closecrv` | selected open curves (immediately): end moved onto the start if near, else a closing segment |
+| Curve seam | `crvseam` | one closed curve; click the new start |
+| Insert / Remove knot | `insertknot` / `removeknot` | one curve; clicks (Enter: done) |
+| Smooth / Fair | `smooth` / `fair` | selected curves; factor (Enter: 0.5) / tolerance |
+
 | **Curves and surfaces** (M6b) | | |
 | Spline (Interpolated curve) | `sp`, `interpcrv` | points (Enter: done); interpolating cubic |
 | Offset curve | `offset` | (distance,) click the side; on the selection, in the construction plane |

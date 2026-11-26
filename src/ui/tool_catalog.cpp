@@ -66,6 +66,13 @@ std::vector<ToolGroupDef> build() {
         t("join", "Join", "Jn", "j"), t("explode", "Explode", "Exp", "x"),
         // not a command: the Edit menu's Delete (Del / Backspace)
         t("delete", "Delete", "Del", "", QKeySequence::Delete)}},
+      {"curve_edit", "Edit curves", false,
+       {t("extend", "Extend curve", "Ext", "extendcrv"), t("divide", "Divide", "Div", "divide"),
+        t("divide_length", "Divide by length", "DvL", "divlen"), t("rebuild", "Rebuild curve", "Rbd", "rebuild"),
+        t("change_degree", "Change degree", "Deg", "changedegree"), t("flip", "Flip direction", "Flp", "flip"),
+        t("close", "Close curve", "Cls", "closecrv"), t("seam", "Curve seam", "Sea", "crvseam"),
+        t("insert_knot", "Insert knot", "IKn", "insertknot"), t("remove_knot", "Remove knot", "RKn", "removeknot"),
+        t("smooth", "Smooth curve", "Smo", "smooth"), t("fair", "Fair curve", "Fai", "fair")}},
       {"analyze", "Analyze", false,
        {t("distance", "Distance", "Dst", "di"), t("angle", "Angle", "Ang", "ang"),
         t("curvature", "Curvature", "Crv", "curv"), t("area", "Area", "Are", "area"),

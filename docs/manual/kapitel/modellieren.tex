@@ -58,6 +58,9 @@ Gruppe & Standard & Befehle \\
 \gui{Transform} & zugeklappt & Move, Copy, Rotate, Scale, Mirror, Linear array, Grid array,
   Polar array \\
 \gui{Edit} & zugeklappt & Trim, Split, Join, Explode, Delete \\
+\gui{Edit curves} & zugeklappt & Extend curve, Divide, Divide by length, Rebuild curve, Change
+  degree, Flip direction, Close curve, Curve seam, Insert knot, Remove knot, Smooth curve, Fair
+  curve \\
 \gui{Analyze} & zugeklappt & Distance, Angle, Curvature, Area, Volume / mass properties,
   Intersection check \\
 \bottomrule
@@ -114,6 +117,10 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{project}, \code{pull} & Project / Pull curves & & \code{section}, \code{contour} & Section, Contour & \\
 \code{dupedge}, \code{dupborder} & Duplicate edge / border & & \code{iso} & Extract isocurve & \\
 \code{offsetcrvonsrf} & Offset curve on surface & & \code{crvboolean} & Curve Boolean & \\
+\code{extendcrv} & Extend curve & & \code{divide}, \code{divlen} & Divide (by length) & \\
+\code{rebuild} & Rebuild curve & & \code{changedegree} & Change degree & \\
+\code{flip} & Flip direction & & \code{closecrv}, \code{crvseam} & Close curve, Curve seam & \\
+\code{insertknot}, \code{removeknot} & Knots & & \code{smooth}, \code{fair} & Smooth, Fair & \\
 \code{tween} & Tween curves & & \code{filletcorners} & Fillet curves & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
@@ -998,6 +1005,50 @@ negativer Abstand legt sie auf die andere Seite.
 geschlossene Kurven, die in der Konstruktionsebene der Ansicht liegen, und tippen Sie: 1
 Vereinigung, 2 Schnittmenge, 3 Differenz (die zuerst gewählte minus die anderen). Die Ränder des
 Ergebnisses entstehen als neue geschlossene Kurven; die Kurvenstücke bleiben exakt.
+
+\section{Kurven bearbeiten (Gruppe Edit curves)}\label{sec:gruppe-curve-edit}
+
+Diese Befehle ändern die ausgewählten Kurven an Ort und Stelle (ein Rückgängig-Schritt) oder
+leiten Punkte von ihnen ab. Trim, Split, Join und Explode stehen in der Gruppe \gui{Edit}
+(Abschnitt~\ref{sec:gruppe-edit}).
+
+\subsection{Extend curve -- Kurve verlängern}\label{sec:cmd-extend}
+\cmd{extend}, Alias \code{extendcrv}. \code{Extend: click near the end to extend}, dann
+\code{Extend: length (number or a point)}: Die Kurve wird an diesem Ende um die Länge (bzw.\ den
+Abstand des Punkts vom Ende) natürlich fortgesetzt -- ein Bogen bleibt ein Kreisbogen, eine
+Gerade eine Gerade.
+
+\subsection{Divide, Divide by length -- Punkte auf Kurven}\label{sec:cmd-divide}
+\cmd{divide}: Punkte, die die ausgewählten Kurven in die getippte Anzahl gleich langer Stücke
+teilen (bei geschlossenen Kurven ohne doppelten Anfangspunkt). \cmd{divide\_length} (Aliasse
+\code{divlen}, \code{dividebylength}): Punkte im getippten Abstand entlang der Kurve vom Anfang
+an.
+
+\subsection{Rebuild curve, Change degree}\label{sec:cmd-rebuild}
+\cmd{rebuild}: Die Kurve wird mit der getippten Anzahl Kontrollpunkte und dann dem Grad
+(\keys{Enter}: 3) neu aufgebaut, mit gleichmäßigen Knoten; die Statusleiste nennt die größte
+Abweichung. \cmd{change\_degree} (Alias \code{changedegree}): Ein höherer Grad ändert die Form
+nicht; ein niedrigerer wird innerhalb von 0,1\,\% der Kurvengröße angenähert, sonst die Kurve mit
+gleich vielen Kontrollpunkten neu aufgebaut.
+
+\subsection{Flip direction, Close curve, Curve seam}\label{sec:cmd-flip}
+\cmd{flip} (Alias \code{dir}) kehrt die Richtung der ausgewählten Kurven und die Normalen
+ausgewählter Flächen um. \cmd{close} (Alias \code{closecrv}) schließt offene Kurven: Liegen die
+Enden nahe beieinander (höchstens 1\,\% der Länge), wird das Ende auf den Anfang gezogen, sonst
+ein gerades Stück angefügt. \cmd{seam} (Alias \code{crvseam}) verlegt Anfang und Ende einer
+geschlossenen Kurve an den geklickten Punkt.
+
+\subsection{Insert knot, Remove knot -- Knoten}\label{sec:cmd-knots}
+\cmd{insert\_knot} (Alias \code{insertknot}): Jeder Klick auf die ausgewählte Kurve fügt dort
+einen Knoten ein -- die Form bleibt, die Kurve bekommt einen Kontrollpunkt mehr.
+\cmd{remove\_knot} (Alias \code{removeknot}): Jeder Klick entfernt den inneren Knoten, dessen
+Kurvenpunkt am nächsten liegt; dabei ändert sich die Form. \keys{Enter} beendet beide.
+
+\subsection{Smooth curve, Fair curve -- glätten}\label{sec:cmd-smooth}
+\cmd{smooth}: Ein Glättungsschritt -- jeder innere Kontrollpunkt rückt um den getippten Faktor
+(0 bis 1, \keys{Enter}: 0,5) zum Mittel seiner Nachbarn; die Enden bleiben. Mehrfach anwenden
+glättet stärker. \cmd{fair}: Glättet schrittweise, solange die Kurve innerhalb der getippten
+Toleranz von der ursprünglichen bleibt -- Wellen verschwinden, die Form bleibt.
 
 \section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
 \index{Fläche}
