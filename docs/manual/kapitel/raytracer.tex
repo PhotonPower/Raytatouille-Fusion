@@ -430,6 +430,32 @@ Die Statuszeile meldet für jeden Strahlengang, wie viele der gezeichneten Strah
 erreichen, z.\,B. \enquote{\texttt{rays reaching the end of the path – main: 217/217}}. Weniger
 als alle bedeutet Vignettierung oder andere Verluste.
 
+\subsection{Strahlen durch Gitterblöcke des Workflows}\label{sec:rt-strahlen-workflow}
+\index{Raytracer!Strahlen durch Gitter}
+
+Führt ein Zweig des Knoten-Workflows durch einen Block anderer Art -- ein FourierGrating-Gitter
+oder einen Stapel (\block{fg.grating}, \block{fg.stack}), ein hp-FEM-Gitter --, kann das
+Raytatouille-System allein dort nicht weiterrechnen: Sein Strahlengang endet vor dem ersten
+solchen Block und heißt \enquote{\textit{Zweig}\texttt{ (aim)}}. \gui{Trace rays} rechnet in
+diesem Fall den Workflow selbst, nur mit Strahlen (ohne Felder, mit den Stellungen der
+Aktuatoren), und zeichnet die Strahlen durch alle Blöcke bis zu den Detektoren: hinter einem Gitter
+jede Beugungsordnung, die nicht zu schwach ist.
+
+\begin{itemize}
+  \item \gui{Weakest order drawn} (Gruppe \gui{Trace}, Standard 0,01): Ein Bündel, das schwächer
+    ist als dieser Anteil des stärksten Bündels durch denselben Block, wird nicht gezeichnet. 0
+    zeichnet jede Ordnung, auch die, die am nächsten Bauteil enden.
+  \item \gui{Paths} nimmt die Namen der Zweige (z.\,B.\ \code{Sensor}); je Zweig entsteht ein
+    Linien-Satz \enquote{\texttt{Rays }\textit{Zweig}}. \gui{Colour by} \code{path} nummeriert die
+    Zweige.
+  \item \gui{Quick irradiance} gibt es auf diesem Weg nicht -- die Kamerabilder rechnet
+    \gui{Run workflow}.
+\end{itemize}
+
+Die Gitter rechnet dabei FourierGrating im Prozess des Raytracers (dieselbe Python-Umgebung), was
+er selbst nicht rechnen kann, das Plugin des Blocks. Der Belichtungskopf
+\code{belichtungskopf\_frobsy\_fg-4.rttf} braucht mit 127 Strahlen wenige Sekunden.
+
 \begin{tipp}
 Einzelne Strahlen lassen sich in CAD-Kurven umwandeln, etwa um daran zu messen oder sie zu
 exportieren: Rechtsklick auf den Linien-Satz im Dock \gui{Results}, \gui{Convert to CAD

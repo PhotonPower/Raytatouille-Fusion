@@ -7,6 +7,13 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Trace rays through the gratings of a node workflow**: where a branch passes a block of another
+  kind (a FourierGrating grating or stack, an hp-FEM grating), the Raytracer's Raytatouille system
+  ends in front of it, and *Trace rays* drew only a short piece up to the first grating (in the
+  FrObSy exposure head: 11 mm behind the laser). It now computes the workflow with rays only and
+  draws the rays through every block to the detectors, each diffraction order that is not weaker
+  than *Weakest order drawn* (default 0.01 of the strongest through the same block). Needs
+  RTT-Fusion with `graph.ray_paths` (RTT-Fusion #145). Manual: Raytracer chapter.
 - **Actuators** (RTT-Fusion `fusion.actuator`, under *Add block → meta*): one value for a stage
   of the setup. It sets a free parameter of the Raytatouille system and moves the blocks the stage
   carries. The Raytracer draws the system with the actuators applied. Manual: workflow chapter
