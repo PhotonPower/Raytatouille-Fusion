@@ -151,6 +151,7 @@ std::optional<Hit> pick(const std::vector<Target>& targets, const viewport::Came
       face ? 2.0F * query.radius_px * camera.worldPerPixelAt(face->point) : 0.0F;
   auto occluded = [&](float depth) { return face && depth > face->depth + occlusion_tol; };
 
+  std::optional<Hit> grip_hit;
   std::optional<Hit> point_hit;
   std::optional<Hit> curve_hit;
   auto consider = [&](std::optional<Hit>& slot, const Hit& h) {
@@ -159,6 +160,23 @@ std::optional<Hit> pick(const std::vector<Target>& targets, const viewport::Came
   };
 
   for (const Target& tg : targets) {
+    // ---- grips: shown control points (not hidden by faces – they are handles)
+    if (tg.grips != nullptr) {
+      for (std::size_t i = 0; i < tg.grips->size(); ++i) {
+        const QVector3D& p = (*tg.grips)[i];
+        const auto s = camera.project(p);
+        if (!s) continue;
+        const float dist = static_cast<float>(std::hypot(s->x() - query.cursor_px.x(), s->y() - query.cursor_px.y()));
+        if (dist > query.radius_px) continue;
+        Hit h;
+        h.kind = Hit::Kind::Point;
+        h.item = {tg.id, {SubElement::Kind::ControlPoint, static_cast<int>(i)}};
+        h.point = p;
+        h.depth = QVector3D::dotProduct(p - o, d);
+        h.distance_px = dist;
+        if (!grip_hit || better(h, *grip_hit)) grip_hit = h;
+      }
+    }
     const DisplayMesh& m = *tg.mesh;
     // ---- points and B-rep vertices
     auto test_points = [&](const std::vector<float>& xyz, bool vertices) {
@@ -207,9 +225,24 @@ std::optional<Hit> pick(const std::vector<Target>& targets, const viewport::Came
       consider(curve_hit, h);
     });
   }
+  if (grip_hit) return grip_hit;
   if (point_hit) return point_hit;
   if (curve_hit) return curve_hit;
   return face;
+}
+
+std::vector<document::SelectionItem> pick_rect_grips(const std::vector<Target>& targets,
+                                                     const viewport::Camera& camera, const QRectF& rect_in) {
+  const QRectF rect = rect_in.normalized();
+  std::vector<document::SelectionItem> out;
+  for (const Target& tg : targets) {
+    if (tg.grips == nullptr) continue;
+    for (std::size_t i = 0; i < tg.grips->size(); ++i) {
+      const auto s = camera.project((*tg.grips)[i]);
+      if (s && rect.contains(*s)) out.push_back({tg.id, {SubElement::Kind::ControlPoint, static_cast<int>(i)}});
+    }
+  }
+  return out;
 }
 
 std::vector<document::EntityId> pick_rect(const std::vector<Target>& targets,

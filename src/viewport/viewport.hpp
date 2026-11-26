@@ -3,6 +3,7 @@
 #include <QPointF>
 #include <QRhiWidget>
 #include <array>
+#include <optional>
 
 #include "render/display_mode.hpp"
 #include "render/line_renderer.hpp"
@@ -95,6 +96,9 @@ class Viewport : public QRhiWidget {
   void textTyped(const QString& text);
   /// Enter / Return pressed in the view.
   void enterPressed();
+  /// The selected control points (grips) were dragged by `delta` (world; in the plane through
+  /// the grabbed grip, perpendicular to the view).
+  void gripsDragged(const QVector3D& delta);
 
  protected:
   void initialize(QRhiCommandBuffer* cb) override;
@@ -113,7 +117,7 @@ class Viewport : public QRhiWidget {
 
  private:
   enum class Drag { None, Pan, Orbit };
-  enum class LeftAction { None, Pending, Rectangle };
+  enum class LeftAction { None, Pending, Rectangle, GripDrag };
 
   void hoverPick(const QPointF& px, Qt::KeyboardModifiers mods);
   /// The result drawing (a run) under the cursor if it wins over the entity hit.
@@ -154,6 +158,10 @@ class Viewport : public QRhiWidget {
   class SnapMarker* marker_ = nullptr;
   LeftAction left_ = LeftAction::None;
   QPointF press_pos_;
+  std::optional<document::SelectionItem> grip_press_;  // a grip under the cursor at the press
+  QVector3D grip_start_;
+  QVector3D grip_delta_;
+  void dragGrips(const QPointF& px);
   class SelectionRect* rubber_ = nullptr;
   render::SceneRenderer scene_renderer_;
   render::ResultRenderer result_renderer_;

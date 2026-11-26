@@ -37,7 +37,7 @@ Item item(EntityId id, nfcad::document::Geometry g) {
 
 std::vector<nfcad::pick::Target> targets(const std::vector<Item>& items) {
   std::vector<nfcad::pick::Target> out;
-  for (const Item& i : items) out.push_back({i.id, i.mesh.get(), i.geometry});
+  for (const Item& i : items) out.push_back({i.id, i.mesh.get(), i.geometry, nullptr});
   return out;
 }
 

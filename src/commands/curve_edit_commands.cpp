@@ -12,6 +12,7 @@
 #include <nurbforge/analysis/properties.hpp>
 #include <nurbforge/geometry/primitives.hpp>
 #include <stdexcept>
+#include <tuple>
 #include <nurbforge/modeling/extend.hpp>
 #include <nurbforge/modeling/surface_tools.hpp>
 #include <nurbforge/nurbs/join.hpp>
@@ -745,6 +746,238 @@ class ArcBlendCommand : public EditCurvesCommand {
   }
 };
 
+// ------------------------------------------------------------------------------ control points
+/// Points on / off: shows or hides the control points (grips) and control polygon of the
+/// selected curves – an attribute, saved with the document. Points off without a selection:
+/// every curve.
+class PointsCommand : public Command {
+ public:
+  explicit PointsCommand(bool on) : on_(on) {}
+  QString id() const override { return on_ ? QStringLiteral("points_on") : QStringLiteral("points_off"); }
+  QString title() const override { return on_ ? QObject::tr("Points on") : QObject::tr("Points off"); }
+  QString prompt() const override { return title(); }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return !on_; }  // a curve picked by its grips counts
+  bool immediate() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    std::vector<const document::Entity*> targets;
+    for (const document::Entity& e : selection) targets.push_back(&e);
+    std::vector<document::Entity> gripped;
+    if (doc_ != nullptr) {
+      for (const GripSet& g : grips_) {
+        if (const document::Entity* e = doc_->entity(g.id)) gripped.push_back(*e);
+      }
+      if (!on_ && selection.empty() && grips_.empty()) {
+        for (const auto& [id, e] : doc_->entities()) gripped.push_back(e);
+      }
+    }
+    for (const document::Entity& e : gripped) targets.push_back(&e);
+    for (const document::Entity* e : targets) {
+      if (std::get_if<nf::NurbsCurve>(e->geometry.get()) == nullptr) continue;
+      const bool now = e->attributes.value(QString::fromLatin1(kPointsOnKey)).toBool();
+      if (now == on_) continue;
+      QVariantMap a = e->attributes;
+      if (on_) {
+        a.insert(QString::fromLatin1(kPointsOnKey), true);
+      } else {
+        a.remove(QString::fromLatin1(kPointsOnKey));
+      }
+      attributes_.emplace_back(e->id, a);
+    }
+    if (!on_) select_ = std::vector<document::SelectionItem>{};  // the grips leave the selection
+    if (on_ && attributes_.empty()) {
+      message_ = QObject::tr("Points on: select curves");
+      return false;
+    }
+    return true;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+  Result finish() override { return Result::Done; }
+
+ private:
+  bool on_;
+};
+
+/// Select points: every grip of the selected curves whose points are shown, or of all such
+/// curves when none is selected.
+class SelectPointsCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("select_points"); }
+  QString title() const override { return QObject::tr("Select points"); }
+  QString prompt() const override { return title(); }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return true; }
+  bool immediate() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    std::vector<document::Entity> curves = selection;
+    if (doc_ != nullptr) {
+      for (const GripSet& g : grips_) {
+        if (const document::Entity* e = doc_->entity(g.id)) curves.push_back(*e);
+      }
+      if (curves.empty()) {
+        for (const auto& [id, e] : doc_->entities()) curves.push_back(e);
+      }
+    }
+    std::vector<document::SelectionItem> items;
+    for (const document::Entity& e : curves) {
+      const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get());
+      if (c == nullptr || !e.attributes.value(QString::fromLatin1(kPointsOnKey)).toBool()) continue;
+      for (std::size_t i = 0; i < c->num_control_points(); ++i) {
+        items.push_back({e.id, {document::SubElement::Kind::ControlPoint, static_cast<int>(i)}});
+      }
+    }
+    if (items.empty()) {
+      message_ = QObject::tr("Select points: no curve shows its points (Points on)");
+      return false;
+    }
+    select_ = std::move(items);
+    return true;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+  Result finish() override { return Result::Done; }
+};
+
+/// Weight: the typed weight (> 0) for the selected control points; 1 everywhere makes the curve
+/// polynomial again, other weights rational (a weight above 1 pulls the curve towards its point).
+class WeightCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("weight"); }
+  QString title() const override { return QObject::tr("Weight"); }
+  QString prompt() const override { return QObject::tr("Weight of the selected control points (> 0; 1: plain)"); }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return true; }
+  bool begin(const std::vector<document::Entity>&) override {
+    if (grips_.empty()) {
+      message_ = QObject::tr("Weight: select control points (Points on, then click them)");
+      return false;
+    }
+    return true;
+  }
+  Result number(double w) override {
+    if (w <= 0) return Result::Rejected;
+    for (const GripSet& g : grips_) {
+      const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get());
+      if (c == nullptr) continue;
+      std::vector<double> weights = c->weights();
+      if (weights.size() != c->num_control_points()) weights.assign(c->num_control_points(), 1.0);
+      for (int i : g.indices) {
+        if (i >= 0 && static_cast<std::size_t>(i) < weights.size()) weights[static_cast<std::size_t>(i)] = w;
+      }
+      replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(
+                                      nf::NurbsCurve(c->degree(), c->knots(), c->control_points(), weights)));
+    }
+    return Result::Done;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+};
+
+/// Insert control point: a click near the control polygon of the selected curve (or the curve
+/// whose grips are selected) adds a control point there – a knot is inserted on that leg and its
+/// new control point moved to the clicked spot, so the shape changes a little; Enter: done.
+class InsertControlPointCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("insert_control_point"); }
+  QString title() const override { return QObject::tr("Insert control point"); }
+  QString prompt() const override {
+    return QObject::tr("Insert control point: click near the control polygon (Enter: done)");
+  }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    for (const document::Entity& e : selection) {
+      if (const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get())) {
+        curve_ = *c;
+        id_ = e.id;
+        break;
+      }
+    }
+    if (!curve_ && !grips_.empty()) {
+      if (const auto* c = std::get_if<nf::NurbsCurve>(grips_.front().geometry.get())) {
+        curve_ = *c;
+        id_ = grips_.front().id;
+      }
+    }
+    if (!curve_) {
+      message_ = QObject::tr("Insert control point: select a curve");
+      return false;
+    }
+    return true;
+  }
+  Result point(const Point3& p, const PlaneFrame&) override {
+    try {
+      curve_ = inserted(*curve_, V(p));
+      replace_.emplace_back(id_, std::make_shared<const document::Geometry>(*curve_));
+      ++count_;
+      return Result::Continue;
+    } catch (const std::exception& e) {
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+  Result finish() override { return count_ > 0 ? Result::Done : Result::Cancelled; }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    const auto [a, b, q] = leg(*curve_, V(c));
+    return {{P(a), P(b)}, {c, P(q)}};
+  }
+
+  /// The control-polygon leg nearest p: its ends and the nearest point on it.
+  static std::tuple<nf::Vec3, nf::Vec3, nf::Vec3> leg(const nf::NurbsCurve& c, const nf::Vec3& p) {
+    const auto& pts = c.control_points();
+    std::tuple<nf::Vec3, nf::Vec3, nf::Vec3> best{pts[0], pts[0], pts[0]};
+    double d = std::numeric_limits<double>::infinity();
+    for (std::size_t j = 0; j + 1 < pts.size(); ++j) {
+      const nf::Vec3 ab = pts[j + 1] - pts[j];
+      const double t = std::clamp(nf::dot(p - pts[j], ab) / std::max(nf::dot(ab, ab), 1e-300), 0.0, 1.0);
+      const nf::Vec3 q = pts[j] + ab * t;
+      if (nf::distance(p, q) < d) {
+        d = nf::distance(p, q);
+        best = {pts[j], pts[j + 1], q};
+      }
+    }
+    return best;
+  }
+
+  /// A knot inserted between the Greville abscissae of the nearest leg's control points, and the
+  /// new control point (the one nearest the clicked spot on the leg) moved there.
+  static nf::NurbsCurve inserted(const nf::NurbsCurve& c, const nf::Vec3& p) {
+    const auto& pts = c.control_points();
+    const auto& k = c.knots();
+    const std::size_t deg = std::max<std::size_t>(c.degree(), 1);
+    auto greville = [&](std::size_t i) {
+      double s = 0;
+      for (std::size_t r = 1; r <= deg; ++r) s += k[i + r];
+      return s / static_cast<double>(deg);
+    };
+    std::size_t j = 0;
+    double d = std::numeric_limits<double>::infinity();
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+      const nf::Vec3 ab = pts[i + 1] - pts[i];
+      const double t = std::clamp(nf::dot(p - pts[i], ab) / std::max(nf::dot(ab, ab), 1e-300), 0.0, 1.0);
+      const double di = nf::distance(p, pts[i] + ab * t);
+      if (di < d) {
+        d = di;
+        j = i;
+      }
+    }
+    const double u = std::clamp(0.5 * (greville(j) + greville(j + 1)), c.domain_start(), c.domain_end());
+    if (u <= c.domain_start() || u >= c.domain_end()) throw std::invalid_argument("no room for a control point there");
+    nf::NurbsCurve out = c.insert_knot(u);
+    const nf::Vec3 q = std::get<2>(leg(c, p));
+    std::vector<nf::Vec3> ctrl = out.control_points();
+    std::size_t nearest = 0;
+    for (std::size_t i = 1; i < ctrl.size(); ++i) {
+      if (nf::distance(ctrl[i], q) < nf::distance(ctrl[nearest], q)) nearest = i;
+    }
+    ctrl[nearest] = q;
+    return {out.degree(), out.knots(), ctrl, out.weights()};
+  }
+
+ private:
+  std::optional<nf::NurbsCurve> curve_;
+  document::EntityId id_ = 0;
+  int count_ = 0;
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -768,6 +1001,11 @@ const std::vector<Entry>& registry() {
       {"match", {"matchcrv"}, [] { return std::make_unique<MatchCommand>(); }},
       {"simplify", {"simplifycrv"}, [] { return std::make_unique<SimplifyCommand>(); }},
       {"arc_blend", {"arcblend", "arctoblend"}, [] { return std::make_unique<ArcBlendCommand>(); }},
+      {"points_on", {"pointson", "pon"}, [] { return std::make_unique<PointsCommand>(true); }},
+      {"points_off", {"pointsoff", "poff"}, [] { return std::make_unique<PointsCommand>(false); }},
+      {"select_points", {"selpoints", "cvselection", "selcv"}, [] { return std::make_unique<SelectPointsCommand>(); }},
+      {"weight", {}, [] { return std::make_unique<WeightCommand>(); }},
+      {"insert_control_point", {"insertcontrolpoint", "insertcp"}, [] { return std::make_unique<InsertControlPointCommand>(); }},
   };
   return r;
 }

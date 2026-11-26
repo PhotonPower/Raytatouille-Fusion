@@ -94,12 +94,27 @@ nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op) {
 }
 
 std::optional<document::Geometry> part_of(const document::Geometry& g, const document::SubElement& sub) {
+  if (const auto* c = std::get_if<nf::NurbsCurve>(&g); c != nullptr && sub.kind == document::SubElement::Kind::ControlPoint &&
+                                                       sub.index >= 0 && static_cast<std::size_t>(sub.index) < c->num_control_points()) {
+    return c->control_points()[static_cast<std::size_t>(sub.index)];
+  }
   const auto* sh = std::get_if<nf::Shell>(&g);
   if (sh == nullptr || sub.index < 0) return std::nullopt;
   const auto i = static_cast<std::size_t>(sub.index);
   if (sub.kind == document::SubElement::Kind::Edge && i < sh->edges().size()) return sh->edges()[i].curve;
   if (sub.kind == document::SubElement::Kind::Face && i < sh->faces().size()) return sh->faces()[i];
   return std::nullopt;
+}
+
+nf::NurbsCurve with_control_points_moved(const nf::NurbsCurve& c, const std::vector<int>& indices,
+                                         const nf::Transform& t) {
+  std::vector<nf::Vec3> pts = c.control_points();
+  for (int i : indices) {
+    if (i >= 0 && static_cast<std::size_t>(i) < pts.size()) {
+      pts[static_cast<std::size_t>(i)] = t.apply(pts[static_cast<std::size_t>(i)]);
+    }
+  }
+  return {c.degree(), c.knots(), pts, c.weights()};
 }
 
 std::vector<nf::TrimmedSurface> faces_of(const document::Geometry& g) {

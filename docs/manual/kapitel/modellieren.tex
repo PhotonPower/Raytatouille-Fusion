@@ -60,7 +60,8 @@ Gruppe & Standard & Befehle \\
 \gui{Edit} & zugeklappt & Trim, Split, Join, Explode, Delete \\
 \gui{Edit curves} & zugeklappt & Extend curve, Divide, Divide by length, Rebuild curve, Change
   degree, Flip direction, Close curve, Curve seam, Insert knot, Remove knot, Smooth curve, Fair
-  curve, Match curve, Simplify curve, Arc blend \\
+  curve, Match curve, Simplify curve, Arc blend, Points on, Points off, Select points, Weight,
+  Insert control point \\
 \gui{Analyze} & zugeklappt & Distance, Angle, Curvature, Area, Volume / mass properties,
   Intersection check \\
 \bottomrule
@@ -122,6 +123,8 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{flip} & Flip direction & & \code{closecrv}, \code{crvseam} & Close curve, Curve seam & \\
 \code{insertknot}, \code{removeknot} & Knots & & \code{smooth}, \code{fair} & Smooth, Fair & \\
 \code{match} & Match curve & & \code{simplify}, \code{arcblend} & Simplify, Arc blend & \\
+\code{pon}, \code{poff} & Points on / off & & \code{selpoints}, \code{weight} & Select points, Weight & \\
+\code{insertcp} & Insert control point & & & & \\
 \code{tween} & Tween curves & & \code{filletcorners} & Fillet curves & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
@@ -1070,6 +1073,39 @@ zusammengefasst. Die Form bleibt.
 Enden zweier ausgewählter Kurven entsteht ein Übergang aus zwei Kreisbögen (Biarc), der an
 beide Kurven tangential anschließt. Anders als \gui{Blend curves} besteht er nur aus Bögen --
 nützlich, wo Fertigung oder Messtechnik Kreisbögen verlangt.
+
+\subsection{Kontrollpunkte bearbeiten}\label{sec:kontrollpunkte}\index{Kontrollpunkt}\index{Grip}
+
+Die Form einer NURBS-Kurve bestimmen ihre Kontrollpunkte. So bearbeiten Sie sie direkt:
+\begin{schritte}
+\item Wählen Sie Kurven und starten Sie \cmd{points\_on} (Aliasse \code{pon}, \code{pointson}):
+  Die Kontrollpunkte erscheinen als kleine Quadrate (\emph{Grips}), verbunden durch das graue
+  Kontrollpolygon. Die Einstellung wird mit dem Dokument gespeichert.
+\item Klicken Sie einen Grip, um ihn zu wählen (gelb); \keys{Shift}-Klick fügt weitere hinzu,
+  \keys{Strg}-Klick nimmt einen heraus. Ein Auswahlrechteck wählt alle Grips darin. Grips haben
+  Vorrang vor der Kurve und liegen auch über Flächen. \cmd{select\_points} (Aliasse
+  \code{selpoints}, \code{cvselection}) wählt alle Grips der ausgewählten Kurven bzw.\ aller
+  Kurven mit eingeschalteten Punkten.
+\item \emph{Ziehen}: Drücken Sie die linke Maustaste auf einem Grip und ziehen Sie -- alle
+  gewählten Grips (ist der gegriffene nicht gewählt, nur er) wandern mit, in der Ebene durch den
+  Grip senkrecht zur Blickrichtung; beim Loslassen ist es ein Rückgängig-Schritt. Für genaue
+  Positionen nehmen Sie \gui{Move} mit Objektfang oder getippten Koordinaten.
+\item Verschieben Sie die gewählten Grips mit \gui{Move}, \gui{Rotate} oder \gui{Scale}: Nur sie
+  bewegen sich, die Kurve folgt (Vorschau mit neuem Kontrollpolygon). Ist die Kurve selbst als
+  Ganzes gewählt, bewegt sie sich als Ganzes. \gui{Copy}, \gui{Mirror} und die Reihen arbeiten nur
+  mit ganzen Objekten.
+\item \cmd{weight}: Tippen Sie ein Gewicht für die gewählten Grips. Über 1 zieht der Punkt die
+  Kurve stärker an, unter 1 schwächer; die Kurve wird rational (exakte Kegelschnitte haben solche
+  Gewichte). 1 überall macht sie wieder polynomial.
+\item \cmd{insert\_control\_point} (Aliasse \code{insertcp}, \code{insertcontrolpoint}): Jeder Klick
+  nahe am Kontrollpolygon der ausgewählten Kurve fügt dort einen Kontrollpunkt ein (ein Knoten
+  auf diesem Abschnitt, der neue Punkt an der Klickstelle) -- die Form ändert sich dabei leicht.
+  \gui{Insert knot} fügt dagegen Punkte ein, ohne die Form zu ändern.
+\item \cmd{points\_off} (Aliasse \code{poff}, \code{pointsoff}) blendet die Punkte der
+  ausgewählten Kurven aus -- ohne Auswahl die aller Kurven.
+\end{schritte}
+Das Eigenschaften-Panel zeigt zu einem gewählten Grip seine Position und sein Gewicht. Jede
+Änderung ist ein Rückgängig-Schritt.
 
 \section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
 \index{Fläche}

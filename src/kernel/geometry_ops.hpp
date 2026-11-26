@@ -25,10 +25,16 @@ enum class BooleanOp { Union, Intersection, Difference };
 /// the others from the first. Throws std::runtime_error with a readable message.
 [[nodiscard]] nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op);
 
-/// A picked part of a shell: an edge as its curve, a face as its trimmed surface; nothing for
+/// A picked part: an edge of a shell as its curve, a face as its trimmed surface, a control point
+/// of a curve as a point; nothing for
 /// other geometry or an index out of range.
 [[nodiscard]] std::optional<document::Geometry> part_of(const document::Geometry& g,
                                                         const document::SubElement& sub);
+
+/// The curve with its control points `indices` transformed (grips moved); indices out of range
+/// are ignored.
+[[nodiscard]] nf::NurbsCurve with_control_points_moved(const nf::NurbsCurve& c, const std::vector<int>& indices,
+                                                       const nf::Transform& t);
 
 /// Faces of a surface-like geometry (surface, trimmed surface, shell); empty for others.
 [[nodiscard]] std::vector<nf::TrimmedSurface> faces_of(const document::Geometry& g);

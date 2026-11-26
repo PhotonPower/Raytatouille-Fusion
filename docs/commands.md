@@ -70,6 +70,14 @@ one undo step.
 | Match curve | `match` | the curve to change, then the one to match; 0 / 1 / 2 (Enter): position / tangent / curvature at the nearest ends |
 | Simplify curve | `simplify` | selected curves (immediately): straight and circular pieces become exact lines and arcs, merged |
 | Arc blend | `arcblend` | two selected curves (immediately): a biarc between the closest ends, tangent to both |
+| Points on / off | `pon` / `poff` | selected curves: show / hide their control points (grips) and polygon (saved); `poff` without a selection: all |
+| Select points | `selpoints` | every grip of the selected curves, or of all curves with points on |
+| Weight | `weight` | selected grips; weight > 0 (1: plain) |
+| Insert control point | `insertcp` | one curve (or its grips); clicks near the control polygon add a control point there (Enter: done) |
+
+Grips (shown control points) are picked by a click (Shift: add, Ctrl: remove) or a window, before
+curves and above faces; dragging a grip moves the selected grips (in the plane through it, perpendicular
+to the view); Move, Rotate and Scale move the selected grips and the curve follows.
 
 | **Curves and surfaces** (M6b) | | |
 | Spline (Interpolated curve) | `sp`, `interpcrv` | points (Enter: done); interpolating cubic |

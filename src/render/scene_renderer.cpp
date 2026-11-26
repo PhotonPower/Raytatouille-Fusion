@@ -12,6 +12,7 @@ using document::SubElement;
 constexpr quint32 kUniformSize = 64 + 64 + 16 + 16;  // mvp, view, color, params
 constexpr float kPointMarkerPx = 5.0F;
 constexpr float kVertexMarkerPx = 7.0F;
+constexpr float kGripPx = 4.0F;  // half size of a control-point square
 // Edges and curves are pulled towards the camera in clip space (z' = z - eps * w) so that they
 // win the depth test against the faces they bound, on every backend (a polygon offset on the
 // faces alone is too weak for faces seen head-on with Metal's float depth buffer).
@@ -46,6 +47,18 @@ void add_polyline(std::vector<LineVertex>& out, const tessellation::Polyline& pl
   for (std::size_t i = 0; i + 5 < pl.size(); i += 3) {
     out.push_back({pl[i], pl[i + 1], pl[i + 2], c[0], c[1], c[2], c[3]});
     out.push_back({pl[i + 3], pl[i + 4], pl[i + 5], c[0], c[1], c[2], c[3]});
+  }
+}
+
+/// A small square facing the camera (right / up: the camera's axes in world coordinates).
+void add_square(std::vector<LineVertex>& out, const QVector3D& p, const QVector3D& right, const QVector3D& up,
+                float h, const Rgba& c) {
+  const QVector3D corner[4] = {p + (-right - up) * h, p + (right - up) * h, p + (right + up) * h, p + (-right + up) * h};
+  for (int k = 0; k < 4; ++k) {
+    const QVector3D& a = corner[k];
+    const QVector3D& b = corner[(k + 1) % 4];
+    out.push_back({a.x(), a.y(), a.z(), c[0], c[1], c[2], c[3]});
+    out.push_back({b.x(), b.y(), b.z(), c[0], c[1], c[2], c[3]});
   }
 }
 
@@ -318,6 +331,29 @@ void SceneRenderer::prepare(const Scene& scene, const FrameParams& frame,
     }
     if (s.hovered_part && s.hovered_part->kind == SubElement::Kind::Vertex) {
       vertex_marker(s.hovered_part->index, kHoverColor);
+    }
+    // grips (PointsOn): the control polygon and a square per control point
+    if (!src.grips.empty()) {
+      const Rgba polygon = rgba(mix(s.color, kGripPolygonBlend, 0.5), 1.0F, 0.8F);
+      for (std::size_t k = 0; k + 1 < src.grips.size(); ++k) {
+        const QVector3D& a = src.grips[k];
+        const QVector3D& b = src.grips[k + 1];
+        cross.push_back({a.x(), a.y(), a.z(), polygon[0], polygon[1], polygon[2], polygon[3]});
+        cross.push_back({b.x(), b.y(), b.z(), polygon[0], polygon[1], polygon[2], polygon[3]});
+      }
+      const float h = kGripPx * frame.world_per_pixel;
+      // the camera's right and up axes in world coordinates: the rows of the view rotation
+      const QVector3D right(frame.view(0, 0), frame.view(0, 1), frame.view(0, 2));
+      const QVector3D up(frame.view(1, 0), frame.view(1, 1), frame.view(1, 2));
+      for (std::size_t k = 0; k < src.grips.size(); ++k) {
+        const int index = static_cast<int>(k);
+        const bool hovered = s.hovered_part && s.hovered_part->kind == SubElement::Kind::ControlPoint &&
+                             s.hovered_part->index == index;
+        const QColor c = contains(s.selected_parts, SubElement::Kind::ControlPoint, index) ? kSelectedColor
+                         : hovered                                                         ? kHoverColor
+                                                                                           : kGripColor;
+        add_square(cross, src.grips[k], right.normalized(), up.normalized(), h, rgba(c));
+      }
     }
     if (!cross.empty() || !item.points.empty()) {
       item.points.setVertices(std::move(cross));

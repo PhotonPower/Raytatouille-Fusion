@@ -17,7 +17,10 @@ struct Edit {
   std::vector<Entity> add;
   std::vector<EntityId> remove;
   std::vector<std::pair<EntityId, GeometryPtr>> replace;  ///< new geometry for an entity
-  [[nodiscard]] bool empty() const { return add.empty() && remove.empty() && replace.empty(); }
+  std::vector<std::pair<EntityId, QVariantMap>> attributes;  ///< new attributes of an entity
+  [[nodiscard]] bool empty() const {
+    return add.empty() && remove.empty() && replace.empty() && attributes.empty();
+  }
 };
 
 /// Node of the model tree; groups nest (parent 0 = top level).

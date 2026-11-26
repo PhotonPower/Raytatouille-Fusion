@@ -2,6 +2,7 @@
 
 #include <QLineEdit>
 #include <QStatusBar>
+#include <algorithm>
 #include <cmath>
 
 #include "commands/input_parser.hpp"
@@ -34,6 +35,7 @@ CommandController::CommandController(document::Document* doc, document::Selectio
       if (!command_) finishOrRepeat();
     });
     connect(v, &viewport::Viewport::enterPressed, this, &CommandController::finishOrRepeat);
+    connect(v, &viewport::Viewport::gripsDragged, this, &CommandController::moveGrips);
     connect(v, &viewport::Viewport::textTyped, this, [this](const QString& text) {
       line_->setFocus();
       line_->insert(text);
@@ -86,6 +88,7 @@ bool CommandController::start(const QString& name) {
   last_name_ = cmd->id();
   drawings_.clear();
   drawing_note_.clear();
+  cmd->setDocument(doc_);
   if (cmd->usesSelection()) {
     // selected result drawings (rays, a plugin's camera): Move and Rotate take them along
     std::vector<std::uint64_t> drawings;
@@ -102,18 +105,32 @@ bool CommandController::start(const QString& name) {
     // commands that take them, the picked edges and faces of shells after them
     std::vector<document::Entity> picked;
     std::vector<document::Entity> parts;
+    std::vector<commands::GripSet> grips;
     if (selection_ != nullptr) {
       for (const document::SelectionItem& i : selection_->ordered()) {
         const document::Entity* e = doc_->entity(i.entity);
         if (e == nullptr) continue;
         if (i.sub.kind == document::SubElement::Kind::None) {
           picked.push_back(*e);
+        } else if (i.sub.kind == document::SubElement::Kind::ControlPoint) {
+          if (!cmd->usesGrips()) continue;
+          // the selected control points, per curve (grips)
+          if (grips.empty() || grips.back().id != e->id) {
+            const auto same = std::find_if(grips.begin(), grips.end(), [&](const commands::GripSet& g) { return g.id == e->id; });
+            if (same == grips.end()) {
+              grips.push_back({e->id, e->geometry, {}});
+            } else {
+              std::rotate(same, same + 1, grips.end());
+            }
+          }
+          grips.back().indices.push_back(i.sub.index);
         } else if (cmd->usesSubElements()) {
           if (auto part = kernel::part_of(*e->geometry, i.sub)) parts.push_back(document::make_entity(std::move(*part)));
         }
       }
     }
     picked.insert(picked.end(), parts.begin(), parts.end());
+    if (!grips.empty()) cmd->setGrips(std::move(grips));
     // commands that need the view's plane already in begin() / finish() (Project: its direction)
     if (grid_->activeView() != nullptr) cmd->setViewPlane(frameOf(grid_->activeView()));
     if (picked.empty() && !drawings.empty() && !cmd->movesDrawings()) {
@@ -244,12 +261,36 @@ void CommandController::onPicked(viewport::Viewport* view, const Point3& p, bool
   handle(command_->point(constrained(p, snapped), plane_));
 }
 
+void CommandController::moveGrips(const QVector3D& delta) {
+  if (command_ || selection_ == nullptr) return;  // a running command owns the input
+  const nf::Transform move = nf::Transform::translation({delta.x(), delta.y(), delta.z()});
+  document::Edit edit;
+  for (document::EntityId id : selection_->entities()) {
+    std::vector<int> indices;
+    for (const document::SubElement& s : selection_->selectedParts(id)) {
+      if (s.kind == document::SubElement::Kind::ControlPoint) indices.push_back(s.index);
+    }
+    const document::Entity* e = doc_->entity(id);
+    if (indices.empty() || e == nullptr) continue;
+    if (const auto* c = std::get_if<nf::NurbsCurve>(e->geometry.get())) {
+      edit.replace.emplace_back(id, std::make_shared<const document::Geometry>(
+                                        kernel::with_control_points_moved(*c, indices, move)));
+    }
+  }
+  if (!edit.empty()) doc_->apply(std::move(edit), tr("Move control points"));
+}
+
 void CommandController::flush() {
   if (!command_) return;
   document::Edit edit = command_->takeEdit();
   std::unique_ptr<QUndoCommand> drawings;
   if (const auto motion = command_->takeMotion(); motion && results_ != nullptr && !drawings_.empty()) {
     drawings = results::move_results(*results_, doc_, drawings_, *motion, command_->title(), &drawing_note_);
+  }
+  if (const auto select = command_->takeSelection(); select && selection_ != nullptr) {
+    if (!edit.empty()) doc_->apply(std::move(edit), command_->title());
+    selection_->apply(*select, document::Selection::Mode::Replace);
+    return;
   }
   if (!drawings) {
     if (!edit.empty()) doc_->apply(std::move(edit), command_->title());

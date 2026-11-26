@@ -14,9 +14,10 @@ namespace nfcad::document {
 class Document;
 
 /// Part of an entity: a face, an edge or a B-rep vertex of a shell or face (index into the
-/// display mesh's sub-elements, which follow the B-rep numbering).
+/// display mesh's sub-elements, which follow the B-rep numbering), or a control point of a curve
+/// whose points are shown (its index among the control points, "grip").
 struct SubElement {
-  enum class Kind : std::uint8_t { None, Face, Edge, Vertex };
+  enum class Kind : std::uint8_t { None, Face, Edge, Vertex, ControlPoint };
   Kind kind = Kind::None;
   int index = -1;
   friend auto operator<=>(const SubElement&, const SubElement&) = default;
