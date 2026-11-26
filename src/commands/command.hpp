@@ -116,6 +116,8 @@ namespace detail {
 // Factories of the command groups (drawing_commands.cpp, solid_commands.cpp,
 // transform_commands.cpp); create_command searches them in this order.
 std::unique_ptr<Command> create_solid_command(const QString& name);
+std::unique_ptr<Command> create_curve_command(const QString& name);
+QStringList curve_command_ids();
 std::unique_ptr<Command> create_transform_command(const QString& name);
 std::unique_ptr<Command> create_surface_command(const QString& name);
 QStringList surface_command_ids();

@@ -556,7 +556,7 @@ namespace detail {
 
 std::unique_ptr<Command> create_surface_command(const QString& n) {
   using M = ImmediateCurveCommand;
-  if (n == QLatin1String("spline") || n == QLatin1String("sp")) return std::make_unique<SplineCommand>();
+  if (n == QLatin1String("spline") || n == QLatin1String("sp") || n == QLatin1String("interpcrv")) return std::make_unique<SplineCommand>();
   if (n == QLatin1String("plane")) return std::make_unique<PlaneCommand>();
   if (n == QLatin1String("extrude") || n == QLatin1String("ext")) return std::make_unique<ExtrudeCommand>();
   if (n == QLatin1String("revolve") || n == QLatin1String("rev")) return std::make_unique<RevolveCommand>();
