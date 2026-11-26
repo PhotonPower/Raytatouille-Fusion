@@ -60,7 +60,7 @@ Gruppe & Standard & Befehle \\
 \gui{Edit} & zugeklappt & Trim, Split, Join, Explode, Delete \\
 \gui{Edit curves} & zugeklappt & Extend curve, Divide, Divide by length, Rebuild curve, Change
   degree, Flip direction, Close curve, Curve seam, Insert knot, Remove knot, Smooth curve, Fair
-  curve \\
+  curve, Match curve, Simplify curve, Arc blend \\
 \gui{Analyze} & zugeklappt & Distance, Angle, Curvature, Area, Volume / mass properties,
   Intersection check \\
 \bottomrule
@@ -121,6 +121,7 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{rebuild} & Rebuild curve & & \code{changedegree} & Change degree & \\
 \code{flip} & Flip direction & & \code{closecrv}, \code{crvseam} & Close curve, Curve seam & \\
 \code{insertknot}, \code{removeknot} & Knots & & \code{smooth}, \code{fair} & Smooth, Fair & \\
+\code{match} & Match curve & & \code{simplify}, \code{arcblend} & Simplify, Arc blend & \\
 \code{tween} & Tween curves & & \code{filletcorners} & Fillet curves & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
@@ -1049,6 +1050,26 @@ Kurvenpunkt am nächsten liegt; dabei ändert sich die Form. \keys{Enter} beende
 (0 bis 1, \keys{Enter}: 0,5) zum Mittel seiner Nachbarn; die Enden bleiben. Mehrfach anwenden
 glättet stärker. \cmd{fair}: Glättet schrittweise, solange die Kurve innerhalb der getippten
 Toleranz von der ursprünglichen bleibt -- Wellen verschwinden, die Form bleibt.
+
+\subsection{Match curve -- Kurve anpassen}\label{sec:cmd-match}
+\cmd{match}, Alias \code{matchcrv}. Wählen Sie zuerst die Kurve, die sich ändern soll, dann die,
+an die sie anschließen soll. Getippt wird die Stetigkeit: 0 -- das nächste Ende rückt auf das
+Ende der zweiten Kurve, 1 -- dazu dieselbe Tangentenrichtung, 2 (\keys{Enter}) -- auch dieselbe
+Krümmung. Geändert werden nur die letzten Kontrollpunkte am angepassten Ende (bei Bedarf werden
+Knoten eingefügt oder der Grad erhöht), das andere Ende bleibt. Rationale Kurven bauen Sie vorher
+mit \gui{Rebuild curve} neu auf.
+
+\subsection{Simplify curve -- Kurve vereinfachen}\label{sec:cmd-simplify}
+\cmd{simplify}, Alias \code{simplifycrv}. Abschnitte der ausgewählten Kurven, die gerade oder
+kreisförmig sind (bis auf ein Millionstel der Kurvengröße), werden durch exakte Linien und
+Kreisbögen ersetzt; benachbarte Abschnitte auf derselben Geraden bzw.\ demselben Kreis werden
+zusammengefasst. Die Form bleibt.
+
+\subsection{Arc blend -- Übergang aus zwei Bögen}\label{sec:cmd-arc-blend}
+\cmd{arc\_blend}, Aliasse \code{arcblend}, \code{arctoblend}. Zwischen den einander nächsten
+Enden zweier ausgewählter Kurven entsteht ein Übergang aus zwei Kreisbögen (Biarc), der an
+beide Kurven tangential anschließt. Anders als \gui{Blend curves} besteht er nur aus Bögen --
+nützlich, wo Fertigung oder Messtechnik Kreisbögen verlangt.
 
 \section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
 \index{Fläche}
