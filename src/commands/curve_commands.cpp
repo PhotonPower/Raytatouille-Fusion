@@ -710,9 +710,9 @@ class TweenCommand : public SelectedCurvesCommand {
 };
 
 // ------------------------------------------------------------------------------ Tangent, Perpendicular
-/// Tangent lines: with one selected curve from a point to the curve, with two the common
-/// tangents; of several solutions the one whose touching point lies nearest the click. In the
-/// construction plane of the view.
+/// Tangent lines: with one selected curve from a point to the curve (of several, the one whose
+/// touching point lies nearest the click), with two the common tangent nearest the click. In
+/// the construction plane of the view.
 class TangentCommand : public SelectedCurvesCommand {
  public:
   TangentCommand() : SelectedCurvesCommand(1, 2, QObject::tr("one curve (tangent from a point) or two curves")) {}
@@ -762,15 +762,20 @@ class TangentCommand : public SelectedCurvesCommand {
     std::optional<nf::TangentLine> best;
     double d_best = std::numeric_limits<double>::infinity();
     for (const nf::TangentLine& t : all) {
-      // one curve: the touching point; two: the nearer of the two touching points
-      double d = nf::distance(t.point_b, V(near));
-      if (curves_.size() == 2) d = std::min(d, nf::distance(t.point_a, V(near)));
+      // one curve: the touching point nearest the click; two: the line nearest the click
+      const double d = curves_.size() == 1 ? nf::distance(t.point_b, V(near))
+                                           : segment_distance(V(near), t.point_a, t.point_b);
       if (d < d_best) {
         d_best = d;
         best = t;
       }
     }
     return best;
+  }
+  static double segment_distance(const nf::Vec3& p, const nf::Vec3& a, const nf::Vec3& b) {
+    const nf::Vec3 ab = b - a;
+    const double t = std::clamp(nf::dot(p - a, ab) / std::max(nf::dot(ab, ab), kEps), 0.0, 1.0);
+    return nf::distance(p, a + ab * t);
   }
   std::optional<Point3> from_;
   PlaneFrame plane_;
