@@ -458,10 +458,15 @@ class FairCommand : public EditCurvesCommand {
   }
 
   static nf::NurbsCurve faired(const nf::NurbsCurve& c, double tol) {
+    // smoothing steps, each as large as the tolerance allows (halved down to 1/64)
     nf::NurbsCurve out = c;
-    for (int step = 0; step < 200; ++step) {
-      const nf::NurbsCurve next = smoothed(out, 0.25);
-      if (deviation(next, c) > tol) break;
+    double factor = 0.25;
+    for (int step = 0; step < 200 && factor >= 0.25 / 64; ++step) {
+      const nf::NurbsCurve next = smoothed(out, factor);
+      if (deviation(next, c) > tol) {
+        factor *= 0.5;
+        continue;
+      }
       out = next;
     }
     return out;
