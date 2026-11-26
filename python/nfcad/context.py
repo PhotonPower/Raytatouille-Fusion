@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from typing import Any, Sequence
 
@@ -133,7 +134,29 @@ class Context:
         active variant; an empty list of fields removes them). Plugins that describe their blocks
         after every edit use this rather than `set_workflow`, which would overwrite what others
         changed meanwhile. Returns how many blocks changed."""
-        return int(self._host.request("workflow.fields", {"blocks": list(blocks)}) or 0)
+        blocks = list(blocks)
+        if not blocks:
+            return 0
+        try:
+            return int(self._host.request("workflow.fields", {"blocks": blocks}) or 0)
+        except RuntimeError as e:  # an older CAD: the whole workflow, as before
+            if "unknown method" not in str(e):
+                raise
+        wf = self.workflow()  # the scopes as workflow_blocks gives them
+
+        def where(block, scope) -> str:
+            return json.dumps([str(block), scope], sort_keys=True, default=str)
+
+        at = {where(n.get("id"), scope): n for scope, n in workflow_blocks(wf)}
+        changed = 0
+        for b in blocks:
+            node = at.get(where(b.get("block"), list(b.get("scope") or [])))
+            if node is not None and node.get("fields") != b.get("fields"):
+                node["fields"] = b.get("fields")
+                changed += 1
+        if changed:
+            self.set_workflow(wf)
+        return changed
 
     # ---- results (docs/plugins.md, section 3a)
     def result_set(self, name: str) -> int:
