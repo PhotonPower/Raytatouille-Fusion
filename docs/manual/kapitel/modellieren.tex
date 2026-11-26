@@ -51,9 +51,11 @@ Gruppe & Standard & Befehle \\
 \gui{Curves from objects} & zugeklappt & Project curves, Pull curves, Section, Contour,
   Duplicate edge, Duplicate border, Extract isocurve, Extract wireframe, Offset curve on surface,
   Curve Boolean \\
-\gui{Surfaces} & zugeklappt & Plane, Extrude, Revolve, Loft, Sweep 1 rail, Sweep 2 rails,
-  Coons patch, Gordon surface, Offset surface, Fillet surfaces, Cap planar holes \\
-\gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Boolean union,
+\gui{Surfaces} & zugeklappt & Plane, Surface from points, Edge surface, Planar surface, Patch,
+  Surface from point grid, Extrude, Revolve, Rail revolve, Extrude along curve, Extrude to point,
+  Extrude tapered, Extrude surface, Pipe, Loft, Sweep 1 rail, Sweep 2 rails, Coons patch, Gordon
+  surface, Offset surface, Fillet surfaces, Cap planar holes \\
+\gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Ellipsoid, Paraboloid, Boolean union,
   Boolean difference, Boolean intersection \\
 \gui{Transform} & zugeklappt & Move, Copy, Rotate, Scale, Mirror, Linear array, Grid array,
   Polar array \\
@@ -1256,6 +1258,40 @@ Auf welcher Seite der Flächen die Rundung liegt, ermittelt das Programm selbst 
 möglichen Seiten durch). Die Ausgangsflächen werden nicht beschnitten; das erledigen Sie bei
 Bedarf mit Trim.
 
+\subsection{Weitere Flächen aus Punkten und Kurven}\label{sec:cmd-surfaces-more}
+\begin{description}
+\item[\cmd{srfpt}] (Surface from points): drei oder vier Eckpunkte klicken -- nach drei
+  \keys{Enter} für ein Dreieck. Eine bilineare Fläche, auch verwunden.
+\item[\cmd{edgesrf}] (Edge surface): zwei, drei oder vier ausgewählte Randkurven in beliebiger
+  Reihenfolge und Richtung -- zwei geben eine Regelfläche, drei ein Dreiecks-Patch, vier ein
+  Coons-Patch (die Kurven müssen eine geschlossene Schleife bilden).
+\item[\cmd{planarsrf}] (Planar surface): ebene Flächen aus ausgewählten geschlossenen Kurven einer
+  Ebene; eine Kurve in einer anderen wird zum Loch.
+\item[\cmd{patch}] Eine glatte Fläche, angepasst an ausgewählte Kurven und Punkte; getippt wird
+  die Glättung (\keys{Enter}: 0,001; 0,1 bis 1 für verrauschte Messdaten). Die Statusleiste nennt
+  den größten Abstand der Eingabe.
+\item[\cmd{srfptgrid}] (Aliasse \code{frompointgrid}, \code{pointgrid}): ausgewählte Punkte, Zeile
+  für Zeile in Auswahlreihenfolge; getippt wird die Zahl der Punkte je Zeile. Die Fläche geht durch
+  alle Punkte.
+\item[\cmd{railrevolve}] Profil und Leitkurve auswählen, dann zwei Punkte der Achse: Das Profil
+  dreht sich um die Achse, sein äußeres Ende folgt der Leitkurve (z.\,B.\ ein Reflektor mit
+  ovalem Rand).
+\item[\cmd{extrude\_along}] (Aliasse \code{extrudecrvalongcrv}, \code{extrudealong}): Profil und
+  Pfad auswählen -- das Profil wird ohne Drehung entlang des Pfads verschoben (exakt).
+\item[\cmd{extrude\_to\_point}] (Aliasse \code{extrudecrvtopoint}, \code{extrudetopoint}): die
+  ausgewählten Kurven zu einem geklickten Punkt (ein Kegel über der Kurve, exakt).
+\item[\cmd{extrude\_tapered}] (Aliasse \code{extrudecrvtapered}, \code{extrudetapered}): ebene
+  Kurven entlang der Normalen der Konstruktionsebene mit Entformungswinkel (Grad, \keys{Enter}: 5;
+  positiv: der Querschnitt wächst), dann die Höhe.
+\item[\cmd{extrudesrf}] (Extrude surface): die ausgewählten Flächen um einen Abstand entlang der
+  Normalen der Konstruktionsebene (oder von Punkt zu Punkt) verschoben und mit Seitenwänden zu
+  einem Körper geschlossen.
+\item[\cmd{pipe}] Massive Rohre entlang der ausgewählten Kurven: Anfangsradius, dann Endradius
+  (\keys{Enter}: gleich).
+\end{description}
+Die Aliasse \code{extrudecrv} (Extrude), \code{birail} (Sweep 2 rails) und \code{networksrf}
+(Gordon surface) starten die vorhandenen Befehle.
+
 \subsection{Cap planar holes -- ebene Öffnungen schließen}\label{sec:cmd-cap}
 \cmd{cap}. Schließt alle ebenen offenen Ränder der ausgewählten Flächen mit beschnittenen
 ebenen Deckeln und näht alles zu \emph{einem} Körper zusammen. Typisch: Eine extrudierte
@@ -1310,6 +1346,12 @@ Konstruktionsebene steht.
 \cmd{cone}. Ein spitzer Kreiskegel; Eingabe wie Cylinder:
 \code{Cone: centre of the base}, \code{Cone: radius (point or number)},
 \code{Cone: height (point or number)}. Die Spitze liegt auf der Achse in der angegebenen Höhe.
+
+\subsection{Ellipsoid, Paraboloid}\label{sec:cmd-ellipsoid}
+\cmd{ellipsoid}: Mittelpunkt, Ende der ersten Achse, dann die zweite und die dritte Halbachse
+(Punkt oder Zahl; die dritte entlang der Normalen der Konstruktionsebene) -- ein exaktes
+Ellipsoid als Körper. \cmd{paraboloid}: Scheitel, Brennpunkt, dann der Randradius -- eine exakte
+Paraboloid-Schale (offen; schließen Sie sie bei Bedarf mit \gui{Cap planar holes}).
 
 \subsection{Torus -- Ring}\label{sec:cmd-torus}
 \cmd{torus}, Alias \code{tor}. Ein Torus, dessen Mittelebene in der Konstruktionsebene liegt.

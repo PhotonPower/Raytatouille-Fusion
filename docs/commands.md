@@ -95,6 +95,16 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Gordon | `network` | a selected curve network (≥ 2 × 2, any order: sorted automatically) |
 | Offset surface | `offsetsrf` | selected (untrimmed) surfaces; signed distance along the normal |
 | Fillet surfaces | `filletsrf` | two selected surfaces; radius (the ball side is found automatically) |
+| Surface from points | `srfpt` | 3 or 4 corners (Enter after 3: a triangle) |
+| Edge surface | `edgesrf` | 2 / 3 / 4 selected edge curves, any order and direction: ruled / three-sided / Coons |
+| Planar surface | `planarsrf` | selected closed planar curves; nested curves are holes |
+| Patch | `patch` | selected curves and points; smoothing (Enter: 0.001); fitted surface |
+| Surface from point grid | `srfptgrid`, `frompointgrid` | selected points row by row; points per row; interpolating |
+| Rail revolve | `railrevolve` | profile, rail; axis start, axis end |
+| Extrude along / to point / tapered | `extrudealong` / `extrudetopoint` / `extrudetapered` | profile + path / curves + apex / planar curves, draft angle (Enter: 5°), height |
+| Extrude surface | `extrudesrf` | selected surfaces; distance along the plane normal or two points; a solid |
+| Pipe | `pipe` | selected curves; start radius, end radius (Enter: the same); solids |
+| Ellipsoid / Paraboloid | `ellipsoid` / `paraboloid` | centre, first axis end, 2nd and 3rd semi-axis / vertex, focus, rim radius; exact |
 
 | **Editing and analysis** (M6c) | | |
 | Join | `j` | selected curves (chained in any order / direction) or surfaces / faces (sewn into one shell) |
