@@ -37,6 +37,7 @@ qt_standard_project_setup(REQUIRES 6.8)
 add_library(nfcad_core STATIC
   src/commands/drawing_commands.cpp
   src/commands/curve_commands.cpp
+  src/commands/derived_curve_commands.cpp
   src/commands/edit_commands.cpp
   src/commands/input_parser.cpp
   src/commands/solid_commands.cpp

@@ -93,6 +93,15 @@ nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op) {
   return result;
 }
 
+std::optional<document::Geometry> part_of(const document::Geometry& g, const document::SubElement& sub) {
+  const auto* sh = std::get_if<nf::Shell>(&g);
+  if (sh == nullptr || sub.index < 0) return std::nullopt;
+  const auto i = static_cast<std::size_t>(sub.index);
+  if (sub.kind == document::SubElement::Kind::Edge && i < sh->edges().size()) return sh->edges()[i].curve;
+  if (sub.kind == document::SubElement::Kind::Face && i < sh->faces().size()) return sh->faces()[i];
+  return std::nullopt;
+}
+
 std::vector<nf::TrimmedSurface> faces_of(const document::Geometry& g) {
   if (const auto* s = std::get_if<nf::NurbsSurface>(&g)) return {nf::TrimmedSurface(*s)};
   if (const auto* f = std::get_if<nf::TrimmedSurface>(&g)) return {*f};

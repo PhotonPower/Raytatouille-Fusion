@@ -72,6 +72,10 @@ class Command {
   virtual bool begin(const std::vector<document::Entity>& /*selection*/) { return true; }
   /// True if the command is complete right after begin() (e.g. Booleans).
   [[nodiscard]] virtual bool immediate() const { return false; }
+  /// Commands that also take picked parts of objects: a selected edge of a shell arrives in
+  /// begin() as a curve entity, a selected face as a trimmed-surface entity (id 0: not in the
+  /// document; the parts follow the whole objects, in selection order).
+  [[nodiscard]] virtual bool usesSubElements() const { return false; }
 
   /// Commands that move the selection rigidly (Move, Rotate) also move selected result drawings
   /// (rays, a plugin's camera – docs/plugins.md, "Result drawings in the views"): before begin()
@@ -118,6 +122,8 @@ namespace detail {
 std::unique_ptr<Command> create_solid_command(const QString& name);
 std::unique_ptr<Command> create_curve_command(const QString& name);
 QStringList curve_command_ids();
+std::unique_ptr<Command> create_derived_curve_command(const QString& name);
+QStringList derived_curve_command_ids();
 std::unique_ptr<Command> create_transform_command(const QString& name);
 std::unique_ptr<Command> create_surface_command(const QString& name);
 QStringList surface_command_ids();

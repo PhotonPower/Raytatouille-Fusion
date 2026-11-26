@@ -7,6 +7,7 @@
 #include "commands/input_parser.hpp"
 #include "document/document.hpp"
 #include "document/selection.hpp"
+#include "kernel/geometry_ops.hpp"
 #include "results/result_edit.hpp"
 #include "results/result_store.hpp"
 #include "viewport/viewport.hpp"
@@ -97,14 +98,24 @@ bool CommandController::start(const QString& name) {
       cmd->setDrawingWire(results::drawing_wire(*results_, drawings));
       drawings_ = drawings;
     }
-    // whole entities in selection order (Boolean difference: first minus the others)
+    // whole entities in selection order (Boolean difference: first minus the others); for the
+    // commands that take them, the picked edges and faces of shells after them
     std::vector<document::Entity> picked;
+    std::vector<document::Entity> parts;
     if (selection_ != nullptr) {
       for (const document::SelectionItem& i : selection_->ordered()) {
-        if (i.sub.kind != document::SubElement::Kind::None) continue;
-        if (const document::Entity* e = doc_->entity(i.entity)) picked.push_back(*e);
+        const document::Entity* e = doc_->entity(i.entity);
+        if (e == nullptr) continue;
+        if (i.sub.kind == document::SubElement::Kind::None) {
+          picked.push_back(*e);
+        } else if (cmd->usesSubElements()) {
+          if (auto part = kernel::part_of(*e->geometry, i.sub)) parts.push_back(document::make_entity(std::move(*part)));
+        }
       }
     }
+    picked.insert(picked.end(), parts.begin(), parts.end());
+    // commands that need the view's plane already in begin() / finish() (Project: its direction)
+    if (grid_->activeView() != nullptr) cmd->setViewPlane(frameOf(grid_->activeView()));
     if (picked.empty() && !drawings.empty() && !cmd->movesDrawings()) {
       status_->showMessage(tr("%1: result drawings can only be moved and rotated").arg(cmd->title()), 6000);
       return true;
