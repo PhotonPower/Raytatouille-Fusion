@@ -12,6 +12,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   curve fitted to the cursor's path (`sk`) – and Curve through the selected points (`crvpts`);
   `interpcrv` also starts the interpolated curve (Spline). Ellipse and the conic sections are
   exact rational NURBS. In the tool group *Curves*; manual: Modelling chapter.
+- **Curves from curves**: Blend curves (`blend`, G1 or G2 between the ends of two curves), Chamfer
+  curves (`cha`: between two curves, or every corner of one – `chamfercorners`), Tween curves
+  (`tween`); `filletcorners` starts Fillet curves. Raytatouille Fusion now builds with Nurbforge
+  0.16.
 - **Trace rays through the gratings of a node workflow**: where a branch passes a block of another
   kind (a FourierGrating grating or stack, an hp-FEM grating), the Raytracer's Raytatouille system
   ends in front of it, and *Trace rays* drew only a short piece up to the first grating (in the
