@@ -379,9 +379,18 @@ ein \datei{.rttf}-Dokument rechnet damit auf jedem Rechner; eine Netzdatei (\gui
     \gui{Save job} keine fremde Datei überschreibt.
 \end{description}
 
-Im Dialog des Blocks stehen danach die wichtigsten Zahlen des Jobs als Felder: \gui{Period}
-(Gruppe \gui{Grating}), \gui{Polynomial order} (\gui{Solver}) und je Material, das als $n$ oder
+Im Dialog des Blocks stehen die wichtigsten Zahlen des Jobs als Felder (auch für einen Job, der mit
+dem Dokument kam -- das Plugin beschreibt seine Blöcke nach jeder Änderung des Workflows, beim
+Öffnen eines Dokuments und wenn es startet): \gui{Period} (Gruppe \gui{Grating}),
+\gui{Polynomial order p} (\gui{Solver}), das Netz (\gui{Mesh}) und je Material, das als $n$ oder
 $n, k$ gegeben ist, \gui{Tag $t$: n} bzw.\ \gui{Tag $t$: n, k} (\gui{Materials}).
+
+Unter \gui{Mesh} steht je nach Netzart: beim strukturierten Netz \gui{Columns} und je Zeilenband
+\gui{Row band $i$: y0, y1, rows}; bei Gmsh die \gui{Element size, tag $t$} der Tags, für die der Job
+Größen nennt (ohne Größen wählt hp-FEM sie nach der Wellenlänge und $p$), und der
+\gui{Interface factor}; bei einer Netzdatei deren \gui{scale}. Der Block vernetzt bei der nächsten
+Rechnung mit den neuen Werten -- die Netzart selbst wechseln Sie im Panel (\gui{Load block job into
+panel}, \gui{Mesh}, \gui{Store job in block}).
 
 \subsection{Lage und Ordnungen}
 

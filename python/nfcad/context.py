@@ -264,7 +264,8 @@ def workflow_blocks(workflow: dict):
     def walk(nodes, scope):
         for node in nodes or []:
             yield scope, node
-            for name, body in (node.get("variants") or {}).items():
+            variants = node.get("variants") or {}
+            for name, body in variants.items() if isinstance(variants, dict) else enumerate(variants):
                 yield from walk((body or {}).get("nodes"), [*scope, {"group": node.get("id"), "variant": name}])
 
     yield from walk(((workflow or {}).get("model") or {}).get("nodes"), [])

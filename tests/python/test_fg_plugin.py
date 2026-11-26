@@ -240,6 +240,15 @@ with tempfile.TemporaryDirectory() as d:
                       "/config/materials/air/n": ("number", "Materials"),
                       "/config/materials/glass/n": ("number", "Materials"),
                       "/config/materials/si/n": ("numbers", "Materials")}, fields
+    # a configuration that came otherwise (a document, an embedded file): Describe blocks gives the
+    # same fields, only where they differ
+    plain = {"id": "G", "type": "fg.grating", "params": {"config": LAMELLAR}}
+    wanted = fg_plugin.described({"model": {"nodes": [plain, {"id": "x", "type": "rtt.source", "params": {}}]}})
+    assert [(w["block"], w["scope"]) for w in wanted] == [("G", [])], wanted
+    assert wanted[0]["fields"] == fg_plugin.config_fields(LAMELLAR)
+    assert {f["name"] for f in wanted[0]["fields"]} >= {"/config/period_um/x", "/config/truncation/Nx"}
+    plain["fields"] = wanted[0]["fields"]
+    assert fg_plugin.described({"model": {"nodes": [plain]}}) == []
     two_d = fg_plugin.config_fields({**OTHER, "materials": {"a/b~c": {"n": 1.2}}})
     assert [f["name"] for f in two_d] == ["/config/period_um/x", "/config/period_um/z", "/config/truncation/Nx",
                                           "/config/truncation/Nz", "/config/layers/0/thickness_um",

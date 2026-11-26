@@ -17,6 +17,17 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   otherwise keeps showing the old result as up to date (an empty camera image, RTT-Fusion #137). A
   plugin action can now be offered on every block (`block_types=("*",)`).
 
+### Fixed
+- **Grating and hp-FEM blocks show their numbers in their dialog again**: period and Fourier
+  orders, layer thicknesses and indices of a FourierGrating block (tabs *Grating*, *Layers*,
+  *Materials*); period, order p, the mesh and indices of an hp-FEM block (tab *Mesh*: a structured
+  mesh's columns and row bands, Gmsh's element sizes and interface factor – the block meshes again
+  with them). The plugins describe their blocks after every edit of the workflow, when a document
+  is opened and when they start, not only after *Store … in block*: a block whose configuration
+  came with a document, an import or an embedded file had no such tab.
+- Plugins that follow the workflow set only their blocks' dialog fields (`ctx.set_block_fields`,
+  new): run after the same edit, they no longer overwrite each other's fields.
+
 ### Changed
 - **The node workflow is a model (version 2) only** – an old document whose workflow is a socket
   graph (version 1) is converted into a model when it is opened (Workflow plugin, *Convert to

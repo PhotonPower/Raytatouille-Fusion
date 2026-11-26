@@ -11,8 +11,9 @@ def action(label: str, *, description: str = "", on_workflow_edit: bool = False,
            block_types: tuple[str, ...] = ()) -> Callable:
     """Marks a method ``f(self, ctx)`` as an action shown in CAD (menu / tool column).
 
-    ``on_workflow_edit``: CAD also runs it, quietly, shortly after the node workflow was edited
-    (e.g. to draw what the edit changed); it should be quick and raise nothing.
+    ``on_workflow_edit``: CAD also runs it, quietly, shortly after the node workflow was edited, after
+    a document was opened and when the plugin starts (e.g. to draw what the edit changed, or to
+    describe its blocks' dialogs with ``ctx.set_block_fields``); it should be quick and raise nothing.
 
     ``block_types``: an action on one block of the node workflow – CAD shows it in the context menu
     of blocks of these types (not in the menu or the tool column); ``"*"`` stands for every type.
