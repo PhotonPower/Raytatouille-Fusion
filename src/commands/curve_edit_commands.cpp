@@ -1,6 +1,7 @@
 // Editing curves (docs/commands.md, "Editing curves"): Extend, Divide, Divide by length, Rebuild,
-// Change degree, Flip, Close, Seam, Insert knot, Remove knot, Smooth, Fair. Commands that change
-// a curve replace its geometry (one undo step); Divide adds points.
+// Change degree, Flip, Close, Seam, Insert knot, Remove knot, Smooth, Fair, Match, Simplify,
+// Arc blend. Commands that change a curve replace its geometry (one undo step); Divide adds
+// points, Arc blend a curve.
 #include <QObject>
 #include <algorithm>
 #include <cmath>
@@ -10,6 +11,7 @@
 #include <nurbforge/analysis/closest_point.hpp>
 #include <nurbforge/analysis/properties.hpp>
 #include <nurbforge/geometry/primitives.hpp>
+#include <stdexcept>
 #include <nurbforge/modeling/extend.hpp>
 #include <nurbforge/modeling/surface_tools.hpp>
 #include <nurbforge/nurbs/join.hpp>
@@ -473,6 +475,276 @@ class FairCommand : public EditCurvesCommand {
   }
 };
 
+// ------------------------------------------------------------------------------ Match
+/// The end `end` of the first curve and the end of the second nearest to it (the pair of ends
+/// closest to each other, `ends`).
+std::pair<nf::CurveEnd, nf::CurveEnd> closest_ends(const nf::NurbsCurve& a, const nf::NurbsCurve& b) {
+  std::pair<nf::CurveEnd, nf::CurveEnd> best{nf::CurveEnd::End, nf::CurveEnd::Start};
+  double d = std::numeric_limits<double>::infinity();
+  for (auto ea : {nf::CurveEnd::Start, nf::CurveEnd::End}) {
+    for (auto eb : {nf::CurveEnd::Start, nf::CurveEnd::End}) {
+      const double dd = nf::distance(a.evaluate(ea == nf::CurveEnd::Start ? a.domain_start() : a.domain_end()),
+                                     b.evaluate(eb == nf::CurveEnd::Start ? b.domain_start() : b.domain_end()));
+      if (dd < d) {
+        d = dd;
+        best = {ea, eb};
+      }
+    }
+  }
+  return best;
+}
+
+/// Changes the end of `a` (at its domain end) so that it meets `b` at its start with position
+/// (continuity 0), tangent direction (1) and curvature vector (2): the last continuity + 1
+/// control points are solved from the end derivatives, which are linear in them (a must be
+/// non-rational and clamped). Its speed at the end is kept.
+nf::NurbsCurve match_end(nf::NurbsCurve a, const nf::NurbsCurve& b, int continuity) {
+  if (a.is_rational()) throw std::invalid_argument("the curve to change is rational – rebuild it first");
+  a = a.clamped();
+  // enough degree and control points: the start must stay where it is
+  if (a.degree() < static_cast<std::size_t>(continuity)) a = a.elevate_degree(continuity - a.degree());
+  while (a.num_control_points() < static_cast<std::size_t>(continuity) + 3) {
+    const nf::KnotVector& k = a.knots();
+    double widest = 0, at = 0;
+    for (std::size_t i = a.degree(); i < a.num_control_points(); ++i) {
+      if (k[i + 1] - k[i] > widest) {
+        widest = k[i + 1] - k[i];
+        at = 0.5 * (k[i] + k[i + 1]);
+      }
+    }
+    a = a.insert_knot(at);
+  }
+  const std::size_t n = a.num_control_points(), m = static_cast<std::size_t>(continuity) + 1;
+  const double ue = a.domain_end(), ub = b.domain_start();
+  const std::vector<nf::Vec3> da = a.derivatives(ue, 2), db = b.derivatives(ub, 2);
+  // targets: B's position; A's speed along B's direction; B's curvature vector at that speed
+  const double lambda = nf::norm(db[1]) > 0 ? nf::norm(da[1]) / nf::norm(db[1]) : 1.0;
+  const nf::Vec3 target[3] = {db[0], db[1] * lambda, db[2] * (lambda * lambda)};
+  // basis derivatives of the last m control points at the end (unit control points)
+  double N[3][3] = {};
+  for (std::size_t j = 0; j < m; ++j) {
+    std::vector<nf::Vec3> unit(n, nf::Vec3{0, 0, 0});
+    unit[n - m + j] = {1, 0, 0};
+    const nf::NurbsCurve e(a.degree(), a.knots(), unit);
+    const auto d = e.derivatives(ue, 2);
+    for (std::size_t k = 0; k < m; ++k) N[k][j] = d[k].x;
+  }
+  // the other control points' share of the end derivatives
+  std::vector<nf::Vec3> rest = a.control_points();
+  for (std::size_t j = 0; j < m; ++j) rest[n - m + j] = {0, 0, 0};
+  const auto fixed = nf::NurbsCurve(a.degree(), a.knots(), rest).derivatives(ue, 2);
+  // solve N x = target - fixed for each coordinate (Gaussian elimination, m <= 3)
+  std::vector<nf::Vec3> ctrl = a.control_points();
+  double M[3][4];
+  for (int c = 0; c < 3; ++c) {
+    for (std::size_t k = 0; k < m; ++k) {
+      for (std::size_t j = 0; j < m; ++j) M[k][j] = N[k][j];
+      const nf::Vec3 rhs = target[k] - fixed[k];
+      M[k][m] = c == 0 ? rhs.x : c == 1 ? rhs.y : rhs.z;
+    }
+    for (std::size_t i = 0; i < m; ++i) {
+      std::size_t piv = i;
+      for (std::size_t r = i + 1; r < m; ++r) {
+        if (std::abs(M[r][i]) > std::abs(M[piv][i])) piv = r;
+      }
+      if (std::abs(M[piv][i]) < 1e-300) throw std::runtime_error("the end cannot be matched");
+      for (std::size_t q = 0; q <= m; ++q) std::swap(M[i][q], M[piv][q]);
+      for (std::size_t r = 0; r < m; ++r) {
+        if (r == i) continue;
+        const double f = M[r][i] / M[i][i];
+        for (std::size_t q = i; q <= m; ++q) M[r][q] -= f * M[i][q];
+      }
+    }
+    for (std::size_t j = 0; j < m; ++j) {
+      const double x = M[j][m] / M[j][j];
+      nf::Vec3& p = ctrl[n - m + j];
+      (c == 0 ? p.x : c == 1 ? p.y : p.z) = x;
+    }
+  }
+  return {a.degree(), a.knots(), ctrl};
+}
+
+/// Match: the end of the first selected curve nearest the second is changed to meet the second
+/// with G0 (position), G1 (tangent) or G2 (curvature; default); the second stays.
+class MatchCommand : public EditCurvesCommand {
+ public:
+  MatchCommand() : EditCurvesCommand(2, 2, QObject::tr("two curves: the one to change, then the one to match")) {}
+  QString id() const override { return QStringLiteral("match"); }
+  QString title() const override { return QObject::tr("Match curve"); }
+  QString prompt() const override {
+    return QObject::tr("Match: continuity 0 (position), 1 (tangent) or 2 (curvature) – Enter: 2");
+  }
+  Result number(double v) override {
+    if (v != 0 && v != 1 && v != 2) return Result::Rejected;
+    try {
+      replaceCurve(0, matched(curves_[0], curves_[1], static_cast<int>(v)));
+      return Result::Done;
+    } catch (const std::exception& e) {
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+  Result finish() override { return number(2); }
+
+  static nf::NurbsCurve matched(const nf::NurbsCurve& a, const nf::NurbsCurve& b, int continuity) {
+    const auto [ea, eb] = closest_ends(a, b);
+    // in the standard situation: a ends where b starts
+    const nf::NurbsCurve a1 = ea == nf::CurveEnd::End ? a : a.reversed();
+    const nf::NurbsCurve b1 = eb == nf::CurveEnd::Start ? b : b.reversed();
+    const nf::NurbsCurve m = match_end(a1, b1, continuity);
+    return ea == nf::CurveEnd::End ? m : m.reversed();
+  }
+};
+
+// ------------------------------------------------------------------------------ Simplify
+/// Simplify: the Bézier pieces of the selected curves that are straight or circular (within
+/// 1e-6 of the curve's size) become exact lines and arcs; neighbouring pieces on one line or
+/// circle become one. The curve keeps its shape.
+class SimplifyCommand : public EditCurvesCommand {
+ public:
+  SimplifyCommand() : EditCurvesCommand(1, 0, QObject::tr("curves")) {}
+  QString id() const override { return QStringLiteral("simplify"); }
+  QString title() const override { return QObject::tr("Simplify curve"); }
+  QString prompt() const override { return title(); }
+  bool immediate() const override { return true; }
+  Result finish() override { return each([](const nf::NurbsCurve& c) { return simplified(c); }); }
+
+  static nf::NurbsCurve simplified(const nf::NurbsCurve& c) {
+    const double tol = 1e-6 * size_of(c);
+    struct Piece {
+      enum Kind { Line, Arc, Other } kind;
+      nf::NurbsCurve curve;
+      nf::Vec3 a, b, mid;  // ends and (for arcs) a point between
+      nf::Vec3 centre{};
+      double radius = 0;
+      nf::Vec3 normal{};
+    };
+    std::vector<Piece> pieces;
+    for (const nf::NurbsCurve& s : c.decompose_bezier()) {
+      const nf::Vec3 a = s.evaluate(s.domain_start()), b = s.evaluate(s.domain_end());
+      const nf::Vec3 mid = s.evaluate(0.5 * (s.domain_start() + s.domain_end()));
+      const auto samples = s.sample(24);
+      // a line: every sample on the chord
+      if (nf::distance(a, b) > tol) {
+        const nf::Vec3 dir = nf::normalized(b - a);
+        bool straight = true;
+        for (const nf::Vec3& q : samples) straight = straight && nf::norm(nf::cross(q - a, dir)) <= tol;
+        if (straight) {
+          pieces.push_back({Piece::Line, nf::make_line(a, b), a, b, mid});
+          continue;
+        }
+      }
+      // an arc: the circle through the ends and the middle holds every sample
+      try {
+        // centre: equidistant from a, mid, b in their plane
+        const nf::Vec3 ab = b - a, am = mid - a;
+        const nf::Vec3 w = nf::cross(ab, am);
+        if (nf::norm(w) <= tol * nf::norm(ab)) throw std::invalid_argument("collinear");
+        const nf::Vec3 n = nf::normalized(nf::cross(mid - a, b - a));
+        const nf::Vec3 centre = a + (nf::cross(w, ab) * nf::dot(am, am) + nf::cross(am, w) * nf::dot(ab, ab)) /
+                                        (2.0 * nf::dot(w, w));
+        const double r = nf::distance(centre, a);
+        bool round = true;
+        for (const nf::Vec3& q : samples) round = round && std::abs(nf::distance(q, centre) - r) <= tol &&
+                                                  std::abs(nf::dot(q - centre, n)) <= tol;
+        if (round) {
+          pieces.push_back({Piece::Arc, nf::make_arc_3pt(a, mid, b), a, b, mid, centre, r, n});
+          continue;
+        }
+      } catch (const std::exception&) {
+      }
+      pieces.push_back({Piece::Other, s, a, b, mid});
+    }
+    // merge neighbouring lines on one line and arcs on one circle
+    std::vector<nf::NurbsCurve> merged;
+    for (std::size_t i = 0; i < pieces.size();) {
+      Piece p = pieces[i];
+      std::size_t j = i + 1;
+      if (p.kind == Piece::Line) {
+        while (j < pieces.size() && pieces[j].kind == Piece::Line &&
+               nf::norm(nf::cross(pieces[j].b - p.a, nf::normalized(p.b - p.a))) <= tol &&
+               nf::dot(pieces[j].b - pieces[j].a, p.b - p.a) > 0) {
+          p.b = pieces[j].b;
+          ++j;
+        }
+        merged.push_back(nf::make_line(p.a, p.b));
+      } else if (p.kind == Piece::Arc) {
+        nf::Vec3 through = p.mid;
+        while (j < pieces.size() && pieces[j].kind == Piece::Arc && nf::distance(pieces[j].centre, p.centre) <= tol &&
+               std::abs(pieces[j].radius - p.radius) <= tol && nf::norm(nf::cross(pieces[j].normal, p.normal)) <= 1e-9 &&
+               nf::dot(pieces[j].normal, p.normal) > 0) {
+          through = p.b;  // the old joint lies on the merged arc
+          p.b = pieces[j].b;
+          ++j;
+        }
+        // a full circle cannot be one 3-point arc: keep the pieces then
+        if (j > i + 1 && nf::distance(p.a, p.b) <= tol) {
+          for (std::size_t k = i; k < j; ++k) merged.push_back(pieces[k].curve);
+        } else {
+          merged.push_back(j > i + 1 ? nf::make_arc_3pt(p.a, through, p.b) : p.curve);
+        }
+      } else {
+        merged.push_back(p.curve);
+      }
+      i = j;
+    }
+    nf::NurbsCurve out = merged.front();
+    for (std::size_t k = 1; k < merged.size(); ++k) out = nf::join(out, merged[k], 1e-6 * size_of(c));
+    return out;
+  }
+};
+
+// ------------------------------------------------------------------------------ Arc blend
+/// Arc blend: two circular arcs (a biarc with equal tangent lengths) between the closest ends of
+/// two selected curves, tangent to both.
+class ArcBlendCommand : public EditCurvesCommand {
+ public:
+  ArcBlendCommand() : EditCurvesCommand(2, 2, QObject::tr("two curves")) {}
+  QString id() const override { return QStringLiteral("arc_blend"); }
+  QString title() const override { return QObject::tr("Arc blend"); }
+  QString prompt() const override { return title(); }
+  bool immediate() const override { return true; }
+  Result finish() override {
+    try {
+      entities_.push_back(document::make_entity(blend(curves_[0], curves_[1])));
+      return Result::Done;
+    } catch (const std::exception& e) {
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+
+  static nf::NurbsCurve blend(const nf::NurbsCurve& a, const nf::NurbsCurve& b) {
+    const auto [ea, eb] = closest_ends(a, b);
+    const nf::NurbsCurve a1 = ea == nf::CurveEnd::End ? a : a.reversed();
+    const nf::NurbsCurve b1 = eb == nf::CurveEnd::Start ? b : b.reversed();
+    const nf::Vec3 p0 = a1.evaluate(a1.domain_end()), p1 = b1.evaluate(b1.domain_start());
+    const nf::Vec3 t0 = nf::normalized(a1.tangent(a1.domain_end())), t1 = nf::normalized(b1.tangent(b1.domain_start()));
+    const nf::Vec3 d = p1 - p0;
+    if (nf::norm(d) < 1e-12) throw std::invalid_argument("the ends coincide");
+    // equal tangent lengths alpha: |d - alpha (t0 + t1)| = 2 alpha
+    const double tt = nf::dot(t0, t1), dv = nf::dot(d, t0 + t1), dd = nf::dot(d, d);
+    double alpha;
+    if (std::abs(1.0 - tt) < 1e-12) {
+      if (std::abs(dv) < 1e-12) throw std::invalid_argument("the ends face each other side by side");
+      alpha = dd / (2.0 * dv);
+    } else {
+      alpha = (-dv + std::sqrt(dv * dv + 2.0 * (1.0 - tt) * dd)) / (2.0 * (1.0 - tt));
+    }
+    const nf::Vec3 q0 = p0 + t0 * alpha, q1 = p1 - t1 * alpha, joint = (q0 + q1) * 0.5;
+    const auto arc = [](const nf::Vec3& s, const nf::Vec3& t, const nf::Vec3& e) {
+      try {
+        return nf::make_arc_tangent(s, t, e);
+      } catch (const std::exception&) {
+        return nf::make_line(s, e);  // straight: the end on the tangent line
+      }
+    };
+    const nf::NurbsCurve first = arc(p0, t0, joint);
+    const nf::NurbsCurve second = arc(joint, nf::normalized(q1 - q0), p1);
+    return nf::join(first, second, 1e-9 * std::max(1.0, nf::norm(d)));
+  }
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -493,6 +765,9 @@ const std::vector<Entry>& registry() {
       {"remove_knot", {"removeknot"}, [] { return std::make_unique<KnotCommand>(false); }},
       {"smooth", {}, [] { return std::make_unique<SmoothCommand>(); }},
       {"fair", {}, [] { return std::make_unique<FairCommand>(); }},
+      {"match", {"matchcrv"}, [] { return std::make_unique<MatchCommand>(); }},
+      {"simplify", {"simplifycrv"}, [] { return std::make_unique<SimplifyCommand>(); }},
+      {"arc_blend", {"arcblend", "arctoblend"}, [] { return std::make_unique<ArcBlendCommand>(); }},
   };
   return r;
 }

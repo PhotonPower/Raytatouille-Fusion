@@ -168,6 +168,61 @@ class TestCurveEdit : public QObject {
     QVERIFY(worst <= 0.05 + 1e-9);  // within the tolerance
     QVERIFY(f.control_points()[5].y != w.control_points()[5].y);  // and changed
   }
+
+  void matchPositionTangentCurvature() {
+    // a cubic along x, to match the start of a unit circle's quarter at (2, 1) heading up
+    const nf::NurbsCurve a = nf::NurbsCurve::from_points(3, {{0, 0, 0}, {0.5, 0.2, 0}, {1, -0.2, 0}, {1.5, 0, 0}});
+    const nf::NurbsCurve arc = nf::make_arc_3pt({2, 1, 0}, {3 - std::sqrt(0.5), 1 + std::sqrt(0.5), 0}, {3, 2, 0});
+    for (int g = 0; g <= 2; ++g) {
+      auto c = started("match", {entity(a), entity(arc, 2)});
+      QVERIFY(c);
+      QCOMPARE(c->number(g), R::Done);
+      const auto m = replaced(*c);
+      const auto dm = m.derivatives(m.domain_end(), 2);
+      const auto db = arc.derivatives(arc.domain_start(), 2);
+      QVERIFY(nf::distance(dm[0], {2, 1, 0}) < 1e-9);
+      QVERIFY(nf::distance(m.evaluate(m.domain_start()), {0, 0, 0}) < 1e-12);  // the other end stays
+      if (g >= 1) QVERIFY(nf::norm(nf::cross(nf::normalized(dm[1]), nf::normalized(db[1]))) < 1e-9);
+      if (g >= 1) QVERIFY(nf::dot(dm[1], db[1]) > 0);
+      if (g == 2) {  // the same curvature vector as the arc (magnitude 1)
+        const nf::Vec3 km = nf::cross(dm[1], dm[2]) / std::pow(nf::norm(dm[1]), 3);
+        const nf::Vec3 kb = nf::cross(db[1], db[2]) / std::pow(nf::norm(db[1]), 3);
+        QVERIFY(std::abs(nf::norm(kb) - 1.0) < 1e-9);
+        QVERIFY(nf::distance(km, kb) < 1e-6);
+      }
+    }
+    QVERIFY(!started("match", {entity(a)}));
+  }
+
+  void simplifyLinesAndArcs() {
+    auto c = started("simplifycrv", {entity(nf::make_line({0, 0, 0}, {2, 1, 0}).elevate_degree(2))});
+    QVERIFY(c && c->immediate());
+    QCOMPARE(c->finish(), R::Done);
+    const auto line = replaced(*c);
+    QCOMPARE(line.degree(), std::size_t{1});
+    QCOMPARE(line.num_control_points(), std::size_t{2});
+    c = started("simplify", {entity(nf::make_polyline({{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {2, 1, 0}}))});
+    QCOMPARE(c->finish(), R::Done);
+    QCOMPARE(replaced(*c).num_control_points(), std::size_t{3});  // the two collinear pieces merged
+    // a quarter circle rebuilt as a polynomial spline is not exact: it stays as it is
+    const nf::NurbsCurve approx = nf::rebuild_curve(nf::make_circle({0, 0, 0}, {0, 0, 1}, 1).sub_curve(0, 0.25), 8, 3).curve;
+    c = started("simplify", {entity(approx)});
+    QCOMPARE(c->finish(), R::Done);
+    for (const auto& q : replaced(*c).sample(20)) QVERIFY(nf::closest_point(approx, q).distance < 1e-9);
+  }
+
+  void arcBlendBetweenLines() {
+    auto c = started("arcblend", {entity(nf::make_line({0, 0, 0}, {1, 0, 0})), entity(nf::make_line({3, 2, 0}, {3, 3, 0}), 2)});
+    QVERIFY(c && c->immediate());
+    QCOMPARE(c->finish(), R::Done);
+    const auto made = c->takeEntities();
+    const auto& b = std::get<nf::NurbsCurve>(*made.front().geometry);
+    QVERIFY(nf::distance(b.evaluate(b.domain_start()), {1, 0, 0}) < 1e-9);
+    QVERIFY(nf::distance(b.evaluate(b.domain_end()), {3, 2, 0}) < 1e-9);
+    QVERIFY(nf::norm(nf::cross(nf::normalized(b.tangent(b.domain_start())), {1, 0, 0})) < 1e-9);
+    QVERIFY(nf::norm(nf::cross(nf::normalized(b.tangent(b.domain_end())), {0, 1, 0})) < 1e-9);
+    QVERIFY(b.is_rational());  // arcs
+  }
 };
 
 QTEST_GUILESS_MAIN(TestCurveEdit)

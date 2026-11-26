@@ -67,6 +67,9 @@ one undo step.
 | Curve seam | `crvseam` | one closed curve; click the new start |
 | Insert / Remove knot | `insertknot` / `removeknot` | one curve; clicks (Enter: done) |
 | Smooth / Fair | `smooth` / `fair` | selected curves; factor (Enter: 0.5) / tolerance |
+| Match curve | `match` | the curve to change, then the one to match; 0 / 1 / 2 (Enter): position / tangent / curvature at the nearest ends |
+| Simplify curve | `simplify` | selected curves (immediately): straight and circular pieces become exact lines and arcs, merged |
+| Arc blend | `arcblend` | two selected curves (immediately): a biarc between the closest ends, tangent to both |
 
 | **Curves and surfaces** (M6b) | | |
 | Spline (Interpolated curve) | `sp`, `interpcrv` | points (Enter: done); interpolating cubic |

@@ -9,7 +9,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ### Added
 - **Editing curves** (tool group *Edit curves*): Extend, Divide and Divide by length (points),
   Rebuild, Change degree, Flip direction (also surface normals), Close, Seam, Insert and Remove
-  knot, Smooth and Fair.
+  knot, Smooth and Fair; Match (G0 / G1 / G2 to another curve), Simplify (exact lines and arcs)
+  and Arc blend (two tangent arcs between two curves).
 - **Curves from objects** (tool group *Curves from objects*): Project and Pull curves onto
   surfaces, Section and Contour of surfaces and solids, Duplicate edge and Duplicate border, Extract
   isocurve and Extract wireframe, Offset curve on surface (geodesic) and Curve Boolean (union,
