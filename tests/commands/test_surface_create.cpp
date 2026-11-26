@@ -33,12 +33,6 @@ G only(Command& c) {
   return std::get<G>(*made.front().geometry);
 }
 
-double face_area(const nfcad::document::Geometry& g) {
-  double a = 0;
-  for (const auto& f : nfcad::kernel::faces_of(g)) a += f.area();
-  return a;
-}
-
 Entity line(nf::Vec3 a, nf::Vec3 b) { return make_entity(nf::make_line(a, b)); }
 
 }  // namespace
