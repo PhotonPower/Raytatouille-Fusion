@@ -43,8 +43,9 @@ als Knöpfe, geordnet in Gruppen:
 Gruppe & Standard & Befehle \\
 \midrule\endhead
 \gui{Draw} & aufgeklappt & Point, Line, Polyline, Rectangle, Polygon \\
-\gui{Curves} & aufgeklappt & Circle (centre, radius), Circle (3 points), Arc, Helix,
-  Interpolated spline, Offset curve, Fillet curves \\
+\gui{Curves} & aufgeklappt & Circle (centre, radius), Circle (3 points), Arc, Ellipse, Helix,
+  Spiral, Curve (control points), Interpolated curve, Sketch (freehand), Curve through points,
+  Conic, Parabola, Hyperbola, Offset curve, Fillet curves \\
 \gui{Surfaces} & zugeklappt & Plane, Extrude, Revolve, Loft, Sweep 1 rail, Sweep 2 rails,
   Coons patch, Gordon surface, Offset surface, Fillet surfaces, Cap planar holes \\
 \gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Boolean union,
@@ -98,7 +99,11 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{c3} & Circle (3 points) & & \code{m} & Move & \\
 \code{a} & Arc & & \code{co} & Copy & \\
 \code{h} & Helix & & \code{ro} & Rotate & \\
-\code{sp} & Spline & & \code{sc} & Scale & \\
+\code{sp}, \code{interpcrv} & Interpolated curve & & \code{sc} & Scale & \\
+\code{crv} & Curve (control points) & & & & \\
+\code{el} & Ellipse & & \code{spi} & Spiral & \\
+\code{sk} & Sketch & & \code{crvpts} & Curve through points & \\
+\code{conic} & Conic & & \code{para}, \code{hyp} & Parabola, Hyperbola & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
 \code{ext} & Extrude & & \code{arraypolar} & Polar array & \\
@@ -726,8 +731,89 @@ Achse; standardmäßig mit 5 Windungen.
 Eine Schraubenfeder modellieren Sie, indem Sie anschließend einen kleinen Kreis an den
 Anfang der Helix setzen und ihn mit \gui{Sweep 1 rail} entlang der Helix führen.
 
-\subsection{Interpolated spline -- interpolierende Spline-Kurve}\label{sec:cmd-spline}
-\cmd{spline}, Alias \code{sp}. Eine glatte Freiformkurve, die exakt durch alle eingegebenen
+\subsection{Ellipse}\label{sec:cmd-ellipse}
+\cmd{ellipse}, Alias \code{el}. Eine Ellipse in der Konstruktionsebene, exakt (rationale
+NURBS-Kurve wie der Kreis).
+\begin{schritte}
+\item \code{Ellipse: centre}.
+\item \code{Ellipse: end of the first axis} -- legt Richtung und Länge der ersten Halbachse
+  fest; eine getippte Zahl ist ihre Länge entlang der $u$-Achse der Ebene.
+\item \code{Ellipse: second axis (point or length)} -- der Abstand des Punkts von der ersten
+  Achse oder eine Zahl ist die zweite Halbachse.
+\end{schritte}
+
+\subsection{Spiral -- archimedische Spirale}\label{sec:cmd-spiral}
+\cmd{spiral}, Alias \code{spi}. Eine ebene Spirale um einen Mittelpunkt in der
+Konstruktionsebene, gegen den Uhrzeigersinn; standardmäßig 5 Windungen.
+\begin{schritte}
+\item \code{Spiral (5 turns): centre (type a number to change the turns)}.
+\item \code{Spiral (5 turns): start radius (point or number)} -- ein Punkt legt auch die
+  Startrichtung fest.
+\item \code{Spiral (5 turns): end radius (point or number)} -- der Radius wächst (oder
+  schrumpft) gleichmäßig bis hierher; 0 endet im Mittelpunkt.
+\end{schritte}
+Eine Spirale mit Steigung (konische Helix) zeichnen Sie weiterhin mit \gui{Helix}.
+
+\subsection{Curve (control points) -- Kurve aus Kontrollpunkten}\label{sec:cmd-curve}
+\cmd{curve}, Alias \code{crv}. Eine B-Spline-Kurve (Grad 3, mit weniger Punkten niedriger),
+deren \emph{Kontrollpunkte} Sie setzen: Die Kurve beginnt und endet in den äußeren Punkten und
+wird von den inneren nur angezogen -- sie verläuft glatter als eine interpolierende Kurve.
+\begin{schritte}
+\item \code{Curve: first control point}.
+\item \code{Curve: next control point (Enter: done, snap to the first point: close)} -- die
+  Vorschau zeigt Kurve und Kontrollpolygon. Ein Klick auf den ersten Punkt schließt die Kurve.
+\item \keys{Enter} erzeugt die Kurve (ab zwei Punkten).
+\end{schritte}
+
+\subsection{Sketch -- Freihandkurve}\label{sec:cmd-sketch}
+\cmd{sketch}, Alias \code{sk}. Klicken Sie den Anfang, führen Sie den Cursor die Kurve entlang
+und beenden Sie mit einem Klick oder \keys{Enter}. Der Weg des Cursors wird durch eine kubische
+Spline-Kurve angenähert (Abweichung höchstens 0,5\,\% seiner Länge); Anfang und Ende werden
+exakt getroffen. Der Objektfang wirkt auch hier -- schalten Sie ihn für freies Zeichnen ab.
+
+\subsection{Curve through points -- Kurve durch ausgewählte Punkte}\label{sec:cmd-crvpts}
+\cmd{curve\_through\_points}, Aliasse \code{crvpts}, \code{curvethroughpoints}. Wählen Sie
+zwei oder mehr Punktobjekte in der gewünschten Reihenfolge aus und starten Sie den Befehl: Er
+legt sofort eine interpolierende Kurve durch sie (kubisch, mit weniger Punkten niedriger).
+
+\subsection{Conic -- Kegelschnitt}\label{sec:cmd-conic}
+\cmd{conic}. Ein Kegelschnittbogen von einem Anfangs- zu einem Endpunkt, tangential an zwei
+gegebene Richtungen, exakt als rationale quadratische Kurve.
+\begin{schritte}
+\item \code{Conic: start point}, \code{Conic: end point}.
+\item \code{Conic: apex (where the end tangents meet)} -- der Schnittpunkt der beiden
+  Endtangenten.
+\item \code{Conic: rho (0 … 1; 0.5: parabola) or a point it passes through} -- $\rho$ legt
+  fest, wie weit die Kurve vom Sehnenmittelpunkt zum Apex reicht: unter 0,5 eine Ellipse, genau
+  0,5 eine Parabel, darüber eine Hyperbel. Ein Punkt gibt $\rho$ durch seine Lage zwischen
+  Sehnenmitte und Apex.
+\end{schritte}
+
+\subsection{Parabola -- Parabel}\label{sec:cmd-parabola}
+\cmd{parabola}, Alias \code{para}. Ein zur Achse symmetrisches Parabelstück in der
+Konstruktionsebene, exakt.
+\begin{schritte}
+\item \code{Parabola: vertex} -- der Scheitel.
+\item \code{Parabola: focus (or focal length)} -- der Brennpunkt legt Achse und Brennweite $f$
+  fest ($y = x^2/(4f)$); eine Zahl ist die Brennweite, geöffnet entlang der $v$-Achse.
+\item \code{Parabola: end point (or half width)} -- der Abstand des Punkts von der Achse ist die
+  halbe Breite; die Kurve endet auf seiner Seite.
+\end{schritte}
+Mit einer Parabel und \gui{Revolve} um ihre Achse entsteht ein Paraboloidspiegel.
+
+\subsection{Hyperbola -- Hyperbel}\label{sec:cmd-hyperbola}
+\cmd{hyperbola}, Alias \code{hyp}. Ein Ast der Hyperbel $x^2/a^2 - y^2/b^2 = 1$, symmetrisch zur
+Achse, exakt.
+\begin{schritte}
+\item \code{Hyperbola: centre}.
+\item \code{Hyperbola: vertex} -- der Scheitel des Astes: Achsrichtung und Halbachse $a$.
+\item \code{Hyperbola: a point of the branch (farther from the centre than the vertex)} -- die
+  Hyperbel geht durch diesen Punkt ($b$ ergibt sich daraus) und reicht symmetrisch bis zu
+  seinem Abstand von der Achse.
+\end{schritte}
+
+\subsection{Interpolated curve -- interpolierende Spline-Kurve}\label{sec:cmd-spline}
+\cmd{spline}, Aliasse \code{sp}, \code{interpcrv}. Eine glatte Freiformkurve, die exakt durch alle eingegebenen
 Punkte verläuft (kubisch interpolierend; bei nur zwei bzw.\ drei Punkten Grad 1 bzw.\ 2).
 \begin{schritte}
 \item \code{Spline: first point}.
