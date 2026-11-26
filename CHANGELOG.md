@@ -33,7 +33,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   is opened and when they start, not only after *Store … in block*: a block whose configuration
   came with a document, an import or an embedded file had no such tab.
 - Plugins that follow the workflow set only their blocks' dialog fields (`ctx.set_block_fields`,
-  new): run after the same edit, they no longer overwrite each other's fields.
+  new): run after the same edit, they no longer overwrite each other's fields. With a CAD
+  before this request, `ctx.set_block_fields` writes the workflow as before (plugins from a newer
+  checkout in an older build keep their fields).
 
 ### Changed
 - **The node workflow is a model (version 2) only** – an old document whose workflow is a socket
