@@ -600,7 +600,7 @@ std::unique_ptr<Command> create_surface_command(const QString& n) {
   if (n == QLatin1String("offset_curve") || n == QLatin1String("offset")) {
     return std::make_unique<OffsetCurveCommand>();
   }
-  if (n == QLatin1String("fillet_curve") || n == QLatin1String("fillet")) {
+  if (n == QLatin1String("fillet_curve") || n == QLatin1String("fillet") || n == QLatin1String("filletcorners")) {
     return std::make_unique<FilletCurvesCommand>();
   }
   if (n == QLatin1String("offset_surface") || n == QLatin1String("offsetsrf")) {
