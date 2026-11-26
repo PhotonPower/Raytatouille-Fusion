@@ -123,14 +123,16 @@ class TestSurfaceEdit : public QObject {
     auto c = started("slab", {entity(nf::make_line({0, 0, 0}, {4, 0, 0}))});
     QCOMPARE(c->number(0.5), R::Continue);
     QCOMPARE(c->point({2, 1, 0}, kTop), R::Continue);  // left of the line
-    QCOMPARE(c->number(2), R::Done);
+    const auto r1 = c->number(2);
+    QVERIFY2(r1 == R::Done, qPrintable(c->message()));
     auto made = c->takeEntities();
     QVERIFY(std::abs(std::get<nf::Shell>(*made.front().geometry).volume() - 4.0) < 1e-6);
     // a circle: a ring outside it
     c = started("slab", {entity(nf::make_circle({0, 0, 0}, {0, 0, 1}, 2.0))});
     c->number(0.5);
     QCOMPARE(c->point({3, 0, 0}, kTop), R::Continue);
-    QCOMPARE(c->number(1), R::Done);
+    const auto r2 = c->number(1);
+    QVERIFY2(r2 == R::Done, qPrintable(c->message()));
     made = c->takeEntities();
     QVERIFY(std::abs(std::abs(std::get<nf::Shell>(*made.front().geometry).volume()) - kPi * (2.5 * 2.5 - 4.0)) < 1e-4);
   }

@@ -1,4 +1,5 @@
 #include "kernel/geometry_ops.hpp"
+#include "kernel/curve_features.hpp"
 
 #include <QObject>
 #include <exception>
@@ -6,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <nurbforge/geometry/primitives.hpp>
+#include <nurbforge/analysis/closest_point.hpp>
 #include <nurbforge/io/step.hpp>
 #include <nurbforge/nurbs/join.hpp>
 #include <nurbforge/topology/boolean.hpp>
@@ -331,14 +333,32 @@ std::vector<nf::TrimmedSurface> planar_faces(const std::vector<nf::NurbsCurve>& 
     v1 += margin;
     const nf::Vec3 origin = centre + ux * u0 + vy * v0;
     const nf::NurbsSurface plane = nf::make_rectangle(origin, ux * (u1 - u0), vy * (v1 - v0));
+    // a loop: the curve split at its corners (each smooth piece one trim curve, so that the
+    // face's edges – and walls built on them – stay smooth), mapped affinely into (u, v)
     auto loop_of = [&](std::size_t k, bool ccw) {
-      nf::NurbsCurve c = (area(poly[k]) > 0) == ccw ? curves[k] : curves[k].reversed();
-      std::vector<nf::Vec3> uv;
-      for (const nf::Vec3& p : c.control_points()) {
-        uv.emplace_back(nf::dot(p - origin, ux) / (u1 - u0), nf::dot(p - origin, vy) / (v1 - v0), 0.0);
+      const nf::NurbsCurve c = (area(poly[k]) > 0) == ccw ? curves[k] : curves[k].reversed();
+      std::vector<double> cuts;
+      const double span = c.domain_end() - c.domain_start();
+      for (const nf::Vec3& corner : curve_features(c).corners) {
+        const double u = nf::closest_point(c, corner).u;
+        if (u > c.domain_start() + 1e-9 * span && u < c.domain_end() - 1e-9 * span) cuts.push_back(u);
       }
+      std::sort(cuts.begin(), cuts.end());
+      std::vector<nf::NurbsCurve> pieces;
+      double from = c.domain_start();
+      for (double u : cuts) {
+        if (u - from > 1e-9 * span) pieces.push_back(c.sub_curve(from, u));
+        from = u;
+      }
+      pieces.push_back(from > c.domain_start() ? c.sub_curve(from, c.domain_end()) : c);
       nf::TrimLoop loop;
-      loop.curves.emplace_back(c.degree(), c.knots(), uv, c.weights());
+      for (const nf::NurbsCurve& piece : pieces) {
+        std::vector<nf::Vec3> uv;
+        for (const nf::Vec3& p : piece.control_points()) {
+          uv.emplace_back(nf::dot(p - origin, ux) / (u1 - u0), nf::dot(p - origin, vy) / (v1 - v0), 0.0);
+        }
+        loop.curves.emplace_back(piece.degree(), piece.knots(), uv, piece.weights());
+      }
       return loop;
     };
     std::vector<nf::TrimLoop> holes;
