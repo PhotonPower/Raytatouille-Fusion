@@ -558,7 +558,7 @@ std::unique_ptr<Command> create_surface_command(const QString& n) {
   using M = ImmediateCurveCommand;
   if (n == QLatin1String("spline") || n == QLatin1String("sp") || n == QLatin1String("interpcrv")) return std::make_unique<SplineCommand>();
   if (n == QLatin1String("plane")) return std::make_unique<PlaneCommand>();
-  if (n == QLatin1String("extrude") || n == QLatin1String("ext")) return std::make_unique<ExtrudeCommand>();
+  if (n == QLatin1String("extrude") || n == QLatin1String("ext") || n == QLatin1String("extrudecrv")) return std::make_unique<ExtrudeCommand>();
   if (n == QLatin1String("revolve") || n == QLatin1String("rev")) return std::make_unique<RevolveCommand>();
   if (n == QLatin1String("loft")) {
     return std::make_unique<M>(QStringLiteral("loft"), QObject::tr("Loft"),
@@ -570,7 +570,7 @@ std::unique_ptr<Command> create_surface_command(const QString& n) {
                                QObject::tr("the profile, then the rail"), 2, 2,
                                [](M& m) { m.add(nf::sweep(m.curves()[0], m.curves()[1])); });
   }
-  if (n == QLatin1String("sweep2")) {
+  if (n == QLatin1String("sweep2") || n == QLatin1String("birail")) {
     return std::make_unique<M>(QStringLiteral("sweep2"), QObject::tr("Sweep 2 rails"),
                                QObject::tr("the profile, then rail 1 and rail 2"), 3, 3, [](M& m) {
                                  m.add(nf::sweep2(m.curves()[0], m.curves()[1], m.curves()[2]));
@@ -584,7 +584,7 @@ std::unique_ptr<Command> create_surface_command(const QString& n) {
                                  m.add(nf::coons(c[0], c[1], c[2], c[3], 1e-6));
                                });
   }
-  if (n == QLatin1String("gordon") || n == QLatin1String("network")) {
+  if (n == QLatin1String("gordon") || n == QLatin1String("network") || n == QLatin1String("networksrf")) {
     return std::make_unique<M>(QStringLiteral("gordon"), QObject::tr("Gordon surface"),
                                QObject::tr("a curve network (at least 2 × 2 crossing curves)"), 4, 0,
                                [](M& m) {

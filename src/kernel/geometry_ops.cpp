@@ -3,6 +3,7 @@
 #include <QObject>
 #include <exception>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <nurbforge/geometry/primitives.hpp>
 #include <nurbforge/io/step.hpp>
@@ -243,6 +244,110 @@ nf::Shell cap_planar_holes(const std::vector<nf::TrimmedSurface>& faces, double 
   }
   if (caps == 0) throw std::runtime_error(QObject::tr("no planar open loop to cap").toStdString());
   return nf::Shell::sew(all, tolerance).oriented();
+}
+
+std::vector<nf::TrimmedSurface> planar_faces(const std::vector<nf::NurbsCurve>& curves) {
+  if (curves.empty()) throw std::runtime_error(QObject::tr("no curves").toStdString());
+  // the common plane: Newell normal of all samples, centre, extent
+  std::vector<std::vector<nf::Vec3>> samples;
+  nf::Vec3 n{0, 0, 0}, centre{0, 0, 0};
+  std::size_t count = 0;
+  for (const nf::NurbsCurve& c : curves) {
+    if (nf::distance(c.evaluate(c.domain_start()), c.evaluate(c.domain_end())) > 1e-7 * std::max(1.0, nf::norm(c.control_points().front()))) {
+      throw std::runtime_error(QObject::tr("a curve is not closed").toStdString());
+    }
+    samples.push_back(c.sample(96));
+    samples.back().pop_back();  // the closing point repeats the first
+    const auto& pts = samples.back();
+    for (std::size_t i = 0; i < pts.size(); ++i) {
+      n += nf::cross(pts[i], pts[(i + 1) % pts.size()]);
+      centre += pts[i];
+      ++count;
+    }
+  }
+  if (nf::norm(n) < 1e-14) throw std::runtime_error(QObject::tr("the curves enclose no area").toStdString());
+  n = n / nf::norm(n);
+  centre = centre / static_cast<double>(count);
+  double size = 0;
+  for (const auto& pts : samples) {
+    for (const nf::Vec3& p : pts) size = std::max(size, nf::distance(p, centre));
+  }
+  for (const auto& pts : samples) {
+    for (const nf::Vec3& p : pts) {
+      if (std::abs(nf::dot(p - centre, n)) > 1e-7 * std::max(size, 1.0)) {
+        throw std::runtime_error(QObject::tr("the curves do not lie in one plane").toStdString());
+      }
+    }
+  }
+  const nf::Vec3 ux = nf::any_perpendicular(n);
+  const nf::Vec3 vy = nf::cross(n, ux);
+  using P2 = std::array<double, 2>;
+  std::vector<std::vector<P2>> poly;
+  for (const auto& pts : samples) {
+    std::vector<P2> q;
+    for (const nf::Vec3& p : pts) q.push_back({nf::dot(p - centre, ux), nf::dot(p - centre, vy)});
+    poly.push_back(std::move(q));
+  }
+  auto inside = [](const P2& p, const std::vector<P2>& q) {
+    bool in = false;
+    for (std::size_t i = 0, j = q.size() - 1; i < q.size(); j = i++) {
+      if ((q[i][1] > p[1]) != (q[j][1] > p[1]) &&
+          p[0] < (q[j][0] - q[i][0]) * (p[1] - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) {
+        in = !in;
+      }
+    }
+    return in;
+  };
+  auto area = [](const std::vector<P2>& q) {
+    double a = 0;
+    for (std::size_t i = 0, j = q.size() - 1; i < q.size(); j = i++) a += q[j][0] * q[i][1] - q[i][0] * q[j][1];
+    return 0.5 * a;
+  };
+  const std::size_t m = curves.size();
+  std::vector<int> depth(m, 0);
+  std::vector<std::size_t> parent(m, m);  // the smallest curve around it
+  for (std::size_t i = 0; i < m; ++i) {
+    for (std::size_t j = 0; j < m; ++j) {
+      if (i == j || !inside(poly[i].front(), poly[j])) continue;
+      ++depth[i];
+      if (parent[i] == m || std::abs(area(poly[j])) < std::abs(area(poly[parent[i]]))) parent[i] = j;
+    }
+  }
+  std::vector<nf::TrimmedSurface> out;
+  for (std::size_t o = 0; o < m; ++o) {
+    if (depth[o] % 2 != 0) continue;
+    // the plane rectangle over the outer curve; the loops mapped affinely into its (u, v)
+    double u0 = 1e300, u1 = -1e300, v0 = 1e300, v1 = -1e300;
+    for (const P2& p : poly[o]) {
+      u0 = std::min(u0, p[0]);
+      u1 = std::max(u1, p[0]);
+      v0 = std::min(v0, p[1]);
+      v1 = std::max(v1, p[1]);
+    }
+    const double margin = 0.05 * std::max(u1 - u0, v1 - v0);
+    u0 -= margin;
+    u1 += margin;
+    v0 -= margin;
+    v1 += margin;
+    const nf::Vec3 origin = centre + ux * u0 + vy * v0;
+    const nf::NurbsSurface plane = nf::make_rectangle(origin, ux * (u1 - u0), vy * (v1 - v0));
+    auto loop_of = [&](std::size_t k, bool ccw) {
+      nf::NurbsCurve c = (area(poly[k]) > 0) == ccw ? curves[k] : curves[k].reversed();
+      std::vector<nf::Vec3> uv;
+      for (const nf::Vec3& p : c.control_points()) {
+        uv.emplace_back(nf::dot(p - origin, ux) / (u1 - u0), nf::dot(p - origin, vy) / (v1 - v0), 0.0);
+      }
+      nf::TrimLoop loop;
+      loop.curves.emplace_back(c.degree(), c.knots(), uv, c.weights());
+      return loop;
+    };
+    std::vector<nf::TrimLoop> holes;
+    for (std::size_t h = 0; h < m; ++h) {
+      if (parent[h] == o && depth[h] == depth[o] + 1) holes.push_back(loop_of(h, false));
+    }
+    out.emplace_back(plane, loop_of(o, true), holes);
+  }
+  return out;
 }
 
 std::size_t export_step(const QString& path, const std::vector<const document::Entity*>& entities) {

@@ -484,6 +484,7 @@ std::unique_ptr<Command> create_command(const QString& name) {
   if (auto c = detail::create_curve_command(n)) return c;
   if (auto c = detail::create_derived_curve_command(n)) return c;
   if (auto c = detail::create_curve_edit_command(n)) return c;
+  if (auto c = detail::create_surface_create_command(n)) return c;
   if (auto c = detail::create_solid_command(n)) return c;
   if (auto c = detail::create_surface_command(n)) return c;
   if (auto c = detail::create_edit_command(n)) return c;
@@ -493,7 +494,7 @@ std::unique_ptr<Command> create_command(const QString& name) {
 QStringList command_ids() {
   QStringList out;
   for (const Entry& e : registry()) out << QString::fromLatin1(e.id);
-  return out + detail::curve_command_ids() + detail::derived_curve_command_ids() + detail::curve_edit_command_ids() + detail::solid_command_ids() + detail::transform_command_ids() +
+  return out + detail::curve_command_ids() + detail::derived_curve_command_ids() + detail::curve_edit_command_ids() + detail::surface_create_command_ids() + detail::solid_command_ids() + detail::transform_command_ids() +
          detail::surface_command_ids() + detail::edit_command_ids();
 }
 

@@ -45,6 +45,11 @@ enum class BooleanOp { Union, Intersection, Difference };
 [[nodiscard]] nf::Shell cap_planar_holes(const std::vector<nf::TrimmedSurface>& faces,
                                          double tolerance = 1e-6);
 
+/// Planar faces bounded by closed curves in one plane: a curve inside an even number of others is
+/// an outer boundary, one inside an odd number a hole of the curve directly around it. Throws
+/// std::runtime_error for open or non-planar curves or curves in different planes.
+[[nodiscard]] std::vector<nf::TrimmedSurface> planar_faces(const std::vector<nf::NurbsCurve>& curves);
+
 /// Chains curves end to start (reversing where needed, any input order) and joins them.
 /// Throws std::runtime_error if they do not form one chain.
 [[nodiscard]] nf::NurbsCurve join_chain(std::vector<nf::NurbsCurve> curves, double tolerance = 1e-6);
