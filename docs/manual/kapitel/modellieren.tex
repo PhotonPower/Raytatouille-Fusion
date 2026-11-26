@@ -62,6 +62,9 @@ Gruppe & Standard & Befehle \\
 \gui{Transform} & zugeklappt & Move, Copy, Rotate, Scale, Mirror, Linear array, Grid array,
   Polar array \\
 \gui{Edit} & zugeklappt & Trim, Split, Join, Explode, Delete \\
+\gui{Edit surfaces} & zugeklappt & Untrim, Extract surface, Shrink trimmed surface, Extend
+  surface, Rebuild surface, Rebuild surface in one direction, Change surface degree, Slab, Thicken,
+  Make hollow \\
 \gui{Edit curves} & zugeklappt & Extend curve, Divide, Divide by length, Rebuild curve, Change
   degree, Flip direction, Close curve, Curve seam, Insert knot, Remove knot, Smooth curve, Fair
   curve, Match curve, Simplify curve, Arc blend, Points on, Points off, Select points, Weight,
@@ -1013,6 +1016,37 @@ negativer Abstand legt sie auf die andere Seite.
 geschlossene Kurven, die in der Konstruktionsebene der Ansicht liegen, und tippen Sie: 1
 Vereinigung, 2 Schnittmenge, 3 Differenz (die zuerst gewählte minus die anderen). Die Ränder des
 Ergebnisses entstehen als neue geschlossene Kurven; die Kurvenstücke bleiben exakt.
+
+\section{Flächen bearbeiten (Gruppe Edit surfaces)}\label{sec:gruppe-surface-edit}
+
+Trim, Split, Join und Explode (Gruppe \gui{Edit}), Offset surface und Cap planar holes (Gruppe
+\gui{Surfaces}) arbeiten auch auf Flächen. Dazu kommen:
+\begin{description}
+\item[\cmd{untrim}] Ein Klick nahe einem Loch einer ausgewählten getrimmten Fläche entfernt dieses
+  Loch; \keys{Enter} entfernt jeden Beschnitt -- die ganze zugrunde liegende Fläche kehrt zurück.
+\item[\cmd{extractsrf}] (Extract surface): Wählen Sie Flächen eines Körpers als Teilobjekte
+  (\keys{Strg+Shift}-Klick); sie werden eigene Flächen, der Körper behält den Rest (und ist dann
+  offen).
+\item[\cmd{shrinktrimmedsrf}] (Aliasse \code{shrink}, \code{shrinksrf}): verkleinert die
+  zugrunde liegende Fläche getrimmter Flächen auf das Parameterrechteck um ihren Beschnitt; die
+  sichtbare Fläche bleibt gleich. Nützlich vor Untrim, Extend oder Rebuild.
+\item[\cmd{extendsrf}] (Extend surface): Klick nahe einer Kante einer ungetrimmten Fläche, dann
+  die Länge -- die Fläche wird an dieser Kante natürlich fortgesetzt.
+\item[\cmd{rebuildsrf}] (Rebuild surface): Kontrollpunkte in $u$, dann in $v$ (\keys{Enter}: wie
+  in $u$), Grad 3, gleichmäßige Knoten; die Statusleiste nennt die größte Abweichung.
+  \cmd{rebuilduv}: nur eine Richtung (1: $u$, 2: $v$), dann die Anzahl. Ein Beschnitt bleibt.
+\item[\cmd{changedegreesrf}] (Change surface degree): Grad in $u$, dann in $v$ (\keys{Enter}:
+  gleich); erhöhen ist exakt, senken nähert innerhalb von 0,1\,\% der Flächengröße an.
+\item[\cmd{slab}] Eine Wand entlang ausgewählter ebener Kurven: Wandstärke, dann ein Klick auf die
+  Seite der Wand, dann die Höhe entlang der Normalen der Konstruktionsebene. Eine offene Kurve gibt
+  eine gerade Wand mit Stirnseiten, eine geschlossene einen Ring.
+\item[\cmd{thicken}] Gibt ausgewählten Flächen (oder offenen Körpern) eine Wandstärke entlang ihrer
+  Normalen (negativ: zur anderen Seite) -- ein Körper.
+\item[\cmd{makehollow}] (Alias \code{hollow}): ein geschlossener Körper bekommt einen inneren
+  Hohlraum mit der getippten Wandstärke.
+\end{description}
+Thicken und Make hollow brauchen Flächen, die glatt ineinander übergehen (die Versätze müssen sich
+treffen); an scharfen Kanten -- etwa bei einem Quader -- melden sie einen Fehler.
 
 \section{Kurven bearbeiten (Gruppe Edit curves)}\label{sec:gruppe-curve-edit}
 

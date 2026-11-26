@@ -57,6 +57,16 @@ one undo step.
 | Offset curve on surface | `offsetcrvonsrf` | one curve and its surface; distance (sign: side), geodesic |
 | Curve Boolean | `crvboolean` | closed curves in the construction plane; 1 union, 2 intersection, 3 difference (first minus the others) |
 
+| **Editing surfaces** | | |
+| Untrim | `untrim` | selected trimmed surfaces; click near a hole (Enter: every trim) |
+| Extract surface | `extractsrf` | picked faces of a solid (Ctrl+Shift-click) become surfaces |
+| Shrink trimmed surface | `shrink` | selected trimmed surfaces: the surface shrunk to the trim's parameter rectangle |
+| Extend surface | `extendsrf` | untrimmed surfaces; click near an edge, length |
+| Rebuild surface / in one direction | `rebuildsrf` / `rebuilduv` | control points in u, v (Enter: as u) / direction 1 or 2, count |
+| Change surface degree | `changedegreesrf` | degree in u, v (Enter: the same) |
+| Slab | `slab` | planar curves; thickness, click the side, height |
+| Thicken / Make hollow | `thicken` / `makehollow` | surfaces / closed solids; thickness (smooth faces) |
+
 | **Editing curves** | | |
 | Extend curve | `extendcrv` | selected curves; click near an end, length (number or point); natural continuation |
 | Divide / Divide by length | `divide` / `divlen` | selected curves; number of segments / segment length; point objects |

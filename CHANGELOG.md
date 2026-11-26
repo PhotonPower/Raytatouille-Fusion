@@ -7,6 +7,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Editing surfaces** (tool group *Edit surfaces*): Untrim (one hole or all), Extract surface (picked
+  faces of a solid), Shrink trimmed surface, Extend surface, Rebuild surface and Rebuild in one
+  direction, Change surface degree, Slab, Thicken and Make hollow.
 - **Blends and continuity**: Blend surface and Match surface (G0 / G1 / G2 at clicked edges), Merge
   surfaces (across a common edge), Connect surfaces (extended and trimmed to meet), Tween surfaces,
   Fillet / Chamfer edges of solids (`blendedge`, `bevel`), Variable fillet, Merge faces. Commands can
