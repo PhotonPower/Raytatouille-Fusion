@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Creating surfaces**: Surface from points (3 or 4 corners), Edge surface (2 to 4 edges),
+  Planar surface (with holes), Patch (fitted to curves and points), Surface from point grid, Rail
+  revolve, Extrude along curve, Extrude to point, Extrude tapered, Extrude surface (a solid), Pipe,
+  Ellipsoid and Paraboloid (exact); aliases `extrudecrv`, `birail`, `networksrf`.
 - **Control points of curves**: Points on / off show a curve's control points as grips with its
   control polygon (saved with the document). Grips are picked by a click or a window and dragged
   with the mouse; Move, Rotate and Scale move the selected ones (the curve follows), Weight sets
