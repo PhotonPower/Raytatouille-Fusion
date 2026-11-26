@@ -236,9 +236,10 @@ class TestSurfaceCreate : public QObject {
   }
 
   void developableLoft() {
-    // a half circle and a skew line: the plain ruled surface is curved, the developable one not
+    // two half circles in parallel planes, not on one axis: the plain ruled surface (equal
+    // parameters) is curved, the developable one not
     const nf::NurbsCurve arc = nf::make_arc_3pt({2, 0, 0}, {0, 2, 0}, {-2, 0, 0});
-    const nf::NurbsCurve top = nf::make_line({1.5, 1, 2}, {-1, 0.5, 2});
+    const nf::NurbsCurve top = nf::make_arc_3pt({1.5, 0, 2}, {0.5, 1, 2}, {-0.5, 0, 2});
     auto c = started("devloft", {make_entity(arc), make_entity(top)});
     QCOMPARE(c->finish(), R::Done);
     const auto dev = only<nf::NurbsSurface>(*c);
