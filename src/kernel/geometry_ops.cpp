@@ -106,6 +106,17 @@ std::optional<document::Geometry> part_of(const document::Geometry& g, const doc
   return std::nullopt;
 }
 
+nf::NurbsCurve with_control_points_moved(const nf::NurbsCurve& c, const std::vector<int>& indices,
+                                         const nf::Transform& t) {
+  std::vector<nf::Vec3> pts = c.control_points();
+  for (int i : indices) {
+    if (i >= 0 && static_cast<std::size_t>(i) < pts.size()) {
+      pts[static_cast<std::size_t>(i)] = t.apply(pts[static_cast<std::size_t>(i)]);
+    }
+  }
+  return {c.degree(), c.knots(), pts, c.weights()};
+}
+
 std::vector<nf::TrimmedSurface> faces_of(const document::Geometry& g) {
   if (const auto* s = std::get_if<nf::NurbsSurface>(&g)) return {nf::TrimmedSurface(*s)};
   if (const auto* f = std::get_if<nf::TrimmedSurface>(&g)) return {*f};

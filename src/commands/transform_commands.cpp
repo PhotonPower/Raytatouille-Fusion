@@ -24,15 +24,6 @@ double signed_angle(const nf::Vec3& a, const nf::Vec3& b, const nf::Vec3& n) {
   return std::atan2(nf::dot(nf::cross(a, b), n), nf::dot(a, b));
 }
 
-/// The curve with the control points `indices` transformed (grips moved).
-nf::NurbsCurve with_grips_moved(const nf::NurbsCurve& c, const std::vector<int>& indices, const nf::Transform& t) {
-  std::vector<nf::Vec3> pts = c.control_points();
-  for (int i : indices) {
-    if (i >= 0 && static_cast<std::size_t>(i) < pts.size()) pts[static_cast<std::size_t>(i)] = t.apply(pts[static_cast<std::size_t>(i)]);
-  }
-  return {c.degree(), c.knots(), pts, c.weights()};
-}
-
 /// Base of all commands that transform or copy the selection.
 class SelectionCommand : public Command {
  public:
@@ -65,7 +56,7 @@ class SelectionCommand : public Command {
     if (!copy && movesGrips()) {
       for (const GripSet& g : grips_) {
         if (const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get())) {
-          replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(with_grips_moved(*c, g.indices, t)));
+          replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(kernel::with_control_points_moved(*c, g.indices, t)));
         }
       }
     }
@@ -100,7 +91,7 @@ class SelectionCommand : public Command {
         for (const GripSet& g : grips_) {
           const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get());
           if (c == nullptr) continue;
-          const nf::NurbsCurve moved = with_grips_moved(*c, g.indices, t);
+          const nf::NurbsCurve moved = kernel::with_control_points_moved(*c, g.indices, t);
           out.push_back(sample(moved, 128));
           Polyline3 polygon;
           for (const nf::Vec3& p : moved.control_points()) polygon.push_back(P(p));

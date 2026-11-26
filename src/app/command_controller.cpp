@@ -35,6 +35,7 @@ CommandController::CommandController(document::Document* doc, document::Selectio
       if (!command_) finishOrRepeat();
     });
     connect(v, &viewport::Viewport::enterPressed, this, &CommandController::finishOrRepeat);
+    connect(v, &viewport::Viewport::gripsDragged, this, &CommandController::moveGrips);
     connect(v, &viewport::Viewport::textTyped, this, [this](const QString& text) {
       line_->setFocus();
       line_->insert(text);
@@ -258,6 +259,25 @@ void CommandController::onPicked(viewport::Viewport* view, const Point3& p, bool
   plane_ = frameOf(view);
   command_->setViewPlane(plane_);
   handle(command_->point(constrained(p, snapped), plane_));
+}
+
+void CommandController::moveGrips(const QVector3D& delta) {
+  if (command_ || selection_ == nullptr) return;  // a running command owns the input
+  const nf::Transform move = nf::Transform::translation({delta.x(), delta.y(), delta.z()});
+  document::Edit edit;
+  for (document::EntityId id : selection_->entities()) {
+    std::vector<int> indices;
+    for (const document::SubElement& s : selection_->selectedParts(id)) {
+      if (s.kind == document::SubElement::Kind::ControlPoint) indices.push_back(s.index);
+    }
+    const document::Entity* e = doc_->entity(id);
+    if (indices.empty() || e == nullptr) continue;
+    if (const auto* c = std::get_if<nf::NurbsCurve>(e->geometry.get())) {
+      edit.replace.emplace_back(id, std::make_shared<const document::Geometry>(
+                                        kernel::with_control_points_moved(*c, indices, move)));
+    }
+  }
+  if (!edit.empty()) doc_->apply(std::move(edit), tr("Move control points"));
 }
 
 void CommandController::flush() {

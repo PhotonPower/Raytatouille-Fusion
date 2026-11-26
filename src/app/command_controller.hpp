@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QVector3D>
 #include <functional>
 #include <memory>
 
@@ -44,6 +45,8 @@ class CommandController : public QObject {
   void cancel();
   /// Enter / right-click: finishes the active command, or repeats the last one.
   void finishOrRepeat();
+  /// Moves the selected control points (grips) by `delta` – a grip dragged in a view.
+  void moveGrips(const QVector3D& delta);
   /// Text from the command line (Return).
   void submit(const QString& text);
 

@@ -5,6 +5,7 @@
 
 #include "commands/command.hpp"
 #include "document/document.hpp"
+#include "kernel/geometry_ops.hpp"
 
 using nfcad::commands::Command;
 using nfcad::commands::create_command;
@@ -134,6 +135,34 @@ class TestGrips : public QObject {
     QCOMPARE(w.weights()[0], 1.0);
     // a heavier control point pulls the curve towards it
     QVERIFY(nf::closest_point(w, {1, 1, 0}).distance < nf::closest_point(cubic(), {1, 1, 0}).distance);
+  }
+
+  void insertControlPoint() {
+    const Entity e = curve_entity(5, true);
+    auto c = create_command(QStringLiteral("insertcp"));
+    QVERIFY(c->begin({e}));
+    QVERIFY(!c->preview({1.5, 0.1, 0}, kTop).empty());
+    QCOMPARE(c->point({1.5, 0.2, 0}, kTop), R::Continue);  // near the leg (1, 1) – (2, -1)
+    QCOMPARE(c->finish(), R::Done);
+    const auto edit = c->takeEdit();
+    const auto more = geometry(edit.replace.back());
+    QCOMPARE(more.num_control_points(), std::size_t{5});
+    bool there = false;  // a control point at the spot on the leg nearest the click
+    const nf::Vec3 a{1, 1, 0}, b{2, -1, 0}, p{1.5, 0.2, 0};
+    const double t = nf::dot(p - a, b - a) / nf::dot(b - a, b - a);
+    for (const auto& q : more.control_points()) there = there || nf::distance(q, a + (b - a) * t) < 1e-12;
+    QVERIFY(there);
+    // the curve's ends stay
+    QVERIFY(nf::distance(more.evaluate(more.domain_start()), {0, 0, 0}) < 1e-12);
+    QVERIFY(nf::distance(more.evaluate(more.domain_end()), {3, 0, 0}) < 1e-12);
+  }
+
+  void moveControlPointsHelper() {
+    // the helper behind dragged grips (viewport) and the moving commands
+    const nf::NurbsCurve moved = nfcad::kernel::with_control_points_moved(
+        cubic(), {0, 9}, nf::Transform::translation({0, 0, 1}));
+    QVERIFY(nf::distance(moved.control_points()[0], {0, 0, 1}) < 1e-12);
+    QVERIFY(nf::distance(moved.control_points()[1], {1, 1, 0}) < 1e-12);  // index 9: ignored
   }
 };
 

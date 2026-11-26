@@ -1,5 +1,7 @@
 #include "viewport/viewport.hpp"
 
+#include "kernel/geometry_ops.hpp"
+
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
@@ -327,6 +329,36 @@ void Viewport::rectSelect(const QRectF& rect, bool crossing, Qt::KeyboardModifie
   selection_->apply(items, selection_mode(mods));
 }
 
+void Viewport::dragGrips(const QPointF& px) {
+  // the cursor ray met with the plane through the grabbed grip, perpendicular to the view
+  const viewport::Ray ray = camera_.pickRay(px);
+  const QVector3D normal = camera_.pickRay(QPointF(width() / 2.0, height() / 2.0)).direction;
+  const float den = QVector3D::dotProduct(ray.direction, normal);
+  if (std::abs(den) < 1e-9F) return;
+  const float t = QVector3D::dotProduct(grip_start_ - ray.origin, normal) / den;
+  grip_delta_ = ray.origin + ray.direction * t - grip_start_;
+  // preview: every curve with selected grips, moved, and its control polygon
+  const nf::Transform move = nf::Transform::translation({grip_delta_.x(), grip_delta_.y(), grip_delta_.z()});
+  std::vector<std::vector<QVector3D>> preview;
+  for (document::EntityId id : selection_->entities()) {
+    std::vector<int> indices;
+    for (const document::SubElement& s : selection_->selectedParts(id)) {
+      if (s.kind == document::SubElement::Kind::ControlPoint) indices.push_back(s.index);
+    }
+    const auto it = scene_->items().find(id);
+    if (indices.empty() || it == scene_->items().end()) continue;
+    const auto* c = std::get_if<nf::NurbsCurve>(it->second.geometry.get());
+    if (c == nullptr) continue;
+    const nf::NurbsCurve moved = kernel::with_control_points_moved(*c, indices, move);
+    std::vector<QVector3D> curve, polygon;
+    for (const nf::Vec3& p : moved.sample(160)) curve.emplace_back(float(p.x), float(p.y), float(p.z));
+    for (const nf::Vec3& p : moved.control_points()) polygon.emplace_back(float(p.x), float(p.y), float(p.z));
+    preview.push_back(std::move(curve));
+    preview.push_back(std::move(polygon));
+  }
+  setPreview(preview);
+}
+
 void Viewport::orbitBy(const QPointF& delta_px) {
   camera_.orbit(delta_px);
   cameraChanged();
@@ -535,8 +567,20 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
       if (mods & Qt::AltModifier) {
         drag_ = orbit_allowed ? Drag::Orbit : Drag::Pan;
       } else {
-        left_ = LeftAction::Pending;  // click or rectangle, decided by the movement
+        left_ = LeftAction::Pending;  // click, rectangle or grip drag, decided by the movement
         press_pos_ = pos;
+        grip_press_.reset();
+        if (!point_input_ && selection_ != nullptr && scene_ != nullptr) {
+          pick::Query q;
+          q.cursor_px = pos;
+          q.radius_px = kPickRadiusPx;
+          q.faces = false;
+          if (const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
+              hit && hit->item.sub.kind == document::SubElement::Kind::ControlPoint) {
+            grip_press_ = hit->item;
+            grip_start_ = hit->point;
+          }
+        }
         return;
       }
       break;
@@ -560,9 +604,23 @@ void Viewport::mouseMoveEvent(QMouseEvent* event) {
   }
   if (left_ == LeftAction::Pending &&
       QLineF(press_pos_, pos).length() > kDragThresholdPx) {
-    left_ = LeftAction::Rectangle;
-    rubber_->show();
-    rubber_->raise();
+    if (grip_press_) {  // dragging a grip: the selected grips move (the grabbed one selected)
+      left_ = LeftAction::GripDrag;
+      const auto& items = selection_->items();
+      if (!items.contains(*grip_press_)) {
+        selection_->apply({*grip_press_}, (event->modifiers() & Qt::ShiftModifier) ? document::Selection::Mode::Add
+                                                                                   : document::Selection::Mode::Replace);
+      }
+    } else {
+      left_ = LeftAction::Rectangle;
+      rubber_->show();
+      rubber_->raise();
+    }
+  }
+  if (left_ == LeftAction::GripDrag) {
+    dragGrips(pos);
+    reportCursor(pos);
+    return;
   }
   if (left_ == LeftAction::Rectangle) {
     // left-to-right: window, right-to-left: crossing (docs/ui-concept.md)
@@ -596,6 +654,13 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
       emit pointPicked(cursor_point_, snapped,
                        snapped ? snaps_[snap_index_ % snaps_.size()].type : snap::SnapType::Point);
     }
+    return;
+  }
+  if (event->button() == Qt::LeftButton && left_ == LeftAction::GripDrag) {
+    left_ = LeftAction::None;
+    grip_press_.reset();
+    setPreview({});
+    if (grip_delta_.lengthSquared() > 0.0F) emit gripsDragged(grip_delta_);
     return;
   }
   if (event->button() == Qt::LeftButton && left_ != LeftAction::None) {

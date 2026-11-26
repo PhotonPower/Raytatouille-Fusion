@@ -76,7 +76,7 @@ std::vector<ToolGroupDef> build() {
         t("match", "Match curve", "Mat", "match"), t("simplify", "Simplify curve", "Smp", "simplify"),
         t("arc_blend", "Arc blend", "ABl", "arcblend"), t("points_on", "Points on", "POn", "pon"),
         t("points_off", "Points off", "POf", "poff"), t("select_points", "Select points", "SPt", "selpoints"),
-        t("weight", "Weight", "Wgt", "weight")}},
+        t("weight", "Weight", "Wgt", "weight"), t("insert_control_point", "Insert control point", "ICP", "insertcp")}},
       {"analyze", "Analyze", false,
        {t("distance", "Distance", "Dst", "di"), t("angle", "Angle", "Ang", "ang"),
         t("curvature", "Curvature", "Crv", "curv"), t("area", "Area", "Are", "area"),
