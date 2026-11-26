@@ -122,11 +122,13 @@ class TestCurveEdit : public QObject {
     QVERIFY(nf::distance(m.evaluate(m.domain_end()), {0, 0, 0}) < 1e-12);
     // seam of a circle at (0, 1)
     QVERIFY(!started("seam", {entity(nf::make_line({0, 0, 0}, {1, 0, 0}))}));
-    c = started("crvseam", {entity(nf::make_circle({0, 0, 0}, {0, 0, 1}, 1.0))});
-    QCOMPARE(c->point({0, 1.2, 0}, kTop), R::Done);
+    const nf::NurbsCurve circle = nf::make_circle({0, 0, 0}, {0, 0, 1}, 1.0);
+    const nf::Vec3 opposite = circle.evaluate(circle.domain_start()) * -1.0;  // half way round
+    c = started("crvseam", {entity(circle)});
+    QCOMPARE(c->point({opposite.x * 1.2, opposite.y * 1.2, 0}, kTop), R::Done);
     const auto s = replaced(*c);
-    QVERIFY(nf::distance(s.evaluate(s.domain_start()), {0, 1, 0}) < 1e-9);
-    QVERIFY(nf::distance(s.evaluate(s.domain_end()), {0, 1, 0}) < 1e-9);
+    QVERIFY(nf::distance(s.evaluate(s.domain_start()), opposite) < 1e-9);
+    QVERIFY(nf::distance(s.evaluate(s.domain_end()), opposite) < 1e-9);
     for (const auto& q : s.sample(30)) QVERIFY(std::abs(std::hypot(q.x, q.y) - 1.0) < 1e-9);
   }
 
