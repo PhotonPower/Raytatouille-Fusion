@@ -123,6 +123,8 @@ std::unique_ptr<Command> create_solid_command(const QString& name);
 std::unique_ptr<Command> create_curve_command(const QString& name);
 QStringList curve_command_ids();
 std::unique_ptr<Command> create_derived_curve_command(const QString& name);
+std::unique_ptr<Command> create_curve_edit_command(const QString& name);
+QStringList curve_edit_command_ids();
 QStringList derived_curve_command_ids();
 std::unique_ptr<Command> create_transform_command(const QString& name);
 std::unique_ptr<Command> create_surface_command(const QString& name);
