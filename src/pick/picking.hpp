@@ -17,6 +17,8 @@ struct Target {
   document::EntityId id = 0;
   const tessellation::DisplayMesh* mesh = nullptr;
   document::GeometryPtr geometry;  ///< exact geometry (snap refinement)
+  /// Control points shown as grips (a curve with PointsOn); null or empty: none.
+  const std::vector<QVector3D>* grips = nullptr;
 };
 
 struct Query {
@@ -35,8 +37,9 @@ struct Hit {
   enum class Kind { Point, Curve, Face } kind = Kind::Face;
 };
 
-/// Best object under the cursor (docs/ui-concept.md, "Selection"): points before curves and
-/// edges before faces; within a kind the smallest screen distance, then the smallest depth.
+/// Best object under the cursor (docs/ui-concept.md, "Selection"): grips (shown control points,
+/// reported as SubElement::Kind::ControlPoint and never hidden by faces) before points, points
+/// before curves and edges before faces; within a kind the smallest screen distance, then the smallest depth.
 /// Curves and edges hidden behind a face (in a mode with faces) are not picked.
 [[nodiscard]] std::optional<Hit> pick(const std::vector<Target>& targets,
                                       const viewport::Camera& camera, const Query& query);
@@ -79,5 +82,10 @@ struct LineHit {
 [[nodiscard]] std::vector<document::EntityId> pick_rect(const std::vector<Target>& targets,
                                                         const viewport::Camera& camera,
                                                         const QRectF& rect, bool crossing);
+
+/// The grips (shown control points) inside the rectangle, as control-point selection items.
+[[nodiscard]] std::vector<document::SelectionItem> pick_rect_grips(const std::vector<Target>& targets,
+                                                                   const viewport::Camera& camera,
+                                                                   const QRectF& rect);
 
 }  // namespace nfcad::pick

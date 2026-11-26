@@ -1,5 +1,6 @@
 // Transforms and arrays of the selection (docs/commands.md, M6).
 #include <QObject>
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <nurbforge/geometry/transform.hpp>
@@ -23,15 +24,30 @@ double signed_angle(const nf::Vec3& a, const nf::Vec3& b, const nf::Vec3& n) {
   return std::atan2(nf::dot(nf::cross(a, b), n), nf::dot(a, b));
 }
 
+/// The curve with the control points `indices` transformed (grips moved).
+nf::NurbsCurve with_grips_moved(const nf::NurbsCurve& c, const std::vector<int>& indices, const nf::Transform& t) {
+  std::vector<nf::Vec3> pts = c.control_points();
+  for (int i : indices) {
+    if (i >= 0 && static_cast<std::size_t>(i) < pts.size()) pts[static_cast<std::size_t>(i)] = t.apply(pts[static_cast<std::size_t>(i)]);
+  }
+  return {c.degree(), c.knots(), pts, c.weights()};
+}
+
 /// Base of all commands that transform or copy the selection.
 class SelectionCommand : public Command {
  public:
   bool usesSelection() const override { return true; }
+  /// Moving commands (Move, Rotate, Scale) move selected control points (grips) too.
+  bool usesGrips() const override { return movesGrips(); }
   bool begin(const std::vector<document::Entity>& selection) override {
-    if (selection.empty() && (drawing_wire_.empty() || !movesDrawings())) {
+    if (selection.empty() && grips_.empty() && (drawing_wire_.empty() || !movesDrawings())) {
       message_ = QObject::tr("%1: select objects first").arg(title());
       return false;
     }
+    // a curve selected as a whole moves as a whole: its grips are not moved twice
+    std::erase_if(grips_, [&](const GripSet& g) {
+      return std::any_of(selection.begin(), selection.end(), [&](const document::Entity& e) { return e.id == g.id; });
+    });
     selection_ = selection;
     for (const document::Entity& e : selection_) {
       for (auto& pl : kernel::wire(*e.geometry, 4000 / selection_.size() + 8)) {
@@ -42,9 +58,17 @@ class SelectionCommand : public Command {
   }
 
  protected:
+  [[nodiscard]] virtual bool movesGrips() const { return false; }
   /// Moves the selection (replace) or adds transformed copies.
   void apply(const nf::Transform& t, bool copy) {
     if (!copy && movesDrawings()) motion_ = t;  // the selected result drawings move too
+    if (!copy && movesGrips()) {
+      for (const GripSet& g : grips_) {
+        if (const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get())) {
+          replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(with_grips_moved(*c, g.indices, t)));
+        }
+      }
+    }
     for (const document::Entity& e : selection_) {
       auto g = std::make_shared<const document::Geometry>(kernel::transformed(*e.geometry, t));
       if (copy) {
@@ -72,6 +96,17 @@ class SelectionCommand : public Command {
           out.push_back(std::move(q));
         }
       }
+      if (movesGrips()) {  // the curves with their moved grips, and their control polygons
+        for (const GripSet& g : grips_) {
+          const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get());
+          if (c == nullptr) continue;
+          const nf::NurbsCurve moved = with_grips_moved(*c, g.indices, t);
+          out.push_back(sample(moved, 128));
+          Polyline3 polygon;
+          for (const nf::Vec3& p : moved.control_points()) polygon.push_back(P(p));
+          out.push_back(std::move(polygon));
+        }
+      }
     }
     return out;
   }
@@ -85,6 +120,7 @@ class MoveCommand : public SelectionCommand {
  public:
   explicit MoveCommand(bool copy) : copy_(copy) {}
   bool movesDrawings() const override { return !copy_; }
+  bool movesGrips() const override { return !copy_; }
   QString id() const override { return copy_ ? QStringLiteral("copy") : QStringLiteral("move"); }
   QString title() const override { return copy_ ? QObject::tr("Copy") : QObject::tr("Move"); }
   QString prompt() const override {
@@ -121,6 +157,7 @@ class RotateCommand : public SelectionCommand {
  public:
   QString id() const override { return QStringLiteral("rotate"); }
   bool movesDrawings() const override { return true; }
+  bool movesGrips() const override { return true; }
   QString title() const override { return QObject::tr("Rotate"); }
   QString prompt() const override {
     if (!centre_) return QObject::tr("Rotate: centre (axis: normal of the construction plane)");
@@ -169,6 +206,7 @@ class RotateCommand : public SelectionCommand {
 // ------------------------------------------------------------------------------ Scale
 class ScaleCommand : public SelectionCommand {
  public:
+  bool movesGrips() const override { return true; }
   QString id() const override { return QStringLiteral("scale"); }
   QString title() const override { return QObject::tr("Scale"); }
   QString prompt() const override {

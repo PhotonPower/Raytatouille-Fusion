@@ -315,8 +315,13 @@ void Viewport::clickSelect(const QPointF& px, Qt::KeyboardModifiers mods) {
 
 void Viewport::rectSelect(const QRectF& rect, bool crossing, Qt::KeyboardModifiers mods) {
   if (selection_ == nullptr || scene_ == nullptr) return;
-  std::vector<document::SelectionItem> items;
-  for (document::EntityId id : pick::pick_rect(scene_->selectableTargets(), camera_, rect, crossing)) {
+  // the grips inside (shown control points); a curve whose points are shown is picked by its
+  // grips, not as a whole
+  const auto targets = scene_->selectableTargets();
+  std::vector<document::SelectionItem> items = pick::pick_rect_grips(targets, camera_, rect);
+  for (document::EntityId id : pick::pick_rect(targets, camera_, rect, crossing)) {
+    const auto it = scene_->items().find(id);
+    if (it != scene_->items().end() && !it->second.grips.empty()) continue;
     items.push_back({id, {}});
   }
   selection_->apply(items, selection_mode(mods));

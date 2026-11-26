@@ -10,6 +10,7 @@
 
 #include "document/document.hpp"
 #include "document/entity.hpp"
+#include "document/selection.hpp"
 #include "snap/snap_types.hpp"
 
 namespace nfcad::commands {
@@ -24,6 +25,17 @@ struct PlaneFrame {
   Point3 v{0, 1, 0};
   Point3 n{0, 0, 1};
 };
+
+/// Selected control points ("grips") of one curve whose points are shown: the entity and the
+/// indices of its selected control points.
+struct GripSet {
+  document::EntityId id = 0;
+  document::GeometryPtr geometry;
+  std::vector<int> indices;
+};
+
+/// Key of the entity attribute that shows a curve's control points (PointsOn / PointsOff).
+inline constexpr const char* kPointsOnKey = "nfcad.points_on";
 
 /// An interactive command (docs/commands.md): a state machine that asks for points and numbers,
 /// shows a rubber-band preview and produces entities. No widgets – the CommandController in
@@ -76,6 +88,16 @@ class Command {
   /// begin() as a curve entity, a selected face as a trimmed-surface entity (id 0: not in the
   /// document; the parts follow the whole objects, in selection order).
   [[nodiscard]] virtual bool usesSubElements() const { return false; }
+  /// Commands that act on selected control points (grips): the controller hands them over with
+  /// setGrips() before begin(); begin() may then get no whole entities.
+  [[nodiscard]] virtual bool usesGrips() const { return false; }
+  void setGrips(std::vector<GripSet> grips) { grips_ = std::move(grips); }
+  /// The document, read-only (commands that look beyond the selection, e.g. Points off for all).
+  void setDocument(const document::Document* doc) { doc_ = doc; }
+  /// The selection the command asks for when it is done (e.g. Select points); empty: unchanged.
+  [[nodiscard]] std::optional<std::vector<document::SelectionItem>> takeSelection() {
+    return std::exchange(select_, std::nullopt);
+  }
 
   /// Commands that move the selection rigidly (Move, Rotate) also move selected result drawings
   /// (rays, a plugin's camera – docs/plugins.md, "Result drawings in the views"): before begin()
@@ -91,7 +113,8 @@ class Command {
   /// All changes since the last call: created entities, removed ids, replaced geometry
   /// (the controller applies them as one undo step).
   [[nodiscard]] document::Edit takeEdit() {
-    return {std::exchange(entities_, {}), std::exchange(remove_, {}), std::exchange(replace_, {})};
+    return {std::exchange(entities_, {}), std::exchange(remove_, {}), std::exchange(replace_, {}),
+            std::exchange(attributes_, {})};
   }
   /// Result text (e.g. a measured distance); after Rejected: why the input was not accepted
   /// (empty if there is no specific reason).
@@ -103,6 +126,10 @@ class Command {
   std::vector<document::Entity> entities_;
   std::vector<document::EntityId> remove_;
   std::vector<std::pair<document::EntityId, document::GeometryPtr>> replace_;
+  std::vector<std::pair<document::EntityId, QVariantMap>> attributes_;
+  std::vector<GripSet> grips_;
+  const document::Document* doc_ = nullptr;
+  std::optional<std::vector<document::SelectionItem>> select_;
   QString message_;
   PlaneFrame view_plane_;
   std::vector<std::vector<nf::Vec3>> drawing_wire_;

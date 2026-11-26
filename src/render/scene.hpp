@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QVector3D>
 #include <QObject>
 #include <unordered_map>
 
@@ -23,6 +24,8 @@ class Scene : public QObject {
     QColor color;
     bool visible = true;
     bool locked = false;  ///< on a locked layer: drawn and snapped to, but not selectable
+    /// Control points of a curve whose points are shown (PointsOn), in order; else empty.
+    std::vector<QVector3D> grips;
   };
 
   Scene(document::Document* doc, tessellation::TessellationService* service,

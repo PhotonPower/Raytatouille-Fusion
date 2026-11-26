@@ -17,6 +17,9 @@ namespace nfcad::render {
 
 /// Highlight colours (docs/ui-concept.md, "Visual style").
 inline const QColor kSelectedColor(255, 214, 51);
+/// Control points shown as grips (PointsOn) and the grey their control polygon is mixed with.
+inline const QColor kGripColor(240, 240, 240);
+inline const QColor kGripPolygonBlend(128, 128, 128);
 inline const QColor kHoverColor(80, 225, 255);
 
 /// Per-viewport GPU copy of the shared Scene and the face pipelines (docs/rendering.md).

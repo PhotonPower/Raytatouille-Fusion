@@ -56,7 +56,7 @@ class TestPicking : public QObject {
   DisplayMesh above_ = mesh(nf::make_line({-20, 5, 10}, {20, 5, 10}));
   DisplayMesh below_ = mesh(nf::make_line({-20, -5, -5}, {20, -5, -5}));
   DisplayMesh point_ = mesh(nf::Vec3{25, 0, 0});
-  std::vector<Target> targets_ = {{1, &box_, nullptr}, {2, &above_, nullptr}, {3, &below_, nullptr}, {4, &point_, nullptr}};
+  std::vector<Target> targets_ = {{1, &box_, nullptr, nullptr}, {2, &above_, nullptr, nullptr}, {3, &below_, nullptr, nullptr}, {4, &point_, nullptr, nullptr}};
 
  private slots:
   void bvhIndexBuilt() {
@@ -248,7 +248,7 @@ class TestPicking : public QObject {
     nfcad::tessellation::TessParams p;
     p.chord = 0.00002;
     const DisplayMesh dense = nfcad::tessellation::tessellate(nf::make_sphere({0, 0, 0}, 9.0), p);
-    const std::vector<Target> targets = {{1, &dense, nullptr}};
+    const std::vector<Target> targets = {{1, &dense, nullptr, nullptr}};
     Camera c = top_camera();
     Query q;
     QElapsedTimer t;
@@ -284,6 +284,32 @@ class TestPicking : public QObject {
     QVERIFY(value(face, QStringLiteral("Type")).startsWith(QStringLiteral("Face 0")));
     QCOMPARE(nfcad::kernel::knots_text({0, 0, 0, 0.5, 1, 1, 1}),
              QStringLiteral("0 (×3), 0.5, 1 (×3)"));
+  }
+
+  void gripsComeFirstAndAreNotHidden() {
+    // a curve with its control points shown, partly above, partly below the box
+    const DisplayMesh curve = mesh(nf::make_line({-20, 0, -8}, {20, 0, -8}));
+    const std::vector<QVector3D> grips{{-20, 0, -8}, {0, 0, -8}, {20, 0, -8}};
+    std::vector<Target> targets = targets_;
+    targets.push_back({5, &curve, nullptr, &grips});
+    const Camera cam = top_camera();
+    Query q;
+    q.cursor_px = px(cam, {0, 0, -8});  // the middle grip lies under the box's top face
+    auto hit = nfcad::pick::pick(targets, cam, q);
+    QVERIFY(hit);
+    QCOMPARE(hit->item, (SelectionItem{5, {SubElement::Kind::ControlPoint, 1}}));
+    q.cursor_px = px(cam, {-15, 0, -8});  // on the curve beside the box, away from the grips
+    hit = nfcad::pick::pick(targets, cam, q);
+    QVERIFY(hit && hit->item.entity == 5 && hit->item.sub.kind == SubElement::Kind::None);
+    // the window takes the grips inside
+    const QRectF window(px(cam, {-25, 2, 0}), px(cam, {5, -2, 0}));
+    const auto inside = nfcad::pick::pick_rect_grips(targets, cam, window);
+    QCOMPARE(inside.size(), std::size_t{2});
+    QCOMPARE(inside[1], (SelectionItem{5, {SubElement::Kind::ControlPoint, 1}}));
+    // the property panel describes a control point
+    const auto props = nfcad::kernel::describe(nfcad::document::Geometry{nf::make_line({0, 0, 0}, {1, 0, 0})},
+                                               {SubElement::Kind::ControlPoint, 1});
+    QCOMPARE(props.front().second, QStringLiteral("Control point 1 of a curve"));
   }
 };
 

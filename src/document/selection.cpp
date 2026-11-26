@@ -11,6 +11,7 @@ QString sub_element_name(const SubElement& s) {
     case SubElement::Kind::Face: return QObject::tr("face %1").arg(s.index);
     case SubElement::Kind::Edge: return QObject::tr("edge %1").arg(s.index);
     case SubElement::Kind::Vertex: return QObject::tr("vertex %1").arg(s.index);
+    case SubElement::Kind::ControlPoint: return QObject::tr("control point %1").arg(s.index);
     case SubElement::Kind::None: break;
   }
   return {};

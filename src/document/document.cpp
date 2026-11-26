@@ -64,10 +64,20 @@ class EditCommand : public QUndoCommand {
     }
     old_.clear();
     for (auto& [id, g] : edit_.replace) old_.emplace_back(id, doc_->setGeometry(id, g));
+    old_attributes_.clear();
+    for (const auto& [id, a] : edit_.attributes) {
+      if (const Entity* e = doc_->entity(id)) {
+        old_attributes_.emplace_back(id, e->attributes);
+        doc_->setEntityAttributes(id, a);
+      }
+    }
     for (Entity& e : edit_.add) e.id = doc_->insert(e);
   }
   void undo() override {
     for (auto it = edit_.add.rbegin(); it != edit_.add.rend(); ++it) doc_->erase(it->id);
+    for (auto it = old_attributes_.rbegin(); it != old_attributes_.rend(); ++it) {
+      doc_->setEntityAttributes(it->first, it->second);
+    }
     for (auto it = old_.rbegin(); it != old_.rend(); ++it) doc_->setGeometry(it->first, it->second);
     for (auto it = removed_.rbegin(); it != removed_.rend(); ++it) doc_->insert(*it);
   }
@@ -82,6 +92,7 @@ class EditCommand : public QUndoCommand {
   Edit edit_;
   std::vector<Entity> removed_;
   std::vector<std::pair<EntityId, GeometryPtr>> old_;
+  std::vector<std::pair<EntityId, QVariantMap>> old_attributes_;
 };
 
 class GroupCommand : public QUndoCommand {

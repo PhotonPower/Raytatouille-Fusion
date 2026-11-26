@@ -745,6 +745,131 @@ class ArcBlendCommand : public EditCurvesCommand {
   }
 };
 
+// ------------------------------------------------------------------------------ control points
+/// Points on / off: shows or hides the control points (grips) and control polygon of the
+/// selected curves – an attribute, saved with the document. Points off without a selection:
+/// every curve.
+class PointsCommand : public Command {
+ public:
+  explicit PointsCommand(bool on) : on_(on) {}
+  QString id() const override { return on_ ? QStringLiteral("points_on") : QStringLiteral("points_off"); }
+  QString title() const override { return on_ ? QObject::tr("Points on") : QObject::tr("Points off"); }
+  QString prompt() const override { return title(); }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return !on_; }  // a curve picked by its grips counts
+  bool immediate() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    std::vector<const document::Entity*> targets;
+    for (const document::Entity& e : selection) targets.push_back(&e);
+    std::vector<document::Entity> gripped;
+    if (doc_ != nullptr) {
+      for (const GripSet& g : grips_) {
+        if (const document::Entity* e = doc_->entity(g.id)) gripped.push_back(*e);
+      }
+      if (!on_ && selection.empty() && grips_.empty()) {
+        for (const auto& [id, e] : doc_->entities()) gripped.push_back(e);
+      }
+    }
+    for (const document::Entity& e : gripped) targets.push_back(&e);
+    for (const document::Entity* e : targets) {
+      if (std::get_if<nf::NurbsCurve>(e->geometry.get()) == nullptr) continue;
+      const bool now = e->attributes.value(QString::fromLatin1(kPointsOnKey)).toBool();
+      if (now == on_) continue;
+      QVariantMap a = e->attributes;
+      if (on_) {
+        a.insert(QString::fromLatin1(kPointsOnKey), true);
+      } else {
+        a.remove(QString::fromLatin1(kPointsOnKey));
+      }
+      attributes_.emplace_back(e->id, a);
+    }
+    if (!on_) select_ = std::vector<document::SelectionItem>{};  // the grips leave the selection
+    if (on_ && attributes_.empty()) {
+      message_ = QObject::tr("Points on: select curves");
+      return false;
+    }
+    return true;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+  Result finish() override { return Result::Done; }
+
+ private:
+  bool on_;
+};
+
+/// Select points: every grip of the selected curves whose points are shown, or of all such
+/// curves when none is selected.
+class SelectPointsCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("select_points"); }
+  QString title() const override { return QObject::tr("Select points"); }
+  QString prompt() const override { return title(); }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return true; }
+  bool immediate() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    std::vector<document::Entity> curves = selection;
+    if (doc_ != nullptr) {
+      for (const GripSet& g : grips_) {
+        if (const document::Entity* e = doc_->entity(g.id)) curves.push_back(*e);
+      }
+      if (curves.empty()) {
+        for (const auto& [id, e] : doc_->entities()) curves.push_back(e);
+      }
+    }
+    std::vector<document::SelectionItem> items;
+    for (const document::Entity& e : curves) {
+      const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get());
+      if (c == nullptr || !e.attributes.value(QString::fromLatin1(kPointsOnKey)).toBool()) continue;
+      for (std::size_t i = 0; i < c->num_control_points(); ++i) {
+        items.push_back({e.id, {document::SubElement::Kind::ControlPoint, static_cast<int>(i)}});
+      }
+    }
+    if (items.empty()) {
+      message_ = QObject::tr("Select points: no curve shows its points (Points on)");
+      return false;
+    }
+    select_ = std::move(items);
+    return true;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+  Result finish() override { return Result::Done; }
+};
+
+/// Weight: the typed weight (> 0) for the selected control points; 1 everywhere makes the curve
+/// polynomial again, other weights rational (a weight above 1 pulls the curve towards its point).
+class WeightCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("weight"); }
+  QString title() const override { return QObject::tr("Weight"); }
+  QString prompt() const override { return QObject::tr("Weight of the selected control points (> 0; 1: plain)"); }
+  bool usesSelection() const override { return true; }
+  bool usesGrips() const override { return true; }
+  bool begin(const std::vector<document::Entity>&) override {
+    if (grips_.empty()) {
+      message_ = QObject::tr("Weight: select control points (Points on, then click them)");
+      return false;
+    }
+    return true;
+  }
+  Result number(double w) override {
+    if (w <= 0) return Result::Rejected;
+    for (const GripSet& g : grips_) {
+      const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get());
+      if (c == nullptr) continue;
+      std::vector<double> weights = c->weights();
+      if (weights.size() != c->num_control_points()) weights.assign(c->num_control_points(), 1.0);
+      for (int i : g.indices) {
+        if (i >= 0 && static_cast<std::size_t>(i) < weights.size()) weights[static_cast<std::size_t>(i)] = w;
+      }
+      replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(
+                                      nf::NurbsCurve(c->degree(), c->knots(), c->control_points(), weights)));
+    }
+    return Result::Done;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -768,6 +893,10 @@ const std::vector<Entry>& registry() {
       {"match", {"matchcrv"}, [] { return std::make_unique<MatchCommand>(); }},
       {"simplify", {"simplifycrv"}, [] { return std::make_unique<SimplifyCommand>(); }},
       {"arc_blend", {"arcblend", "arctoblend"}, [] { return std::make_unique<ArcBlendCommand>(); }},
+      {"points_on", {"pointson", "pon"}, [] { return std::make_unique<PointsCommand>(true); }},
+      {"points_off", {"pointsoff", "poff"}, [] { return std::make_unique<PointsCommand>(false); }},
+      {"select_points", {"selpoints", "cvselection", "selcv"}, [] { return std::make_unique<SelectPointsCommand>(); }},
+      {"weight", {}, [] { return std::make_unique<WeightCommand>(); }},
   };
   return r;
 }

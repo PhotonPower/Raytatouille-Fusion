@@ -2,6 +2,22 @@
 
 namespace nfcad::render {
 
+namespace {
+
+/// The control points of a curve whose points are shown (attribute nfcad.points_on).
+std::vector<QVector3D> grips_of(const document::Entity& e) {
+  std::vector<QVector3D> out;
+  if (!e.attributes.value(QStringLiteral("nfcad.points_on")).toBool()) return out;
+  if (const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get())) {
+    for (const nf::Vec3& p : c->control_points()) {
+      out.emplace_back(static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z));
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
 Scene::Scene(document::Document* doc, tessellation::TessellationService* service, QObject* parent)
     : QObject(parent), doc_(doc), service_(service) {
   connect(doc_, &document::Document::entityAdded, this, &Scene::add);
@@ -20,6 +36,7 @@ void Scene::add(document::EntityId id) {
   item.color = doc_->displayColor(*e);
   item.visible = doc_->isDisplayed(*e);
   item.locked = doc_->isLocked(*e);
+  item.grips = grips_of(*e);
   item.mesh.reset();
   service_->request(id, e->revision, e->geometry);
   emit changed();
@@ -35,6 +52,7 @@ void Scene::update(document::EntityId id) {
   it->second.color = doc_->displayColor(*e);
   it->second.visible = doc_->isDisplayed(*e);
   it->second.locked = doc_->isLocked(*e);
+  it->second.grips = grips_of(*e);
   if (it->second.geometry != e->geometry) {
     it->second.geometry = e->geometry;
     service_->request(id, e->revision, e->geometry);  // keep the old mesh until the new arrives
@@ -57,6 +75,7 @@ void Scene::rebuild() {
     item.color = doc_->displayColor(e);
     item.visible = doc_->isDisplayed(e);
     item.locked = doc_->isLocked(e);
+    item.grips = grips_of(e);
     service_->request(id, e.revision, e.geometry);
   }
   emit changed();
@@ -108,6 +127,9 @@ tessellation::Box3 Scene::bounds(const std::vector<document::SelectionItem>& sel
           box.add(QVector3D(m.corners[3 * i], m.corners[3 * i + 1], m.corners[3 * i + 2]));
         }
         break;
+      case Kind::ControlPoint:
+        if (i >= 0 && static_cast<std::size_t>(i) < it->second.grips.size()) box.add(it->second.grips[i]);
+        break;
     }
   }
   return box;
@@ -117,7 +139,7 @@ std::vector<pick::Target> Scene::pickTargets() const {
   std::vector<pick::Target> out;
   out.reserve(items_.size());
   for (const auto& [id, item] : items_) {
-    if (item.visible && item.mesh) out.push_back({id, item.mesh.get(), item.geometry});
+    if (item.visible && item.mesh) out.push_back({id, item.mesh.get(), item.geometry, &item.grips});
   }
   return out;
 }
@@ -126,7 +148,7 @@ std::vector<pick::Target> Scene::selectableTargets() const {
   std::vector<pick::Target> out;
   out.reserve(items_.size());
   for (const auto& [id, item] : items_) {
-    if (item.visible && !item.locked && item.mesh) out.push_back({id, item.mesh.get(), item.geometry});
+    if (item.visible && !item.locked && item.mesh) out.push_back({id, item.mesh.get(), item.geometry, &item.grips});
   }
   return out;
 }

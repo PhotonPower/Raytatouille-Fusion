@@ -94,6 +94,10 @@ nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op) {
 }
 
 std::optional<document::Geometry> part_of(const document::Geometry& g, const document::SubElement& sub) {
+  if (const auto* c = std::get_if<nf::NurbsCurve>(&g); c != nullptr && sub.kind == document::SubElement::Kind::ControlPoint &&
+                                                       sub.index >= 0 && static_cast<std::size_t>(sub.index) < c->num_control_points()) {
+    return c->control_points()[static_cast<std::size_t>(sub.index)];
+  }
   const auto* sh = std::get_if<nf::Shell>(&g);
   if (sh == nullptr || sub.index < 0) return std::nullopt;
   const auto i = static_cast<std::size_t>(sub.index);

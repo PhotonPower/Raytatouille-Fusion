@@ -90,6 +90,15 @@ PropertyList describe(const document::Geometry& g, const document::SubElement& s
           out.emplace_back(QObject::tr("Type"), QObject::tr("Point"));
           out.emplace_back(QObject::tr("Position"), vec(v));
         } else if constexpr (std::is_same_v<T, nf::NurbsCurve>) {
+          if (sub.kind == Kind::ControlPoint && sub.index >= 0 &&
+              static_cast<std::size_t>(sub.index) < v.num_control_points()) {
+            const auto i = static_cast<std::size_t>(sub.index);
+            out.emplace_back(QObject::tr("Type"), QObject::tr("Control point %1 of a curve").arg(sub.index));
+            out.emplace_back(QObject::tr("Position"), vec(v.control_points()[i]));
+            out.emplace_back(QObject::tr("Weight"),
+                             QString::number(i < v.weights().size() ? v.weights()[i] : 1.0, 'g', 10));
+            return;
+          }
           out.emplace_back(QObject::tr("Type"), QObject::tr("NURBS curve"));
           curve_props(v, out);
         } else if constexpr (std::is_same_v<T, nf::NurbsSurface>) {

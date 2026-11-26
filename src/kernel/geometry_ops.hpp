@@ -25,7 +25,8 @@ enum class BooleanOp { Union, Intersection, Difference };
 /// the others from the first. Throws std::runtime_error with a readable message.
 [[nodiscard]] nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op);
 
-/// A picked part of a shell: an edge as its curve, a face as its trimmed surface; nothing for
+/// A picked part: an edge of a shell as its curve, a face as its trimmed surface, a control point
+/// of a curve as a point; nothing for
 /// other geometry or an index out of range.
 [[nodiscard]] std::optional<document::Geometry> part_of(const document::Geometry& g,
                                                         const document::SubElement& sub);
