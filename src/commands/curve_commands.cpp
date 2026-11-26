@@ -1,6 +1,6 @@
 // Curve constructions (docs/commands.md, "Curves"): Curve (control points), Ellipse, Spiral,
 // Parabola, Hyperbola, Conic, Sketch (freehand) and Curve through points; curves from curves:
-// Blend, Chamfer, Tween. Conic sections are exact rational quadratic NURBS; Sketch is a
+// Blend, Chamfer, Tween; lines: Tangent, Perpendicular. Conic sections are exact rational quadratic NURBS; Sketch is a
 // least-squares fit of the cursor's path.
 #include <QObject>
 #include <algorithm>
@@ -8,6 +8,7 @@
 #include <exception>
 #include <functional>
 #include <limits>
+#include <nurbforge/analysis/closest_point.hpp>
 #include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/geometry/primitives.hpp>
 #include <nurbforge/modeling/blend.hpp>
@@ -708,6 +709,102 @@ class TweenCommand : public SelectedCurvesCommand {
   }
 };
 
+// ------------------------------------------------------------------------------ Tangent, Perpendicular
+/// Tangent lines: with one selected curve from a point to the curve, with two the common
+/// tangents; of several solutions the one whose touching point lies nearest the click. In the
+/// construction plane of the view.
+class TangentCommand : public SelectedCurvesCommand {
+ public:
+  TangentCommand() : SelectedCurvesCommand(1, 2, QObject::tr("one curve (tangent from a point) or two curves")) {}
+  QString id() const override { return QStringLiteral("tangent"); }
+  QString title() const override { return QObject::tr("Tangent line"); }
+  QString prompt() const override {
+    if (curves_.size() == 2) return QObject::tr("Tangent: click near the tangent you want");
+    return from_ ? QObject::tr("Tangent: click near the touching point you want")
+                 : QObject::tr("Tangent: start point");
+  }
+  Result point(const Point3& p, const PlaneFrame& plane) override {
+    if (curves_.size() == 1 && !from_) {
+      from_ = p;
+      plane_ = plane;
+      return Result::Continue;
+    }
+    if (!from_) plane_ = plane;
+    try {
+      const auto line = choose(p, plane_);
+      if (!line) {
+        message_ = QObject::tr("Tangent: there is no tangent line here");
+        return Result::Rejected;
+      }
+      entities_.push_back(document::make_entity(line->line));
+      return Result::Done;
+    } catch (const std::exception& e) {
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame& plane) const override {
+    if (curves_.size() == 1 && !from_) return {};
+    try {
+      const auto line = choose(c, from_ ? plane_ : plane);
+      if (line) return {{P(line->point_a), P(line->point_b)}};
+    } catch (const std::exception&) {
+    }
+    return {};
+  }
+  std::optional<Point3> basePoint() const override { return from_; }
+
+ private:
+  std::optional<nf::TangentLine> choose(const Point3& near, const PlaneFrame& plane) const {
+    const std::vector<nf::TangentLine> all =
+        curves_.size() == 1 ? nf::tangent_lines(V(*from_), curves_[0], V(plane.n))
+                            : nf::tangent_lines(curves_[0], curves_[1], V(plane.n));
+    std::optional<nf::TangentLine> best;
+    double d_best = std::numeric_limits<double>::infinity();
+    for (const nf::TangentLine& t : all) {
+      // one curve: the touching point; two: the nearer of the two touching points
+      double d = nf::distance(t.point_b, V(near));
+      if (curves_.size() == 2) d = std::min(d, nf::distance(t.point_a, V(near)));
+      if (d < d_best) {
+        d_best = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+  std::optional<Point3> from_;
+  PlaneFrame plane_;
+};
+
+/// Perpendicular: from a point to its foot on the selected curve (the nearest point: the line
+/// meets the curve at a right angle); repeats until Enter.
+class PerpendicularCommand : public SelectedCurvesCommand {
+ public:
+  PerpendicularCommand() : SelectedCurvesCommand(1, 1, QObject::tr("one curve")) {}
+  QString id() const override { return QStringLiteral("perpendicular"); }
+  QString title() const override { return QObject::tr("Perpendicular line"); }
+  QString prompt() const override {
+    return QObject::tr("Perpendicular: from point (Enter: done)");
+  }
+  Result point(const Point3& p, const PlaneFrame&) override {
+    const nf::CurvePoint foot = nf::closest_point(curves_[0], V(p));
+    if (foot.distance < kEps) {
+      message_ = QObject::tr("Perpendicular: the point lies on the curve");
+      return Result::Rejected;
+    }
+    entities_.push_back(document::make_entity(nf::make_line(V(p), foot.point)));
+    ++count_;
+    return Result::Continue;
+  }
+  Result finish() override { return count_ > 0 ? Result::Done : Result::Cancelled; }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    return {{c, P(nf::closest_point(curves_[0], V(c)).point)}};
+  }
+
+ private:
+  int count_ = 0;
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -728,6 +825,8 @@ const std::vector<Entry>& registry() {
       {"blend", {"blendcrv"}, [] { return std::make_unique<BlendCommand>(); }},
       {"chamfer", {"cha", "chamfercorners"}, [] { return std::make_unique<ChamferCommand>(); }},
       {"tween", {"tweencurves"}, [] { return std::make_unique<TweenCommand>(); }},
+      {"tangent", {"tan"}, [] { return std::make_unique<TangentCommand>(); }},
+      {"perpendicular", {"perp"}, [] { return std::make_unique<PerpendicularCommand>(); }},
   };
   return r;
 }

@@ -71,7 +71,7 @@ class TestCommands : public QObject {
     QVERIFY(create_command(QStringLiteral("L")));
     QCOMPARE(create_command(QStringLiteral("pl"))->id(), QStringLiteral("polyline"));
     QVERIFY(!create_command(QStringLiteral("nonsense")));
-    QCOMPARE(nfcad::commands::command_ids().size(), 60);
+    QCOMPARE(nfcad::commands::command_ids().size(), 62);
     for (const QString& id : nfcad::commands::command_ids()) {
       QVERIFY2(create_command(id), qPrintable(id));
       QCOMPARE(create_command(id)->id(), id);
@@ -396,6 +396,44 @@ class TestCommands : public QObject {
     QVERIFY(c->begin(sel));
     QCOMPARE(c->finish(), R::Done);  // Enter: one
     QCOMPARE(c->takeEntities().size(), std::size_t{1});
+  }
+
+  void tangentFromAPointAndBetweenCurves() {
+    std::vector<nfcad::document::Entity> circle{nfcad::document::make_entity(nf::make_circle({0, 0, 0}, {0, 0, 1}, 1.0))};
+    circle.front().id = 1;
+    auto c = create_command(QStringLiteral("tan"));
+    QVERIFY(c->begin(circle));
+    QCOMPARE(c->point({2, 0, 0}, kTop), R::Continue);  // from (2, 0): touching at (1/2, ±sqrt(3)/2)
+    QVERIFY(!c->preview({0.5, 1, 0}, kTop).empty());
+    QCOMPARE(c->point({0.5, 1, 0}, kTop), R::Done);    // the upper one
+    const auto made_t = c->takeEntities();
+    const auto& t = curve_of(made_t);
+    QVERIFY(nf::distance(t.evaluate(t.domain_end()), {0.5, std::sqrt(3.0) / 2, 0}) < 1e-9);
+    // two circles: the outer tangent above
+    std::vector<nfcad::document::Entity> two{circle[0],
+                                             nfcad::document::make_entity(nf::make_circle({4, 0, 0}, {0, 0, 1}, 1.0))};
+    two[1].id = 2;
+    c = create_command(QStringLiteral("tangent"));
+    QVERIFY(c->begin(two));
+    QCOMPARE(c->point({2, 1.1, 0}, kTop), R::Done);
+    const auto made_o = c->takeEntities();
+    const auto& o = curve_of(made_o);
+    for (const auto& q : o.sample(5)) QVERIFY(std::abs(q.y - 1.0) < 1e-9);
+  }
+
+  void perpendicularToACurve() {
+    std::vector<nfcad::document::Entity> line{nfcad::document::make_entity(nf::make_line({0, 0, 0}, {4, 0, 0}))};
+    line.front().id = 1;
+    auto c = create_command(QStringLiteral("perp"));
+    QVERIFY(c->begin(line));
+    QCOMPARE(c->point({1, 2, 0}, kTop), R::Continue);
+    QCOMPARE(c->point({3, 0, 0}, kTop), R::Rejected);  // on the curve
+    QCOMPARE(c->point({3, -1, 0}, kTop), R::Continue);
+    QCOMPARE(c->finish(), R::Done);
+    const auto made = c->takeEntities();
+    QCOMPARE(made.size(), std::size_t{2});
+    const auto& first = std::get<nf::NurbsCurve>(*made[0].geometry);
+    QVERIFY(nf::distance(first.evaluate(first.domain_end()), {1, 0, 0}) < 1e-9);
   }
 
   void distanceMessage() {

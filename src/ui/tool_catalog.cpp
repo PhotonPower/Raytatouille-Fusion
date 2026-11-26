@@ -17,6 +17,7 @@ std::vector<ToolGroupDef> build() {
   return {
       {"draw", "Draw", true,
        {t("point", "Point", "Pt", "pt"), t("line", "Line", "Ln", "l"),
+        t("tangent", "Tangent line", "Tan", "tan"), t("perpendicular", "Perpendicular line", "Prp", "perp"),
         t("polyline", "Polyline", "PL", "pl"), t("rectangle", "Rectangle", "Rec", "rec"),
         t("polygon", "Polygon", "Pol", "pol")}},
       {"curves", "Curves", true,
