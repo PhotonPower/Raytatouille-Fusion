@@ -239,7 +239,18 @@ class TestSurfaceCreate : public QObject {
     // two half circles in parallel planes, not on one axis: the plain ruled surface (equal
     // parameters) is curved, the developable one not
     const nf::NurbsCurve arc = nf::make_arc_3pt({2, 0, 0}, {0, 2, 0}, {-2, 0, 0});
-    const nf::NurbsCurve top = nf::make_arc_3pt({1.5, 0, 2}, {0.5, 1, 2}, {-0.5, 0, 2});
+    // (the upper one reparametrised: its point at t is the circle's at t², so equal parameters
+    // do not pair points with parallel tangents)
+    const nf::NurbsCurve circle = nf::make_arc_3pt({1.5, 0, 2}, {0.5, 1, 2}, {-0.5, 0, 2});
+    std::vector<nf::Vec3> pts;
+    std::vector<double> params;
+    for (int i = 0; i <= 24; ++i) {
+      const double t = i / 24.0;
+      const double cu = circle.domain_start() + t * t * (circle.domain_end() - circle.domain_start());
+      pts.push_back(circle.evaluate(cu));
+      params.push_back(t);
+    }
+    const nf::NurbsCurve top = nf::interpolate_curve(pts, 3, params);
     auto c = started("devloft", {make_entity(arc), make_entity(top)});
     QCOMPARE(c->finish(), R::Done);
     const auto dev = only<nf::NurbsSurface>(*c);
