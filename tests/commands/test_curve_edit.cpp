@@ -184,10 +184,11 @@ class TestCurveEdit : public QObject {
       QVERIFY(nf::distance(m.evaluate(m.domain_start()), {0, 0, 0}) < 1e-12);  // the other end stays
       if (g >= 1) QVERIFY(nf::norm(nf::cross(nf::normalized(dm[1]), nf::normalized(db[1]))) < 1e-9);
       if (g >= 1) QVERIFY(nf::dot(dm[1], db[1]) > 0);
-      if (g == 2) {  // the same curvature (1) and its direction
+      if (g == 2) {  // the same curvature vector as the arc (magnitude 1)
         const nf::Vec3 km = nf::cross(dm[1], dm[2]) / std::pow(nf::norm(dm[1]), 3);
-        QVERIFY(std::abs(nf::norm(km) - 1.0) < 1e-6);
-        QVERIFY(km.z > 0);
+        const nf::Vec3 kb = nf::cross(db[1], db[2]) / std::pow(nf::norm(db[1]), 3);
+        QVERIFY(std::abs(nf::norm(kb) - 1.0) < 1e-9);
+        QVERIFY(nf::distance(km, kb) < 1e-6);
       }
     }
     QVERIFY(!started("match", {entity(a)}));
