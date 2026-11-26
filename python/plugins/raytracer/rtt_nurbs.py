@@ -196,6 +196,24 @@ def surface_face(system, index: int, *, tol: float = DEFAULT_TOL, fallback_half:
     return Face(geometry, err, ax, ay)
 
 
+def plane_disc(origin, normal, radius: float, label: str) -> dict:
+    """A flat disc (trimmed plane, global) of `radius` about `origin`, perpendicular to `normal` –
+    the plane of a block without a Raytatouille surface (a FourierGrating stack in the workflow)."""
+    n = np.asarray(normal, dtype=float)
+    n = n / np.linalg.norm(n)
+    seed = np.array([0.0, 1.0, 0.0]) if abs(n[1]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    u = np.cross(seed, n)
+    u /= np.linalg.norm(u)
+    v = np.cross(n, u)
+    a = 1.02 * radius
+    corners = [np.asarray(origin, dtype=float) + x * u + y * v for x in (-a, a) for y in (-a, a)]
+    knots = list(map(float, clamped_uniform_knots(2, 1, -a, a)))
+    surface = {"degree_u": 1, "degree_v": 1, "knots_u": knots, "knots_v": knots, "num_u": 2, "num_v": 2,
+               "points": [float(c) for p in corners for c in p]}
+    return {"type": "trimmed_surface", "surface": surface, "label": label,
+            "outer": [circle_curve(0.0, 0.0, radius, radius)]}
+
+
 def rim_faces(system, element) -> list[dict]:
     """Edges of a lens (also cemented: every pair of consecutive surfaces) whose surfaces have
     circular apertures of the same radius and are rotationally symmetric at the rim: ruled

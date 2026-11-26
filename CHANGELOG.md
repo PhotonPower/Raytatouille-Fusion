@@ -25,6 +25,12 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   plugin action can now be offered on every block (`block_types=("*",)`).
 
 ### Fixed
+- **The planes of blocks without a Raytatouille surface are drawn**: a FourierGrating stack (in
+  the FrObSy exposure head E1 and E2, the outer faces of the grating plates), a grating added in the
+  workflow. The rays bend there – at E2 they leave the glass of the second plate –, but nothing was
+  drawn, so their corner hung 1 mm above the drawn second grating. Each such block is a disc as
+  large as the nearest drawn surface, in the group *Blocks of the workflow*, where it lies now
+  (offsets and actuators applied, also its own `point`, `normal` and pose: an edit redraws).
 - **Grating and hp-FEM blocks show their numbers in their dialog again**: period and Fourier
   orders, layer thicknesses and indices of a FourierGrating block (tabs *Grating*, *Layers*,
   *Materials*); period, order p, the mesh and indices of an hp-FEM block (tab *Mesh*: a structured

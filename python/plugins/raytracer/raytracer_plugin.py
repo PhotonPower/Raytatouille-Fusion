@@ -130,6 +130,7 @@ class RaytracerPlugin(Plugin):
         self.library = None
         self.loaded_from: str | None = None
         self.detector_half: tuple[float, float] | None = None
+        self._planes: list[tuple[str, list, list]] = []  # blocks of other kinds to draw (_block_planes)
 
     # ------------------------------------------------------------------ helpers
     @staticmethod
@@ -178,7 +179,8 @@ class RaytracerPlugin(Plugin):
         return out
 
     def _entities(self, ctx) -> list[dict]:
-        return [e for e in ctx.entities() if "rtt.surface" in e["attributes"] or "rtt.rim" in e["attributes"]]
+        keys = ("rtt.surface", "rtt.rim", "rtt.block")
+        return [e for e in ctx.entities() if any(k in e["attributes"] for k in keys)]
 
     def _anchor(self, ctx) -> dict | None:
         for e in self._entities(ctx):
@@ -241,7 +243,9 @@ class RaytracerPlugin(Plugin):
             out = [[n.get("id"), {k: n.get("params", {}).get(k)
                                   for k in ("rtt", "runs", "rtt_system", "rtt_tree", "rtt_paths", "rtt_new")},
                     n.get("variant"), {v: data(b) for v, b in (n.get("variants") or {}).items()},
-                    [n.get("params"), n.get("muted")] if n.get("type") == "fusion.actuator" else None]
+                    [n.get("params"), n.get("muted")] if n.get("type") == "fusion.actuator" else None,
+                    {k: v for k, v in n.get("params", {}).items()  # where a block of another kind lies
+                     if k in ("point", "normal", "pose") or k.startswith("pose_")}]
                    for n in body.get("nodes", [])]
             return out + [body.get("branches"), (body.get("meta") or {}).get("branches")]
 
@@ -252,6 +256,7 @@ class RaytracerPlugin(Plugin):
         registry, _ = self._registry(fg)
         made = io.model_from_dict(model, registry)
         self._actuate(ctx, made)
+        self._planes = self._block_planes(fg, made, registry)
         d = importer.system_from_model(made)
         if self.library is None:
             self.library = self._library(ctx, ctx.params.get("system") or "")
@@ -261,6 +266,31 @@ class RaytracerPlugin(Plugin):
             raise UserError(f"The system of the node workflow is not valid:\n{e}") from e
         self._made = (system, stamp)
         return self._made
+
+    @staticmethod
+    def _block_planes(fg, model, registry) -> list[tuple[str, list, list]]:
+        """(name, point, normal) of the light blocks that lie on a plane but have no Raytatouille
+        surface to draw – a FourierGrating stack (the faces of a grating's substrate), a grating
+        added in the workflow: where the rays bend there. Posed: their offsets and the actuators'
+        moves applied, also inside groups."""
+        try:
+            graph = fg.unroll(model, registry)
+            executor = importlib.import_module("rtt_fusion.graph.execute").Executor(graph, registry, {})
+        except Exception:  # noqa: BLE001 - only the drawing of these planes
+            return []
+        out = []
+        for node in graph.nodes.values():
+            params = node.params
+            if (node.type_id.split(".")[0] in ("rtt", "fusion", "display", "optics") or params.get("rtt")
+                    or "point" not in params or "normal" not in params):
+                continue
+            try:
+                placed = executor._posed(node).params
+                point, normal = [float(x) for x in placed["point"]], [float(x) for x in placed["normal"]]
+            except Exception:  # noqa: BLE001 - a block whose pose cannot be read is not drawn
+                continue
+            out.append((str(node.id), point, normal))
+        return out
 
     @staticmethod
     def _actuate(ctx, model) -> None:
@@ -485,10 +515,30 @@ class RaytracerPlugin(Plugin):
             for n, rim in enumerate(rtt_nurbs.rim_faces(compiled, element)):
                 ctx.add(rim, f"{element.name} edge" + (f" {n + 1}" if n else ""),
                         {"rtt.rim": element.name}, group=group_for(location))
+        if "rtt.workflow" in anchor_attributes:
+            self._draw_block_planes(ctx, layouts, top)
         if coarse:
             ctx.log("drawn with more than the tolerance (non-smooth shapes such as the axicon tip): "
                     + ", ".join(coarse))
         return len(layouts)
+
+    def _draw_block_planes(self, ctx, layouts, top: int) -> None:
+        """The planes of the workflow's blocks without a Raytatouille surface (`_block_planes`) as
+        discs, as large as the aperture of the nearest drawn surface (the stack on a grating's
+        substrate: the grating's), in a group of their own."""
+        planes = getattr(self, "_planes", [])
+        if not planes:
+            return
+        group = ctx.add_group("Blocks of the workflow", top)
+        for name, point, normal in planes:
+            near = min(layouts, key=lambda L: float(np.linalg.norm(np.asarray(L.translation) - point)), default=None)
+            radius = 5.0
+            if near is not None and near.aperture is not None:
+                a = near.aperture[1]
+                radius = float(a.get("radius") or max(a.get("half_width_x", 0), a.get("half_width_y", 0),
+                                                       a.get("semi_axis_x", 0), a.get("semi_axis_y", 0)) or 5.0)
+            ctx.add(rtt_nurbs.plane_disc(point, normal, radius, name), name,
+                    {"rtt.block": name, "rtt.kind": "block plane"}, group=group)
 
     @action("Trace rays", description="Rays along the path as lines; irradiance on the image surface")
     def trace(self, ctx):

@@ -78,6 +78,24 @@ else:
     if again is None or again is first or value_of_t(again) != 4.0:
         failures.append("a new value of the actuator is not drawn")
 
+# a block of another kind on a plane (a grating added in the workflow, no Raytatouille surface): its
+# plane is drawn where it lies, its offset (an actuator's move) applied
+import rtt_nurbs  # noqa: E402
+from rtt_fusion import graph as fusion_graph  # noqa: E402
+
+model = io.model_to_dict(model_from_raytatouille(system))
+model["nodes"].append({"id": "plate", "type": "fg.grating",
+                       "params": {"point": [0, 0, 5], "normal": [0, 0, 1], "pose_by_stage": [0, 0, 1, 0, 0, 0]}})
+engine = plugin()
+registry, _ = engine._registry(fusion_graph)
+planes = engine._block_planes(fusion_graph, io.model_from_dict(model, registry), registry)
+if [(n, [round(x, 9) for x in p], q) for n, p, q in planes] != [("plate", [0.0, 0.0, 6.0], [0.0, 0.0, 1.0])]:
+    failures.append(f"planes of blocks without a surface: {planes}")
+disc = rtt_nurbs.plane_disc([0, 0, 6], [0, 0, 1], 2.0, "plate")
+corners = [disc["surface"]["points"][i:i + 3] for i in range(0, 12, 3)]
+if {c[2] for c in corners} != {6.0} or disc["outer"][0]["points"][0] != 2.0:
+    failures.append(f"a block's plane as a disc: {corners}")
+
 graph = io.to_dict(graph_from_raytatouille(d))  # version 1: converted on opening, not read here
 if plugin()._workflow_system(Ctx({"graph": graph})) is not None:
     failures.append("a system from an old socket graph (version 1)")

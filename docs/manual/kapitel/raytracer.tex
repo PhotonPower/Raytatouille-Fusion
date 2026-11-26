@@ -452,6 +452,12 @@ jede Beugungsordnung, die nicht zu schwach ist.
     \gui{Run workflow}.
 \end{itemize}
 
+Blöcke ohne Raytatouille-Fläche, die auf einer Ebene liegen -- etwa die Stapel E1 und E2 auf den
+Außenseiten der Gitterplatten --, zeichnet der Raytracer als Scheiben (so groß wie die nächste
+gezeichnete Fläche, in der Gruppe \gui{Blocks of the workflow}), an ihrer aktuellen Lage mit den
+Stellungen der Aktuatoren. Dort knicken die Strahlen ebenfalls: An E2 treten sie aus dem Glas der
+zweiten Platte aus.
+
 Die Gitter rechnet dabei FourierGrating im Prozess des Raytracers (dieselbe Python-Umgebung), was
 er selbst nicht rechnen kann, das Plugin des Blocks. Der Belichtungskopf
 \code{belichtungskopf\_frobsy\_fg-4.rttf} braucht mit 127 Strahlen wenige Sekunden.
