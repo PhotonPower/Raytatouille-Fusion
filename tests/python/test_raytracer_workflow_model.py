@@ -84,6 +84,32 @@ if plugin()._workflow_system(Ctx({"graph": graph})) is not None:
 if plugin()._workflow_system(Ctx({})) is not None:
     failures.append("a system from an empty workflow")
 
+# rays through the gratings of a workflow (RTT-Fusion graph.ray_paths): pieces of polylines per ray,
+# NaN where a ray is lost or has no point in front, become one line set per branch
+from types import SimpleNamespace  # noqa: E402
+
+nan = float("nan")
+pieces = [
+    SimpleNamespace(path=("Belichtung", "L"), field=0, wavelength_um=0.633,
+                    points=[[[0, 0, 0], [0, 0, 5]], [[1, 0, 0], [nan, nan, nan]]]),  # the second ray lost
+    SimpleNamespace(path=("Belichtung", "L", "G[1]", "M"), field=0, wavelength_um=0.633,
+                    points=[[[0, 0, 5], [0, 0, 9], [0, 1, 20]]]),
+    SimpleNamespace(path=("Sensor", "L"), field=1, wavelength_um=0.633, points=[[[nan, nan, nan], [0, 0, 1], [0, 0, 2]]]),
+    SimpleNamespace(path=("Belichtung", "L"), field=0, wavelength_um=0.5, points=[[[0, 0, 0], [0, 0, 5]]]),
+]
+sets = raytracer_plugin.workflow_lines(pieces, "path", wavelength_um=0.633)
+points, starts, values = sets["Belichtung"]
+if list(starts) != [0, 2, 5] or points.shape != (5, 3) or set(values) != {1.0}:
+    failures.append(f"workflow lines of a branch: starts {list(starts)}, {points.shape}, {set(values)}")
+points, starts, values = sets["Sensor"]
+if list(starts) != [0, 2] or float(values[0]) != 2.0:  # the leading NaN dropped; the second branch
+    failures.append(f"workflow lines: a ray without a point in front: {list(starts)}, {values}")
+by_field = raytracer_plugin.workflow_lines(pieces, "field", field=1)
+if list(by_field) != ["Sensor"] or float(by_field["Sensor"][2][0]) != 2.0:
+    failures.append(f"workflow lines of one field: {list(by_field)}")
+if len(raytracer_plugin.workflow_lines(pieces, "wavelength", branches=["Sensor"])) != 1:
+    failures.append("workflow lines of one branch")
+
 for f in failures:
     print("FAIL", f)
 print("ok" if not failures else f"{len(failures)} failure(s)")

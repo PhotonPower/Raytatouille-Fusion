@@ -47,6 +47,38 @@ def rings_for(rays: int) -> int:
     return lo if abs(count(lo) - rays) <= abs(count(hi) - rays) else hi
 
 
+def workflow_lines(paths, colour_by: str, field: int | None = None, wavelength_um: float | None = None,
+                   branches: list[str] | None = None) -> dict[str, tuple]:
+    """The ray paths of a workflow (RTT-Fusion graph.ray_paths: per piece the polylines of its rays,
+    NaN where a ray is lost or has no point in front) as line sets per branch: {branch: (points (n, 3),
+    starts, values)} – the finite points of each ray, a ray with fewer than two left out. `field`,
+    `wavelength_um`, `branches`: only those (None: all). Colour by wavelength (nm), field (1, 2, …) or
+    path (the branch's place in `branches`, else in the order met, from 1)."""
+    order = list(branches or [])
+    out: dict[str, list] = {}
+    for rp in paths:
+        branch = str(rp.path[0]) if rp.path else ""
+        if branches is not None and branch not in branches:
+            continue
+        if field is not None and rp.field != field:
+            continue
+        if wavelength_um is not None and abs(rp.wavelength_um - wavelength_um) > 1e-9:
+            continue
+        if branch not in order:
+            order.append(branch)
+        value = {"wavelength": rp.wavelength_um * 1000.0, "field": rp.field + 1.0}.get(
+            colour_by, float(order.index(branch) + 1))
+        acc = out.setdefault(branch, [[], [0], []])
+        for ray in np.asarray(rp.points, dtype=float):
+            ray = ray[np.all(np.isfinite(ray), axis=1)]
+            if len(ray) < 2:
+                continue
+            acc[0].append(ray)
+            acc[1].append(acc[1][-1] + len(ray))
+            acc[2].append(np.full(len(ray), value))
+    return {b: (np.concatenate(a[0]), np.asarray(a[1]), np.concatenate(a[2])) for b, a in out.items() if a[0]}
+
+
 def _require_rt():
     if rt is None:
         raise UserError("The Python package 'raytatouille' is not installed in the plugin's Python "
@@ -73,6 +105,10 @@ class RaytracerPlugin(Plugin):
                               description="Rays drawn per field and wavelength (hexapolar pupil; the next possible "
                                           "number 1, 7, 19, 37, … 127, … is used)"),
         "colour_by": Param.choice(["wavelength", "field", "path"], "wavelength", label="Colour by", group="Trace"),
+        "orders_min": Param.number(0.01, min=0.0, max=1.0, decimals=4, label="Weakest order drawn", group="Trace",
+                                   description="Rays through the gratings of a node workflow: a diffraction order "
+                                               "weaker than this share of the strongest through the same block is "
+                                               "not drawn (0: every order)"),
         "irradiance": Param.boolean(False, label="Quick irradiance", group="Trace",
                                     description="A coarse irradiance with the trace; for a real camera image use "
                                                 "Camera image"),
@@ -462,6 +498,7 @@ class RaytracerPlugin(Plugin):
         p = ctx.params
         names = list(compiled.path_names)
         wanted = [n.strip() for n in p["path"].split(",") if n.strip()]
+        wanted = [f"{n} (aim)" if n not in names and f"{n} (aim)" in names else n for n in wanted]  # a branch
         unknown = [n for n in wanted if n not in names]
         if unknown:
             raise UserError(f"Unknown path {', '.join(unknown)}. Paths of this system: {', '.join(names)}")
@@ -469,6 +506,8 @@ class RaytracerPlugin(Plugin):
         fields = None if p["fields"] == 0 else [p["fields"] - 1]
         wls = range(len(compiled.wavelengths_um)) if p["wavelengths"] == "all" else [None]
         self._warn_inactive(ctx)
+        if any(str(n).endswith(" (aim)") for n in paths):  # a branch through a grating (another kind of block)
+            return self._trace_workflow(ctx, compiled, [str(n).removesuffix(" (aim)") for n in paths])
 
         run = ctx.result_set(f"Trace {Path(self.loaded_from or 'system').name.split('.')[0]}")
         summary, failed = [], []
@@ -500,6 +539,71 @@ class RaytracerPlugin(Plugin):
         if failed:
             message += f"; not traced: {', '.join(failed)} (see the plugin log)"
         return message
+
+    def _trace_workflow(self, ctx, compiled, branches: list[str]) -> str:
+        """Trace rays where a branch of the node workflow passes blocks of other kinds (a FourierGrating
+        grating or stack, an hp-FEM grating): the Raytatouille system ends in front of them (an "(aim)"
+        path), so the workflow is computed with rays only (RTT-Fusion graph.ray_paths) – the
+        Raytatouille blocks here, the others by their plugins where this process cannot – and the rays
+        are drawn through it, every order of a grating that is not too weak (Weakest order drawn)."""
+        try:
+            graph_ray_paths = importlib.import_module("rtt_fusion.graph.ray_paths")
+            workflow = importlib.import_module("rtt_fusion.graph.workflow")
+            backend = importlib.import_module("rtt_fusion.graph.backend_rtt")
+            io = importlib.import_module("rtt_fusion.graph.io")
+            fg = importlib.import_module("rtt_fusion.graph")
+        except ImportError as e:
+            raise UserError("Rays through the gratings of the node workflow need a newer RTT-Fusion "
+                            "(graph.ray_paths, RTT-Fusion #145); Trace rays draws them up to the first grating "
+                            "otherwise.") from e
+        p = ctx.params
+        registry, evaluators = workflow.registry()
+        evaluators = {**evaluators, **backend.EVALUATORS}
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as portdata:
+            evaluators.update(self._other_plugins_blocks(ctx, registry, evaluators, portdata))
+            graph = fg.unroll(io.model_from_dict(ctx.workflow()["model"], registry), registry)
+            shared = {"rings": rings_for(p["rays"]), "pixels": [32, 32], "materials": self.library}
+            ctx.progress(0.05, "rays through the workflow …")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                found, log = graph_ray_paths.ray_paths(graph, registry, evaluators, shared,
+                                                       min_power=float(p.get("orders_min", 0.01)))
+        for line in log:
+            if "error" in line.lower() or ": exec." in line:
+                ctx.log(line)
+        wl = None
+        if p["wavelengths"] != "all":
+            wl = float(compiled.wavelengths_um[compiled.reference_wavelength])
+        sets = workflow_lines(found, p["colour_by"], None if p["fields"] == 0 else p["fields"] - 1, wl, branches)
+        if not sets:
+            raise UserError("No rays reach a detector of the node workflow – the plugin log has the details.")
+        run = ctx.result_set(f"Trace {Path(self.loaded_from or 'workflow').name.split('.')[0]}")
+        unit = {"wavelength": "nm", "path": "path"}.get(p["colour_by"], "field")
+        colormap = {"wavelength": "viridis", "path": "coolwarm"}.get(p["colour_by"], "plasma")
+        ranges = (1.0, float(max(len(branches), 2))) if p["colour_by"] == "path" else None
+        summary = []
+        for branch, (points, starts, values) in sets.items():
+            ctx.lines(run, f"Rays {branch}", points, starts, values, unit=unit, colormap=colormap,
+                      value_range=ranges)
+            summary.append(f"{branch}: {len(starts) - 1} ray pieces")
+        if p["irradiance"]:
+            ctx.log("quick irradiance: not through the gratings of a workflow – Run workflow computes the cameras")
+        return "rays through the node workflow (gratings included) – " + ", ".join(summary)
+
+    @staticmethod
+    def _other_plugins_blocks(ctx, registry, evaluators: dict, portdata: str) -> dict:
+        """Evaluators for the block types this process cannot compute itself (e.g. hp-FEM without its
+        package here): their plugins compute them (ADR 0010, as for the workflow engine)."""
+        try:
+            remote = importlib.import_module("rtt_fusion.graph.remote")
+            catalogues = [c for c in (ctx.block_catalogues() if hasattr(ctx, "block_catalogues") else [])
+                          if str((c.get("type") or {}).get("type", "")) not in evaluators]
+        except Exception as e:  # noqa: BLE001 - only the blocks of other plugins are missing then
+            ctx.log(f"blocks of other plugins: {e}")
+            return {}
+        return remote.register_remote(registry, catalogues, ctx.evaluate_block, portdata) if catalogues else {}
 
     def _draw_rays(self, ctx, system, compiled, run, path, label, index, fields, wls):
         """The recorded rays of one path as a line set; returns (reaching the end, total, last surface)."""
