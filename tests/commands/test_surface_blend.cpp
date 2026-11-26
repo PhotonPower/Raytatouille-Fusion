@@ -76,8 +76,8 @@ class TestSurfaceBlend : public QObject {
     const auto edit = c->takeEdit();
     QCOMPARE(edit.remove.size(), std::size_t{2});
     QVERIFY(std::abs(nf::area(std::get<nf::NurbsSurface>(*edit.add.front().geometry)) - 2.0) < 1e-9);
-    QVERIFY(!started("mergesrf", {rect({0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 1), rect({3, 0, 0}, {1, 0, 0}, {0, 1, 0}, 2)})
-                 ->finish() == R::Done);
+    QCOMPARE(started("mergesrf", {rect({0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 1), rect({3, 0, 0}, {1, 0, 0}, {0, 1, 0}, 2)})->finish(),
+             R::Rejected);  // no common edge
     // two coplanar faces sewn into an open shell merge into one
     const nf::Shell two = nf::Shell::sew({nf::TrimmedSurface(nf::make_rectangle({0, 0, 0}, {1, 0, 0}, {0, 1, 0})),
                                           nf::TrimmedSurface(nf::make_rectangle({1, 0, 0}, {1, 0, 0}, {0, 1, 0}))},
