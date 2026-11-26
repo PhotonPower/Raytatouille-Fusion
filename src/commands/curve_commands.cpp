@@ -281,17 +281,17 @@ class ParabolaCommand : public Command {
   }
 
  private:
+  /// The signed half width: the curve ends on the side of the point.
   double half_width(const Point3& p) const {
-    const nf::Vec3 d = in_plane(p, *vertex_, plane_);
-    const nf::Vec3 a = nf::normalized(*focus_);
-    return nf::norm(d - a * nf::dot(d, a));
+    return nf::dot(in_plane(p, *vertex_, plane_), side());
   }
+  nf::Vec3 side() const { return nf::normalized(nf::cross(nf::normalized(*focus_), V(plane_.n))); }
   nf::NurbsCurve make(double half) const {
-    const nf::Vec3 a = nf::normalized(*focus_);
-    return parabola(V(*vertex_), a, nf::normalized(nf::cross(V(plane_.n), a)), nf::norm(*focus_), half);
+    const nf::Vec3 s = half < 0 ? side() * -1.0 : side();
+    return parabola(V(*vertex_), nf::normalized(*focus_), s, nf::norm(*focus_), std::abs(half));
   }
   Result create(double half) {
-    if (half < kEps) return Result::Rejected;
+    if (std::abs(half) < kEps) return Result::Rejected;
     return add(entities_, message_, title(), [&] { return make(half); }) ? Result::Done : Result::Rejected;
   }
   std::optional<Point3> vertex_;
