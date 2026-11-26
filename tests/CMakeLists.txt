@@ -23,6 +23,7 @@ nfcad_add_test(test_viewport_selection viewport/test_viewport_selection.cpp nfca
 nfcad_add_test(test_snap_engine snap/test_snap_engine.cpp nfcad_core)
 nfcad_add_test(test_viewport_snap viewport/test_viewport_snap.cpp nfcad_gui)
 nfcad_add_test(test_commands commands/test_commands.cpp nfcad_core)
+nfcad_add_test(test_derived_curves commands/test_derived_curves.cpp nfcad_core)
 nfcad_add_test(test_command_controller app/test_command_controller.cpp nfcad_gui)
 nfcad_add_test(test_solid_transform_commands commands/test_solid_transform_commands.cpp nfcad_core)
 nfcad_add_test(test_surface_commands commands/test_surface_commands.cpp nfcad_core)

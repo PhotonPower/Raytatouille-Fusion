@@ -7,6 +7,7 @@
 #include <nurbforge/geometry/transform.hpp>
 
 #include "document/entity.hpp"
+#include "document/selection.hpp"
 
 namespace nfcad::kernel {
 
@@ -23,6 +24,11 @@ enum class BooleanOp { Union, Intersection, Difference };
 /// Boolean of closed shells: Union / Intersection fold over all inputs, Difference subtracts
 /// the others from the first. Throws std::runtime_error with a readable message.
 [[nodiscard]] nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op);
+
+/// A picked part of a shell: an edge as its curve, a face as its trimmed surface; nothing for
+/// other geometry or an index out of range.
+[[nodiscard]] std::optional<document::Geometry> part_of(const document::Geometry& g,
+                                                        const document::SubElement& sub);
 
 /// Faces of a surface-like geometry (surface, trimmed surface, shell); empty for others.
 [[nodiscard]] std::vector<nf::TrimmedSurface> faces_of(const document::Geometry& g);
