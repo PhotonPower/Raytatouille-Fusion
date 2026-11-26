@@ -6,6 +6,7 @@
 #include <QStandardPaths>
 #include <QTcpSocket>
 #include <QTest>
+#include <QUndoStack>
 #include <nurbforge/nurbforge.hpp>
 
 #include "document/document.hpp"
@@ -53,7 +54,7 @@ class TestPluginHost : public QObject {
     host_->start(python_, plugins::PluginManager::nfcadPythonPath());
     QVERIFY2(ready.wait(20000), qPrintable(failed.isEmpty() ? QStringLiteral("timeout")
                                                             : failed.first().at(0).toString()));
-    QCOMPARE(host_->actions().size(), std::size_t{13});
+    QCOMPARE(host_->actions().size(), std::size_t{14});
     QCOMPARE(host_->paramsSchema().size(), 5);
     QCOMPARE(host_->paramsSchema()[0].toObject()["name"].toString(), QStringLiteral("count"));  // order kept
   }
@@ -219,6 +220,33 @@ class TestPluginHost : public QObject {
     QVERIFY(host_->run(QStringLiteral("other_params")) > 0);
     QVERIFY(waitFinished(finished));
     QCOMPARE(finished.first().at(3).toString(), QStringLiteral("['/a/b.agf']|{}"));
+  }
+
+  void pluginSetsOnlyTheFieldsOfBlocks() {
+    // ctx.set_block_fields (workflow.fields): the dialog fields of blocks, also in every variant of
+    // a group, set in the workflow as it is – nothing else, no undo step, the document unmodified
+    const QJsonObject lens{{"id", "lens"}, {"type", "optics.thin_lens"}, {"params", QJsonObject{{"f", 50}}}};
+    const QJsonObject group{{"id", "g"},
+                            {"variant", "a"},
+                            {"variants", QJsonObject{{"a", QJsonObject{{"nodes", QJsonArray{lens}}}},
+                                                     {"b", QJsonObject{{"nodes", QJsonArray{lens}}}}}}};
+    doc_.setWorkflow(QJsonObject{{"model", QJsonObject{{"nodes", QJsonArray{lens, group}}}}});
+    doc_.markSaved();
+    const int undo = doc_.undoStack()->count();
+    QSignalSpy finished(host_.get(), &plugins::PluginHost::finished);
+    QVERIFY(host_->run(QStringLiteral("block_fields")) > 0);
+    QVERIFY(waitFinished(finished));
+    QCOMPARE(finished.first().at(3).toString(), QStringLiteral("3|3|0"));  // three blocks; again: unchanged
+    const QJsonArray nodes = doc_.workflow()["model"].toObject()["nodes"].toArray();
+    QCOMPARE(nodes[0].toObject()["fields"].toArray().size(), 1);
+    QCOMPARE(nodes[0].toObject()["params"].toObject()["f"].toInt(), 50);
+    const QJsonObject variants = nodes[1].toObject()["variants"].toObject();
+    for (const char* v : {"a", "b"}) {
+      const QJsonObject inner = variants[QLatin1String(v)].toObject()["nodes"].toArray()[0].toObject();
+      QCOMPARE(inner["fields"].toArray()[0].toObject()["group"].toString(), QStringLiteral("G"));
+    }
+    QVERIFY(!doc_.isModified());
+    QCOMPARE(doc_.undoStack()->count(), undo);
   }
 
   void tablesAndBars() {

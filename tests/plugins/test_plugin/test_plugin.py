@@ -101,6 +101,15 @@ class TestPlugin(Plugin):
         other = ctx.plugin_params("raytracer")
         return f"{other.get('catalogs')}|{ctx.plugin_params('nobody')}"
 
+    @action("Block fields")
+    def block_fields(self, ctx):
+        # every block with its scope; the fields of the block "lens" wherever it lies
+        from nfcad import workflow_blocks
+        blocks = [{"block": n["id"], "scope": scope, "fields": [{"name": "/f", "type": "number", "group": "G"}]}
+                  for scope, n in workflow_blocks(ctx.workflow()) if n["id"] == "lens"]
+        again = blocks[:1]
+        return f"{len(blocks)}|{ctx.set_block_fields(blocks)}|{ctx.set_block_fields(again)}"
+
     @action("Kept result")
     def kept_result(self, ctx):
         run = ctx.result_set("kept")

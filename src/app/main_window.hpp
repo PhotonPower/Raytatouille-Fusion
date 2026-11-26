@@ -17,6 +17,8 @@ class QProgressBar;
 class QToolButton;
 class QMenu;
 
+class QTimer;
+
 namespace nfcad::document {
 class Document;
 class Selection;
@@ -152,6 +154,9 @@ class MainWindow : public QMainWindow {
   plugins::PluginManager* plugins_ = nullptr;
   plugins::PluginHost* active_plugin_ = nullptr;
   bool plugin_started_on_empty_ = false;
+  /// shortly after an edit of the node workflow, an opened document or a plugin that became ready:
+  /// followWorkflow (the plugins describe their blocks' dialogs, the Raytracer draws)
+  QTimer* follow_timer_ = nullptr;
   QMenu* plugins_menu_ = nullptr;
   QProgressBar* job_progress_ = nullptr;
   QToolButton* job_cancel_ = nullptr;

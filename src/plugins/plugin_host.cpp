@@ -79,6 +79,49 @@ std::optional<results::Range> range_of(const QJsonObject& args) {
   return results::Range{r[0].toDouble(), r[1].toDouble()};
 }
 
+QString id_text(const QJsonValue& v) { return v.isString() ? v.toString() : v.toVariant().toString(); }
+
+/// Sets `fields` (the dialog fields a plugin describes) on the block `id` among `nodes`, inside
+/// the groups `scope` names from `depth` on: a group id (its active variant) or {"group", "variant"}.
+/// True if the block was found and its fields changed; an empty list removes them.
+bool set_block_fields(QJsonArray& nodes, const QJsonArray& scope, qsizetype depth, const QString& id,
+                      const QJsonArray& fields) {
+  if (depth == scope.size()) {
+    for (qsizetype k = 0; k < nodes.size(); ++k) {
+      QJsonObject n = nodes[k].toObject();
+      if (id_text(n["id"]) != id) continue;
+      if (n["fields"].toArray() == fields) return false;
+      if (fields.isEmpty()) {
+        n.remove(QStringLiteral("fields"));
+      } else {
+        n["fields"] = fields;
+      }
+      nodes[k] = n;
+      return true;
+    }
+    return false;
+  }
+  const QJsonValue step = scope[depth];
+  const QString group = step.isObject() ? id_text(step.toObject()["group"]) : id_text(step);
+  for (qsizetype k = 0; k < nodes.size(); ++k) {
+    QJsonObject n = nodes[k].toObject();
+    if (id_text(n["id"]) != group || !n.contains(QStringLiteral("variants"))) continue;
+    const QString variant = step.toObject().contains(QStringLiteral("variant"))
+                                ? step.toObject()["variant"].toString()
+                                : n["variant"].toString();
+    QJsonObject variants = n["variants"].toObject();
+    QJsonObject body = variants[variant].toObject();
+    QJsonArray inner = body["nodes"].toArray();
+    if (!set_block_fields(inner, scope, depth + 1, id, fields)) return false;
+    body["nodes"] = inner;
+    variants[variant] = body;
+    n["variants"] = variants;
+    nodes[k] = n;
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 std::optional<Manifest> read_manifest(const QString& dir, QString* error) {
@@ -434,6 +477,25 @@ QJsonValue PluginHost::request(const QString& method, const QJsonObject& args) {
     doc_->setWorkflow(args["workflow"].toObject());
     doc_->requestWorkflowShown();
     return QJsonValue::Null;
+  }
+  if (method == QLatin1String("workflow.fields")) {
+    // the fields a plugin describes for its blocks' dialogs, set in the workflow as it is now:
+    // nothing else changes, so plugins that follow an edit at the same time (and the user's
+    // newer edits) are not overwritten; derived data – no undo step, the document not modified
+    QJsonObject wf = doc_->workflow();
+    QJsonObject model = wf["model"].toObject();
+    QJsonArray nodes = model["nodes"].toArray();
+    int changed = 0;
+    for (const QJsonValue& v : args["blocks"].toArray()) {
+      const QJsonObject b = v.toObject();
+      changed += set_block_fields(nodes, b["scope"].toArray(), 0, id_text(b["block"]), b["fields"].toArray()) ? 1 : 0;
+    }
+    if (changed > 0) {
+      model["nodes"] = nodes;
+      wf["model"] = model;
+      doc_->replaceWorkflow(wf);
+    }
+    return changed;
   }
   if (method == QLatin1String("results.create_set")) {
     return static_cast<qint64>(results_->createSet(args["name"].toString(), manifest_.id));

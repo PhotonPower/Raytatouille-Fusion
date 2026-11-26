@@ -183,8 +183,48 @@ assert held["params"]["job"] == "" and "incidence" not in held["params"]["job_da
 assert held["params"]["job_data"]["mesh"]["file"] == str(Path("/data/jobs/cell.msh").resolve())
 assert held["params"]["job_data"]["model"]["period"] == 400
 assert [f["name"] for f in held["fields"]] == ["/rtt/surface/radius", "/job_data/model/period",
-                                               "/job_data/solver/order", "/job_data/materials/2/n"], held["fields"]
-assert held["fields"][1]["unit"] == "nm" and held["fields"][3]["type"] == "numbers"
+                                               "/job_data/solver/order", "/job_data/mesh/scale",
+                                               "/job_data/materials/2/n"], held["fields"]
+assert held["fields"][1]["unit"] == "nm" and held["fields"][4]["type"] == "numbers"
+# the mesh in the dialog: a structured mesh's columns and row bands, Gmsh's sizes and interface factor
+structured = {f["name"]: f["type"] for f in hpfem_block.job_fields(hpfem_job.EXAMPLE, "nm") if "/mesh/" in f["name"]}
+assert structured == {"/job_data/mesh/structured/nx": "integer", "/job_data/mesh/structured/rows/0": "numbers",
+                      "/job_data/mesh/structured/rows/1": "numbers",
+                      "/job_data/mesh/structured/rows/2": "numbers"}, structured
+by_gmsh = {**hpfem_job.EXAMPLE, "mesh": {"gmsh": {"sizes": {"1": 40, "3": 12.5}, "interface_factor": 0.5}}}
+by_gmsh = [f for f in hpfem_block.job_fields(by_gmsh, "µm") if "/mesh/" in f["name"]]
+assert [(f["name"], f["unit"]) for f in by_gmsh] == [("/job_data/mesh/gmsh/sizes/1", "µm"),
+                                                     ("/job_data/mesh/gmsh/sizes/3", "µm"),
+                                                     ("/job_data/mesh/gmsh/interface_factor", "")], by_gmsh
+# a block whose job came otherwise (a document, an import) gets its fields from Describe blocks, which
+# sets only the fields (ctx.set_block_fields) and leaves those of other data
+plain = {"id": "gr", "type": "hpfem.grating", "params": {"job_data": hpfem_job.EXAMPLE}, "fields": mirror_fields}
+grouped = {"model": {"nodes": [{"id": "g1", "variant": "a", "variants": {"a": {"nodes": [plain]}}}]}}
+wanted = hpfem_block.described(grouped)
+assert [(w["block"], w["scope"]) for w in wanted] == [("gr", [{"group": "g1", "variant": "a"}])], wanted
+assert wanted[0]["fields"][0] == mirror_fields[0] and len(wanted[0]["fields"]) > 5, wanted
+plain["fields"] = wanted[0]["fields"]
+assert hpfem_block.described(grouped) == []  # up to date: nothing to set
+
+
+class FieldsCtx:
+    def __init__(self, wf):
+        self.wf, self.sent = wf, []
+
+    def workflow(self):
+        return self.wf
+
+    def set_block_fields(self, blocks):
+        self.sent.append(blocks)
+        return len(blocks)
+
+    def log(self, m):
+        raise AssertionError(m)
+
+
+plain["fields"] = mirror_fields
+fctx = FieldsCtx(grouped)
+assert HpFemPlugin().follow_workflow(fctx) == "" and fctx.sent == [wanted], fctx.sent
 assert any("stays outside" in line for line in bctx.lines) and any("left out" in line for line in bctx.lines)
 # back into a panel with another job: the block's cell, the panel's incidence
 other = as_panel({**hpfem_job.to_params(hpfem_job.EXAMPLE), "period": 999.0, "wavelength": "500:600:3",

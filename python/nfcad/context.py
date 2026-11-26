@@ -126,6 +126,15 @@ class Context:
         """Replaces the document's node workflow (shown in the node editor)."""
         self._host.request("workflow.set", {"workflow": workflow})
 
+    def set_block_fields(self, blocks: list[dict]) -> int:
+        """Sets the fields of blocks' dialogs (JSON pointers into their params, grouped into tabs) in
+        the workflow as it is now, nothing else: {"block": id, "scope": [...], "fields": [...]} per
+        block, `scope` the groups it lies in as `workflow_blocks` gives them (a group id means its
+        active variant; an empty list of fields removes them). Plugins that describe their blocks
+        after every edit use this rather than `set_workflow`, which would overwrite what others
+        changed meanwhile. Returns how many blocks changed."""
+        return int(self._host.request("workflow.fields", {"blocks": list(blocks)}) or 0)
+
     # ---- results (docs/plugins.md, section 3a)
     def result_set(self, name: str) -> int:
         return self._host.request("results.create_set", {"name": name})
@@ -245,3 +254,18 @@ class Context:
     def append(self, curve: int, x: float, y: float) -> None:
         self._host.send({"type": "notify", "method": "results.append",
                          "args": {"item": int(curve), "x": float(x), "y": float(y)}})
+
+
+def workflow_blocks(workflow: dict):
+    """Every block of a node workflow's model, also inside groups (every variant): (scope, node)
+    with `scope` the groups around it as [{"group": id, "variant": name}, ...] – the address
+    `Context.set_block_fields` takes."""
+
+    def walk(nodes, scope):
+        for node in nodes or []:
+            yield scope, node
+            variants = node.get("variants") or {}
+            for name, body in variants.items() if isinstance(variants, dict) else enumerate(variants):
+                yield from walk((body or {}).get("nodes"), [*scope, {"group": node.get("id"), "variant": name}])
+
+    yield from walk(((workflow or {}).get("model") or {}).get("nodes"), [])
