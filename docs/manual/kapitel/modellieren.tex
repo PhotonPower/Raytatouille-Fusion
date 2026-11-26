@@ -42,7 +42,8 @@ als Knöpfe, geordnet in Gruppen:
 \toprule
 Gruppe & Standard & Befehle \\
 \midrule\endhead
-\gui{Draw} & aufgeklappt & Point, Line, Polyline, Rectangle, Polygon \\
+\gui{Draw} & aufgeklappt & Point, Line, Tangent line, Perpendicular line, Polyline,
+  Rectangle, Polygon \\
 \gui{Curves} & aufgeklappt & Circle (centre, radius), Circle (3 points), Arc, Ellipse, Helix,
   Spiral, Curve (control points), Interpolated curve, Sketch (freehand), Curve through points,
   Conic, Parabola, Hyperbola, Offset curve, Fillet curves, Chamfer curves, Blend curves,
@@ -106,6 +107,7 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{sk} & Sketch & & \code{crvpts} & Curve through points & \\
 \code{conic} & Conic & & \code{para}, \code{hyp} & Parabola, Hyperbola & \\
 \code{blend} & Blend curves & & \code{cha} & Chamfer curves & \\
+\code{tan} & Tangent line & & \code{perp} & Perpendicular line & \\
 \code{tween} & Tween curves & & \code{filletcorners} & Fillet curves & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
@@ -641,6 +643,22 @@ Punktobjekte dienen als Hilfspunkte für den Fang (Fangart \gui{Point}) und als 
 \end{schritte}
 Der Befehl endet nach einer Linie; mit \keys{Enter} starten Sie die nächste. Fallen Start- und
 Endpunkt zusammen, wird der Endpunkt abgelehnt.
+
+\subsection{Tangent line -- Tangente}\label{sec:cmd-tangent}
+\cmd{tangent}, Alias \code{tan}. Eine Strecke, die eine oder zwei ausgewählte ebene Kurven
+berührt, in der Konstruktionsebene der Ansicht.
+\begin{itemize}
+\item \textbf{Eine Kurve}: \code{Tangent: start point}, dann \code{Tangent: click near the
+  touching point you want} -- vom Startpunkt gibt es meist mehrere Tangenten (an einen Kreis
+  zwei); die Vorschau zeigt jeweils die, deren Berührpunkt dem Cursor am nächsten liegt.
+\item \textbf{Zwei Kurven}: \code{Tangent: click near the tangent you want} -- eine gemeinsame
+  Tangente beider Kurven (an zwei Kreise bis zu vier), die nächste zum Cursor.
+\end{itemize}
+
+\subsection{Perpendicular line -- Lot auf eine Kurve}\label{sec:cmd-perpendicular}
+\cmd{perpendicular}, Alias \code{perp}. Wählen Sie eine Kurve aus und klicken Sie Punkte: Jeder
+Klick erzeugt die Strecke von dem Punkt zu seinem Fußpunkt auf der Kurve (dem nächsten Punkt;
+die Strecke trifft die Kurve im rechten Winkel). \keys{Enter} beendet den Befehl.
 
 \subsection{Polyline -- Polylinie}\label{sec:cmd-polyline}
 \cmd{polyline}, Alias \code{pl}. Ein Linienzug aus geraden Segmenten.

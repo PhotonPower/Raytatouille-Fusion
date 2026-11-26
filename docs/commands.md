@@ -11,6 +11,8 @@ one undo step.
 |---|---|---|
 | Point | `pt` | locations, until Enter / right-click |
 | Line | `l` | start, end (or a length) |
+| Tangent line | `tan` | one selected curve: start point, then click near the touching point; two curves: click near the common tangent (construction plane) |
+| Perpendicular line | `perp` | one selected curve; points: a line from each to its foot on the curve (Enter: done) |
 | Polyline | `pl` | points; Enter: open polyline, clicking the start point (it snaps as End): closed |
 | Rectangle | `rec` | corner, opposite corner (edges along the construction-plane axes) |
 | Polygon | `pol` | (number of sides,) centre, corner point or circumradius |
