@@ -11,6 +11,8 @@ one undo step.
 |---|---|---|
 | Point | `pt` | locations, until Enter / right-click |
 | Line | `l` | start, end (or a length) |
+| Tangent line | `tan` | one selected curve: start point, then click near the touching point; two curves: click near the common tangent (construction plane) |
+| Perpendicular line | `perp` | one selected curve; points: a line from each to its foot on the curve (Enter: done) |
 | Polyline | `pl` | points; Enter: open polyline, clicking the start point (it snaps as End): closed |
 | Rectangle | `rec` | corner, opposite corner (edges along the construction-plane axes) |
 | Polygon | `pol` | (number of sides,) centre, corner point or circumradius |
@@ -48,7 +50,10 @@ one undo step.
 | **Curves and surfaces** (M6b) | | |
 | Spline (Interpolated curve) | `sp`, `interpcrv` | points (Enter: done); interpolating cubic |
 | Offset curve | `offset` | (distance,) click the side; on the selection, in the construction plane |
-| Fillet curves | `fillet` | radius; two selected curves (arc + both trimmed) or one curve (all corners) |
+| Fillet curves | `fillet`, `filletcorners` | radius; two selected curves (arc + both trimmed) or one curve (all corners) |
+| Chamfer curves | `cha`, `chamfercorners` | distance; two selected curves (cut + both trimmed) or one curve (all corners) |
+| Blend curves | `blend` | two selected curves; Enter: the closest ends, or click near an end of each; typed 1 / 2: G1 / G2 (default) |
+| Tween curves | `tween` | two selected curves; number of curves (Enter: 1); the second turned round if it runs the other way |
 | Plane | `plane` | two corners in the construction plane |
 | Extrude | `ext` | selected curves; a typed distance along the normal of the view's construction plane (Top / Perspective: +Z, Front: −Y, Left: −X; negative: the other way), or two points |
 | Revolve | `rev` | selected curves; axis start, axis end, angle (Enter: 360°) |

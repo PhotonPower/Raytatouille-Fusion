@@ -1,13 +1,18 @@
 // Curve constructions (docs/commands.md, "Curves"): Curve (control points), Ellipse, Spiral,
-// Parabola, Hyperbola, Conic, Sketch (freehand) and Curve through points. Conic sections are exact
-// rational quadratic NURBS; Sketch is a least-squares fit of the cursor's path.
+// Parabola, Hyperbola, Conic, Sketch (freehand) and Curve through points; curves from curves:
+// Blend, Chamfer, Tween; lines: Tangent, Perpendicular. Conic sections are exact rational quadratic NURBS; Sketch is a
+// least-squares fit of the cursor's path.
 #include <QObject>
 #include <algorithm>
 #include <cmath>
 #include <exception>
 #include <functional>
+#include <limits>
+#include <nurbforge/analysis/closest_point.hpp>
 #include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/geometry/primitives.hpp>
+#include <nurbforge/modeling/blend.hpp>
+#include <nurbforge/modeling/fillet.hpp>
 
 #include "commands/command_util.hpp"
 
@@ -513,6 +518,298 @@ class CurveThroughPointsCommand : public Command {
   Result finish() override { return entities_.empty() ? Result::Cancelled : Result::Done; }
 };
 
+// ------------------------------------------------------------------------------ curves from curves
+/// The curves of the selection (with their entities), in selection order.
+class SelectedCurvesCommand : public Command {
+ public:
+  bool usesSelection() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    for (const document::Entity& e : selection) {
+      if (const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get())) {
+        curves_.push_back(*c);
+        ids_.push_back(e.id);
+      }
+    }
+    if (curves_.size() < min_ || curves_.size() > max_) {
+      message_ = QObject::tr("%1: select %2").arg(title(), requirement_);
+      return false;
+    }
+    return true;
+  }
+
+ protected:
+  SelectedCurvesCommand(std::size_t min, std::size_t max, QString requirement)
+      : min_(min), max_(max), requirement_(std::move(requirement)) {}
+  void replaceCurve(std::size_t i, const nf::NurbsCurve& c) {
+    replace_.emplace_back(ids_[i], std::make_shared<const document::Geometry>(c));
+  }
+  std::vector<nf::NurbsCurve> curves_;
+  std::vector<document::EntityId> ids_;
+
+ private:
+  std::size_t min_, max_;
+  QString requirement_;
+};
+
+nf::Vec3 end_point(const nf::NurbsCurve& c, nf::CurveEnd e) {
+  return c.evaluate(e == nf::CurveEnd::Start ? c.domain_start() : c.domain_end());
+}
+
+/// Blend: a smooth curve between an end of each of two selected curves – the ends nearest to
+/// the two clicks, or (Enter) the two ends closest to each other; G2 unless 1 is typed.
+class BlendCommand : public SelectedCurvesCommand {
+ public:
+  BlendCommand() : SelectedCurvesCommand(2, 2, QObject::tr("two curves")) {}
+  QString id() const override { return QStringLiteral("blend"); }
+  QString title() const override { return QObject::tr("Blend curves"); }
+  QString prompt() const override {
+    const QString g = QStringLiteral("G%1").arg(continuity_);
+    if (!first_) {
+      return QObject::tr("Blend (%1): click near the end of the first curve, or Enter: the closest ends "
+                         "(type 1 or 2: continuity)").arg(g);
+    }
+    return QObject::tr("Blend (%1): click near the end of the second curve").arg(g);
+  }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    if (!SelectedCurvesCommand::begin(selection)) return false;
+    double best = std::numeric_limits<double>::infinity();
+    for (auto ea : {nf::CurveEnd::Start, nf::CurveEnd::End}) {
+      for (auto eb : {nf::CurveEnd::Start, nf::CurveEnd::End}) {
+        const double d = nf::distance(end_point(curves_[0], ea), end_point(curves_[1], eb));
+        if (d < best) {
+          best = d;
+          closest_ = {ea, eb};
+        }
+      }
+    }
+    return true;
+  }
+  Result number(double v) override {
+    if (v != 1 && v != 2) {
+      message_ = QObject::tr("Blend: the continuity is 1 (tangent) or 2 (curvature)");
+      return Result::Rejected;
+    }
+    continuity_ = static_cast<int>(v);
+    return Result::Continue;
+  }
+  Result point(const Point3& p, const PlaneFrame&) override {
+    if (!first_) {
+      first_ = nearest_end(curves_[0], p);
+      return Result::Continue;
+    }
+    return create(*first_, nearest_end(curves_[1], p));
+  }
+  Result finish() override {
+    return first_ ? Result::Cancelled : create(closest_.first, closest_.second);
+  }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    const auto ends = first_ ? std::pair{*first_, nearest_end(curves_[1], c)} : closest_;
+    return try_sample([&] { return make(ends.first, ends.second); });
+  }
+
+ private:
+  static nf::CurveEnd nearest_end(const nf::NurbsCurve& c, const Point3& p) {
+    return nf::distance(end_point(c, nf::CurveEnd::Start), V(p)) <=
+                   nf::distance(end_point(c, nf::CurveEnd::End), V(p))
+               ? nf::CurveEnd::Start
+               : nf::CurveEnd::End;
+  }
+  nf::NurbsCurve make(nf::CurveEnd a, nf::CurveEnd b) const {
+    return nf::blend_curves(curves_[0], a, curves_[1], b, continuity_);
+  }
+  Result create(nf::CurveEnd a, nf::CurveEnd b) {
+    return add(entities_, message_, title(), [&] { return make(a, b); }) ? Result::Done : Result::Rejected;
+  }
+  int continuity_ = 2;
+  std::optional<nf::CurveEnd> first_;
+  std::pair<nf::CurveEnd, nf::CurveEnd> closest_{nf::CurveEnd::End, nf::CurveEnd::Start};
+};
+
+/// Chamfer: a straight cut at the typed distance from the corner – between two selected
+/// curves (both trimmed to it) or at every corner of one curve.
+class ChamferCommand : public SelectedCurvesCommand {
+ public:
+  ChamferCommand() : SelectedCurvesCommand(1, 2, QObject::tr("one curve (all its corners) or two curves")) {}
+  QString id() const override { return QStringLiteral("chamfer"); }
+  QString title() const override { return QObject::tr("Chamfer curves"); }
+  QString prompt() const override {
+    return QObject::tr("Chamfer: distance from the corner (two curves: between them; one curve: all its corners)");
+  }
+  Result number(double d) override {
+    if (d <= 0) {
+      message_ = QObject::tr("Chamfer: the distance must be positive");
+      return Result::Rejected;
+    }
+    try {
+      if (curves_.size() == 1) {
+        replaceCurve(0, nf::chamfer_corners(curves_[0], d));
+        return Result::Done;
+      }
+      const nf::CurveChamfer c = nf::chamfer_curves(curves_[0], curves_[1], d, d);
+      entities_.push_back(document::make_entity(c.line));
+      if (c.trimmed_a) replaceCurve(0, *c.trimmed_a);
+      if (c.trimmed_b) replaceCurve(1, *c.trimmed_b);
+      return Result::Done;
+    } catch (const std::exception& e) {
+      entities_.clear();
+      replace_.clear();
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+};
+
+/// Tween: curves between two selected curves (the typed number, Enter: one), evenly from the
+/// first to the second; a second curve running the other way is turned round first.
+class TweenCommand : public SelectedCurvesCommand {
+ public:
+  TweenCommand() : SelectedCurvesCommand(2, 2, QObject::tr("two curves")) {}
+  QString id() const override { return QStringLiteral("tween"); }
+  QString title() const override { return QObject::tr("Tween curves"); }
+  QString prompt() const override { return QObject::tr("Tween: number of curves (Enter: 1)"); }
+  Result number(double v) override {
+    if (v < 1 || v > 1000 || std::floor(v) != v) {
+      message_ = QObject::tr("Tween: the number of curves is a whole number from 1");
+      return Result::Rejected;
+    }
+    return create(static_cast<std::size_t>(v));
+  }
+  Result finish() override { return create(1); }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+  std::vector<Polyline3> preview(const Point3&, const PlaneFrame&) const override {
+    try {
+      return {sample(tweens(1).front())};
+    } catch (const std::exception&) {
+      return {};
+    }
+  }
+
+  /// `count` tweens of a and b, b turned round if its start lies nearer to a's end.
+  static std::vector<nf::NurbsCurve> tween(const nf::NurbsCurve& a, nf::NurbsCurve b, std::size_t count) {
+    const nf::Vec3 a0 = end_point(a, nf::CurveEnd::Start), a1 = end_point(a, nf::CurveEnd::End);
+    const nf::Vec3 b0 = end_point(b, nf::CurveEnd::Start), b1 = end_point(b, nf::CurveEnd::End);
+    if (nf::distance(a0, b1) + nf::distance(a1, b0) < nf::distance(a0, b0) + nf::distance(a1, b1)) {
+      b = b.reversed();
+    }
+    return nf::tween_curves(a, b, count);
+  }
+
+ private:
+  std::vector<nf::NurbsCurve> tweens(std::size_t n) const { return tween(curves_[0], curves_[1], n); }
+  Result create(std::size_t n) {
+    try {
+      for (const nf::NurbsCurve& c : tweens(n)) entities_.push_back(document::make_entity(c));
+      return Result::Done;
+    } catch (const std::exception& e) {
+      entities_.clear();
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+};
+
+// ------------------------------------------------------------------------------ Tangent, Perpendicular
+/// Tangent lines: with one selected curve from a point to the curve (of several, the one whose
+/// touching point lies nearest the click), with two the common tangent nearest the click. In
+/// the construction plane of the view.
+class TangentCommand : public SelectedCurvesCommand {
+ public:
+  TangentCommand() : SelectedCurvesCommand(1, 2, QObject::tr("one curve (tangent from a point) or two curves")) {}
+  QString id() const override { return QStringLiteral("tangent"); }
+  QString title() const override { return QObject::tr("Tangent line"); }
+  QString prompt() const override {
+    if (curves_.size() == 2) return QObject::tr("Tangent: click near the tangent you want");
+    return from_ ? QObject::tr("Tangent: click near the touching point you want")
+                 : QObject::tr("Tangent: start point");
+  }
+  Result point(const Point3& p, const PlaneFrame& plane) override {
+    if (curves_.size() == 1 && !from_) {
+      from_ = p;
+      plane_ = plane;
+      return Result::Continue;
+    }
+    if (!from_) plane_ = plane;
+    try {
+      const auto line = choose(p, plane_);
+      if (!line) {
+        message_ = QObject::tr("Tangent: there is no tangent line here");
+        return Result::Rejected;
+      }
+      entities_.push_back(document::make_entity(line->line));
+      return Result::Done;
+    } catch (const std::exception& e) {
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame& plane) const override {
+    if (curves_.size() == 1 && !from_) return {};
+    try {
+      const auto line = choose(c, from_ ? plane_ : plane);
+      if (line) return {{P(line->point_a), P(line->point_b)}};
+    } catch (const std::exception&) {
+    }
+    return {};
+  }
+  std::optional<Point3> basePoint() const override { return from_; }
+
+ private:
+  std::optional<nf::TangentLine> choose(const Point3& near, const PlaneFrame& plane) const {
+    const std::vector<nf::TangentLine> all =
+        curves_.size() == 1 ? nf::tangent_lines(V(*from_), curves_[0], V(plane.n))
+                            : nf::tangent_lines(curves_[0], curves_[1], V(plane.n));
+    std::optional<nf::TangentLine> best;
+    double d_best = std::numeric_limits<double>::infinity();
+    for (const nf::TangentLine& t : all) {
+      // one curve: the touching point nearest the click; two: the line nearest the click
+      const double d = curves_.size() == 1 ? nf::distance(t.point_b, V(near))
+                                           : segment_distance(V(near), t.point_a, t.point_b);
+      if (d < d_best) {
+        d_best = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+  static double segment_distance(const nf::Vec3& p, const nf::Vec3& a, const nf::Vec3& b) {
+    const nf::Vec3 ab = b - a;
+    const double t = std::clamp(nf::dot(p - a, ab) / std::max(nf::dot(ab, ab), kEps), 0.0, 1.0);
+    return nf::distance(p, a + ab * t);
+  }
+  std::optional<Point3> from_;
+  PlaneFrame plane_;
+};
+
+/// Perpendicular: from a point to its foot on the selected curve (the nearest point: the line
+/// meets the curve at a right angle); repeats until Enter.
+class PerpendicularCommand : public SelectedCurvesCommand {
+ public:
+  PerpendicularCommand() : SelectedCurvesCommand(1, 1, QObject::tr("one curve")) {}
+  QString id() const override { return QStringLiteral("perpendicular"); }
+  QString title() const override { return QObject::tr("Perpendicular line"); }
+  QString prompt() const override {
+    return QObject::tr("Perpendicular: from point (Enter: done)");
+  }
+  Result point(const Point3& p, const PlaneFrame&) override {
+    const nf::CurvePoint foot = nf::closest_point(curves_[0], V(p));
+    if (foot.distance < kEps) {
+      message_ = QObject::tr("Perpendicular: the point lies on the curve");
+      return Result::Rejected;
+    }
+    entities_.push_back(document::make_entity(nf::make_line(V(p), foot.point)));
+    ++count_;
+    return Result::Continue;
+  }
+  Result finish() override { return count_ > 0 ? Result::Done : Result::Cancelled; }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    return {{c, P(nf::closest_point(curves_[0], V(c)).point)}};
+  }
+
+ private:
+  int count_ = 0;
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -530,6 +827,11 @@ const std::vector<Entry>& registry() {
       {"sketch", {"sk"}, [] { return std::make_unique<SketchCommand>(); }},
       {"curve_through_points", {"crvpts", "curvethroughpoints"},
        [] { return std::make_unique<CurveThroughPointsCommand>(); }},
+      {"blend", {"blendcrv"}, [] { return std::make_unique<BlendCommand>(); }},
+      {"chamfer", {"cha", "chamfercorners"}, [] { return std::make_unique<ChamferCommand>(); }},
+      {"tween", {"tweencurves"}, [] { return std::make_unique<TweenCommand>(); }},
+      {"tangent", {"tan"}, [] { return std::make_unique<TangentCommand>(); }},
+      {"perpendicular", {"perp"}, [] { return std::make_unique<PerpendicularCommand>(); }},
   };
   return r;
 }

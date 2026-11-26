@@ -17,6 +17,7 @@ std::vector<ToolGroupDef> build() {
   return {
       {"draw", "Draw", true,
        {t("point", "Point", "Pt", "pt"), t("line", "Line", "Ln", "l"),
+        t("tangent", "Tangent line", "Tan", "tan"), t("perpendicular", "Perpendicular line", "Prp", "perp"),
         t("polyline", "Polyline", "PL", "pl"), t("rectangle", "Rectangle", "Rec", "rec"),
         t("polygon", "Polygon", "Pol", "pol")}},
       {"curves", "Curves", true,
@@ -29,7 +30,9 @@ std::vector<ToolGroupDef> build() {
         t("conic", "Conic", "Cnc", "conic"), t("parabola", "Parabola", "Par", "para"),
         t("hyperbola", "Hyperbola", "Hyp", "hyp"),
         t("offset_curve", "Offset curve", "Off", "offset"),
-        t("fillet_curve", "Fillet curves", "Fil", "fillet")}},
+        t("fillet_curve", "Fillet curves", "Fil", "fillet"),
+        t("chamfer", "Chamfer curves", "Cha", "cha"), t("blend", "Blend curves", "Bln", "blend"),
+        t("tween", "Tween curves", "Twn", "tween")}},
       {"surfaces", "Surfaces", false,
        {t("plane", "Plane", "Pln", "plane"), t("extrude", "Extrude", "Ext", "ext"),
         t("revolve", "Revolve", "Rev", "rev"), t("loft", "Loft", "Lft", "loft"),

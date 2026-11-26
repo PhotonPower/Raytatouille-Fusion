@@ -42,10 +42,12 @@ als Knöpfe, geordnet in Gruppen:
 \toprule
 Gruppe & Standard & Befehle \\
 \midrule\endhead
-\gui{Draw} & aufgeklappt & Point, Line, Polyline, Rectangle, Polygon \\
+\gui{Draw} & aufgeklappt & Point, Line, Tangent line, Perpendicular line, Polyline,
+  Rectangle, Polygon \\
 \gui{Curves} & aufgeklappt & Circle (centre, radius), Circle (3 points), Arc, Ellipse, Helix,
   Spiral, Curve (control points), Interpolated curve, Sketch (freehand), Curve through points,
-  Conic, Parabola, Hyperbola, Offset curve, Fillet curves \\
+  Conic, Parabola, Hyperbola, Offset curve, Fillet curves, Chamfer curves, Blend curves,
+  Tween curves \\
 \gui{Surfaces} & zugeklappt & Plane, Extrude, Revolve, Loft, Sweep 1 rail, Sweep 2 rails,
   Coons patch, Gordon surface, Offset surface, Fillet surfaces, Cap planar holes \\
 \gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Boolean union,
@@ -104,6 +106,9 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{el} & Ellipse & & \code{spi} & Spiral & \\
 \code{sk} & Sketch & & \code{crvpts} & Curve through points & \\
 \code{conic} & Conic & & \code{para}, \code{hyp} & Parabola, Hyperbola & \\
+\code{blend} & Blend curves & & \code{cha} & Chamfer curves & \\
+\code{tan} & Tangent line & & \code{perp} & Perpendicular line & \\
+\code{tween} & Tween curves & & \code{filletcorners} & Fillet curves & \\
 \code{offset} & Offset curve & & \code{mi} & Mirror & \\
 \code{fillet} & Fillet curves & & \code{array} & Linear array & \\
 \code{ext} & Extrude & & \code{arraypolar} & Polar array & \\
@@ -639,6 +644,22 @@ Punktobjekte dienen als Hilfspunkte für den Fang (Fangart \gui{Point}) und als 
 Der Befehl endet nach einer Linie; mit \keys{Enter} starten Sie die nächste. Fallen Start- und
 Endpunkt zusammen, wird der Endpunkt abgelehnt.
 
+\subsection{Tangent line -- Tangente}\label{sec:cmd-tangent}
+\cmd{tangent}, Alias \code{tan}. Eine Strecke, die eine oder zwei ausgewählte ebene Kurven
+berührt, in der Konstruktionsebene der Ansicht.
+\begin{itemize}
+\item \textbf{Eine Kurve}: \code{Tangent: start point}, dann \code{Tangent: click near the
+  touching point you want} -- vom Startpunkt gibt es meist mehrere Tangenten (an einen Kreis
+  zwei); die Vorschau zeigt jeweils die, deren Berührpunkt dem Cursor am nächsten liegt.
+\item \textbf{Zwei Kurven}: \code{Tangent: click near the tangent you want} -- eine gemeinsame
+  Tangente beider Kurven (an zwei Kreise bis zu vier), die nächste zum Cursor.
+\end{itemize}
+
+\subsection{Perpendicular line -- Lot auf eine Kurve}\label{sec:cmd-perpendicular}
+\cmd{perpendicular}, Alias \code{perp}. Wählen Sie eine Kurve aus und klicken Sie Punkte: Jeder
+Klick erzeugt die Strecke von dem Punkt zu seinem Fußpunkt auf der Kurve (dem nächsten Punkt;
+die Strecke trifft die Kurve im rechten Winkel). \keys{Enter} beendet den Befehl.
+
 \subsection{Polyline -- Polylinie}\label{sec:cmd-polyline}
 \cmd{polyline}, Alias \code{pl}. Ein Linienzug aus geraden Segmenten.
 \begin{schritte}
@@ -880,6 +901,42 @@ anderen Radius (oder \keys{Esc}):
 \end{itemize}
 
 % ============================================================================
+\subsection{Chamfer curves -- Kurven fasen}\label{sec:cmd-chamfer}
+\cmd{chamfer}, Aliasse \code{cha}, \code{chamfercorners}. Wie \gui{Fillet curves}, nur mit
+einer geraden Fase statt eines Bogens.
+\begin{schritte}
+\item Wählen Sie eine oder zwei Kurven aus und starten Sie den Befehl.
+\item \code{Chamfer: distance from the corner (two curves: between them; one curve: all its
+  corners)} -- tippen Sie den Abstand der Fasenpunkte von der Ecke.
+\end{schritte}
+Bei zwei Kurven (die sich treffen oder schneiden) entsteht die Fasenlinie, und beide Kurven
+werden bis zu ihr gekürzt; bei einer Kurve (Polylinie, Rechteck, Polygon) wird jede Ecke
+gefast. Die Kurven müssen nicht eben sein. \code{filletcorners} startet entsprechend
+\gui{Fillet curves}.
+
+\subsection{Blend curves -- Übergangskurve}\label{sec:cmd-blend}
+\cmd{blend}, Alias \code{blendcrv}. Eine glatte Verbindung zwischen den Enden zweier
+ausgewählter Kurven, die beide Kurven ohne Knick fortsetzt.
+\begin{schritte}
+\item Wählen Sie zwei Kurven aus und starten Sie den Befehl. Die Vorschau zeigt die
+  Übergangskurve zwischen den beiden einander nächsten Enden.
+\item \code{Blend (G2): click near the end of the first curve, or Enter: the closest ends (type 1
+  or 2: continuity)} -- \keys{Enter} verbindet die nächsten Enden; ein Klick wählt das Ende der
+  ersten Kurve, ein zweiter Klick das der zweiten. Eine getippte 1 macht den Übergang
+  tangentenstetig (G1, kubisch), 2 (Voreinstellung) auch krümmungsstetig (G2, Grad 5).
+\end{schritte}
+Die Originale bleiben erhalten; verbinden Sie sie bei Bedarf mit \gui{Join}.
+
+\subsection{Tween curves -- Zwischenkurven}\label{sec:cmd-tween}
+\cmd{tween}, Alias \code{tweencurves}. Kurven, die gleichmäßig von der ersten zur zweiten
+ausgewählten Kurve überblenden.
+\begin{schritte}
+\item Wählen Sie zwei Kurven aus und starten Sie den Befehl.
+\item \code{Tween: number of curves (Enter: 1)} -- tippen Sie die Anzahl oder drücken Sie
+  \keys{Enter} für eine Kurve in der Mitte.
+\end{schritte}
+Läuft die zweite Kurve andersherum als die erste, wird sie vorher umgedreht.
+
 \section{Flächen (Gruppe Surfaces)}\label{sec:gruppe-surfaces}
 \index{Fläche}
 
