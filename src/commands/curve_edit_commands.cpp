@@ -773,7 +773,10 @@ class PointsCommand : public Command {
     }
     for (const document::Entity& e : gripped) targets.push_back(&e);
     for (const document::Entity* e : targets) {
-      if (std::get_if<nf::NurbsCurve>(e->geometry.get()) == nullptr) continue;
+      if (std::get_if<nf::NurbsCurve>(e->geometry.get()) == nullptr && std::get_if<nf::NurbsSurface>(e->geometry.get()) == nullptr &&
+          std::get_if<nf::TrimmedSurface>(e->geometry.get()) == nullptr) {
+        continue;  // curves and single surfaces have control points
+      }
       const bool now = e->attributes.value(QString::fromLatin1(kPointsOnKey)).toBool();
       if (now == on_) continue;
       QVariantMap a = e->attributes;
@@ -786,7 +789,7 @@ class PointsCommand : public Command {
     }
     if (!on_) select_ = std::vector<document::SelectionItem>{};  // the grips leave the selection
     if (on_ && attributes_.empty()) {
-      message_ = QObject::tr("Points on: select curves");
+      message_ = QObject::tr("Points on: select curves or surfaces");
       return false;
     }
     return true;
@@ -1001,7 +1004,7 @@ const std::vector<Entry>& registry() {
       {"match", {"matchcrv"}, [] { return std::make_unique<MatchCommand>(); }},
       {"simplify", {"simplifycrv"}, [] { return std::make_unique<SimplifyCommand>(); }},
       {"arc_blend", {"arcblend", "arctoblend"}, [] { return std::make_unique<ArcBlendCommand>(); }},
-      {"points_on", {"pointson", "pon"}, [] { return std::make_unique<PointsCommand>(true); }},
+      {"points_on", {"pointson", "pon", "surfaceeditpt"}, [] { return std::make_unique<PointsCommand>(true); }},
       {"points_off", {"pointsoff", "poff"}, [] { return std::make_unique<PointsCommand>(false); }},
       {"select_points", {"selpoints", "cvselection", "selcv"}, [] { return std::make_unique<SelectPointsCommand>(); }},
       {"weight", {}, [] { return std::make_unique<WeightCommand>(); }},

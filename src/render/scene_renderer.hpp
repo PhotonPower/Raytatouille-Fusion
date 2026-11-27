@@ -33,6 +33,7 @@ class SceneRenderer {
     bool perspective = false;
     float world_per_pixel = 1.0F;  ///< for screen-sized point markers
     DisplayMode mode = DisplayMode::Shaded;
+    Analysis analysis;
     const document::Selection* selection = nullptr;
   };
 
@@ -65,6 +66,7 @@ class SceneRenderer {
     bool styled = false;
     bool visible = true;
     std::unique_ptr<QRhiBuffer> vbuf;
+    std::unique_ptr<QRhiBuffer> cbuf;  // curvature k1, k2 per vertex
     std::unique_ptr<QRhiBuffer> ibuf;
     std::unique_ptr<QRhiBuffer> ubuf;
     std::unique_ptr<QRhiShaderResourceBindings> srb;

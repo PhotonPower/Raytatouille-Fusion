@@ -55,8 +55,8 @@ class SelectionCommand : public Command {
     if (!copy && movesDrawings()) motion_ = t;  // the selected result drawings move too
     if (!copy && movesGrips()) {
       for (const GripSet& g : grips_) {
-        if (const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get())) {
-          replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(kernel::with_control_points_moved(*c, g.indices, t)));
+        if (auto moved = kernel::with_control_points_moved(*g.geometry, g.indices, t)) {
+          replace_.emplace_back(g.id, std::make_shared<const document::Geometry>(std::move(*moved)));
         }
       }
     }
@@ -89,13 +89,20 @@ class SelectionCommand : public Command {
       }
       if (movesGrips()) {  // the curves with their moved grips, and their control polygons
         for (const GripSet& g : grips_) {
-          const auto* c = std::get_if<nf::NurbsCurve>(g.geometry.get());
-          if (c == nullptr) continue;
-          const nf::NurbsCurve moved = kernel::with_control_points_moved(*c, g.indices, t);
-          out.push_back(sample(moved, 128));
-          Polyline3 polygon;
-          for (const nf::Vec3& p : moved.control_points()) polygon.push_back(P(p));
-          out.push_back(std::move(polygon));
+          const auto moved = kernel::with_control_points_moved(*g.geometry, g.indices, t);
+          if (!moved) continue;
+          if (const auto* c = std::get_if<nf::NurbsCurve>(&*moved)) {
+            out.push_back(sample(*c, 128));
+            Polyline3 polygon;
+            for (const nf::Vec3& p : c->control_points()) polygon.push_back(P(p));
+            out.push_back(std::move(polygon));
+          } else {  // a surface: its light wireframe with the moved points
+            for (auto& pl : kernel::wire(*moved, 600)) {
+              Polyline3 q;
+              for (const nf::Vec3& p : pl) q.push_back(P(p));
+              out.push_back(std::move(q));
+            }
+          }
         }
       }
     }

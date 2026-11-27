@@ -125,6 +125,12 @@ void Viewport::setDisplayMode(render::DisplayMode mode) {
   update();
 }
 
+void Viewport::setAnalysis(const render::Analysis& analysis) {
+  analysis_ = analysis;
+  updateTitle();
+  update();
+}
+
 void Viewport::setProjection(Camera::Projection projection) {
   camera_.setProjection(projection);
   updateTitle();
@@ -409,7 +415,17 @@ void Viewport::updateTitle() {
     text += camera_.projection() == Camera::Projection::Perspective ? tr(" (perspective)")
                                                                      : tr(" (parallel)");
   }
-  title_->setText(text + QStringLiteral("  ·  ") + modeName(mode_) + QStringLiteral("  ▾"));
+  QString analysis;
+  switch (analysis_.kind) {
+    case render::Analysis::Kind::Zebra: analysis = tr("Zebra"); break;
+    case render::Analysis::Kind::EMap: analysis = tr("Environment map"); break;
+    case render::Analysis::Kind::Curvature: analysis = tr("Curvature"); break;
+    case render::Analysis::Kind::Draft: analysis = tr("Draft angle"); break;
+    case render::Analysis::Kind::None: break;
+  }
+  if (!analysis.isEmpty() && mode_ != render::DisplayMode::Wireframe) analysis = QStringLiteral("  ·  ") + analysis;
+  else analysis.clear();
+  title_->setText(text + QStringLiteral("  ·  ") + modeName(mode_) + analysis + QStringLiteral("  ▾"));
   title_->adjustSize();
 }
 
@@ -510,6 +526,7 @@ void Viewport::render(QRhiCommandBuffer* cb) {
     frame.perspective = camera_.projection() == Camera::Projection::Perspective;
     frame.world_per_pixel = camera_.worldPerPixel();
     frame.mode = mode_;
+    frame.analysis = analysis_;
     frame.selection = selection_;
     scene_renderer_.prepare(*scene_, frame, updates);
     if (results_ != nullptr) {

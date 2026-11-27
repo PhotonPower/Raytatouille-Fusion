@@ -110,7 +110,13 @@ std::vector<ToolGroupDef> build() {
        {t("distance", "Distance", "Dst", "di"), t("angle", "Angle", "Ang", "ang"),
         t("curvature", "Curvature", "Crv", "curv"), t("area", "Area", "Are", "area"),
         t("mass_properties", "Volume / mass properties", "Vol", "volume"),
-        t("intersection_check", "Intersection check", "Chk", "intersect")}},
+        t("intersection_check", "Intersection check", "Int", "intersect"),
+        t("areacentroid", "Area centroid", "ACe", "areacentroid"), t("gcon", "Continuity", "GCo", "gcon"),
+        t("zebra", "Zebra", "Zeb", "zebra"), t("emap", "Environment map", "EMp", "emap"),
+        t("curvatureanalysis", "Curvature analysis", "CAn", "curvatureanalysis"),
+        t("draftangleanalysis", "Draft angle analysis", "Dft", "draftangleanalysis"),
+        t("analysisoff", "Analysis off", "AOf", "analysisoff"), t("check", "Check", "Chk", "check"),
+        t("selbadobjects", "Select bad objects", "SBO", "selbadobjects")}},
   };
 }
 

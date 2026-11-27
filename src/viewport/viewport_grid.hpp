@@ -46,12 +46,18 @@ class ViewportGrid : public QWidget {
 
   /// Sets the display mode of the active view, or of all views if `all` is true.
   void setDisplayMode(render::DisplayMode mode, bool all);
+  /// Surface analysis in every viewport.
+  void setAnalysis(const render::Analysis& analysis);
+  [[nodiscard]] const render::Analysis& analysis() const { return analysis_; }
+  [[nodiscard]] const render::Scene* scene() const { return scene_; }
   void toggleMaximized(Viewport* view);
 
  signals:
   void activeViewChanged(nfcad::viewport::Viewport* view);
 
  private:
+  const render::Scene* scene_ = nullptr;
+  render::Analysis analysis_;
   void setActive(Viewport* view);
 
   std::array<Viewport*, 4> views_{};

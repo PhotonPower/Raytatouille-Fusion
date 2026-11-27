@@ -4,15 +4,22 @@ namespace nfcad::render {
 
 namespace {
 
-/// The control points of a curve whose points are shown (attribute nfcad.points_on).
-std::vector<QVector3D> grips_of(const document::Entity& e) {
+/// The control points of a curve or surface whose points are shown (attribute nfcad.points_on);
+/// `columns`: the surface's points per row (v), 0 for a curve.
+std::vector<QVector3D> grips_of(const document::Entity& e, int* columns = nullptr) {
   std::vector<QVector3D> out;
+  if (columns != nullptr) *columns = 0;
   if (!e.attributes.value(QStringLiteral("nfcad.points_on")).toBool()) return out;
-  if (const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get())) {
-    for (const nf::Vec3& p : c->control_points()) {
-      out.emplace_back(static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z));
-    }
+  const std::vector<nf::Vec3>* pts = nullptr;
+  if (const auto* c = std::get_if<nf::NurbsCurve>(e.geometry.get())) pts = &c->control_points();
+  const nf::NurbsSurface* s = std::get_if<nf::NurbsSurface>(e.geometry.get());
+  if (const auto* f = std::get_if<nf::TrimmedSurface>(e.geometry.get())) s = &f->surface();
+  if (s != nullptr) {
+    pts = &s->control_points();
+    if (columns != nullptr) *columns = static_cast<int>(s->num_v());
   }
+  if (pts == nullptr) return out;
+  for (const nf::Vec3& p : *pts) out.emplace_back(static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z));
   return out;
 }
 
@@ -36,7 +43,7 @@ void Scene::add(document::EntityId id) {
   item.color = doc_->displayColor(*e);
   item.visible = doc_->isDisplayed(*e);
   item.locked = doc_->isLocked(*e);
-  item.grips = grips_of(*e);
+  item.grips = grips_of(*e, &item.grip_columns);
   item.mesh.reset();
   service_->request(id, e->revision, e->geometry);
   emit changed();
@@ -52,7 +59,7 @@ void Scene::update(document::EntityId id) {
   it->second.color = doc_->displayColor(*e);
   it->second.visible = doc_->isDisplayed(*e);
   it->second.locked = doc_->isLocked(*e);
-  it->second.grips = grips_of(*e);
+  it->second.grips = grips_of(*e, &it->second.grip_columns);
   if (it->second.geometry != e->geometry) {
     it->second.geometry = e->geometry;
     service_->request(id, e->revision, e->geometry);  // keep the old mesh until the new arrives
@@ -75,7 +82,7 @@ void Scene::rebuild() {
     item.color = doc_->displayColor(e);
     item.visible = doc_->isDisplayed(e);
     item.locked = doc_->isLocked(e);
-    item.grips = grips_of(e);
+    item.grips = grips_of(e, &item.grip_columns);
     service_->request(id, e.revision, e.geometry);
   }
   emit changed();

@@ -192,7 +192,32 @@ document::Geometry morphed(const document::Geometry& g, const std::function<nf::
       g);
 }
 
+std::optional<document::Geometry> with_control_points_moved(const document::Geometry& g, const std::vector<int>& indices,
+                                                             const nf::Transform& t) {
+  if (const auto* c = std::get_if<nf::NurbsCurve>(&g)) return with_control_points_moved(*c, indices, t);
+  auto moved = [&](const nf::NurbsSurface& s) {
+    std::vector<nf::Vec3> pts = s.control_points();
+    for (int i : indices) {
+      if (i >= 0 && static_cast<std::size_t>(i) < pts.size()) pts[static_cast<std::size_t>(i)] = t.apply(pts[static_cast<std::size_t>(i)]);
+    }
+    return nf::NurbsSurface(s.degree_u(), s.degree_v(), s.knots_u(), s.knots_v(), s.num_u(), s.num_v(), pts, s.weights());
+  };
+  if (const auto* s = std::get_if<nf::NurbsSurface>(&g)) return moved(*s);
+  if (const auto* f = std::get_if<nf::TrimmedSurface>(&g)) {
+    if (f->is_untrimmed()) return nf::TrimmedSurface(moved(f->surface()));
+    return nf::TrimmedSurface(moved(f->surface()), f->outer(), f->holes());
+  }
+  return std::nullopt;
+}
+
 std::optional<document::Geometry> part_of(const document::Geometry& g, const document::SubElement& sub) {
+  if (sub.kind == document::SubElement::Kind::ControlPoint && sub.index >= 0) {
+    const nf::NurbsSurface* s = std::get_if<nf::NurbsSurface>(&g);
+    if (const auto* f = std::get_if<nf::TrimmedSurface>(&g)) s = &f->surface();
+    if (s != nullptr && static_cast<std::size_t>(sub.index) < s->control_points().size()) {
+      return s->control_points()[static_cast<std::size_t>(sub.index)];
+    }
+  }
   if (const auto* c = std::get_if<nf::NurbsCurve>(&g); c != nullptr && sub.kind == document::SubElement::Kind::ControlPoint &&
                                                        sub.index >= 0 && static_cast<std::size_t>(sub.index) < c->num_control_points()) {
     return c->control_points()[static_cast<std::size_t>(sub.index)];
