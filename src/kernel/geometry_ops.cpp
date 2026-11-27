@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/geometry/primitives.hpp>
 #include <nurbforge/analysis/closest_point.hpp>
 #include <nurbforge/io/step.hpp>
@@ -120,24 +121,34 @@ std::vector<double> refining_knots(const nf::KnotVector& knots, std::size_t degr
   return out;
 }
 
-nf::NurbsCurve morph_curve(nf::NurbsCurve c, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine, std::size_t spans) {
-  if (refine) {
-    if (c.degree() < 3) c = c.elevate_degree(3 - c.degree());  // a bent line must not stay a polygon
-    const auto x = refining_knots(c.knots(), c.degree(), c.num_control_points(), spans);
-    if (!x.empty()) c = c.refine_knots(x);
+nf::NurbsCurve morph_curve(const nf::NurbsCurve& c, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine,
+                           std::size_t spans) {
+  if (!refine) {  // affine: the control points, exactly
+    std::vector<nf::Vec3> pts;
+    for (const nf::Vec3& p : c.control_points()) pts.push_back(map(p));
+    return {c.degree(), c.knots(), pts, c.weights()};
   }
+  // curved maps: mapped points of the curve interpolated at their own parameters (a cubic, the
+  // parametrisation kept; the error falls with the fourth power of the spacing)
+  const std::size_t n = std::max<std::size_t>({4 * spans, 4 * c.num_control_points(), 64});
   std::vector<nf::Vec3> pts;
-  for (const nf::Vec3& p : c.control_points()) pts.push_back(map(p));
-  return {c.degree(), c.knots(), pts, c.weights()};
+  std::vector<double> params;
+  const double a = c.domain_start(), b = c.domain_end();
+  for (std::size_t i = 0; i <= n; ++i) {
+    const double u = a + (b - a) * double(i) / double(n);
+    params.push_back(u);
+    pts.push_back(map(c.evaluate(u)));
+  }
+  return nf::interpolate_curve(pts, 3, params);
 }
 
 nf::NurbsSurface morph_surface(nf::NurbsSurface s, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine, std::size_t spans) {
   if (refine) {
     if (s.degree_u() < 3) s = s.elevate_degree_u(3 - s.degree_u());
     if (s.degree_v() < 3) s = s.elevate_degree_v(3 - s.degree_v());
-    const auto xu = refining_knots(s.knots_u(), s.degree_u(), s.num_u(), spans);
+    const auto xu = refining_knots(s.knots_u(), s.degree_u(), s.num_u(), 2 * spans);
     if (!xu.empty()) s = s.refine_knots_u(xu);
-    const auto xv = refining_knots(s.knots_v(), s.degree_v(), s.num_v(), spans);
+    const auto xv = refining_knots(s.knots_v(), s.degree_v(), s.num_v(), 2 * spans);
     if (!xv.empty()) s = s.refine_knots_v(xv);
   }
   std::vector<nf::Vec3> pts;
