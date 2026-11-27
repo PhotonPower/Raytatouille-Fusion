@@ -9,6 +9,7 @@
 #include <variant>
 
 #include <nurbforge/geometry/primitives.hpp>
+#include <nurbforge/mesh/triangle_mesh.hpp>
 #include <nurbforge/nurbs/curve.hpp>
 #include <nurbforge/nurbs/surface.hpp>
 #include <nurbforge/topology/shell.hpp>
@@ -24,14 +25,15 @@ using GroupId = std::uint32_t;  ///< 0: top level (no group)
 /// is added (Document::addEntities, apply, insert). Never stored in a document.
 inline constexpr LayerId kCurrentLayer = 0xFFFFFFFFu;
 
-/// Geometry of an entity: exact Nurbforge values (immutable, ADR 0003).
+/// Geometry of an entity: exact Nurbforge values (immutable, ADR 0003); a triangle mesh is the
+/// one approximate kind (the result of mesh-level tools such as Shrink wrap).
 using Geometry =
-    std::variant<nf::Vec3, nf::NurbsCurve, nf::NurbsSurface, nf::TrimmedSurface, nf::Shell>;
+    std::variant<nf::Vec3, nf::NurbsCurve, nf::NurbsSurface, nf::TrimmedSurface, nf::Shell, nf::TriangleMesh>;
 
 /// Shared, immutable geometry: entities, undo commands and tessellation workers share it.
 using GeometryPtr = std::shared_ptr<const Geometry>;
 
-enum class GeometryKind { Point, Curve, Surface, TrimmedSurface, Shell };
+enum class GeometryKind { Point, Curve, Surface, TrimmedSurface, Shell, Mesh };
 
 [[nodiscard]] inline GeometryKind kind_of(const Geometry& g) {
   return static_cast<GeometryKind>(g.index());

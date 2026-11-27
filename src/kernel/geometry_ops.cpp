@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/geometry/primitives.hpp>
 #include <nurbforge/analysis/closest_point.hpp>
@@ -22,6 +23,19 @@ nf::TrimmedSurface transform_face(const nf::TrimmedSurface& f, const nf::Transfo
   if (f.is_untrimmed()) return nf::TrimmedSurface(std::move(s)).with_label(f.label());
   return nf::TrimmedSurface(std::move(s), f.outer(), f.holes()).with_label(f.label());
 }
+
+/// The nodes of a mesh mapped; the triangles turned round where the map reverses the orientation
+/// (a mirror), so that a closed mesh keeps its normals pointing out.
+nf::TriangleMesh map_mesh(const nf::TriangleMesh& m, const std::function<nf::Vec3(const nf::Vec3&)>& map) {
+  nf::TriangleMesh out;
+  out.nodes.reserve(m.nodes.size());
+  for (const nf::Vec3& p : m.nodes) out.nodes.push_back(map(p));
+  out.triangles = m.triangles;
+  if (m.volume() * out.volume() < 0) {
+    for (auto& t : out.triangles) std::swap(t[1], t[2]);
+  }
+  return out;
+}
 }  // namespace
 
 document::Geometry transformed(const document::Geometry& g, const nf::Transform& t) {
@@ -32,6 +46,8 @@ document::Geometry transformed(const document::Geometry& g, const nf::Transform&
           return t.apply(v);
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           return transform_face(v, t);
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          return map_mesh(v, [&](const nf::Vec3& p) { return t.apply(p); });
         } else {
           return v.transformed(t);
         }
@@ -63,6 +79,13 @@ std::vector<std::vector<nf::Vec3>> wire(const document::Geometry& g, std::size_t
               for (auto& c : loop) owned.push_back(std::move(c));
             }
           } catch (const std::exception&) {
+          }
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          // the outlines of every n-th triangle
+          const std::size_t every = std::max<std::size_t>(1, 4 * v.triangles.size() / std::max<std::size_t>(max_points, 1));
+          for (std::size_t k = 0; k < v.triangles.size(); k += every) {
+            const auto& t = v.triangles[k];
+            out.push_back({v.nodes[t[0]], v.nodes[t[1]], v.nodes[t[2]], v.nodes[t[0]]});
           }
         } else {
           for (const nf::ShellEdge& e : v.edges()) curves.push_back(&e.curve);
@@ -178,6 +201,8 @@ document::Geometry morphed(const document::Geometry& g, const std::function<nf::
           return morph_surface(v, map, refine, spans);
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           return morph_face(v, map, refine, spans);
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          return map_mesh(v, map);
         } else {
           std::vector<nf::TrimmedSurface> faces;
           double size = 0;

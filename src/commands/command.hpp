@@ -187,6 +187,8 @@ std::unique_ptr<Command> create_analysis_command(const QString& name);
 QStringList analysis_command_ids();
 std::unique_ptr<Command> create_view_drawing_command(const QString& name);
 std::unique_ptr<Command> create_dimension_command(const QString& name);
+std::unique_ptr<Command> create_mesh_command(const QString& name);
+QStringList mesh_command_ids();
 QStringList dimension_command_ids();
 QStringList view_drawing_command_ids();
 QStringList deform_command_ids();

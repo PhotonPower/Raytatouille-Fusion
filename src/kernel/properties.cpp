@@ -108,6 +108,15 @@ PropertyList describe(const document::Geometry& g, const document::SubElement& s
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           out.emplace_back(QObject::tr("Type"), QObject::tr("Trimmed surface"));
           face_props(v, out);
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          out.emplace_back(QObject::tr("Type"), QObject::tr("Triangle mesh (approximate)"));
+          out.emplace_back(QObject::tr("Nodes"), QString::number(v.nodes.size()));
+          out.emplace_back(QObject::tr("Triangles"), QString::number(v.triangles.size()));
+          const bool closed = v.is_watertight();
+          out.emplace_back(QObject::tr("Closed"), closed ? QObject::tr("yes (watertight)") : QObject::tr("no"));
+          out.emplace_back(QObject::tr("Area"), num(v.area()));
+          if (closed) out.emplace_back(QObject::tr("Volume"), num(v.volume()));
+          out.emplace_back(QObject::tr("Worst triangle quality"), QString::number(v.min_quality(), 'f', 3));
         } else {
           const nf::Shell& sh = v;
           if (sub.kind == Kind::Face && sub.index >= 0 &&

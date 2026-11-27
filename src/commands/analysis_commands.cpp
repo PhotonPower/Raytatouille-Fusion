@@ -420,6 +420,23 @@ Findings check(const document::Geometry& g) {
           surface(v, QObject::tr("surface"));
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           face(v, QObject::tr("surface"));
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          if (!points_ok(v.nodes)) out.errors << QObject::tr("mesh nodes not finite");
+          const bool indices_ok = std::all_of(v.triangles.begin(), v.triangles.end(), [&](const auto& t) {
+            return t[0] < v.nodes.size() && t[1] < v.nodes.size() && t[2] < v.nodes.size();
+          });
+          if (!indices_ok) {
+            out.errors << QObject::tr("triangles refer to missing nodes");
+            return;
+          }
+          if (v.triangles.empty()) out.errors << QObject::tr("empty mesh");
+          if (!v.is_consistently_oriented()) out.errors << QObject::tr("triangles not consistently oriented");
+          if (!v.is_watertight()) {
+            out.notes << QObject::tr("open mesh");
+          } else if (v.is_consistently_oriented() && v.volume() < 0) {
+            out.errors << QObject::tr("closed, but the normals point inwards (negative volume)");
+          }
+          if (v.min_quality() < 0.05) out.notes << QObject::tr("worst triangle quality %1").arg(v.min_quality(), 0, 'f', 3);
         } else {
           for (std::size_t i = 0; i < v.faces().size(); ++i) face(v.faces()[i], QObject::tr("face %1").arg(i));
           if (const auto nm = v.non_manifold_edges(); !nm.empty()) {

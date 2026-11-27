@@ -36,6 +36,7 @@ Geometry is stored exactly: degrees, knot vectors, control points and weights â€
 | `surface` | `degree_u`, `degree_v`, `knots_u`, `knots_v`, `num_u`, `num_v`, `points` (row-major, i along u), `weights` |
 | `trimmed_surface` | `surface`, `outer` and `holes` (lists of 2D curves in parameter space, z = 0; omitted if untrimmed), `label` |
 | `shell` | `faces`: list of trimmed surfaces; topology (edges, vertices) is rebuilt by sewing on load |
+| `mesh` | `nodes` (flat x, y, z list), `triangles` (flat list, three 0-based node indices per triangle, counter-clockwise seen from outside); an approximate triangle mesh, e.g. from Shrink wrap |
 
 Layer `0` is *Default*; it is always there (added when a file lacks it). `locked` (optional,
 written only when true) keeps the layer's objects visible but out of selection. `current_layer`

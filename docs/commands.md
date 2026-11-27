@@ -140,6 +140,7 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Fillet / Chamfer edges | `filletedge`, `blendedge` / `chamferedge`, `bevel` | picked edges of one solid (Ctrl+Shift-click); radius / distance |
 | Variable fillet | `variableblend` | picked edges; points on them, each followed by its radius; Enter: apply |
 | Merge faces | `merge` | selected solids: faces that continue each other merged |
+| Shrink wrap | `shrinkwrap` | selected surfaces / solids (may overlap, leave gaps, be open); resolution (Enter: size / 100), offset (Enter: 0, open input 0.75 × resolution): one closed triangle mesh (a *Mesh* object, approximate; exported as STL, not STEP) |
 | Ellipsoid / Paraboloid | `ellipsoid` / `paraboloid` | centre, first axis end, 2nd and 3rd semi-axis / vertex, focus, rim radius; exact |
 
 | **Editing and analysis** (M6c) | | |
