@@ -74,6 +74,8 @@ Gruppe & Standard & Befehle \\
 \gui{Analyze} & zugeklappt & Distance, Angle, Curvature, Area, Volume / mass properties,
   Intersection check, Area centroid, Continuity, Zebra, Environment map, Curvature analysis, Draft
   angle analysis, Analysis off, Check, Select bad objects \\
+\gui{Dimensions} & zugeklappt & Linear dimension, Aligned dimension, Angle dimension, Radius
+  dimension, Diameter dimension, Arc length dimension, Ordinate dimension, Leader, Dimension text \\
 \bottomrule
 \end{referenz}
 
@@ -1880,6 +1882,46 @@ Kurven der Länge 0, Flächen ohne Normale im Inneren, Beschnitte ohne Fläche, 
 nicht-mannigfaltigen Kanten, uneinheitlich orientierten Flächen oder nach innen zeigenden Normalen
 (Fehler), offene Körper mit ihren freien Kanten (Hinweis). \cmd{selbadobjects} prüft alle Objekte
 und wählt die mit Fehlern.
+
+% ============================================================================
+\section{Bemaßen (Gruppe Dimensions)}\label{sec:gruppe-dimensions}
+
+Bemaßungen sind Objekte des Modells: Maß- und Hilfslinien bilden eine Linie (eine Polylinie), die
+Ansichten zeichnen Pfeile und Maßzahl dazu. Sie werden wie Kurven angeklickt (auch auf der
+Maßzahl), mit Move, Rotate oder Copy verschoben, mit Hide ausgeblendet, mit \keys{Entf}
+gelöscht, liegen auf einem Layer und werden mit dem Modell gespeichert. In Ansichten, die eine
+Bemaßung genau von der Kante sehen, bleibt nur ihre Linie. Die Maßzahl wird bei
+jedem Zeichnen aus der Lage der Bemaßung gemessen: Nach Scale zeigt sie das neue Maß. Sie hat
+höchstens zwei Nachkommastellen (Winkel eine), ohne Einheit.
+
+\begin{description}
+\item[\cmd{dimlinear}] (Alias \code{dim}): erster Punkt, zweiter Punkt, Lage der Maßlinie.
+  Waagerecht oder senkrecht in der Konstruktionsebene -- je nachdem, ob Sie die Maßlinie nach
+  oben/unten oder zur Seite ziehen; gemessen wird nur der Abstand in dieser Richtung.
+\item[\cmd{dimaligned}] wie \cmd{dimlinear}, aber parallel zu den beiden Punkten (ihr wahrer
+  Abstand).
+\item[\cmd{dimangle}] Scheitel, ein Punkt auf dem ersten Schenkel, ein Punkt auf dem zweiten,
+  Lage des Bogens. Von den vier Winkeln zwischen den beiden Geraden wird der bemaßt, in dem die
+  Lage liegt (der Winkel oder sein Nebenwinkel).
+\item[\cmd{dimradius}, \cmd{dimdiameter}] Wählen Sie einen Kreis oder Bogen und klicken Sie die
+  Lage der Maßzahl; die Maßlinie läuft vom Mittelpunkt in diese Richtung, die Zahl steht auf
+  einem kurzen waagerechten Absatz. Text \code{R5} bzw.\
+  \code{$\varnothing$10}.
+\item[\cmd{dimarclength}] (Alias \code{dimarc}): Wählen Sie einen Bogen und klicken Sie die Lage
+  des Maßbogens (konzentrisch); bemaßt wird die Bogenlänge.
+\item[\cmd{dimordinate}] (Alias \code{dimord}): ein Punkt, dann das Ende der Hinweislinie.
+  Nach oben/unten gezogen zeigt sie die $x$-Koordinate (\code{X 12.5}), zur Seite die
+  $y$-Koordinate, jeweils in der Konstruktionsebene, vom Ursprung aus gemessen.
+\item[\cmd{leader}] Hinweislinie: Pfeilspitze, weitere Punkte, \keys{Enter}, dann den Text tippen
+  und mit \keys{Enter} bestätigen.
+\item[\cmd{dimtext}] Wählen Sie Bemaßungen und tippen Sie einen Text, der die Maßzahl ersetzt;
+  \code{<>} darin steht für die Maßzahl (\code{<> H7}, \code{2x <>}). \keys{Enter} ohne Text zeigt
+  wieder die gemessene Zahl. Bei Hinweislinien ersetzt der Text ihren Text.
+\end{description}
+
+Bemaßungen liegen frei im Raum: Sie hängen nicht an den bemaßten Objekten; wird ein Objekt
+geändert, verschieben Sie die Bemaßung mit oder setzen sie neu. Befehle, die Kurven umbauen
+(Rebuild, Join), machen aus einer Bemaßung eine gewöhnliche Kurve.
 
 % ============================================================================
 \section{Arbeitsabläufe an Beispielen}\label{sec:mod-beispiele}

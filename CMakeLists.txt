@@ -45,11 +45,13 @@ add_library(nfcad_core STATIC
   src/commands/deform_commands.cpp
   src/commands/analysis_commands.cpp
   src/commands/view_drawing_commands.cpp
+  src/commands/dimension_commands.cpp
   src/commands/edit_commands.cpp
   src/commands/input_parser.cpp
   src/commands/solid_commands.cpp
   src/commands/surface_commands.cpp
   src/commands/transform_commands.cpp
+  src/document/dimension.cpp
   src/document/document.cpp
   src/document/entity.cpp
   src/document/nfcad_io.cpp
@@ -120,6 +122,7 @@ add_library(nfcad_gui STATIC
   src/render/result_renderer.cpp
   src/render/scene.cpp
   src/render/scene_renderer.cpp
+  src/viewport/dimension_overlay.cpp
   src/viewport/field_legend.cpp
   src/viewport/selection_rect.cpp
   src/viewport/snap_marker.cpp
