@@ -419,6 +419,7 @@ class FlowCommand : public DeformCommand {
     return DeformCommand::begin({selection.begin() + 2, selection.end()});
   }
   Result finish() override { return apply(surface_ ? surface_map() : curve_map(V(viewPlane().n)), false); }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
 
   /// Along curves: a point's arc-length position on the base curve and its offsets in the base
   /// curve's frame (tangent, side = up × tangent, up = the plane normal) carried to the same
