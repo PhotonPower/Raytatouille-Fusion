@@ -37,6 +37,14 @@ one undo step.
 | Torus | `tor` | centre, major radius, tube radius |
 | Union / Intersection | `bu` / `bi` | the selected solids (immediately) |
 | Difference | `bd` | the **first selected** solid minus the other selected solids |
+| **Deform** (selected objects; Shear and Stretch exact) | | |
+| Bend | `bend` | axis start, axis end, a point on the side, angle (degrees) |
+| Twist / Taper | `twist` / `taper` | axis start, axis end, angle at the end / scale at the end |
+| Shear | `shear` | base point, direction point, angle |
+| Stretch | `stretch` | axis start, axis end, new end (or factor) |
+| Maelstrom | `maelstrom` | centre, radius, angle at the centre |
+| Boolean split | `booleansplit`, `bs` | the solid to split, then the cutters: the parts outside and inside |
+| Shell | `shell` | picked faces of a closed solid (open), wall thickness |
 | **Transforms** (on the selection) | | |
 | Move | `m` | from, to; also moves selected result drawings |
 | Copy | `co` | from, to (repeat; Enter: done) |
