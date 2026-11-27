@@ -7,6 +7,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Solids and deformations**: Boolean split, Shell (open at picked faces); Bend, Twist, Taper, Shear,
+  Stretch, Maelstrom, Flow along curve / surface, Cage edit and Splop for every kind of object (tool
+  group *Deform*; Shear and Stretch exact); Unroll surface, Smash and Squish.
 - **Editing surfaces** (tool group *Edit surfaces*): Untrim (one hole or all), Extract surface (picked
   faces of a solid), Shrink trimmed surface, Extend surface, Rebuild surface and Rebuild in one
   direction, Change surface degree, Slab, Thicken and Make hollow.

@@ -168,6 +168,8 @@ std::unique_ptr<Command> create_curve_edit_command(const QString& name);
 std::unique_ptr<Command> create_surface_create_command(const QString& name);
 std::unique_ptr<Command> create_surface_blend_command(const QString& name);
 std::unique_ptr<Command> create_surface_edit_command(const QString& name);
+std::unique_ptr<Command> create_deform_command(const QString& name);
+QStringList deform_command_ids();
 QStringList surface_edit_command_ids();
 QStringList surface_blend_command_ids();
 QStringList surface_create_command_ids();

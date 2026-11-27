@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/geometry/primitives.hpp>
 #include <nurbforge/analysis/closest_point.hpp>
 #include <nurbforge/io/step.hpp>
@@ -94,6 +95,101 @@ nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op) {
     throw std::runtime_error(QObject::tr("the result is empty").toStdString());
   }
   return result;
+}
+
+namespace {
+
+/// Interior knots that split every span of `knots` (on its domain) into pieces, so that the
+/// domain has at least `spans` spans.
+std::vector<double> refining_knots(const nf::KnotVector& knots, std::size_t degree, std::size_t count, std::size_t spans) {
+  const double a = knots[degree], b = knots[count];
+  std::vector<double> distinct;
+  for (std::size_t i = degree; i <= count; ++i) {
+    if (distinct.empty() || knots[i] > distinct.back()) distinct.push_back(knots[i]);
+  }
+  const std::size_t have = distinct.size() - 1;
+  std::vector<double> out;
+  if (have >= spans) return out;
+  const std::size_t per = (spans + have - 1) / have;  // pieces per existing span
+  for (std::size_t k = 0; k + 1 < distinct.size(); ++k) {
+    for (std::size_t j = 1; j < per; ++j) {
+      out.push_back(distinct[k] + (distinct[k + 1] - distinct[k]) * double(j) / double(per));
+    }
+  }
+  (void)a;
+  (void)b;
+  return out;
+}
+
+nf::NurbsCurve morph_curve(const nf::NurbsCurve& c, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine,
+                           std::size_t spans) {
+  if (!refine) {  // affine: the control points, exactly
+    std::vector<nf::Vec3> pts;
+    for (const nf::Vec3& p : c.control_points()) pts.push_back(map(p));
+    return {c.degree(), c.knots(), pts, c.weights()};
+  }
+  // curved maps: mapped points of the curve interpolated at their own parameters (a cubic, the
+  // parametrisation kept; the error falls with the fourth power of the spacing)
+  const std::size_t n = std::max<std::size_t>({4 * spans, 4 * c.num_control_points(), 64});
+  std::vector<nf::Vec3> pts;
+  std::vector<double> params;
+  const double a = c.domain_start(), b = c.domain_end();
+  for (std::size_t i = 0; i <= n; ++i) {
+    const double u = a + (b - a) * double(i) / double(n);
+    params.push_back(u);
+    pts.push_back(map(c.evaluate(u)));
+  }
+  return nf::interpolate_curve(pts, 3, params);
+}
+
+nf::NurbsSurface morph_surface(nf::NurbsSurface s, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine, std::size_t spans) {
+  if (refine) {
+    if (s.degree_u() < 3) s = s.elevate_degree_u(3 - s.degree_u());
+    if (s.degree_v() < 3) s = s.elevate_degree_v(3 - s.degree_v());
+    const auto xu = refining_knots(s.knots_u(), s.degree_u(), s.num_u(), 2 * spans);
+    if (!xu.empty()) s = s.refine_knots_u(xu);
+    const auto xv = refining_knots(s.knots_v(), s.degree_v(), s.num_v(), 2 * spans);
+    if (!xv.empty()) s = s.refine_knots_v(xv);
+  }
+  std::vector<nf::Vec3> pts;
+  for (const nf::Vec3& p : s.control_points()) pts.push_back(map(p));
+  return {s.degree_u(), s.degree_v(), s.knots_u(), s.knots_v(), s.num_u(), s.num_v(), pts, s.weights()};
+}
+
+nf::TrimmedSurface morph_face(const nf::TrimmedSurface& f, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine,
+                              std::size_t spans) {
+  const nf::NurbsSurface s = morph_surface(f.surface(), map, refine, spans);
+  if (f.is_untrimmed()) return nf::TrimmedSurface(s);
+  return nf::TrimmedSurface(s, f.outer(), f.holes());
+}
+
+}  // namespace
+
+document::Geometry morphed(const document::Geometry& g, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine,
+                           std::size_t spans) {
+  return std::visit(
+      [&](const auto& v) -> document::Geometry {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, nf::Vec3>) {
+          return map(v);
+        } else if constexpr (std::is_same_v<T, nf::NurbsCurve>) {
+          return morph_curve(v, map, refine, spans);
+        } else if constexpr (std::is_same_v<T, nf::NurbsSurface>) {
+          return morph_surface(v, map, refine, spans);
+        } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
+          return morph_face(v, map, refine, spans);
+        } else {
+          std::vector<nf::TrimmedSurface> faces;
+          double size = 0;
+          for (const nf::TrimmedSurface& f : v.faces()) {
+            faces.push_back(morph_face(f, map, refine, spans));
+            for (const nf::Vec3& p : faces.back().surface().control_points()) size = std::max(size, nf::norm(p));
+          }
+          const nf::Shell sewn = nf::Shell::sew(faces, 1e-4 * std::max(size, 1.0));
+          return v.is_closed() && sewn.is_closed() ? sewn.oriented() : sewn;
+        }
+      },
+      g);
 }
 
 std::optional<document::Geometry> part_of(const document::Geometry& g, const document::SubElement& sub) {

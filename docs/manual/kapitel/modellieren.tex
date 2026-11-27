@@ -57,8 +57,10 @@ Gruppe & Standard & Befehle \\
   surface, Offset surface, Fillet surfaces, Blend surface, Match surface, Merge surfaces, Connect
   surfaces, Tween surfaces, Cap planar holes \\
 \gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Ellipsoid, Paraboloid, Fillet
-  edges, Chamfer edges, Variable fillet, Merge faces, Boolean union,
+  edges, Chamfer edges, Variable fillet, Merge faces, Boolean split, Shell, Boolean union,
   Boolean difference, Boolean intersection \\
+\gui{Deform} & zugeklappt & Bend, Twist, Taper, Shear, Stretch, Maelstrom, Flow along curve, Flow
+  along surface, Cage edit, Splop, Unroll surface, Smash, Squish \\
 \gui{Transform} & zugeklappt & Move, Copy, Rotate, Scale, Mirror, Linear array, Grid array,
   Polar array \\
 \gui{Edit} & zugeklappt & Trim, Split, Join, Explode, Delete \\
@@ -1438,6 +1440,14 @@ Abschnitt~\ref{sec:teilobjekte}) und starten Sie:
 Körper zusammen, die einander fortsetzen (z.\,B.\ zwei Flächen derselben Ebene nach einer
 Booleschen Operation).
 
+\subsection{Boolean split, Shell}\label{sec:cmd-boolean-split}
+\cmd{booleansplit} (Alias \code{bs}): Wählen Sie zuerst den Körper, der geteilt werden soll, dann
+die schneidenden Körper -- es entstehen der Teil außerhalb und der Teil innerhalb der Schneidkörper;
+die Schneidkörper bleiben. \cmd{shell}: Wählen Sie die Flächen eines geschlossenen Körpers, die
+offen sein sollen (\keys{Strg+Shift}-Klick), und tippen Sie die Wandstärke -- der Körper wird zur
+Schale, die an diesen Flächen offen ist. Die übrigen Flächen müssen glatt ineinander übergehen
+(wie bei \gui{Make hollow}).
+
 \subsection{Torus -- Ring}\label{sec:cmd-torus}
 \cmd{torus}, Alias \code{tor}. Ein Torus, dessen Mittelebene in der Konstruktionsebene liegt.
 \begin{schritte}
@@ -1495,6 +1505,51 @@ lassen (Beispiel in Abschnitt~\ref{sec:bsp-platte}).
 \end{tipp}
 
 % ============================================================================
+\section{Verformen (Gruppe Deform)}\label{sec:gruppe-deform}
+
+Die Verformungen wirken auf die ausgewählten Objekte jeder Art -- Punkte, Kurven, Flächen,
+Körper. Scherung und Streckung sind affin und exakt (ein gescherter Quader behält sein Volumen);
+die übrigen biegen die Geometrie: Kurven werden dazu dicht abgetastet und neu interpoliert, Flächen
+fein unterteilt, bevor ihre Kontrollpunkte abgebildet werden -- die Abweichung von der exakten
+Verformung bleibt klein, ist aber nicht null.
+\begin{description}
+\item[\cmd{bend}] Anfang und Ende der Biegeachse, ein Punkt auf der Seite, zu der gebogen wird,
+  dann der Winkel in Grad: Die Achse wird zum Kreisbogen dieses Winkels; was hinter ihrem Ende
+  liegt, setzt sich gerade fort.
+\item[\cmd{twist}] Achse (zwei Punkte), dann der Drehwinkel am Achsende -- vom Anfang zum Ende
+  wächst die Drehung gleichmäßig.
+\item[\cmd{taper}] Achse, dann der Maßstab am Achsende (am Anfang 1): der Abstand von der Achse
+  wächst oder schrumpft gleichmäßig.
+\item[\cmd{shear}] Basispunkt, ein Punkt für die Scherrichtung (in der Konstruktionsebene), dann
+  der Winkel.
+\item[\cmd{stretch}] Anfang und Ende einer Achse, dann das neue Ende (oder ein Faktor): Streckung
+  nur entlang der Achse.
+\item[\cmd{maelstrom}] Mittelpunkt, Radius, Winkel: ein Strudel -- am Mittelpunkt um den vollen
+  Winkel gedreht, nach außen abnehmend bis null am Radius.
+\item[\cmd{flow}] (Flow along curve, Alias \code{flowalongcrv}): Wählen Sie zuerst eine
+  Basiskurve, dann eine Zielkurve, dann die Objekte. Die Lage entlang der Basiskurve (relativ zu
+  ihrer Länge) wird auf die Zielkurve übertragen, der Abstand quer dazu bleibt; entlang der Kurve
+  wird im Verhältnis der Längen gestreckt.
+\item[\cmd{flowalongsrf}] Ebenso mit einer Basis- und einer Zielfläche: $(u, v)$ relativ zum
+  Parameterbereich und die Höhe entlang der Normalen werden übertragen.
+\item[\cmd{cageedit}] (Alias \code{cage}): Anzahl der Käfigpunkte je Richtung (2--6,
+  \keys{Enter}: 4). Um die Auswahl entsteht ein Käfig, ausgerichtet an der Konstruktionsebene;
+  seine Punkte sind Fangpunkte. Klicken Sie einen Käfigpunkt, dann seinen neuen Ort -- beliebig
+  oft, die Vorschau zeigt die verformten Objekte; \keys{Enter} wendet die Verformung an (ein
+  Bézier-Volumen, bei 2 Punkten trilinear). Der Käfig ist kein bleibendes Objekt.
+\item[\cmd{splop}] Wählen Sie zuerst die Zielfläche, dann die Objekte; klicken Sie einen Basispunkt
+  und einen Punkt auf der Fläche. Die Objekte werden dort auf die Fläche gelegt: Die Richtungen der
+  Konstruktionsebene folgen der $u$-Richtung und der Normalen der Fläche, Abstände entlang der
+  Fläche bleiben näherungsweise erhalten.
+\end{description}
+
+\subsection{Abwickeln: Unroll surface, Smash, Squish}\label{sec:cmd-unroll}
+\cmd{unrollsrf} (Alias \code{unroll}) wickelt die ausgewählten Flächen in die Konstruktionsebene ab
+-- exakt für abwickelbare Flächen (Zylinder, Kegel, Developable loft); ein Beschnitt bleibt. Die
+Statusleiste nennt die größte Dehnung; über 1\,\% ist die Fläche nicht abwickelbar.
+\cmd{smash} wickelt ebenso ab, ohne Warnung; \cmd{squish} verteilt bei nicht abwickelbaren Flächen
+die Dehnung gleichmäßiger (Federn entlang der Gitterkanten).
+
 \section{Transformieren (Gruppe Transform)}\label{sec:gruppe-transform}
 \index{Transformation}
 
