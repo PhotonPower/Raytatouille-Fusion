@@ -151,6 +151,8 @@ class MainWindow : public QMainWindow {
   document::Document* doc_ = nullptr;
   document::Selection* selection_ = nullptr;
   results::ResultStore* results_ = nullptr;
+  /// Line items of result drawings (rays) hidden with Hide; Unhide shows them again.
+  std::vector<std::uint64_t> hidden_drawings_;
   plugins::PluginManager* plugins_ = nullptr;
   plugins::PluginHost* active_plugin_ = nullptr;
   bool plugin_started_on_empty_ = false;

@@ -426,7 +426,7 @@ Strahlen sind Anzeigedaten; zum Messen oder Konstruieren brauchen Sie echte Kurv
 Die neuen Kurven sind normale CAD-Objekte (fangbar, messbar, exportierbar) und bilden einen
 Rückgängig-Schritt \enquote{Rays to curves}.
 
-\subsubsection{Zeichnungen anklicken, verschieben, drehen, löschen}\label{sec:ergebnis-zeichnungen}
+\subsubsection{Zeichnungen anklicken, verschieben, drehen, ausblenden, löschen}\label{sec:ergebnis-zeichnungen}
 \index{Ergebnis!auswählen}
 
 Die Linien-Ergebnisse eines Ergebnissatzes -- etwa alle Strahlen eines Laufs des Raytracers oder
@@ -449,6 +449,10 @@ CAD-Objekt anklicken lässt:
   \item \textbf{Löschen:} \keys{Entf} entfernt die Linien des Ergebnissatzes (rückgängig
     machbar); andere Ergebnisse des Satzes, etwa Felder oder Tabellen, bleiben, ein leerer Satz
     verschwindet.
+  \item \textbf{Ausblenden:} \gui{Hide} (\keys{H}) blendet die Linien ausgewählter Zeichnungen
+    aus und hebt ihre Auswahl auf, \gui{Unhide} (\keys{Shift+H}) zeigt sie wieder -- wie bei
+    Objekten. Im Ergebnis-Panel sind die Linien-Einträge dann nicht mehr abgehakt; dort lassen
+    sie sich auch einzeln wieder einschalten.
 \end{itemize}
 
 Ein Plugin kann eine Zeichnung an seine Parameter \emph{binden}. Dann schreibt Verschieben oder

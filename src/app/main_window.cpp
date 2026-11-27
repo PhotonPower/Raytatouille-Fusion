@@ -290,7 +290,22 @@ void MainWindow::createViewToolBar() {
 }
 
 void MainWindow::hideSelection() {
-  const std::size_t n = model_tree_->hideSelection();
+  // selected result drawings (rays, a plugin's camera): their line items
+  std::size_t drawings = 0;
+  const std::vector<results::ResultId> runs(selection_->results().begin(), selection_->results().end());
+  const std::size_t entities = model_tree_->hideSelection();
+  for (results::ResultId run : runs) {
+    const auto lines = results::drawn_lines(*results_, run);
+    std::vector<results::ResultId> items;
+    for (const results::ResultItem* i : lines) items.push_back(i->id);
+    for (results::ResultId id : items) {
+      results_->setItemVisible(id, false);
+      hidden_drawings_.push_back(id);
+    }
+    if (!items.empty()) ++drawings;
+  }
+  if (drawings > 0) selection_->clear();  // what cannot be seen must not stay selected
+  const std::size_t n = entities + drawings;
   statusBar()->showMessage(n == 0 ? tr("Hide: select objects first")
                                   : tr("%n object(s) hidden – Unhide (Shift+H) shows them again", nullptr,
                                        static_cast<int>(n)),
@@ -298,7 +313,16 @@ void MainWindow::hideSelection() {
 }
 
 void MainWindow::unhide() {
-  const std::size_t n = doc_->showHiddenEntities();
+  std::size_t drawings = 0;
+  std::vector<results::ResultId> runs;
+  for (results::ResultId id : std::exchange(hidden_drawings_, {})) {
+    if (results_->item(id) == nullptr) continue;  // deleted meanwhile
+    results_->setItemVisible(id, true);
+    const results::ResultId run = results_->setOf(id);
+    if (std::find(runs.begin(), runs.end(), run) == runs.end()) runs.push_back(run);
+  }
+  drawings = runs.size();
+  const std::size_t n = doc_->showHiddenEntities() + drawings;
   statusBar()->showMessage(n == 0 ? tr("Unhide: no hidden objects")
                                   : tr("%n object(s) shown again", nullptr, static_cast<int>(n)),
                            4000);

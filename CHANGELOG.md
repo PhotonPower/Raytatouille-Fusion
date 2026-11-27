@@ -7,6 +7,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Hide / Unhide for result drawings**: Hide (H) also hides selected rays and other result drawings,
+  Unhide (Shift+H) shows them again.
 - **Dimensions** (tool group *Dimensions*): linear (horizontal / vertical), aligned, angle, radius,
   diameter, arc length and ordinate dimensions, leaders, and Dimension text (`<>` = the value).
   Dimensions are objects: picked (also at their text), moved, rotated, copied, hidden, deleted and
