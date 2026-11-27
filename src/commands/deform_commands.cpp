@@ -507,6 +507,20 @@ Flattened flatten(const nf::NurbsSurface& s, std::size_t n, int relax) {
       p[i][j] = s.evaluate(du[0] + (du[1] - du[0]) * double(i) / double(n), dv[0] + (dv[1] - dv[0]) * double(j) / double(n));
     }
   }
+  // length of a grid edge along the surface (iso line in 16 chords: error ~ 1/16² of a chord's)
+  auto edge = [&](std::size_t i0, std::size_t j0, std::size_t i1, std::size_t j1) {
+    constexpr int k = 16;
+    double len = 0;
+    nf::Vec3 prev = p[i0][j0];
+    for (int m = 1; m <= k; ++m) {
+      const double t = double(m) / k;
+      const double ui = (double(i0) + (double(i1) - double(i0)) * t) / double(n), vj = (double(j0) + (double(j1) - double(j0)) * t) / double(n);
+      const nf::Vec3 cur = s.evaluate(du[0] + (du[1] - du[0]) * ui, dv[0] + (dv[1] - dv[0]) * vj);
+      len += nf::distance(prev, cur);
+      prev = cur;
+    }
+    return len;
+  };
   std::vector<std::vector<nf::Vec3>> q(n + 1, std::vector<nf::Vec3>(n + 1));
   // the third corner of a triangle from two placed points and the distances to them, on the left
   // of a → b (the side the surface's v grows to)
@@ -518,14 +532,14 @@ Flattened flatten(const nf::NurbsSurface& s, std::size_t n, int relax) {
     return a + e * x + f * (side * y);
   };
   q[0][0] = {0, 0, 0};
-  for (std::size_t i = 1; i <= n; ++i) q[i][0] = q[i - 1][0] + nf::Vec3{nf::distance(p[i][0], p[i - 1][0]), 0, 0};
+  for (std::size_t i = 1; i <= n; ++i) q[i][0] = q[i - 1][0] + nf::Vec3{edge(i - 1, 0, i, 0), 0, 0};
   for (std::size_t j = 1; j <= n; ++j) {
     for (std::size_t i = 0; i <= n; ++i) {
       // from the point below and its neighbour in the row below (or the point to the left)
       if (i == 0) {
-        q[0][j] = apex(q[0][j - 1], q[1][j - 1], nf::distance(p[0][j], p[0][j - 1]), nf::distance(p[0][j], p[1][j - 1]), 1);
+        q[0][j] = apex(q[0][j - 1], q[1][j - 1], edge(0, j - 1, 0, j), nf::distance(p[0][j], p[1][j - 1]), 1);
       } else {
-        q[i][j] = apex(q[i - 1][j], q[i][j - 1], nf::distance(p[i][j], p[i - 1][j]), nf::distance(p[i][j], p[i][j - 1]), 1);
+        q[i][j] = apex(q[i - 1][j], q[i][j - 1], edge(i - 1, j, i, j), edge(i, j - 1, i, j), 1);
       }
     }
   }
@@ -555,7 +569,7 @@ Flattened flatten(const nf::NurbsSurface& s, std::size_t n, int relax) {
     for (std::size_t j = 0; j <= n; ++j) {
       for (const auto& [di, dj] : {std::pair{1, 0}, {0, 1}}) {
         if (i + di > n || j + dj > n) continue;
-        const double rest = nf::distance(p[i + di][j + dj], p[i][j]);
+        const double rest = edge(i, j, i + di, j + dj);
         if (rest > 0) out.max_strain = std::max(out.max_strain, std::abs(nf::distance(q[i + di][j + dj], q[i][j]) - rest) / rest);
       }
     }
