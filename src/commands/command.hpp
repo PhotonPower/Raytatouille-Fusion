@@ -25,6 +25,11 @@ struct PlaneFrame {
   Point3 u{1, 0, 0};
   Point3 v{0, 1, 0};
   Point3 n{0, 0, 1};
+  // camera of that view (Silhouette, Make2D, Outline)
+  Point3 view{0, 0, -1};        ///< viewing direction, from the viewer into the scene (unit)
+  Point3 up{0, 1, 0};           ///< screen up (unit, normal to `view`)
+  Point3 target{0, 0, 0};       ///< orbit centre
+  std::optional<Point3> eye{};  ///< eye point of a perspective view; empty: parallel view
 };
 
 /// Selected control points ("grips") of one curve whose points are shown: the entity and the
@@ -176,6 +181,8 @@ std::unique_ptr<Command> create_surface_edit_command(const QString& name);
 std::unique_ptr<Command> create_deform_command(const QString& name);
 std::unique_ptr<Command> create_analysis_command(const QString& name);
 QStringList analysis_command_ids();
+std::unique_ptr<Command> create_view_drawing_command(const QString& name);
+QStringList view_drawing_command_ids();
 QStringList deform_command_ids();
 QStringList surface_edit_command_ids();
 QStringList surface_blend_command_ids();

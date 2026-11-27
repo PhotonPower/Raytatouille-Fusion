@@ -44,6 +44,7 @@ add_library(nfcad_core STATIC
   src/commands/surface_edit_commands.cpp
   src/commands/deform_commands.cpp
   src/commands/analysis_commands.cpp
+  src/commands/view_drawing_commands.cpp
   src/commands/edit_commands.cpp
   src/commands/input_parser.cpp
   src/commands/solid_commands.cpp

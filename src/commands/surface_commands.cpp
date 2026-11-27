@@ -550,6 +550,63 @@ class SurfaceInputCommand : public Command {
   std::vector<nf::NurbsSurface> surfaces_;
 };
 
+/// ChamferSrf: the ruled surface between the curves at the given distances (measured within the
+/// surfaces) from the intersection of two surfaces. One distance and Enter: the same on both.
+class ChamferSurfacesCommand : public Command {
+ public:
+  QString id() const override { return QStringLiteral("chamfer_surface"); }
+  QString title() const override { return QObject::tr("Chamfer surfaces"); }
+  QString prompt() const override {
+    return first_ ? QObject::tr("Chamfer surfaces: distance on the second surface (Enter: the same)")
+                  : QObject::tr("Chamfer surfaces: distance on the first surface");
+  }
+  bool usesSelection() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    for (const document::Entity& e : selection) {
+      if (auto s = surface_of(e)) surfaces_.push_back(std::move(*s));
+    }
+    if (surfaces_.size() != 2) {
+      message_ = QObject::tr("Chamfer surfaces: select two (untrimmed) surfaces");
+      return false;
+    }
+    return true;
+  }
+  Result number(double v) override {
+    if (v <= 0.0) return Result::Rejected;
+    if (!first_) {
+      first_ = v;
+      return Result::Continue;
+    }
+    return make(*first_, v);
+  }
+  Result finish() override { return first_ ? make(*first_, *first_) : Result::Cancelled; }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+
+ private:
+  Result make(double d1, double d2) {
+    const bool ok = attempt(message_, title(), [&] {
+      // the wedge is not known in advance: try the four, as Fillet surfaces does
+      std::string last;
+      for (const auto& [s1, s2] : {std::pair{1, 1}, {-1, -1}, {1, -1}, {-1, 1}}) {
+        try {
+          nf::SurfaceChamferOptions o;
+          o.side1 = s1;
+          o.side2 = s2;
+          o.tolerance = 1e-5;
+          entities_.push_back(document::make_entity(nf::chamfer_surfaces(surfaces_[0], surfaces_[1], d1, d2, o).surface));
+          return;
+        } catch (const std::exception& e) {
+          last = e.what();
+        }
+      }
+      throw std::runtime_error(last);
+    });
+    return ok ? Result::Done : Result::Rejected;
+  }
+  std::vector<nf::NurbsSurface> surfaces_;
+  std::optional<double> first_;
+};
+
 }  // namespace
 
 namespace detail {
@@ -609,6 +666,9 @@ std::unique_ptr<Command> create_surface_command(const QString& n) {
   if (n == QLatin1String("fillet_surface") || n == QLatin1String("filletsrf")) {
     return std::make_unique<SurfaceInputCommand>(true);
   }
+  if (n == QLatin1String("chamfer_surface") || n == QLatin1String("chamfersrf")) {
+    return std::make_unique<ChamferSurfacesCommand>();
+  }
   return nullptr;
 }
 
@@ -617,7 +677,7 @@ QStringList surface_command_ids() {
           QStringLiteral("revolve"),        QStringLiteral("loft"),         QStringLiteral("sweep1"),
           QStringLiteral("sweep2"),         QStringLiteral("coons"),        QStringLiteral("gordon"),
           QStringLiteral("offset_curve"),   QStringLiteral("fillet_curve"), QStringLiteral("offset_surface"),
-          QStringLiteral("fillet_surface")};
+          QStringLiteral("fillet_surface"), QStringLiteral("chamfer_surface")};
 }
 
 }  // namespace detail
