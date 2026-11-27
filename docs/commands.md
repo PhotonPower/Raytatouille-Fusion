@@ -43,6 +43,10 @@ one undo step.
 | Shear | `shear` | base point, direction point, angle |
 | Stretch | `stretch` | axis start, axis end, new end (or factor) |
 | Maelstrom | `maelstrom` | centre, radius, angle at the centre |
+| Flow along curve / surface | `flow` / `flowalongsrf` | base, target, then the objects (selected in that order) |
+| Cage edit | `cageedit`, `cage` | points per direction (Enter: 4), then cage point → new place, …, Enter |
+| Splop | `splop` | target surface, then the objects; base point, point on the surface |
+| Unroll surface / Smash / Squish | `unrollsrf` / `smash` / `squish` | selected surfaces flattened into the construction plane (Squish: stretch spread) |
 | Boolean split | `booleansplit`, `bs` | the solid to split, then the cutters: the parts outside and inside |
 | Shell | `shell` | picked faces of a closed solid (open), wall thickness |
 | **Transforms** (on the selection) | | |
