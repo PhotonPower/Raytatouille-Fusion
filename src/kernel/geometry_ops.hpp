@@ -16,8 +16,9 @@ namespace nfcad::kernel {
 [[nodiscard]] document::Geometry transformed(const document::Geometry& g, const nf::Transform& t);
 
 /// A geometry deformed by a point map (Bend, Twist, Flow …): the control points are mapped – exact
-/// for affine maps; for others (`refine`) curves and surfaces are first refined to at least
-/// `spans` knot spans per direction so that the shape follows the map closely. Trimmed faces keep
+/// for affine maps; for others (`refine`) curves and surfaces are first raised to degree 3 at
+/// least and refined to `spans` knot spans per direction so that the shape follows the map
+/// closely. Trimmed faces keep
 /// their trims (parameters); the faces of a shell are deformed one by one and sewn again within
 /// 1e-4 of the model's size. Weights stay.
 [[nodiscard]] document::Geometry morphed(const document::Geometry& g, const std::function<nf::Vec3(const nf::Vec3&)>& map,

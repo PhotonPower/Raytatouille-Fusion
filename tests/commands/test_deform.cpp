@@ -55,7 +55,7 @@ class TestDeform : public QObject {
     const double r = 8 / kPi;
     QVERIFY(nf::distance(end_of(g), {r, r, 0}) < 1e-9);
     const auto& arc = std::get<nf::NurbsCurve>(g);
-    for (const auto& p : arc.sample(20)) QVERIFY(std::abs(nf::distance(p, {0, r, 0}) - r) < 2e-3);  // on the circle
+    for (const auto& p : arc.sample(20)) QVERIFY(std::abs(nf::distance(p, {0, r, 0}) - r) < 1e-4);  // on the circle
   }
 
   void twistAndTaper() {
