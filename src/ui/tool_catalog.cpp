@@ -80,6 +80,13 @@ std::vector<ToolGroupDef> build() {
         t("join", "Join", "Jn", "j"), t("explode", "Explode", "Exp", "x"),
         // not a command: the Edit menu's Delete (Del / Backspace)
         t("delete", "Delete", "Del", "", QKeySequence::Delete)}},
+      {"surface_edit", "Edit surfaces", false,
+       {t("untrim", "Untrim", "Utr", "untrim"), t("extractsrf", "Extract surface", "ExF", "extractsrf"),
+        t("shrinktrimmedsrf", "Shrink trimmed surface", "Shr", "shrink"),
+        t("extendsrf", "Extend surface", "ExE", "extendsrf"), t("rebuildsrf", "Rebuild surface", "RbS", "rebuildsrf"),
+        t("rebuilduv", "Rebuild surface in one direction", "RUV", "rebuilduv"),
+        t("changedegreesrf", "Change surface degree", "DgS", "changedegreesrf"), t("slab", "Slab", "Slb", "slab"),
+        t("thicken", "Thicken", "Thk", "thicken"), t("makehollow", "Make hollow", "Hol", "makehollow")}},
       {"curve_edit", "Edit curves", false,
        {t("extend", "Extend curve", "Ext", "extendcrv"), t("divide", "Divide", "Div", "divide"),
         t("divide_length", "Divide by length", "DvL", "divlen"), t("rebuild", "Rebuild curve", "Rbd", "rebuild"),
