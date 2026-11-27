@@ -115,7 +115,7 @@ class TestAnalysis : public QObject {
 
   void surfaceControlPoints() {
     const nf::TrimmedSurface face(nf::make_rectangle({0, 0, 0}, {2, 0, 0}, {0, 2, 0}));
-    const auto hole = nf::TrimmedSurface(face).with_hole(nf::make_circle({1, 1, 0}, {0, 0, 1}, 0.3));
+    const auto hole = face.with_hole(nf::TrimLoop{{nf::make_circle({0.5, 0.5, 0}, {0, 0, 1}, 0.15).reversed()}});
     const Geometry g = hole;
     const auto& s = hole.surface();
     const int last = static_cast<int>(s.control_points().size()) - 1;
