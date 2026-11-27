@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Analysis**: Zebra, environment map, curvature analysis (Gaussian, mean, max, min) and draft angle
+  analysis shown on the faces in every viewport; Continuity (GCon) of curves and surfaces; Area
+  centroid; Check and Select bad objects. Points on now also shows and drags the control net of
+  surfaces (alias `surfaceeditpt`).
 - **Solids and deformations**: Boolean split, Shell (open at picked faces); Bend, Twist, Taper, Shear,
   Stretch, Maelstrom, Flow along curve / surface, Cage edit and Splop for every kind of object (tool
   group *Deform*; Shear and Stretch exact); Unroll surface, Smash and Squish.
