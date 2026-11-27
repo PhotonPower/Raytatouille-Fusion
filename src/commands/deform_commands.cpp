@@ -1,12 +1,16 @@
 // Solid operations and deformations (docs/commands.md, "Solids" and "Deform"): Boolean split, Shell;
-// Bend, Twist, Taper, Shear, Stretch, Maelstrom. The deformations map the control points of the
-// selected objects (kernel::morphed): exact for Shear and Stretch, refined first for the others.
+// Bend, Twist, Taper, Shear, Stretch, Maelstrom, Flow along curve, Flow along surface; Unroll,
+// Smash and Squish (flattening surfaces). The deformations map the selected objects with
+// kernel::morphed: exact for Shear and Stretch, refined first for the others.
 #include <QObject>
 #include <algorithm>
 #include <cmath>
 #include <exception>
 #include <functional>
 #include <numbers>
+#include <nurbforge/analysis/closest_point.hpp>
+#include <nurbforge/analysis/properties.hpp>
+#include <nurbforge/fitting/fit.hpp>
 #include <nurbforge/topology/solid_ops.hpp>
 
 #include "commands/command_util.hpp"
@@ -378,6 +382,265 @@ class MaelstromCommand : public DeformCommand {
   PlaneFrame plane_;
 };
 
+// ------------------------------------------------------------------------------ Flow
+/// The objects after the first two selected items: Flow along curve takes a base curve and a
+/// target curve first, Flow along surface a base and a target surface.
+class FlowCommand : public DeformCommand {
+ public:
+  explicit FlowCommand(bool surface) : surface_(surface) {}
+  QString id() const override { return surface_ ? QStringLiteral("flowalongsrf") : QStringLiteral("flow"); }
+  QString title() const override { return surface_ ? QObject::tr("Flow along surface") : QObject::tr("Flow along curve"); }
+  QString prompt() const override { return title(); }
+  bool immediate() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    if (selection.size() < 3) {
+      message_ = surface_ ? QObject::tr("Flow along surface: select the base surface, the target surface, then the objects")
+                          : QObject::tr("Flow along curve: select the base curve, the target curve, then the objects");
+      return false;
+    }
+    if (surface_) {
+      const auto a = surface_of(selection[0]), b = surface_of(selection[1]);
+      if (!a || !b) {
+        message_ = QObject::tr("Flow along surface: the first two selected objects must be surfaces");
+        return false;
+      }
+      base_s_ = *a;
+      target_s_ = *b;
+    } else {
+      const auto* a = std::get_if<nf::NurbsCurve>(selection[0].geometry.get());
+      const auto* b = std::get_if<nf::NurbsCurve>(selection[1].geometry.get());
+      if (a == nullptr || b == nullptr) {
+        message_ = QObject::tr("Flow along curve: the first two selected objects must be curves");
+        return false;
+      }
+      base_c_ = *a;
+      target_c_ = *b;
+    }
+    return DeformCommand::begin({selection.begin() + 2, selection.end()});
+  }
+  Result finish() override { return apply(surface_ ? surface_map() : curve_map(V(viewPlane().n)), false); }
+
+  /// Along curves: a point's arc-length position on the base curve and its offsets in the base
+  /// curve's frame (tangent, side = up × tangent, up = the plane normal) carried to the same
+  /// relative position on the target curve; offsets beyond the ends run along the end tangents.
+  static Map flow_curve(const nf::NurbsCurve& base, const nf::NurbsCurve& target, const nf::Vec3& up) {
+    const double lb = nf::arc_length(base), lt = nf::arc_length(target);
+    return [=](const nf::Vec3& p) {
+      const nf::CurvePoint f = nf::closest_point(base, p);
+      const nf::Vec3 tb = nf::normalized(base.tangent(f.u)), sb = nf::normalized(nf::cross(up, tb));
+      const nf::Vec3 d = p - f.point;
+      const double s = nf::arc_length(base, base.domain_start(), f.u) / lb;
+      const double ut = nf::parameter_at_length(target, std::clamp(s, 0.0, 1.0) * lt);
+      const nf::Vec3 tt = nf::normalized(target.tangent(ut)), st = nf::normalized(nf::cross(up, tt));
+      return target.evaluate(ut) + tt * (nf::dot(d, tb) * lt / lb) + st * nf::dot(d, sb) + up * nf::dot(d, up);
+    };
+  }
+
+  /// Along surfaces: a point's (u, v) on the base surface (relative to its domain) and its
+  /// height along the base normal carried to the target surface.
+  static Map flow_surface(const nf::NurbsSurface& base, const nf::NurbsSurface& target) {
+    return [=](const nf::Vec3& p) {
+      const nf::SurfacePoint f = nf::closest_point(base, p);
+      const auto bu = base.domain_u(), bv = base.domain_v(), tu = target.domain_u(), tv = target.domain_v();
+      const double h = nf::dot(p - f.point, base.normal(f.u, f.v));
+      const double u = tu[0] + (f.u - bu[0]) / (bu[1] - bu[0]) * (tu[1] - tu[0]);
+      const double v = tv[0] + (f.v - bv[0]) / (bv[1] - bv[0]) * (tv[1] - tv[0]);
+      return target.evaluate(u, v) + target.normal(u, v) * h;
+    };
+  }
+
+ private:
+  static std::optional<nf::NurbsSurface> surface_of(const document::Entity& e) {
+    if (const auto* s = std::get_if<nf::NurbsSurface>(e.geometry.get())) return *s;
+    if (const auto* f = std::get_if<nf::TrimmedSurface>(e.geometry.get())) return f->surface();
+    return std::nullopt;
+  }
+  Map curve_map(const nf::Vec3& up) const { return flow_curve(*base_c_, *target_c_, up); }
+  Map surface_map() const { return flow_surface(*base_s_, *target_s_); }
+  bool surface_;
+  std::optional<nf::NurbsCurve> base_c_, target_c_;
+  std::optional<nf::NurbsSurface> base_s_, target_s_;
+};
+
+// ------------------------------------------------------------------------------ Unroll, Smash, Squish
+/// A tensor-product cubic through a grid of points at the given parameters (rows along u):
+/// every row interpolated at `us`, then the rows' control points along v at `vs` – so the
+/// flattened surface keeps the original parameters (and trims).
+nf::NurbsSurface grid_surface(const std::vector<std::vector<nf::Vec3>>& grid, const std::vector<double>& us,
+                              const std::vector<double>& vs) {
+  std::vector<nf::NurbsCurve> rows;  // one per v: along u
+  for (std::size_t j = 0; j < vs.size(); ++j) {
+    std::vector<nf::Vec3> row;
+    for (std::size_t i = 0; i < us.size(); ++i) row.push_back(grid[i][j]);
+    rows.push_back(nf::interpolate_curve(row, 3, us));
+  }
+  const std::size_t nu = rows.front().num_control_points();
+  std::vector<nf::NurbsCurve> cols;
+  for (std::size_t i = 0; i < nu; ++i) {
+    std::vector<nf::Vec3> col;
+    for (const nf::NurbsCurve& r : rows) col.push_back(r.control_points()[i]);
+    cols.push_back(nf::interpolate_curve(col, 3, vs));
+  }
+  const std::size_t nv = cols.front().num_control_points();
+  std::vector<nf::Vec3> pts(nu * nv);
+  for (std::size_t i = 0; i < nu; ++i) {
+    for (std::size_t j = 0; j < nv; ++j) pts[i * nv + j] = cols[i].control_points()[j];
+  }
+  return {3, 3, rows.front().knots(), cols.front().knots(), nu, nv, pts};
+}
+
+/// The surface's grid flattened into the plane (x, y) by unfolding triangle by triangle: the
+/// first row keeps its segment lengths along x, every further point the distances to its two
+/// known neighbours. Exact (up to the grid) for developable surfaces. `relax`: spring iterations
+/// that spread the stretch of a non-developable surface (Squish).
+struct Flattened {
+  std::vector<std::vector<nf::Vec3>> grid;
+  double max_strain = 0;  ///< largest relative change of a grid edge's length
+};
+
+Flattened flatten(const nf::NurbsSurface& s, std::size_t n, int relax) {
+  const auto du = s.domain_u(), dv = s.domain_v();
+  std::vector<std::vector<nf::Vec3>> p(n + 1, std::vector<nf::Vec3>(n + 1));
+  for (std::size_t i = 0; i <= n; ++i) {
+    for (std::size_t j = 0; j <= n; ++j) {
+      p[i][j] = s.evaluate(du[0] + (du[1] - du[0]) * double(i) / double(n), dv[0] + (dv[1] - dv[0]) * double(j) / double(n));
+    }
+  }
+  std::vector<std::vector<nf::Vec3>> q(n + 1, std::vector<nf::Vec3>(n + 1));
+  // the third corner of a triangle from two placed points and the distances to them, on the left
+  // of a → b (the side the surface's v grows to)
+  auto apex = [](const nf::Vec3& a, const nf::Vec3& b, double da, double db, double side) {
+    const double ab = nf::distance(a, b);
+    const double x = (da * da - db * db + ab * ab) / (2 * ab);
+    const double y = std::sqrt(std::max(da * da - x * x, 0.0));
+    const nf::Vec3 e = (b - a) / ab, f{-e.y, e.x, 0};
+    return a + e * x + f * (side * y);
+  };
+  q[0][0] = {0, 0, 0};
+  for (std::size_t i = 1; i <= n; ++i) q[i][0] = q[i - 1][0] + nf::Vec3{nf::distance(p[i][0], p[i - 1][0]), 0, 0};
+  for (std::size_t j = 1; j <= n; ++j) {
+    for (std::size_t i = 0; i <= n; ++i) {
+      // from the point below and its neighbour in the row below (or the point to the left)
+      if (i == 0) {
+        q[0][j] = apex(q[0][j - 1], q[1][j - 1], nf::distance(p[0][j], p[0][j - 1]), nf::distance(p[0][j], p[1][j - 1]), 1);
+      } else {
+        q[i][j] = apex(q[i - 1][j], q[i][j - 1], nf::distance(p[i][j], p[i - 1][j]), nf::distance(p[i][j], p[i][j - 1]), 1);
+      }
+    }
+  }
+  // springs along the grid edges and diagonals (Squish)
+  for (int it = 0; it < relax; ++it) {
+    std::vector<std::vector<nf::Vec3>> moved = q;
+    for (std::size_t i = 0; i <= n; ++i) {
+      for (std::size_t j = 0; j <= n; ++j) {
+        nf::Vec3 shift{0, 0, 0};
+        int k = 0;
+        for (const auto& [di, dj] : {std::pair{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, -1}}) {
+          const long a = long(i) + di, b = long(j) + dj;
+          if (a < 0 || b < 0 || a > long(n) || b > long(n)) continue;
+          const nf::Vec3 d = q[std::size_t(a)][std::size_t(b)] - q[i][j];
+          const double rest = nf::distance(p[std::size_t(a)][std::size_t(b)], p[i][j]), now = nf::norm(d);
+          if (now > 0) shift = shift + d * (0.5 * (now - rest) / now);
+          ++k;
+        }
+        if (k > 0) moved[i][j] = q[i][j] + shift * (1.0 / k);
+      }
+    }
+    q = moved;
+  }
+  Flattened out;
+  out.grid = q;
+  for (std::size_t i = 0; i <= n; ++i) {
+    for (std::size_t j = 0; j <= n; ++j) {
+      for (const auto& [di, dj] : {std::pair{1, 0}, {0, 1}}) {
+        if (i + di > n || j + dj > n) continue;
+        const double rest = nf::distance(p[i + di][j + dj], p[i][j]);
+        if (rest > 0) out.max_strain = std::max(out.max_strain, std::abs(nf::distance(q[i + di][j + dj], q[i][j]) - rest) / rest);
+      }
+    }
+  }
+  return out;
+}
+
+/// Unroll surface / Smash / Squish: the selected surfaces flattened into the construction plane
+/// (beside each other's origin at the surface's first corner); trims are kept. Unroll is for
+/// developable surfaces (it reports the stretch); Squish relaxes the stretch of others.
+class FlattenCommand : public Command {
+ public:
+  enum class Kind { Unroll, Smash, Squish };
+  explicit FlattenCommand(Kind kind) : kind_(kind) {}
+  QString id() const override {
+    switch (kind_) {
+      case Kind::Unroll: return QStringLiteral("unrollsrf");
+      case Kind::Smash: return QStringLiteral("smash");
+      case Kind::Squish: break;
+    }
+    return QStringLiteral("squish");
+  }
+  QString title() const override {
+    switch (kind_) {
+      case Kind::Unroll: return QObject::tr("Unroll surface");
+      case Kind::Smash: return QObject::tr("Smash");
+      case Kind::Squish: break;
+    }
+    return QObject::tr("Squish");
+  }
+  QString prompt() const override { return title(); }
+  bool usesSelection() const override { return true; }
+  bool immediate() const override { return true; }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    double strain = 0;
+    try {
+      for (const document::Entity& e : selection) {
+        const nf::TrimmedSurface* face = std::get_if<nf::TrimmedSurface>(e.geometry.get());
+        const nf::NurbsSurface* plain = std::get_if<nf::NurbsSurface>(e.geometry.get());
+        if (face == nullptr && plain == nullptr) continue;
+        const nf::NurbsSurface& s = face != nullptr ? face->surface() : *plain;
+        const std::size_t n = 24;
+        const Flattened f = flatten(s, n, kind_ == Kind::Squish ? 300 : 0);
+        strain = std::max(strain, f.max_strain);
+        // into the construction plane at the surface's first corner (projected)
+        const PlaneFrame& pl = viewPlane();
+        const nf::Vec3 corner = s.evaluate(s.domain_u()[0], s.domain_v()[0]);
+        const nf::Vec3 origin = corner - V(pl.n) * nf::dot(corner - V(pl.origin), V(pl.n));
+        std::vector<std::vector<nf::Vec3>> grid = f.grid;
+        for (auto& col : grid) {
+          for (nf::Vec3& q : col) q = origin + V(pl.u) * q.x + V(pl.v) * q.y;
+        }
+        std::vector<double> us, vs;
+        for (std::size_t i = 0; i <= n; ++i) {
+          us.push_back(s.domain_u()[0] + (s.domain_u()[1] - s.domain_u()[0]) * double(i) / double(n));
+          vs.push_back(s.domain_v()[0] + (s.domain_v()[1] - s.domain_v()[0]) * double(i) / double(n));
+        }
+        const nf::NurbsSurface flat = grid_surface(grid, us, vs);
+        if (face != nullptr && !face->is_untrimmed()) {
+          entities_.push_back(document::make_entity(nf::TrimmedSurface(flat, face->outer(), face->holes())));
+        } else {
+          entities_.push_back(document::make_entity(flat));
+        }
+      }
+    } catch (const std::exception& e) {
+      entities_.clear();
+      message_ = failure(title(), e);
+      return false;
+    }
+    if (entities_.empty()) {
+      message_ = QObject::tr("%1: select surfaces").arg(title());
+      return false;
+    }
+    message_ = QObject::tr("%1: largest stretch %2 %").arg(title()).arg(100.0 * strain, 0, 'g', 3);
+    if (kind_ == Kind::Unroll && strain > 0.01) {
+      message_ += QObject::tr(" – the surface is not developable; Squish spreads the stretch");
+    }
+    return true;
+  }
+  Result point(const Point3&, const PlaneFrame&) override { return Result::Rejected; }
+  Result finish() override { return Result::Done; }
+
+ private:
+  Kind kind_;
+};
+
 struct Entry {
   const char* id;
   std::vector<const char*> aliases;
@@ -394,6 +657,11 @@ const std::vector<Entry>& registry() {
       {"shear", {}, [] { return std::make_unique<AffineDeformCommand>(true); }},
       {"stretch", {}, [] { return std::make_unique<AffineDeformCommand>(false); }},
       {"maelstrom", {}, [] { return std::make_unique<MaelstromCommand>(); }},
+      {"flow", {"flowalongcrv"}, [] { return std::make_unique<FlowCommand>(false); }},
+      {"flowalongsrf", {}, [] { return std::make_unique<FlowCommand>(true); }},
+      {"unrollsrf", {"unroll"}, [] { return std::make_unique<FlattenCommand>(FlattenCommand::Kind::Unroll); }},
+      {"smash", {}, [] { return std::make_unique<FlattenCommand>(FlattenCommand::Kind::Smash); }},
+      {"squish", {}, [] { return std::make_unique<FlattenCommand>(FlattenCommand::Kind::Squish); }},
   };
   return r;
 }

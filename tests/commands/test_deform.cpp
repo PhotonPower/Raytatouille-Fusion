@@ -129,6 +129,44 @@ class TestDeform : public QObject {
     QVERIFY(cup.is_closed());
     QVERIFY(std::abs(std::abs(cup.volume()) - 2.0 / 3.0 * kPi * (8.0 - 1.8 * 1.8 * 1.8)) < 1e-3);
   }
+
+  void flowAlongCurveAndSurface() {
+    // base: the x axis 0 … 4; target: the y axis 0 … 8 (turned, twice as long)
+    auto c = started("flow", {entity(nf::make_line({0, 0, 0}, {4, 0, 0}), 1), entity(nf::make_line({0, 0, 0}, {0, 8, 0}), 2),
+                              entity(nf::Vec3{1, 0.5, 0}, 3)});
+    QVERIFY(c && c->immediate());
+    QCOMPARE(c->finish(), R::Done);
+    QVERIFY(nf::distance(std::get<nf::Vec3>(replaced(*c)), {-0.5, 2, 0}) < 1e-9);
+    // a unit plate onto a 2 × 2 plate one higher: (u, v) and the height above carried over
+    c = started("flowalongsrf", {entity(nf::make_rectangle({0, 0, 0}, {1, 0, 0}, {0, 1, 0}), 1),
+                                 entity(nf::make_rectangle({0, 0, 1}, {2, 0, 0}, {0, 2, 0}), 2), entity(nf::Vec3{0.5, 0.5, 0.3}, 3)});
+    QCOMPARE(c->finish(), R::Done);
+    QVERIFY(nf::distance(std::get<nf::Vec3>(replaced(*c)), {1, 1, 1.3}) < 1e-9);
+    QVERIFY(!started("flow", {entity(nf::Vec3{0, 0, 0}, 1)}));
+  }
+
+  void unrollAHalfCylinder() {
+    const nf::NurbsSurface half = nf::extrude(nf::make_arc_3pt({1, 0, 0}, {0, 1, 0}, {-1, 0, 0}), {0, 0, 2});
+    auto c = started("unrollsrf", {entity(half)});
+    QVERIFY(c);
+    QCOMPARE(c->finish(), R::Done);
+    QVERIFY(!c->message().contains(QStringLiteral("not developable")));
+    const auto made = c->takeEntities();
+    const auto& flat = std::get<nf::NurbsSurface>(*made.front().geometry);
+    for (const auto& p : flat.control_points()) QVERIFY(std::abs(p.z - flat.control_points().front().z) < 1e-9);  // planar
+    QVERIFY(std::abs(nf::area(flat) - 2 * kPi) < 1e-3);  // π × 2
+    // a sphere's patch cannot be unrolled without stretch; Squish spreads it
+    const auto sphere = nf::make_sphere({0, 0, 0}, 1.0).faces().front().surface();
+    const auto du = sphere.domain_u(), dv = sphere.domain_v();
+    const auto patch = sphere.split_u(du[0] + 0.25 * (du[1] - du[0])).first.split_v(dv[0] + 0.3 * (dv[1] - dv[0])).second
+                           .split_v(dv[0] + 0.7 * (dv[1] - dv[0])).first;
+    c = started("unrollsrf", {entity(patch)});
+    QCOMPARE(c->finish(), R::Done);
+    QVERIFY(c->message().contains(QStringLiteral("not developable")));
+    c = started("squish", {entity(patch)});
+    QCOMPARE(c->finish(), R::Done);
+    QCOMPARE(c->takeEntities().size(), std::size_t{1});
+  }
 };
 
 QTEST_GUILESS_MAIN(TestDeform)
