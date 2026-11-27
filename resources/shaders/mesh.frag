@@ -41,8 +41,8 @@ void main() {
   int kind = int(analysis.x + 0.5);
   if (kind == 1) {  // zebra: stripes of the reflected view direction
     vec3 r = reflect(-v, n);
-    float phi = atan(r.x, r.z);
-    float s = step(0.5, fract(phi * pull.w / 3.14159265));
+    float phi = asin(clamp(r.x, -1.0, 1.0));  // parallel bands across the view
+    float s = smoothstep(0.47, 0.53, abs(fract(phi * pull.w / 3.14159265) - 0.5) * 2.0);
     frag_color = vec4(vec3(mix(0.06, 0.96, s)) * mix(0.8, 1.0, side), 1.0);
     return;
   }

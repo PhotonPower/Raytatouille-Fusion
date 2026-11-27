@@ -15,7 +15,7 @@ struct Analysis {
   float lo = 0.0F, hi = 1.0F;          ///< curvature mapped blue (lo) … red (hi)
   float draft_angle = 3.0F;             ///< degrees: below this the face is red
   float direction[3] = {0.0F, 0.0F, 1.0F};  ///< pull direction (world)
-  float stripes = 12.0F;                ///< zebra stripes per half turn
+  float stripes = 8.0F;                 ///< zebra stripe pairs per half turn of the reflection
   bool operator==(const Analysis& o) const {
     return kind == o.kind && measure == o.measure && lo == o.lo && hi == o.hi && draft_angle == o.draft_angle &&
            direction[0] == o.direction[0] && direction[1] == o.direction[1] && direction[2] == o.direction[2] &&
