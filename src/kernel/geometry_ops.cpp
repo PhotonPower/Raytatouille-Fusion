@@ -96,6 +96,88 @@ nf::Shell boolean(const std::vector<nf::Shell>& shells, BooleanOp op) {
   return result;
 }
 
+namespace {
+
+/// Interior knots that split every span of `knots` (on its domain) into pieces, so that the
+/// domain has at least `spans` spans.
+std::vector<double> refining_knots(const nf::KnotVector& knots, std::size_t degree, std::size_t count, std::size_t spans) {
+  const double a = knots[degree], b = knots[count];
+  std::vector<double> distinct;
+  for (std::size_t i = degree; i <= count; ++i) {
+    if (distinct.empty() || knots[i] > distinct.back()) distinct.push_back(knots[i]);
+  }
+  const std::size_t have = distinct.size() - 1;
+  std::vector<double> out;
+  if (have >= spans) return out;
+  const std::size_t per = (spans + have - 1) / have;  // pieces per existing span
+  for (std::size_t k = 0; k + 1 < distinct.size(); ++k) {
+    for (std::size_t j = 1; j < per; ++j) {
+      out.push_back(distinct[k] + (distinct[k + 1] - distinct[k]) * double(j) / double(per));
+    }
+  }
+  (void)a;
+  (void)b;
+  return out;
+}
+
+nf::NurbsCurve morph_curve(nf::NurbsCurve c, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine, std::size_t spans) {
+  if (refine) {
+    const auto x = refining_knots(c.knots(), c.degree(), c.num_control_points(), spans);
+    if (!x.empty()) c = c.refine_knots(x);
+  }
+  std::vector<nf::Vec3> pts;
+  for (const nf::Vec3& p : c.control_points()) pts.push_back(map(p));
+  return {c.degree(), c.knots(), pts, c.weights()};
+}
+
+nf::NurbsSurface morph_surface(nf::NurbsSurface s, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine, std::size_t spans) {
+  if (refine) {
+    const auto xu = refining_knots(s.knots_u(), s.degree_u(), s.num_u(), spans);
+    if (!xu.empty()) s = s.refine_knots_u(xu);
+    const auto xv = refining_knots(s.knots_v(), s.degree_v(), s.num_v(), spans);
+    if (!xv.empty()) s = s.refine_knots_v(xv);
+  }
+  std::vector<nf::Vec3> pts;
+  for (const nf::Vec3& p : s.control_points()) pts.push_back(map(p));
+  return {s.degree_u(), s.degree_v(), s.knots_u(), s.knots_v(), s.num_u(), s.num_v(), pts, s.weights()};
+}
+
+nf::TrimmedSurface morph_face(const nf::TrimmedSurface& f, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine,
+                              std::size_t spans) {
+  const nf::NurbsSurface s = morph_surface(f.surface(), map, refine, spans);
+  if (f.is_untrimmed()) return nf::TrimmedSurface(s);
+  return nf::TrimmedSurface(s, f.outer(), f.holes());
+}
+
+}  // namespace
+
+document::Geometry morphed(const document::Geometry& g, const std::function<nf::Vec3(const nf::Vec3&)>& map, bool refine,
+                           std::size_t spans) {
+  return std::visit(
+      [&](const auto& v) -> document::Geometry {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, nf::Vec3>) {
+          return map(v);
+        } else if constexpr (std::is_same_v<T, nf::NurbsCurve>) {
+          return morph_curve(v, map, refine, spans);
+        } else if constexpr (std::is_same_v<T, nf::NurbsSurface>) {
+          return morph_surface(v, map, refine, spans);
+        } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
+          return morph_face(v, map, refine, spans);
+        } else {
+          std::vector<nf::TrimmedSurface> faces;
+          double size = 0;
+          for (const nf::TrimmedSurface& f : v.faces()) {
+            faces.push_back(morph_face(f, map, refine, spans));
+            for (const nf::Vec3& p : faces.back().surface().control_points()) size = std::max(size, nf::norm(p));
+          }
+          const nf::Shell sewn = nf::Shell::sew(faces, 1e-4 * std::max(size, 1.0));
+          return v.is_closed() && sewn.is_closed() ? sewn.oriented() : sewn;
+        }
+      },
+      g);
+}
+
 std::optional<document::Geometry> part_of(const document::Geometry& g, const document::SubElement& sub) {
   if (const auto* c = std::get_if<nf::NurbsCurve>(&g); c != nullptr && sub.kind == document::SubElement::Kind::ControlPoint &&
                                                        sub.index >= 0 && static_cast<std::size_t>(sub.index) < c->num_control_points()) {
