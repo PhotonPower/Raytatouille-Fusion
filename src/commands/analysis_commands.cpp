@@ -22,6 +22,8 @@ using render::Analysis;
 
 constexpr double kDeg = 180.0 / std::numbers::pi;
 
+QString num(double v) { return QString::number(v, 'g', 6); }
+
 // ------------------------------------------------------------------------------ viewport analyses
 /// Zebra / EMap (no input; run again: off), CurvatureAnalysis (measure, range from the surfaces),
 /// DraftAngleAnalysis (angle; pull direction = the construction plane's normal), AnalysisOff.
@@ -358,10 +360,8 @@ class AreaCentroidCommand : public Command {
             },
             1e-10, tol);
       }
-      // the integrals follow the loops' orientation, like signed_area
-      const double sign = f.signed_area() < 0 ? -1.0 : 1.0;
       area += a;
-      moment = moment + nf::Vec3{m[0], m[1], m[2]} * sign;
+      moment = moment + nf::Vec3{m[0], m[1], m[2]};
     }
     return {area, area > 0 ? moment / area : nf::Vec3{0, 0, 0}};
   }
