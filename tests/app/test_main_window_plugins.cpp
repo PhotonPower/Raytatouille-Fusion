@@ -27,6 +27,7 @@
 #include "plugins/plugin_manager.hpp"
 #include "ui/plugin_panel.hpp"
 #include "ui/plugin_settings_dialog.hpp"
+#include "results/result_edit.hpp"
 #include "results/result_store.hpp"
 #include "ui/image_view.hpp"
 #include "ui/node_editor.hpp"
@@ -73,6 +74,21 @@ class TestMainWindowPlugins : public QObject {
     QVERIFY(selection->empty());  // a later Delete must not take the hidden object along
     unhide->trigger();
     QVERIFY(doc->isDisplayed(*doc->entity(ids[0])));
+
+    // result drawings (rays): Hide hides their lines, Unhide shows them again
+    auto* store = w.findChild<nfcad::results::ResultStore*>();
+    QVERIFY(store);
+    nfcad::results::LineSet l;
+    l.points = {0, 0, 0, 1, 0, 0};
+    const auto run = store->createSet(QStringLiteral("Rays"), QStringLiteral("rt"));
+    const auto item = store->addLines(run, QStringLiteral("rays"), l);
+    selection->applyResults({run}, nfcad::document::Selection::Mode::Replace);
+    hide->trigger();
+    QVERIFY(!store->item(item)->visible);
+    QVERIFY(selection->results().empty());
+    QVERIFY(nfcad::results::drawn_lines(*store, run).empty());  // no longer picked
+    unhide->trigger();
+    QVERIFY(store->item(item)->visible);
   }
 
   void workflowWindowComesBack() {
