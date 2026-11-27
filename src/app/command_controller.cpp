@@ -251,7 +251,13 @@ commands::PlaneFrame CommandController::frameOf(const viewport::Viewport* view) 
   const viewport::CPlane& c = view->cplane();
   const QVector3D n = c.normal();
   auto p = [](const QVector3D& v) { return Point3{v.x(), v.y(), v.z()}; };
-  return {p(c.origin), p(c.u), p(c.v), p(n)};
+  commands::PlaneFrame f{p(c.origin), p(c.u), p(c.v), p(n)};
+  const viewport::Camera& cam = view->camera();
+  f.view = p(cam.forward());
+  f.up = p(cam.up());
+  f.target = p(cam.target());
+  if (cam.projection() == viewport::Camera::Projection::Perspective) f.eye = p(cam.eye());
+  return f;
 }
 
 Point3 CommandController::constrained(const Point3& p, bool snapped) const {

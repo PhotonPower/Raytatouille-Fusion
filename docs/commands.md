@@ -68,6 +68,9 @@ one undo step.
 | Extract wireframe | `extractwireframe` | selected surfaces; their isocurves at all knot lines, borders included |
 | Offset curve on surface | `offsetcrvonsrf` | one curve and its surface; distance (sign: side), geodesic |
 | Curve Boolean | `crvboolean` | closed curves in the construction plane; 1 union, 2 intersection, 3 difference (first minus the others) |
+| Silhouette | `silhouette` | selected surfaces / solids; immediately: the curves where they turn away from the active view (parallel or perspective) |
+| Make2D | `make2d` | selected surfaces / solids; immediately: visible and hidden (grey) edges and silhouettes of the active view, projected into the world XY plane as the view shows them |
+| Outline | `outline` | selected surfaces / solids; immediately: the contour seen from the active view as closed curves, in the plane normal to the view through the construction plane's origin |
 
 | **Editing surfaces** | | |
 | Untrim | `untrim` | selected trimmed surfaces; click near a hole (Enter: every trim) |
@@ -117,6 +120,7 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Gordon | `network` | a selected curve network (≥ 2 × 2, any order: sorted automatically) |
 | Offset surface | `offsetsrf` | selected (untrimmed) surfaces; signed distance along the normal |
 | Fillet surfaces | `filletsrf` | two selected surfaces; radius (the ball side is found automatically) |
+| Chamfer surfaces | `chamfersrf` | two selected intersecting surfaces; distance on the first, distance on the second (Enter: the same), measured within the surfaces |
 | Surface from points | `srfpt` | 3 or 4 corners (Enter after 3: a triangle) |
 | Edge surface | `edgesrf` | 2 / 3 / 4 selected edge curves, any order and direction: ruled / three-sided / Coons |
 | Planar surface | `planarsrf` | selected closed planar curves; nested curves are holes |

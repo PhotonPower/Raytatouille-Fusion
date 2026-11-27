@@ -18,7 +18,7 @@ permissions:
 
 env:
   # the default of NFCAD_NURBFORGE_TAG in cmake/FindOrFetchNurbforge.cmake: keep them equal
-  NURBFORGE_TAG: v0.16.0
+  NURBFORGE_TAG: v0.17.0
 
 jobs:
   windows:

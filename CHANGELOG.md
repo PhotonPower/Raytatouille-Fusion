@@ -7,6 +7,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Drawings from the view** (Nurbforge 0.17): Silhouette, Make2D (visible and hidden lines as a 2D
+  drawing, parallel or perspective) and Outline of surfaces and solids as the active view shows them;
+  Chamfer surfaces (`chamfersrf`, two distances measured within the surfaces).
 - **Analysis**: Zebra, environment map, curvature analysis (Gaussian, mean, max, min) and draft angle
   analysis shown on the faces in every viewport; Continuity (GCon) of curves and surfaces; Area
   centroid; Check and Select bad objects. Points on now also shows and drags the control net of
@@ -88,6 +91,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   checkout in an older build keep their fields).
 
 ### Changed
+- Built against Nurbforge 0.17.0.
 - **The node workflow is a model (version 2) only** – an old document whose workflow is a socket
   graph (version 1) is converted into a model when it is opened (Workflow plugin, *Convert to
   model*; reported in the status line); the document is then modified and is saved with the

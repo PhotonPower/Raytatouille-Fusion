@@ -50,7 +50,7 @@ Gruppe & Standard & Befehle \\
   Tween curves \\
 \gui{Curves from objects} & zugeklappt & Project curves, Pull curves, Section, Contour,
   Duplicate edge, Duplicate border, Extract isocurve, Extract wireframe, Offset curve on surface,
-  Curve Boolean \\
+  Curve Boolean, Silhouette, Make2D, Outline \\
 \gui{Surfaces} & zugeklappt & Plane, Surface from points, Edge surface, Planar surface, Patch,
   Surface from point grid, Extrude, Revolve, Rail revolve, Extrude along curve, Extrude to point,
   Extrude tapered, Extrude surface, Pipe, Drape, Heightfield, Developable loft, Loft, Sweep 1 rail, Sweep 2 rails, Coons patch, Gordon
@@ -128,6 +128,7 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{project}, \code{pull} & Project / Pull curves & & \code{section}, \code{contour} & Section, Contour & \\
 \code{dupedge}, \code{dupborder} & Duplicate edge / border & & \code{iso} & Extract isocurve & \\
 \code{offsetcrvonsrf} & Offset curve on surface & & \code{crvboolean} & Curve Boolean & \\
+\code{silhouette} & Silhouette & & \code{make2d}, \code{outline} & Make2D, Outline & \\
 \code{extendcrv} & Extend curve & & \code{divide}, \code{divlen} & Divide (by length) & \\
 \code{rebuild} & Rebuild curve & & \code{changedegree} & Change degree & \\
 \code{flip} & Flip direction & & \code{closecrv}, \code{crvseam} & Close curve, Curve seam & \\
@@ -142,6 +143,7 @@ Alias & Befehl & & Alias & Befehl & \\
 \code{rev} & Revolve & & \code{j} & Join & \\
 \code{offsetsrf} & Offset surface & & \code{x} & Explode & \\
 \code{filletsrf} & Fillet surfaces & & \code{tr} & Trim & \\
+\code{chamfersrf} & Chamfer surfaces & & & & \\
 \code{network} & Gordon surface & & \code{dist} & Distance & \\
 \code{volume} & Volume & & \code{ang} & Angle & \\
 \code{intersect} & Intersect & & \code{curv} & Curvature & \\
@@ -1020,6 +1022,29 @@ geschlossene Kurven, die in der Konstruktionsebene der Ansicht liegen, und tippe
 Vereinigung, 2 Schnittmenge, 3 Differenz (die zuerst gewählte minus die anderen). Die Ränder des
 Ergebnisses entstehen als neue geschlossene Kurven; die Kurvenstücke bleiben exakt.
 
+\subsection{Silhouette, Make2D, Outline -- Ansichtskurven}\label{sec:cmd-silhouette}
+Die drei Befehle arbeiten auf den ausgewählten Flächen, Polyflächen und Körpern und sehen sie so,
+wie die aktive Ansicht sie zeigt: Parallelansichten entlang ihrer Blickrichtung, perspektivische
+Ansichten von ihrem Augpunkt aus. Sie laufen sofort.
+\begin{description}
+\item[\cmd{silhouette}] Die Umrisskurven auf den Flächen selbst: dort, wo die Fläche sich vom
+  Betrachter wegdreht (die Normale steht senkrecht zum Sehstrahl). Eine Kugel in der Draufsicht
+  liefert ihren Äquator, ein Zylinder von der Seite zwei gerade Mantellinien. Eine Fläche, die man
+  genau von der Kante sieht, hat keine Silhouette.
+\item[\cmd{make2d}] Eine 2D-Zeichnung: alle Kanten und Silhouetten, nach Sichtbarkeit aufgeteilt
+  und exakt in eine Ebene senkrecht zur Blickrichtung projiziert. Die Zeichnung liegt in der
+  XY-Ebene der Welt, so orientiert, wie die Ansicht sie zeigt (rechts im Bild ist $+x$, oben
+  $+y$); bei Parallelansichten vom Weltursprung aus projiziert, bei perspektivischen auf die Ebene
+  durch den Zielpunkt der Ansicht. Verdeckte Linien werden grau gezeichnet (Name \code{Make2D
+  hidden}), sichtbare in der Ebenenfarbe. Doppelte Linien fallen weg (die sichtbare gewinnt),
+  ebenso glatte Kanten wie die Naht eines Zylinders.
+\item[\cmd{outline}] Die Kontur der Auswahl, von der Ansicht aus gesehen: der Rand der
+  Vereinigung ihrer Projektionen als geschlossene Kurven (Außenkonturen und Löcher), in der Ebene
+  senkrecht zur Blickrichtung durch den Ursprung der Konstruktionsebene -- in den Standardansichten
+  also in der Konstruktionsebene. Bei perspektivischen Ansichten geht die Ebene durch den
+  Zielpunkt.
+\end{description}
+
 \section{Flächen bearbeiten (Gruppe Edit surfaces)}\label{sec:gruppe-surface-edit}
 
 Trim, Split, Join und Explode (Gruppe \gui{Edit}), Offset surface und Cap planar holes (Gruppe
@@ -1299,6 +1324,21 @@ zwischen zwei Flächen.
 Auf welcher Seite der Flächen die Rundung liegt, ermittelt das Programm selbst (es probiert die
 möglichen Seiten durch). Die Ausgangsflächen werden nicht beschnitten; das erledigen Sie bei
 Bedarf mit Trim.
+
+\subsection{Chamfer surfaces -- Fase zwischen Flächen}\label{sec:cmd-chamfer-surface}
+\cmd{chamfer\_surface}, Alias \code{chamfersrf}. Erzeugt die Regelfläche zwischen zwei Kurven,
+die in den angegebenen Abständen von der Schnittkurve zweier Flächen auf ihnen liegen.
+\begin{schritte}
+\item Wählen Sie genau zwei unbeschnittene, sich schneidende Flächen aus und starten Sie den
+  Befehl.
+\item \code{Chamfer surfaces: distance on the first surface} -- tippen Sie den Abstand auf der
+  zuerst gewählten Fläche.
+\item \code{Chamfer surfaces: distance on the second surface (Enter: the same)} -- tippen Sie den
+  zweiten Abstand oder drücken Sie \keys{Enter} für eine gleichschenklige Fase.
+\end{schritte}
+Die Abstände werden auf den Flächen gemessen (entlang geodätischer Linien senkrecht zur
+Schnittkurve), nicht als gerade Strecke. Die Seite wählt das Programm wie bei Fillet surfaces
+selbst; die Ausgangsflächen bleiben unbeschnitten.
 
 \subsection{Weitere Flächen aus Punkten und Kurven}\label{sec:cmd-surfaces-more}
 \begin{description}
