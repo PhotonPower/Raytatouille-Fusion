@@ -1,9 +1,11 @@
 // Solid operations and deformations (docs/commands.md, "Solids" and "Deform"): Boolean split, Shell;
-// Bend, Twist, Taper, Shear, Stretch, Maelstrom, Flow along curve, Flow along surface; Unroll,
+// Bend, Twist, Taper, Shear, Stretch, Maelstrom, Flow along curve, Flow along surface, Cage edit,
+// Splop; Unroll,
 // Smash and Squish (flattening surfaces). The deformations map the selected objects with
 // kernel::morphed: exact for Shear and Stretch, refined first for the others.
 #include <QObject>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
 #include <functional>
@@ -463,6 +465,239 @@ class FlowCommand : public DeformCommand {
   std::optional<nf::NurbsSurface> base_s_, target_s_;
 };
 
+// ------------------------------------------------------------------------------ Cage edit
+/// Cage edit: a lattice of n × n × n points (a Bézier volume) around the selection, aligned with
+/// the construction plane. Click a lattice point (they are snap points), then its new place –
+/// as often as wanted; Enter deforms the objects with the moved lattice.
+class CageEditCommand : public DeformCommand {
+ public:
+  QString id() const override { return QStringLiteral("cageedit"); }
+  QString title() const override { return QObject::tr("Cage edit"); }
+  QString prompt() const override {
+    if (lattice_.empty()) return QObject::tr("Cage edit: points per direction, 2 … 6 (Enter: 4)");
+    if (!picked_) return QObject::tr("Cage edit: a cage point to move (Enter: apply)");
+    return QObject::tr("Cage edit: its new place");
+  }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    if (!DeformCommand::begin(selection)) return false;
+    plane_ = viewPlane();
+    const nf::Vec3 e[3] = {V(plane_.u), V(plane_.v), V(plane_.n)};
+    for (int k = 0; k < 3; ++k) {
+      lo_[k] = 1e300;
+      hi_[k] = -1e300;
+    }
+    double size = 0;
+    for (const auto& pl : wire_) {
+      for (const nf::Vec3& q : pl) {
+        for (int k = 0; k < 3; ++k) {
+          lo_[k] = std::min(lo_[k], nf::dot(q, e[k]));
+          hi_[k] = std::max(hi_[k], nf::dot(q, e[k]));
+        }
+      }
+    }
+    for (int k = 0; k < 3; ++k) size = std::max(size, hi_[k] - lo_[k]);
+    if (size <= 0) size = 1;
+    for (int k = 0; k < 3; ++k) {  // a flat direction gets some depth
+      if (hi_[k] - lo_[k] < 1e-6 * size) {
+        lo_[k] -= 0.05 * size;
+        hi_[k] += 0.05 * size;
+      }
+    }
+    return true;
+  }
+  Result number(double v) override {
+    if (!lattice_.empty() || v < 2 || v > 6 || v != std::floor(v)) return Result::Rejected;
+    build(static_cast<int>(v));
+    return Result::Continue;
+  }
+  Result finish() override {
+    if (lattice_.empty()) {
+      build(4);
+      return Result::Continue;
+    }
+    if (!moved_) return Result::Cancelled;
+    return apply(map(), false);
+  }
+  Result point(const Point3& p, const PlaneFrame&) override {
+    if (lattice_.empty()) return Result::Rejected;
+    if (!picked_) {
+      std::size_t best = 0;
+      double d = 1e300;
+      for (std::size_t i = 0; i < lattice_.size(); ++i) {
+        const double di = nf::distance(lattice_[i], V(p));
+        if (di < d) {
+          d = di;
+          best = i;
+        }
+      }
+      if (d > 1e-6 * extent()) return Result::Rejected;  // not on a cage point (use the snap)
+      picked_ = best;
+      return Result::Continue;
+    }
+    lattice_[*picked_] = V(p);
+    picked_.reset();
+    moved_ = true;
+    return Result::Continue;
+  }
+  std::vector<Point3> snapPoints() const override {
+    std::vector<Point3> out;
+    for (const nf::Vec3& q : lattice_) out.push_back(P(q));
+    return out;
+  }
+  std::vector<Polyline3> preview(const Point3& c, const PlaneFrame&) const override {
+    if (lattice_.empty()) return {};
+    CageEditCommand* self = const_cast<CageEditCommand*>(this);
+    std::optional<nf::Vec3> keep;
+    if (picked_) {
+      keep = lattice_[*picked_];
+      self->lattice_[*picked_] = V(c);
+    }
+    std::vector<Polyline3> out = moved_ || picked_ ? wireUnder(map()) : std::vector<Polyline3>{};
+    for (int a = 0; a < n_; ++a) {  // the lattice lines
+      for (int b = 0; b < n_; ++b) {
+        Polyline3 l0, l1, l2;
+        for (int k = 0; k < n_; ++k) {
+          l0.push_back(P(at(k, a, b)));
+          l1.push_back(P(at(a, k, b)));
+          l2.push_back(P(at(a, b, k)));
+        }
+        out.push_back(l0);
+        out.push_back(l1);
+        out.push_back(l2);
+      }
+    }
+    if (keep) self->lattice_[*picked_] = *keep;
+    return out;
+  }
+  std::optional<Point3> basePoint() const override { return picked_ ? std::optional(P(lattice_[*picked_])) : std::nullopt; }
+
+  /// The Bézier volume of the lattice.
+  Map map() const {
+    const auto pts = lattice_;
+    const int n = n_;
+    const nf::Vec3 e0 = V(plane_.u), e1 = V(plane_.v), e2 = V(plane_.n);
+    const std::array<double, 3> lo = lo_, hi = hi_;
+    return [=](const nf::Vec3& p) {
+      const double t[3] = {(nf::dot(p, e0) - lo[0]) / (hi[0] - lo[0]), (nf::dot(p, e1) - lo[1]) / (hi[1] - lo[1]),
+                           (nf::dot(p, e2) - lo[2]) / (hi[2] - lo[2])};
+      std::vector<double> b[3];
+      for (int k = 0; k < 3; ++k) {
+        b[k].assign(std::size_t(n), 0.0);
+        for (int i = 0; i < n; ++i) {
+          double binom = 1;
+          for (int m = 1; m <= i; ++m) binom = binom * double(n - 1 - i + m) / double(m);
+          b[k][std::size_t(i)] = binom * std::pow(t[k], i) * std::pow(1 - t[k], n - 1 - i);
+        }
+      }
+      nf::Vec3 q{0, 0, 0};
+      for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+          for (int k = 0; k < n; ++k) {
+            q = q + pts[std::size_t((i * n + j) * n + k)] * (b[0][std::size_t(i)] * b[1][std::size_t(j)] * b[2][std::size_t(k)]);
+          }
+        }
+      }
+      return q;
+    };
+  }
+
+ private:
+  void build(int n) {
+    n_ = n;
+    lattice_.clear();
+    const nf::Vec3 e0 = V(plane_.u), e1 = V(plane_.v), e2 = V(plane_.n);
+    for (int i = 0; i < n; ++i) {
+      for (int j = 0; j < n; ++j) {
+        for (int k = 0; k < n; ++k) {
+          const double a = lo_[0] + (hi_[0] - lo_[0]) * i / (n - 1), b = lo_[1] + (hi_[1] - lo_[1]) * j / (n - 1),
+                       c = lo_[2] + (hi_[2] - lo_[2]) * k / (n - 1);
+          lattice_.push_back(e0 * a + e1 * b + e2 * c);
+        }
+      }
+    }
+  }
+  const nf::Vec3& at(int i, int j, int k) const { return lattice_[std::size_t((i * n_ + j) * n_ + k)]; }
+  double extent() const { return std::max({hi_[0] - lo_[0], hi_[1] - lo_[1], hi_[2] - lo_[2]}); }
+  PlaneFrame plane_;
+  std::array<double, 3> lo_{}, hi_{};
+  int n_ = 0;
+  std::vector<nf::Vec3> lattice_;
+  std::optional<std::size_t> picked_;
+  bool moved_ = false;
+};
+
+// ------------------------------------------------------------------------------ Splop
+/// Splop: the objects around a base point in the construction plane placed onto a point of a
+/// surface (the first selected object) – the plane's directions follow the surface's u direction
+/// and its normal, distances along the surface approximately kept.
+class SplopCommand : public DeformCommand {
+ public:
+  QString id() const override { return QStringLiteral("splop"); }
+  QString title() const override { return QObject::tr("Splop"); }
+  QString prompt() const override {
+    return base_ ? QObject::tr("Splop: point on the surface") : QObject::tr("Splop: base point of the objects");
+  }
+  bool begin(const std::vector<document::Entity>& selection) override {
+    std::optional<nf::NurbsSurface> s;
+    if (!selection.empty()) {
+      if (const auto* a = std::get_if<nf::NurbsSurface>(selection.front().geometry.get())) s = *a;
+      if (const auto* f = std::get_if<nf::TrimmedSurface>(selection.front().geometry.get())) s = f->surface();
+    }
+    if (!s || selection.size() < 2) {
+      message_ = QObject::tr("Splop: select the target surface first, then the objects");
+      return false;
+    }
+    target_ = *s;
+    return DeformCommand::begin({selection.begin() + 1, selection.end()});
+  }
+  Result point(const Point3& p, const PlaneFrame& plane) override {
+    if (!base_) {
+      base_ = V(p);
+      plane_ = plane;
+      return Result::Continue;
+    }
+    try {
+      const nf::SurfacePoint f = nf::closest_point(*target_, V(p));
+      return apply(map(f.u, f.v), false);
+    } catch (const std::exception& e) {
+      message_ = failure(title(), e);
+      return Result::Rejected;
+    }
+  }
+  std::optional<Point3> basePoint() const override { return base_ ? std::optional(P(*base_)) : std::nullopt; }
+
+  /// Offsets (x, y) in the plane walked on the surface from (u0, v0) in small steps along the
+  /// local frame (u direction, normal × u direction); the height goes along the normal.
+  Map map(double u0, double v0) const {
+    const nf::NurbsSurface s = *target_;
+    const nf::Vec3 o = *base_, eu = V(plane_.u), ev = V(plane_.v), en = V(plane_.n);
+    return [=](const nf::Vec3& p) {
+      const nf::Vec3 r = p - o;
+      const double x = nf::dot(r, eu), y = nf::dot(r, ev), h = nf::dot(r, en);
+      const auto du = s.domain_u(), dv = s.domain_v();
+      double u = u0, v = v0;
+      constexpr int steps = 32;
+      for (int k = 0; k < steps; ++k) {
+        const auto d = s.first_derivatives(u, v);
+        const nf::Vec3 n = s.normal(u, v), e1 = nf::normalized(d[1]), e2 = nf::cross(n, e1);
+        const nf::Vec3 w = (e1 * x + e2 * y) * (1.0 / steps);
+        // [Su Sv] (a, b) = w, least squares
+        const double g11 = nf::dot(d[1], d[1]), g12 = nf::dot(d[1], d[2]), g22 = nf::dot(d[2], d[2]);
+        const double r1 = nf::dot(d[1], w), r2 = nf::dot(d[2], w), det = g11 * g22 - g12 * g12;
+        if (std::abs(det) < 1e-300) break;
+        u = std::clamp(u + (g22 * r1 - g12 * r2) / det, du[0], du[1]);
+        v = std::clamp(v + (g11 * r2 - g12 * r1) / det, dv[0], dv[1]);
+      }
+      return s.evaluate(u, v) + s.normal(u, v) * h;
+    };
+  }
+
+ private:
+  std::optional<nf::NurbsSurface> target_;
+  std::optional<nf::Vec3> base_;
+  PlaneFrame plane_;
+};
+
 // ------------------------------------------------------------------------------ Unroll, Smash, Squish
 /// A tensor-product cubic through a grid of points at the given parameters (rows along u):
 /// every row interpolated at `us`, then the rows' control points along v at `vs` – so the
@@ -674,6 +909,8 @@ const std::vector<Entry>& registry() {
       {"maelstrom", {}, [] { return std::make_unique<MaelstromCommand>(); }},
       {"flow", {"flowalongcrv"}, [] { return std::make_unique<FlowCommand>(false); }},
       {"flowalongsrf", {}, [] { return std::make_unique<FlowCommand>(true); }},
+      {"cageedit", {"cage"}, [] { return std::make_unique<CageEditCommand>(); }},
+      {"splop", {}, [] { return std::make_unique<SplopCommand>(); }},
       {"unrollsrf", {"unroll"}, [] { return std::make_unique<FlattenCommand>(FlattenCommand::Kind::Unroll); }},
       {"smash", {}, [] { return std::make_unique<FlattenCommand>(FlattenCommand::Kind::Smash); }},
       {"squish", {}, [] { return std::make_unique<FlattenCommand>(FlattenCommand::Kind::Squish); }},

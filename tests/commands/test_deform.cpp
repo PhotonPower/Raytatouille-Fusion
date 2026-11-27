@@ -167,6 +167,43 @@ class TestDeform : public QObject {
     QCOMPARE(c->finish(), R::Done);
     QCOMPARE(c->takeEntities().size(), std::size_t{1});
   }
+
+  void cageEdit() {
+    auto c = started("cageedit", {entity(nf::make_box({0, 0, 0}, {2, 2, 2}), 1), entity(nf::Vec3{1, 1, 1}, 2)});
+    QVERIFY(c);
+    QCOMPARE(c->number(2), R::Continue);  // trilinear
+    QCOMPARE(c->snapPoints().size(), std::size_t{8});
+    QCOMPARE(c->point({1, 1, 0}, kTop), R::Rejected);  // not a cage point
+    QCOMPARE(c->point({2, 2, 2}, kTop), R::Continue);
+    QCOMPARE(c->point({3, 2, 2}, kTop), R::Continue);
+    QVERIFY(!c->preview({0, 0, 0}, kTop).empty());
+    QCOMPARE(c->finish(), R::Done);
+    const auto edit = c->takeEdit();
+    QCOMPARE(edit.replace.size(), std::size_t{2});
+    bool corner = false;
+    for (const auto& f : std::get<nf::Shell>(*edit.replace[0].second).faces()) {
+      for (const auto& p : f.surface().control_points()) corner = corner || nf::distance(p, {3, 2, 2}) < 1e-9;
+    }
+    QVERIFY(corner);
+    QVERIFY(nf::distance(std::get<nf::Vec3>(*edit.replace[1].second), {1.125, 1, 1}) < 1e-12);  // the centre: 1/8
+  }
+
+  void splop() {
+    // onto a plane one higher: the offsets kept
+    auto c = started("splop", {entity(nf::make_rectangle({0, 0, 1}, {4, 0, 0}, {0, 4, 0}), 1), entity(nf::Vec3{0.5, 0, 0.2}, 2)});
+    QVERIFY(c);
+    c->point({0, 0, 0}, kTop);
+    QCOMPARE(c->point({2, 2, 1}, kTop), R::Done);
+    QVERIFY(nf::distance(std::get<nf::Vec3>(replaced(*c)), {2.5, 2, 1.2}) < 1e-9);
+    // onto the top of a cylinder of radius 1: half a unit along the circle
+    const nf::NurbsSurface half = nf::extrude(nf::make_arc_3pt({1, 0, 0}, {0, 1, 0}, {-1, 0, 0}), {0, 0, 2});
+    c = started("splop", {entity(half, 1), entity(nf::Vec3{0.5, 0, 0}, 2)});
+    c->point({0, 0, 0}, kTop);
+    QCOMPARE(c->point({0, 1, 1}, kTop), R::Done);
+    const nf::Vec3 q = std::get<nf::Vec3>(replaced(*c));
+    QVERIFY(std::abs(std::hypot(q.x, q.y) - 1) < 1e-6);
+    QVERIFY(std::abs(std::abs(std::atan2(q.x, q.y)) - 0.5) < 2e-3);
+  }
 };
 
 QTEST_GUILESS_MAIN(TestDeform)
