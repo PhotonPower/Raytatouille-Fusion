@@ -158,6 +158,16 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Curvature analysis | `curvatureanalysis` | 1 Gaussian, 2 mean, 3 max, 4 min (Enter: Gaussian); range from the selection (else all) |
 | Draft angle analysis | `draftangleanalysis` | minimum draft (Enter: 3°) against the construction-plane normal |
 | Analysis off | `analysisoff` | |
+
+| **Dimensions** (curve entities with the attribute `nfcad.dimension`; arrows and text drawn by the viewports, the value measured from the points) | | |
+| Linear dimension | `dimlinear`, `dim` | two points, location: horizontal or vertical in the construction plane (as the location is pulled) |
+| Aligned dimension | `dimaligned` | two points, location: parallel to the points |
+| Angle dimension | `dimangle` | vertex, a point on each line, location: the one of the four angles containing it |
+| Radius / Diameter | `dimradius` / `dimdiameter` | a selected circle or arc; location of the text (direction from the centre) |
+| Arc length | `dimarclength`, `dimarc` | a selected arc; location of the concentric dimension arc |
+| Ordinate | `dimordinate`, `dimord` | point, end of the leader: up / down the x, sideways the y coordinate in the construction plane |
+| Leader | `leader` | arrow tip, points, Enter, text |
+| Dimension text | `dimtext` | selected dimensions; text replacing the value (`<>`: the value); Enter: the value again |
 | Check / Select bad objects | `check` / `selbadobjects` | problems of the selection / select every object with errors |
 
 Selection-based commands use the whole selected objects in selection order; each result –

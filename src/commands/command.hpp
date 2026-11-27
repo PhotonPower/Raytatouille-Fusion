@@ -66,6 +66,10 @@ class Command {
   virtual Result number(double /*value*/) { return Result::Rejected; }
   /// Enter / right-click.
   virtual Result finish() { return Result::Cancelled; }
+  /// Commands that ask for text (Leader, DimText): while true, a non-empty input line goes to
+  /// text() as typed instead of being parsed as a point, number or command.
+  [[nodiscard]] virtual bool wantsText() const { return false; }
+  virtual Result text(const QString& /*text*/) { return Result::Rejected; }
 
   /// Rubber band for the cursor position.
   [[nodiscard]] virtual std::vector<Polyline3> preview(const Point3& /*cursor*/,
@@ -182,6 +186,8 @@ std::unique_ptr<Command> create_deform_command(const QString& name);
 std::unique_ptr<Command> create_analysis_command(const QString& name);
 QStringList analysis_command_ids();
 std::unique_ptr<Command> create_view_drawing_command(const QString& name);
+std::unique_ptr<Command> create_dimension_command(const QString& name);
+QStringList dimension_command_ids();
 QStringList view_drawing_command_ids();
 QStringList deform_command_ids();
 QStringList surface_edit_command_ids();

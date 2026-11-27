@@ -174,6 +174,7 @@ class Viewport : public QRhiWidget {
   tessellation::Box3 result_bounds_;
   bool result_bounds_dirty_ = true;
   class FieldLegend* legend_ = nullptr;
+  class DimensionOverlay* dims_ = nullptr;
   void updateLegend();
   render::LineRenderer lines_;
   render::LineLayer grid_layer_;

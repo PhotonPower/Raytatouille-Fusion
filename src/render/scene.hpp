@@ -5,6 +5,7 @@
 #include <QObject>
 #include <unordered_map>
 
+#include "document/dimension.hpp"
 #include "document/document.hpp"
 #include "document/selection.hpp"
 #include "pick/picking.hpp"
@@ -28,6 +29,8 @@ class Scene : public QObject {
     std::vector<QVector3D> grips;
     /// Grips of a surface: its control net, rows of this many points (v); 0 for a curve.
     int grip_columns = 0;
+    /// Arrows and text of a dimension entity (drawn over the viewport); empty for others.
+    std::optional<document::DimensionView> dimension;
   };
 
   Scene(document::Document* doc, tessellation::TessellationService* service,
