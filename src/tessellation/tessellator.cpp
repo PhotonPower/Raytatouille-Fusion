@@ -7,6 +7,7 @@
 #include <cmath>
 #include <numbers>
 #include <numeric>
+#include <nurbforge/analysis/properties.hpp>
 
 namespace nfcad::tessellation {
 
@@ -172,6 +173,16 @@ void push_vertex(DisplayMesh& m, const nf::NurbsSurface& s, double u, double v) 
                     {static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z),
                      static_cast<float>(n.x), static_cast<float>(n.y), static_cast<float>(n.z),
                      static_cast<float>(nu), static_cast<float>(nv)});
+  float k1 = 0.0F, k2 = 0.0F;
+  try {
+    const nf::SurfaceCurvature k = nf::curvature(s, u, v);
+    if (std::isfinite(k.k1) && std::isfinite(k.k2)) {
+      k1 = static_cast<float>(k.k1);
+      k2 = static_cast<float>(k.k2);
+    }
+  } catch (...) {
+  }
+  m.curvature.insert(m.curvature.end(), {k1, k2});
 }
 
 struct Uv {
@@ -423,6 +434,7 @@ void append_face(DisplayMesh& dst, DisplayMesh&& src) {
   dst.iso_faces.insert(dst.iso_faces.end(), src.isocurves.size(), face);
   const auto base = static_cast<std::uint32_t>(dst.vertexCount());
   dst.vertices.insert(dst.vertices.end(), src.vertices.begin(), src.vertices.end());
+  dst.curvature.insert(dst.curvature.end(), src.curvature.begin(), src.curvature.end());
   for (std::uint32_t i : src.indices) dst.indices.push_back(base + i);
   std::move(src.edges.begin(), src.edges.end(), std::back_inserter(dst.edges));
   std::move(src.isocurves.begin(), src.isocurves.end(), std::back_inserter(dst.isocurves));

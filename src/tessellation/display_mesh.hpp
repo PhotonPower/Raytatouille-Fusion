@@ -18,6 +18,7 @@ inline constexpr std::size_t kVertexStride = 8;
 /// Display data of one entity (docs/rendering.md, "Display geometry"). Never used for modelling.
 struct DisplayMesh {
   std::vector<float> vertices;         ///< interleaved x, y, z, nx, ny, nz, u, v (kVertexStride)
+  std::vector<float> curvature;        ///< principal curvatures k1, k2 per vertex (analysis)
   std::vector<std::uint32_t> indices;  ///< triangles
   std::vector<Polyline> edges;         ///< curves, face boundaries, shell edges
   std::vector<Polyline> isocurves;     ///< wireframe only

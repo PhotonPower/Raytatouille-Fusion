@@ -294,9 +294,8 @@ void CommandController::moveGrips(const QVector3D& delta) {
     }
     const document::Entity* e = doc_->entity(id);
     if (indices.empty() || e == nullptr) continue;
-    if (const auto* c = std::get_if<nf::NurbsCurve>(e->geometry.get())) {
-      edit.replace.emplace_back(id, std::make_shared<const document::Geometry>(
-                                        kernel::with_control_points_moved(*c, indices, move)));
+    if (auto moved = kernel::with_control_points_moved(*e->geometry, indices, move)) {
+      edit.replace.emplace_back(id, std::make_shared<const document::Geometry>(std::move(*moved)));
     }
   }
   if (!edit.empty()) doc_->apply(std::move(edit), tr("Move control points"));
@@ -335,6 +334,10 @@ void CommandController::handle(Command::Result r) {
       break;
     case Command::Result::Done: {
       flush();
+      if (auto a = command_->viewAnalysis()) {
+        if (command_->analysisToggles() && grid_->analysis().kind == a->kind) a = render::Analysis{};
+        grid_->setAnalysis(*a);
+      }
       const QString message = command_->message();
       // e.g. "Viewing pyramid: up +Z, roll 12.50°" – what a moved camera wrote into its plugin
       end(message.isEmpty() && !drawing_note_.isEmpty() ? tr("%1 – %2").arg(command_->title(), drawing_note_)

@@ -26,6 +26,8 @@ class Scene : public QObject {
     bool locked = false;  ///< on a locked layer: drawn and snapped to, but not selectable
     /// Control points of a curve whose points are shown (PointsOn), in order; else empty.
     std::vector<QVector3D> grips;
+    /// Grips of a surface: its control net, rows of this many points (v); 0 for a curve.
+    int grip_columns = 0;
   };
 
   Scene(document::Document* doc, tessellation::TessellationService* service,

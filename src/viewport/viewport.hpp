@@ -37,6 +37,8 @@ class Viewport : public QRhiWidget {
   void setKind(ViewKind kind);
 
   [[nodiscard]] render::DisplayMode displayMode() const { return mode_; }
+  void setAnalysis(const render::Analysis& analysis);
+  [[nodiscard]] const render::Analysis& analysis() const { return analysis_; }
   void setDisplayMode(render::DisplayMode mode);
 
   [[nodiscard]] const Camera& camera() const { return camera_; }
@@ -136,6 +138,7 @@ class Viewport : public QRhiWidget {
 
   ViewKind kind_;
   render::DisplayMode mode_ = render::DisplayMode::Shaded;
+  render::Analysis analysis_;
   Camera camera_;
   CPlane cplane_;
 

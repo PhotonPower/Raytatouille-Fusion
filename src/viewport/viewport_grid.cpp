@@ -60,7 +60,13 @@ void ViewportGrid::setActive(Viewport* view) {
 }
 
 void ViewportGrid::setScene(const render::Scene* scene) {
+  scene_ = scene;
   for (Viewport* v : views_) v->setScene(scene);
+}
+
+void ViewportGrid::setAnalysis(const render::Analysis& analysis) {
+  analysis_ = analysis;
+  for (Viewport* v : views_) v->setAnalysis(analysis);
 }
 
 void ViewportGrid::setSelection(document::Selection* selection) {

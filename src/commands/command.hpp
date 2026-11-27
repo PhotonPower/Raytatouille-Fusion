@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "render/display_mode.hpp"
 #include "document/document.hpp"
 #include "document/entity.hpp"
 #include "document/selection.hpp"
@@ -98,6 +99,10 @@ class Command {
   void setEdges(std::vector<GripSet> edges) { edges_ = std::move(edges); }
   /// Commands that act on picked faces of solids (Extract surface): the selected faces per shell.
   [[nodiscard]] virtual bool usesFaces() const { return false; }
+  /// A surface analysis the viewports show once the command is done (Zebra …); nullopt: none.
+  [[nodiscard]] virtual std::optional<render::Analysis> viewAnalysis() const { return std::nullopt; }
+  /// The analysis is switched off instead if the viewports already show the same kind.
+  [[nodiscard]] virtual bool analysisToggles() const { return false; }
   void setFaces(std::vector<GripSet> faces) { picked_faces_ = std::move(faces); }
   /// Commands that read a file (Heightfield: an image): a non-empty file-dialog filter makes the
   /// controller ask for the file before begin() and hand it over with setFile().
@@ -169,6 +174,8 @@ std::unique_ptr<Command> create_surface_create_command(const QString& name);
 std::unique_ptr<Command> create_surface_blend_command(const QString& name);
 std::unique_ptr<Command> create_surface_edit_command(const QString& name);
 std::unique_ptr<Command> create_deform_command(const QString& name);
+std::unique_ptr<Command> create_analysis_command(const QString& name);
+QStringList analysis_command_ids();
 QStringList deform_command_ids();
 QStringList surface_edit_command_ids();
 QStringList surface_blend_command_ids();

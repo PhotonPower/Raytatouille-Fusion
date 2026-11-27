@@ -72,7 +72,8 @@ Gruppe & Standard & Befehle \\
   curve, Match curve, Simplify curve, Arc blend, Points on, Points off, Select points, Weight,
   Insert control point \\
 \gui{Analyze} & zugeklappt & Distance, Angle, Curvature, Area, Volume / mass properties,
-  Intersection check \\
+  Intersection check, Area centroid, Continuity, Zebra, Environment map, Curvature analysis, Draft
+  angle analysis, Analysis off, Check, Select bad objects \\
 \bottomrule
 \end{referenz}
 
@@ -1118,9 +1119,12 @@ nützlich, wo Fertigung oder Messtechnik Kreisbögen verlangt.
 
 Die Form einer NURBS-Kurve bestimmen ihre Kontrollpunkte. So bearbeiten Sie sie direkt:
 \begin{schritte}
-\item Wählen Sie Kurven und starten Sie \cmd{points\_on} (Aliasse \code{pon}, \code{pointson}):
-  Die Kontrollpunkte erscheinen als kleine Quadrate (\emph{Grips}), verbunden durch das graue
-  Kontrollpolygon. Die Einstellung wird mit dem Dokument gespeichert.
+\item Wählen Sie Kurven oder Flächen und starten Sie \cmd{points\_on} (Aliasse \code{pon},
+  \code{pointson}, \code{surfaceeditpt}): Die Kontrollpunkte erscheinen als kleine Quadrate
+  (\emph{Grips}), verbunden durch das graue Kontrollpolygon -- bei einer Fläche das Kontrollnetz.
+  Die Einstellung wird mit dem Dokument gespeichert. Ziehen und Move, Rotate, Scale wirken auf
+  Flächenpunkte wie auf Kurvenpunkte; ein Beschnitt bleibt (er liegt im Parameterraum). Die
+  übrigen Schritte unten (Select points, Weight, Insert control point) gelten nur für Kurven.
 \item Klicken Sie einen Grip, um ihn zu wählen (gelb); \keys{Shift}-Klick fügt weitere hinzu,
   \keys{Strg}-Klick nimmt einen heraus. Ein Auswahlrechteck wählt alle Grips darin. Grips haben
   Vorrang vor der Kurve und liegen auch über Flächen. \cmd{select\_points} (Aliasse
@@ -1792,6 +1796,50 @@ ausgewählten Objekten und legt sie als neue Objekte an:
 Flächen desselben Körpers werden nicht miteinander geschnitten. Ergebnis in der Statusleiste:
 \code{Intersections: 1 curve(s), 2 point(s)}. Die erzeugten Punkte und Kurven können Sie mit
 dem Fang weiterverwenden, etwa als Schnittkante einer Linse mit einer Blendenebene.
+
+\subsection{Area centroid -- Flächenschwerpunkt}\label{sec:cmd-areacentroid}
+\cmd{areacentroid}: Fläche und Flächenschwerpunkt der ausgewählten Flächen, Körperoberflächen und
+geschlossenen ebenen Kurven (deren eingeschlossene Fläche); am Schwerpunkt entsteht ein Punkt.
+Den Volumenschwerpunkt geschlossener Körper liefert \cmd{volume}.
+
+\subsection{Continuity -- Stetigkeit (GCon)}\label{sec:cmd-gcon}
+\cmd{gcon} (Alias \code{continuity}): Wählen Sie zwei Kurven oder zwei Flächen. Bei Kurven wird
+das nächstliegende Paar von Enden geprüft, bei Flächen der Rand der ersten Fläche, soweit er auf der
+zweiten liegt. Die Statusleiste nennt Lücke, Winkel zwischen Tangenten (Normalen),
+Krümmungsunterschied (bei Flächen quer zur Kante) und das Ergebnis:
+\begin{description}
+\item[G0] Die Objekte berühren sich (Lücke unter $10^{-4}$ der Modellgröße), haben aber einen Knick.
+\item[G1] Tangenten stimmen auf 0,1° überein, die Krümmungen unterscheiden sich um mehr als 1\,\%.
+\item[G2] Auch die Krümmungen stimmen überein.
+\end{description}
+
+\subsection{Flächenanalysen im Viewport}\label{sec:analyse-viewport}\index{Zebra}\index{Krümmungsanalyse}
+Die folgenden Analysen färben die Flächen in allen Viewports (Modi \gui{Surfaces} und
+\gui{Shaded}); der Viewport-Titel nennt die aktive Analyse. \cmd{analysisoff} (Alias
+\code{noanalysis}) schaltet sie ab, ebenso ein zweiter Aufruf von Zebra oder Environment map.
+\begin{description}
+\item[\cmd{zebra}] Schwarz-weiße Streifen, als spiegelten sich Leuchtstreifen in der Fläche: Wo
+  Streifen über eine Kante springen, ist sie nur G0; knicken sie, G1; laufen sie glatt durch, G2.
+\item[\cmd{emap}] Spiegelung einer Studioumgebung (Horizont, zwei Lichtflächen): Glanzlichter zeigen
+  Dellen und Wellen.
+\item[\cmd{curvatureanalysis}] Falschfarben der Krümmung: 1 Gaußsche, 2 mittlere, 3 größte,
+  4 kleinste Krümmung (Betrag; \keys{Enter}: Gaußsche). Der Bereich -- blau bis rot -- wird aus den
+  ausgewählten (sonst allen) Flächen bestimmt: $\pm$ das 95.-Perzentil des Betrags (bei 3 und 4:
+  0 bis dahin) und in der Statusleiste genannt. Bei der Gaußschen Krümmung ist eine Kugel
+  rot/orange, ein Sattel blau, Ebene und Zylinder grün.
+\item[\cmd{draftangleanalysis}] (Alias \code{draftangle}): Entformungsschräge gegen die Normale der
+  Konstruktionsebene des aktiven Viewports (die Entformungsrichtung). Tippen Sie den kleinsten
+  zulässigen Winkel (\keys{Enter}: 3°): grün mit genug Schräge, rot darunter (senkrechte Wände),
+  blau mit genug Schräge zur Gegenseite. Die Farben richten sich nach der Normalenrichtung der
+  Fläche.
+\end{description}
+
+\subsection{Check, Select bad objects}\label{sec:cmd-check}
+\cmd{check} prüft die ausgewählten Objekte: nicht endliche Kontrollpunkte, Gewichte $\le 0$,
+Kurven der Länge 0, Flächen ohne Normale im Inneren, Beschnitte ohne Fläche, Körper mit
+nicht-mannigfaltigen Kanten, uneinheitlich orientierten Flächen oder nach innen zeigenden Normalen
+(Fehler), offene Körper mit ihren freien Kanten (Hinweis). \cmd{selbadobjects} prüft alle Objekte
+und wählt die mit Fehlern.
 
 % ============================================================================
 \section{Arbeitsabläufe an Beispielen}\label{sec:mod-beispiele}

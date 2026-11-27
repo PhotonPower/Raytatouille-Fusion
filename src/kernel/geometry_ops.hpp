@@ -46,6 +46,11 @@ enum class BooleanOp { Union, Intersection, Difference };
 /// are ignored.
 [[nodiscard]] nf::NurbsCurve with_control_points_moved(const nf::NurbsCurve& c, const std::vector<int>& indices,
                                                        const nf::Transform& t);
+/// The same for any geometry with control points (curves, surfaces – a face keeps its trims);
+/// nullopt for others.
+[[nodiscard]] std::optional<document::Geometry> with_control_points_moved(const document::Geometry& g,
+                                                                          const std::vector<int>& indices,
+                                                                          const nf::Transform& t);
 
 /// Faces of a surface-like geometry (surface, trimmed surface, shell); empty for others.
 [[nodiscard]] std::vector<nf::TrimmedSurface> faces_of(const document::Geometry& g);

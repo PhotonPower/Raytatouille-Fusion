@@ -148,6 +148,13 @@ to the view); Move, Rotate and Scale move the selected grips and the curve follo
 | Area | `area` | total area and length of the selection |
 | Volume | `volume` | volume and centroid of the selected closed solids |
 | Curvature | `curv` | one selected curve (curvature, radius) or surface (k1, k2, Gaussian, mean); click a point |
+| Area centroid | `areacentroid` | area and centroid of surfaces / closed planar curves; a point there |
+| Continuity | `gcon` | two curves (closest ends) or two surfaces (common edge): gap, angle, curvature difference, G0/G1/G2 |
+| Zebra / Environment map | `zebra` / `emap` | viewport analysis on all faces; run again: off |
+| Curvature analysis | `curvatureanalysis` | 1 Gaussian, 2 mean, 3 max, 4 min (Enter: Gaussian); range from the selection (else all) |
+| Draft angle analysis | `draftangleanalysis` | minimum draft (Enter: 3°) against the construction-plane normal |
+| Analysis off | `analysisoff` | |
+| Check / Select bad objects | `check` / `selbadobjects` | problems of the selection / select every object with errors |
 
 Selection-based commands use the whole selected objects in selection order; each result –
 including a Boolean that removes its inputs – is one undo step.

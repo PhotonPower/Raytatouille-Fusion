@@ -9,7 +9,7 @@ namespace {
 
 using document::SubElement;
 
-constexpr quint32 kUniformSize = 64 + 64 + 16 + 16;  // mvp, view, color, params
+constexpr quint32 kUniformSize = 64 + 64 + 16 + 16 + 16 + 16;  // mvp, view, color, params, analysis, pull
 constexpr float kPointMarkerPx = 5.0F;
 constexpr float kVertexMarkerPx = 7.0F;
 constexpr float kGripPx = 4.0F;  // half size of a control-point square
@@ -86,9 +86,10 @@ std::unique_ptr<QRhiGraphicsPipeline> make_mesh_pipeline(QRhi* rhi, QRhiRenderPa
       {QRhiShaderStage::Fragment, load_shader(QStringLiteral(":/shaders/mesh.frag.qsb"))},
   });
   QRhiVertexInputLayout layout_in;
-  layout_in.setBindings({{tessellation::kVertexStride * sizeof(float)}});
+  layout_in.setBindings({{tessellation::kVertexStride * sizeof(float)}, {2 * sizeof(float)}});
   layout_in.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, 0},
-                           {0, 1, QRhiVertexInputAttribute::Float3, 3 * sizeof(float)}});
+                           {0, 1, QRhiVertexInputAttribute::Float3, 3 * sizeof(float)},
+                           {1, 2, QRhiVertexInputAttribute::Float2, 0}});
   p->setVertexInputLayout(layout_in);
   p->setTopology(QRhiGraphicsPipeline::Triangles);
   p->setCullMode(QRhiGraphicsPipeline::None);
@@ -233,6 +234,7 @@ void SceneRenderer::applyStyle(GpuItem& item) {
 void SceneRenderer::upload(GpuItem& item, QRhiResourceUpdateBatch* updates) {
   const tessellation::DisplayMesh& m = *item.mesh;
   item.vbuf.reset();
+  item.cbuf.reset();
   item.ibuf.reset();
   item.index_count = 0;
   if (!m.indices.empty()) {
@@ -244,6 +246,13 @@ void SceneRenderer::upload(GpuItem& item, QRhiResourceUpdateBatch* updates) {
     item.ibuf->create();
     updates->uploadStaticBuffer(item.vbuf.get(), m.vertices.data());
     updates->uploadStaticBuffer(item.ibuf.get(), m.indices.data());
+    // curvature for the analysis (zeros if the mesh has none)
+    std::vector<float> k = m.curvature;
+    k.resize(2 * m.vertexCount(), 0.0F);
+    const auto cbytes = static_cast<quint32>(k.size() * sizeof(float));
+    item.cbuf.reset(rhi_->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, cbytes));
+    item.cbuf->create();
+    updates->uploadStaticBuffer(item.cbuf.get(), 0, cbytes, k.data());
     item.index_count = static_cast<quint32>(m.indices.size());
   }
   if (!item.ubuf) {
@@ -267,6 +276,12 @@ void SceneRenderer::writeUniforms(QRhiBuffer* ubuf, const QColor& color, const F
   updates->updateDynamicBuffer(ubuf, 64, 64, frame.view.constData());
   updates->updateDynamicBuffer(ubuf, 128, 16, c.data());
   updates->updateDynamicBuffer(ubuf, 144, 16, params);
+  const Analysis& a = frame.analysis;
+  const float analysis[4] = {static_cast<float>(a.kind), static_cast<float>(a.measure), a.lo, a.hi};
+  const QVector3D d = frame.view.mapVector(QVector3D(a.direction[0], a.direction[1], a.direction[2])).normalized();
+  const float pull[4] = {d.x(), d.y(), d.z(), a.kind == Analysis::Kind::Zebra ? a.stripes : a.draft_angle};
+  updates->updateDynamicBuffer(ubuf, 160, 16, analysis);
+  updates->updateDynamicBuffer(ubuf, 176, 16, pull);
 }
 
 void SceneRenderer::prepare(const Scene& scene, const FrameParams& frame,
@@ -335,11 +350,18 @@ void SceneRenderer::prepare(const Scene& scene, const FrameParams& frame,
     // grips (PointsOn): the control polygon and a square per control point
     if (!src.grips.empty()) {
       const Rgba polygon = rgba(mix(s.color, kGripPolygonBlend, 0.5), 1.0F, 0.8F);
-      for (std::size_t k = 0; k + 1 < src.grips.size(); ++k) {
-        const QVector3D& a = src.grips[k];
-        const QVector3D& b = src.grips[k + 1];
+      auto segment = [&](const QVector3D& a, const QVector3D& b) {
         cross.push_back({a.x(), a.y(), a.z(), polygon[0], polygon[1], polygon[2], polygon[3]});
         cross.push_back({b.x(), b.y(), b.z(), polygon[0], polygon[1], polygon[2], polygon[3]});
+      };
+      const auto cols = static_cast<std::size_t>(src.grip_columns);
+      if (cols == 0) {  // a curve: its control polygon
+        for (std::size_t k = 0; k + 1 < src.grips.size(); ++k) segment(src.grips[k], src.grips[k + 1]);
+      } else {  // a surface: its control net
+        for (std::size_t k = 0; k < src.grips.size(); ++k) {
+          if ((k + 1) % cols != 0 && k + 1 < src.grips.size()) segment(src.grips[k], src.grips[k + 1]);
+          if (k + cols < src.grips.size()) segment(src.grips[k], src.grips[k + cols]);
+        }
       }
       const float h = kGripPx * frame.world_per_pixel;
       // the camera's right and up axes in world coordinates: the rows of the view rotation
@@ -374,8 +396,8 @@ void SceneRenderer::drawFaces(QRhiCommandBuffer* cb, const QRhiViewport& viewpor
       bound = true;
     }
     cb->setShaderResources(item.srb.get());
-    const QRhiCommandBuffer::VertexInput input(item.vbuf.get(), 0);
-    cb->setVertexInput(0, 1, &input, item.ibuf.get(), 0, QRhiCommandBuffer::IndexUInt32);
+    const QRhiCommandBuffer::VertexInput inputs[] = {{item.vbuf.get(), 0}, {item.cbuf.get(), 0}};
+    cb->setVertexInput(0, 2, inputs, item.ibuf.get(), 0, QRhiCommandBuffer::IndexUInt32);
     cb->drawIndexed(item.index_count);
   }
   // overlays of highlighted single faces
@@ -390,8 +412,8 @@ void SceneRenderer::drawFaces(QRhiCommandBuffer* cb, const QRhiViewport& viewpor
         overlay_bound = true;
       }
       cb->setShaderResources(o->srb.get());
-      const QRhiCommandBuffer::VertexInput input(item.vbuf.get(), 0);
-      cb->setVertexInput(0, 1, &input, item.ibuf.get(), 0, QRhiCommandBuffer::IndexUInt32);
+      const QRhiCommandBuffer::VertexInput inputs[] = {{item.vbuf.get(), 0}, {item.cbuf.get(), 0}};
+      cb->setVertexInput(0, 2, inputs, item.ibuf.get(), 0, QRhiCommandBuffer::IndexUInt32);
       for (const auto& [first, count] : o->ranges) cb->drawIndexed(count, 1, first);
     }
   }
