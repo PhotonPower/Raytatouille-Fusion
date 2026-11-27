@@ -7,6 +7,7 @@
 #include <cmath>
 #include <numbers>
 #include <numeric>
+#include <nurbforge/analysis/properties.hpp>
 
 namespace nfcad::tessellation {
 
