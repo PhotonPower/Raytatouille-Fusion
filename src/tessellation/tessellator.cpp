@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
 #include <numbers>
 #include <numeric>
 #include <nurbforge/analysis/properties.hpp>
@@ -448,6 +449,54 @@ void single_face(const nf::TrimmedSurface& face, const TessParams& params, Displ
   append_face(out, std::move(m));
 }
 
+/// A triangle mesh as one face: its nodes with area-weighted normals (smooth shading), its
+/// triangles; its open edges as edges and, for the wireframe, all triangle edges (up to a limit).
+void tessellate_mesh(const nf::TriangleMesh& mesh, DisplayMesh& out) {
+  constexpr std::size_t kMaxWireEdges = 300000;
+  const std::size_t n = mesh.nodes.size();
+  std::vector<Vec3> normals(n, Vec3{0, 0, 0});
+  for (const auto& t : mesh.triangles) {
+    if (t[0] >= n || t[1] >= n || t[2] >= n) continue;
+    const Vec3 a = mesh.nodes[t[0]], b = mesh.nodes[t[1]], c = mesh.nodes[t[2]];
+    const Vec3 w = nf::cross(b - a, c - a);  // length: twice the area
+    for (std::size_t k : t) normals[k] += w;
+  }
+  out.vertices.reserve(n * kVertexStride);
+  for (std::size_t i = 0; i < n; ++i) {
+    const Vec3& p = mesh.nodes[i];
+    const double l = nf::norm(normals[i]);
+    const Vec3 nn = l > 0 ? normals[i] / l : Vec3{0, 0, 1};
+    for (double v : {p.x, p.y, p.z, nn.x, nn.y, nn.z, 0.0, 0.0}) out.vertices.push_back(static_cast<float>(v));
+  }
+  out.curvature.assign(2 * n, 0.0F);
+  for (const auto& t : mesh.triangles) {
+    if (t[0] >= n || t[1] >= n || t[2] >= n) continue;
+    for (std::size_t k : t) out.indices.push_back(static_cast<std::uint32_t>(k));
+  }
+  out.face_starts = {0, static_cast<std::uint32_t>(out.indices.size())};
+  // edges: used once (open border) or, for the wireframe, all of them
+  std::map<std::pair<std::size_t, std::size_t>, int> uses;
+  for (const auto& t : mesh.triangles) {
+    if (t[0] >= n || t[1] >= n || t[2] >= n) continue;
+    for (int k = 0; k < 3; ++k) {
+      const std::size_t a = t[static_cast<std::size_t>(k)], b = t[static_cast<std::size_t>((k + 1) % 3)];
+      ++uses[{std::min(a, b), std::max(a, b)}];
+    }
+  }
+  const bool wire = uses.size() <= kMaxWireEdges;
+  for (const auto& [e, count] : uses) {
+    Polyline pl;
+    add_point(pl, mesh.nodes[e.first]);
+    add_point(pl, mesh.nodes[e.second]);
+    if (count == 1) {
+      out.edges.push_back(std::move(pl));
+    } else if (wire) {
+      out.isocurves.push_back(std::move(pl));
+      out.iso_faces.push_back(0);
+    }
+  }
+}
+
 void compute_bounds(DisplayMesh& m) {
   m.bounds = {};
   for (std::size_t i = 0; i + kVertexStride <= m.vertices.size(); i += kVertexStride) {
@@ -483,6 +532,8 @@ TessParams default_params(const document::Geometry& g) {
           add_control_points(v.control_points(), box);
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           add_control_points(v.surface().control_points(), box);
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          add_control_points(v.nodes, box);
         } else {
           for (const auto& f : v.faces()) add_control_points(f.surface().control_points(), box);
         }
@@ -534,6 +585,8 @@ DisplayMesh tessellate(const document::Geometry& g, const TessParams& params) {
           single_face(nf::TrimmedSurface(v), params, out);
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           single_face(v, params, out);
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          tessellate_mesh(v, out);
         } else {
           // Shell: faces in parallel, shared B-rep edges once.
           const auto& faces = v.faces();

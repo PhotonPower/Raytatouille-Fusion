@@ -72,6 +72,7 @@ std::vector<ToolGroupDef> build() {
         t("intersection", "Boolean intersection", "∩", "bi"), t("filletedge", "Fillet edges", "FiE", "filletedge"),
         t("chamferedge", "Chamfer edges", "ChE", "chamferedge"),
         t("variableblend", "Variable fillet", "VFi", "variableblend"), t("merge", "Merge faces", "MgF", "merge"),
+        t("shrinkwrap", "Shrink wrap", "ShW", "shrinkwrap"),
         t("booleansplit", "Boolean split", "BSp", "booleansplit"), t("shell", "Shell", "Shl", "shell")}},
       {"deform", "Deform", false,
        {t("bend", "Bend", "Bnd", "bend"), t("twist", "Twist", "Twi", "twist"), t("taper", "Taper", "Tap", "taper"),

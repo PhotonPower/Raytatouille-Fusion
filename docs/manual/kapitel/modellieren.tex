@@ -57,7 +57,7 @@ Gruppe & Standard & Befehle \\
   surface, Offset surface, Fillet surfaces, Blend surface, Match surface, Merge surfaces, Connect
   surfaces, Tween surfaces, Cap planar holes \\
 \gui{Solids} & zugeklappt & Box, Sphere, Cylinder, Cone, Torus, Ellipsoid, Paraboloid, Fillet
-  edges, Chamfer edges, Variable fillet, Merge faces, Boolean split, Shell, Boolean union,
+  edges, Chamfer edges, Variable fillet, Merge faces, Shrink wrap, Boolean split, Shell, Boolean union,
   Boolean difference, Boolean intersection \\
 \gui{Deform} & zugeklappt & Bend, Twist, Taper, Shear, Stretch, Maelstrom, Flow along curve, Flow
   along surface, Cage edit, Splop, Unroll surface, Smash, Squish \\
@@ -1493,6 +1493,27 @@ die Schneidkörper bleiben. \cmd{shell}: Wählen Sie die Flächen eines geschlos
 offen sein sollen (\keys{Strg+Shift}-Klick), und tippen Sie die Wandstärke -- der Körper wird zur
 Schale, die an diesen Flächen offen ist. Die übrigen Flächen müssen glatt ineinander übergehen
 (wie bei \gui{Make hollow}).
+
+\subsection{Shrink wrap -- geschlossene Hülle als Netz}\label{sec:cmd-shrinkwrap}
+\cmd{shrinkwrap} legt eine geschlossene Dreiecks-Hülle um die ausgewählten Flächen, Polyflächen und
+Körper -- auch wenn sie sich überschneiden, Lücken lassen oder offen sind (etwa für den 3D-Druck
+oder als Vernetzungsvorlage).
+\begin{schritte}
+\item Wählen Sie die Objekte aus und starten Sie den Befehl.
+\item \code{Shrink wrap: resolution} -- die Zellgröße des Rasters, auf dem die Hülle entsteht;
+  sie ist etwa die Kantenlänge der Dreiecke und die Genauigkeit. \keys{Enter}: ein Hundertstel der
+  Objektgröße. Lücken und Öffnungen schmaler als etwa 1,5 Zellen werden geschlossen, feinere
+  Details geglättet.
+\item \code{Shrink wrap: offset from the objects} -- der Abstand der Hülle von den Objekten.
+  \keys{Enter}: 0 bei geschlossenen Körpern; offene Flächen brauchen mindestens 0,75 Zellen, das
+  ist dann der Vorschlag.
+\end{schritte}
+Das Ergebnis ist ein \emph{Netz}-Objekt (Typ \gui{Mesh}): Es lässt sich anklicken, verschieben,
+drehen, spiegeln, ausblenden, löschen, auf Layer legen und wird mit dem Modell gespeichert; die
+Eigenschaften zeigen Knoten, Dreiecke, Fläche, Volumen und die schlechteste Dreiecksqualität.
+\gui{Export STL} schreibt es, STEP nicht (ein Netz ist keine exakte Geometrie). Die
+Ausgangsobjekte bleiben erhalten. Sehr feine Auflösungen brauchen viel Speicher; über etwa
+zehn Millionen Rasterpunkten bricht der Befehl mit einer Meldung ab.
 
 \subsection{Torus -- Ring}\label{sec:cmd-torus}
 \cmd{torus}, Alias \code{tor}. Ein Torus, dessen Mittelebene in der Konstruktionsebene liegt.

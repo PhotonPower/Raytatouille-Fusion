@@ -11,6 +11,7 @@ QString kind_name(GeometryKind kind) {
     case GeometryKind::Surface: return QObject::tr("Surface");
     case GeometryKind::TrimmedSurface: return QObject::tr("Trimmed surface");
     case GeometryKind::Shell: return QObject::tr("Shell");
+    case GeometryKind::Mesh: return QObject::tr("Mesh");
   }
   return {};
 }

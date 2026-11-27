@@ -7,7 +7,7 @@ set(NFCAD_NURBFORGE_REPOSITORY "https://github.com/PhotonPower/Nurbforge.git"
     CACHE STRING "Git repository of Nurbforge")
 # The commit CI builds against (NURBFORGE_TAG in .github/workflows/ci.yml and package.yml): keep all
 # three equal, a fresh source build without options must compile what CI tested
-set(NFCAD_NURBFORGE_TAG "v0.17.0"
+set(NFCAD_NURBFORGE_TAG "v0.18.0"
     CACHE STRING "Nurbforge git tag or commit to download")
 
 if(NOT DEFINED NFCAD_NURBFORGE_SOURCE_DIR AND EXISTS "${PROJECT_SOURCE_DIR}/../Nurbforge/CMakeLists.txt")

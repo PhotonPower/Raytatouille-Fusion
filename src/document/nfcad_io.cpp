@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
+#include <array>
 #include <exception>
 #include <stdexcept>
 
@@ -144,6 +145,19 @@ QJsonObject geometry_to_json(const Geometry& g) {
           QJsonObject o = face_json(v);
           o["type"] = "trimmed_surface";
           return o;
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          // flat lists: x, y, z per node; three 0-based node indices per triangle
+          QJsonArray nodes;
+          for (const nf::Vec3& p : v.nodes) {
+            nodes.append(p.x);
+            nodes.append(p.y);
+            nodes.append(p.z);
+          }
+          QJsonArray triangles;
+          for (const auto& t : v.triangles) {
+            for (std::size_t i : t) triangles.append(static_cast<qint64>(i));
+          }
+          return {{"type", "mesh"}, {"nodes", nodes}, {"triangles", triangles}};
         } else {
           QJsonArray faces;
           for (const nf::TrimmedSurface& f : v.faces()) faces.append(face_json(f));
@@ -163,6 +177,22 @@ Geometry geometry_from_json(const QJsonObject& o) {
   if (type == QLatin1String("curve")) return curve_from(o);
   if (type == QLatin1String("surface")) return surface_from(o);
   if (type == QLatin1String("trimmed_surface")) return face_from(o);
+  if (type == QLatin1String("mesh")) {
+    nf::TriangleMesh m;
+    m.nodes = to_points(o["nodes"]);
+    const QJsonArray t = o["triangles"].toArray();
+    if (t.size() % 3 != 0) throw std::runtime_error("mesh: triangles need 3 node indices each");
+    for (qsizetype i = 0; i < t.size(); i += 3) {
+      std::array<std::size_t, 3> tri{};
+      for (int k = 0; k < 3; ++k) {
+        const qint64 n = t[i + k].toInteger(-1);
+        if (n < 0 || static_cast<std::size_t>(n) >= m.nodes.size()) throw std::runtime_error("mesh: node index out of range");
+        tri[static_cast<std::size_t>(k)] = static_cast<std::size_t>(n);
+      }
+      m.triangles.push_back(tri);
+    }
+    return m;
+  }
   if (type == QLatin1String("shell")) {
     std::vector<nf::TrimmedSurface> faces;
     for (const QJsonValue& f : o["faces"].toArray()) faces.push_back(face_from(f.toObject()));

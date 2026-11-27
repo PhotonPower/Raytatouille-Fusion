@@ -43,6 +43,8 @@ nf::Vec3 probe(const Geometry& g) {
           return v.evaluate(0.3, 0.6);
         } else if constexpr (std::is_same_v<T, nf::TrimmedSurface>) {
           return v.surface().evaluate(0.3, 0.6) + nf::Vec3(v.area(), 0, 0);
+        } else if constexpr (std::is_same_v<T, nf::TriangleMesh>) {
+          return nf::Vec3(v.volume(), static_cast<double>(v.nodes.size()), static_cast<double>(v.triangles.size()));
         } else {
           return nf::Vec3(v.volume(), static_cast<double>(v.faces().size()),
                           static_cast<double>(v.edges().size()));

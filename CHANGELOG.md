@@ -7,6 +7,10 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Shrink wrap and meshes** (Nurbforge 0.18): Shrink wrap (`shrinkwrap`, tool group *Solids*) builds one
+  closed triangle mesh around selected surfaces and solids, even overlapping, gapped or open ones.
+  Triangle meshes are a new kind of object (*Mesh*): drawn, picked, transformed, hidden, saved
+  (`.nfcad` type `mesh`), checked, described in the properties and exported as STL.
 - **Hide / Unhide for result drawings**: Hide (H) also hides selected rays and other result drawings,
   Unhide (Shift+H) shows them again.
 - **Dimensions** (tool group *Dimensions*): linear (horizontal / vertical), aligned, angle, radius,
@@ -97,7 +101,7 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   checkout in an older build keep their fields).
 
 ### Changed
-- Built against Nurbforge 0.17.0.
+- Built against Nurbforge 0.18.0.
 - **The node workflow is a model (version 2) only** – an old document whose workflow is a socket
   graph (version 1) is converted into a model when it is opened (Workflow plugin, *Convert to
   model*; reported in the status line); the document is then modified and is saved with the
