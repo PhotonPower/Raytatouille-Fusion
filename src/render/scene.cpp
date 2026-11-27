@@ -44,6 +44,7 @@ void Scene::add(document::EntityId id) {
   item.visible = doc_->isDisplayed(*e);
   item.locked = doc_->isLocked(*e);
   item.grips = grips_of(*e, &item.grip_columns);
+  item.dimension = document::dimension_view(*e);
   item.mesh.reset();
   service_->request(id, e->revision, e->geometry);
   emit changed();
@@ -60,6 +61,7 @@ void Scene::update(document::EntityId id) {
   it->second.visible = doc_->isDisplayed(*e);
   it->second.locked = doc_->isLocked(*e);
   it->second.grips = grips_of(*e, &it->second.grip_columns);
+  it->second.dimension = document::dimension_view(*e);
   if (it->second.geometry != e->geometry) {
     it->second.geometry = e->geometry;
     service_->request(id, e->revision, e->geometry);  // keep the old mesh until the new arrives
@@ -83,6 +85,7 @@ void Scene::rebuild() {
     item.visible = doc_->isDisplayed(e);
     item.locked = doc_->isLocked(e);
     item.grips = grips_of(e, &item.grip_columns);
+    item.dimension = document::dimension_view(e);
     service_->request(id, e.revision, e.geometry);
   }
   emit changed();

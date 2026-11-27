@@ -194,6 +194,10 @@ void CommandController::finishOrRepeat() {
 }
 
 void CommandController::submit(const QString& text) {
+  if (command_ && command_->wantsText() && !text.trimmed().isEmpty()) {
+    handle(command_->text(text.trimmed()));
+    return;
+  }
   const std::optional<Point3> base = command_ ? command_->basePoint() : std::nullopt;
   const ParsedInput in = commands::parse_input(text, plane_, base);
   switch (in.kind) {

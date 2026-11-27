@@ -17,6 +17,7 @@
 #include "results/result_edit.hpp"
 #include "platform/rhi_backend.hpp"
 #include "viewport/selection_rect.hpp"
+#include "viewport/dimension_overlay.hpp"
 #include "viewport/field_legend.hpp"
 #include "viewport/snap_marker.hpp"
 
@@ -79,6 +80,7 @@ Viewport::Viewport(ViewKind kind, QWidget* parent) : QRhiWidget(parent), kind_(k
   title_->setAttribute(Qt::WA_TransparentForMouseEvents);
   title_->setCursor(Qt::PointingHandCursor);
   title_->move(8, 6);
+  dims_ = new DimensionOverlay(this, &camera_);
   rubber_ = new SelectionRect(this);
   marker_ = new SnapMarker(this);
   legend_ = new FieldLegend(this);
@@ -140,6 +142,7 @@ void Viewport::setProjection(Camera::Projection projection) {
 void Viewport::setScene(const render::Scene* scene) {
   if (scene_ != nullptr) disconnect(scene_, nullptr, this, nullptr);
   scene_ = scene;
+  dims_->setScene(scene);
   if (scene_ != nullptr) {
     connect(scene_, &render::Scene::changed, this, [this] { update(); });
   }
@@ -149,6 +152,7 @@ void Viewport::setScene(const render::Scene* scene) {
 void Viewport::setSelection(document::Selection* selection) {
   if (selection_ != nullptr) disconnect(selection_, nullptr, this, nullptr);
   selection_ = selection;
+  dims_->setSelection(selection);
   if (selection_ != nullptr) {
     connect(selection_, &document::Selection::changed, this, [this] { update(); });
     connect(selection_, &document::Selection::hoverChanged, this, [this] { update(); });
@@ -285,7 +289,9 @@ void Viewport::hoverPick(const QPointF& px, Qt::KeyboardModifiers mods) {
   q.sub_elements = sub_element_mode(mods);
   const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
   const auto drawing = q.sub_elements ? std::nullopt : pickDrawing(px, hit);
-  selection_->setHovered(hit && !drawing ? std::optional(hit->item) : std::nullopt);
+  std::optional<document::SelectionItem> item = hit ? std::optional(hit->item) : std::nullopt;
+  if (const auto text = q.sub_elements ? std::nullopt : dims_->textAt(px)) item = document::SelectionItem{*text, {}};
+  selection_->setHovered(item && !drawing ? item : std::nullopt);
   selection_->setHoveredResult(drawing);
 }
 
@@ -312,7 +318,10 @@ void Viewport::clickSelect(const QPointF& px, Qt::KeyboardModifiers mods) {
   const auto hit = pick::pick(scene_->selectableTargets(), camera_, q);
   const auto mode = q.sub_elements ? document::Selection::Mode::Toggle : selection_mode(mods);
   // a result drawing (rays, a plugin's camera) is selected as a whole
-  if (const auto drawing = q.sub_elements ? std::nullopt : pickDrawing(px, hit)) {
+  const auto text = q.sub_elements ? std::nullopt : dims_->textAt(px);
+  if (text) {  // the text of a dimension, drawn on top
+    selection_->apply({document::SelectionItem{*text, {}}}, mode);
+  } else if (const auto drawing = q.sub_elements ? std::nullopt : pickDrawing(px, hit)) {
     selection_->applyResults({*drawing}, mode);
   } else if (hit) {
     selection_->apply({hit->item}, mode);
@@ -463,6 +472,7 @@ void Viewport::releaseResources() {
 void Viewport::render(QRhiCommandBuffer* cb) {
   QRhi* r = rhi();
   camera_.setViewportSize(size());
+  dims_->update();  // arrows and texts of dimensions follow every frame
   if (result_bounds_dirty_) {
     // the visible result lines where they are shown (placement): rays may leave the model far
     // behind, towards the eye – outside the depth range the near plane cut them off
@@ -792,6 +802,7 @@ void Viewport::leaveEvent(QEvent* event) {
 void Viewport::resizeEvent(QResizeEvent* event) {
   QRhiWidget::resizeEvent(event);
   legend_->place();
+  dims_->setGeometry(rect());
   camera_.setViewportSize(size());
   cameraChanged();
 }
