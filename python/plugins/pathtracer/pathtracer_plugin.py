@@ -14,6 +14,7 @@ from nfcad import Param, Plugin, UserError, action
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import pt_blocks  # noqa: E402
 import pt_bsdf  # noqa: E402
 import pt_colour  # noqa: E402
 import pt_integrator  # noqa: E402
@@ -165,15 +166,59 @@ class PathTracerPlugin(Plugin):
         self.cache = pt_setup.MeshCache()
         self.native_cache = pt_native.MeshCache()
         self.files = pt_setup.Distributions()
+        self._provider = None
+
+    # ------------------------------------------------------------------ blocks of the workflow
+    def _block_provider(self):
+        if self._provider is None:
+            self._provider = pt_blocks.provider()
+        return self._provider
+
+    def blocks(self) -> list:
+        """Material blocks for the node workflow (ADR 0011, M2): BSDF file, analytic BSDF, mix, material."""
+        provider = self._block_provider()
+        return provider.catalogue() if provider is not None else []
+
+    def evaluate_block(self, request: dict) -> dict:
+        provider = self._block_provider()
+        if provider is None:
+            return {"ok": False, "error": "the material blocks need RTT-Fusion with the data type bsdf (R36b)"}
+        return provider.handle(request)
+
+    def preview_block(self, request: dict) -> dict:
+        """A sphere in the block's BSDF."""
+        return pt_blocks.preview(request)
 
     @staticmethod
-    def _native(ctx) -> bool:
+    def _block_materials(ctx) -> dict:
+        """The materials of the workflow's material blocks: name -> table arrays (ADR 0011, M2)."""
+        read = getattr(ctx, "workflow", None)
+        if read is None or not pt_blocks.available():
+            return {}
+        try:
+            found = pt_blocks.workflow_materials(read())
+        except pt_blocks.BlockError as e:
+            raise UserError(f"Workflow: {e}") from None
+        return {name: pt_blocks.table_of(b) for name, b in found.items()}
+
+    def _params(self, ctx) -> dict:
+        """The panel's parameters plus the workflow's materials (key workflow_materials)."""
+        return {**ctx.params, "workflow_materials": self._block_materials(ctx)}
+
+    @staticmethod
+    def _native(ctx, params: dict | None = None) -> bool:
         """Whether the C++ kernel computes (see the parameter Kernel)."""
-        choice = ctx.params["kernel"]
+        params = params or ctx.params
+        choice = params["kernel"]
         if choice == "C++" and not pt_native.available():
             raise UserError("The C++ kernel is not installed in the plugin's Python (package \"pathtracer\"): "
                             "install it, or choose the kernel NumPy or automatic.")
-        tabulated = any(str(m.get("kind", "")).strip().lower() == "tabulated" for m in ctx.params["materials"])
+        blocks = params.get("workflow_materials")
+        if blocks is None:                                  # (not computed here: only whether there are any)
+            read = getattr(ctx, "workflow", None)
+            blocks = read is not None and pt_blocks.has_materials(read())
+        tabulated = any(str(m.get("kind", "")).strip().lower() == "tabulated" for m in params["materials"]) or \
+            bool(blocks)
         if choice == "C++" and tabulated and not pt_native.supports("tabulated"):
             raise UserError(f"The C++ kernel {pt_native.version()} has no tabulated materials yet: choose the "
                             "kernel NumPy or automatic.")
@@ -191,8 +236,10 @@ class PathTracerPlugin(Plugin):
                                                     "in \"Material for the selection\"")
     def set_material(self, ctx):
         name = ctx.params["assign_material"].strip()
-        if name not in [str(m.get("name", "")).strip() for m in ctx.params["materials"]]:
-            raise UserError(f"The material {name!r} is not in the table of materials.")
+        if name not in [str(m.get("name", "")).strip() for m in ctx.params["materials"]] + \
+                list(self._block_materials(ctx)):
+            raise UserError(f"The material {name!r} is neither in the table of materials nor a material block "
+                            f"of the workflow.")
         found = self._selected(ctx, _SURFACES)
         for e in found:
             ctx.set_attribute(e["id"], pt_setup.MATERIAL, name)
@@ -230,12 +277,13 @@ class PathTracerPlugin(Plugin):
     def _scene(self, ctx):
         """The scene of the model for the kernel in use (pt_scene.Scene or the C++ kernel's)."""
         ctx.progress(0.0, "preparing the model")
-        native = self._native(ctx)
+        params = self._params(ctx)
+        native = self._native(ctx, params)
         try:
             if native:
-                scene = pt_native.build_scene(ctx.entities(), ctx.params, self.native_cache, self.files)
+                scene = pt_native.build_scene(ctx.entities(), params, self.native_cache, self.files)
             else:
-                scene = pt_setup.build_scene(ctx.entities(), ctx.params, self.cache, self.files)
+                scene = pt_setup.build_scene(ctx.entities(), params, self.cache, self.files)
         except ValueError as e:
             raise UserError(str(e)) from None
         mesh = scene.mesh

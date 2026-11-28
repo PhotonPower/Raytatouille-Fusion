@@ -99,6 +99,10 @@ Dialog nicht direkt zeigt.
 \block{fusion.convert} & conversion & Workflow & Umwandlung \\
 \block{analysis.camera\_image} & analysis & Workflow & Kamerabild \\
 \block{biooptomd.layer} & data & Workflow & BioOptoMD-Daten \\
+\block{pathtracer.bsdf\_file} & data & Path Tracer & BSDF aus Datei \\
+\block{pathtracer.bsdf\_analytic} & data & Path Tracer & BSDF aus Modell \\
+\block{pathtracer.bsdf\_mix} & data & Path Tracer & BSDF-Mischung \\
+\block{pathtracer.material} & data & Path Tracer & Material des Path Tracers \\
 \block{display.image} & analysis & Workflow & Bildanzeige \\
 \block{display.plot} & analysis & Workflow & Kurvenanzeige \\
 \block{display.beam} & analysis & Workflow & Sonde \\
@@ -847,6 +851,13 @@ aus einem Ausgabeordner von BioOptoMD.
 \param{directory} \newline\small\gui{BioOptoMD output} & Datei & leer & -- & Ausgabeordner von BioOptoMD. \\
 \bottomrule
 \end{referenz}
+
+\subsection{Materialblöcke des Path Tracers}\label{sec:block-pathtracer-material}\index{pathtracer.material@\texttt{pathtracer.material} (Block)}
+
+\block{pathtracer.bsdf\_file}, \block{pathtracer.bsdf\_analytic}, \block{pathtracer.bsdf\_mix} und
+\block{pathtracer.material} haben nur Datenanschlüsse vom Typ \code{bsdf} und kein Licht. Sie
+beschreiben Materialien, die der Path Tracer beim Rechnen selbst aus dem Workflow liest; Parameter
+und Bedeutung in \autoref{sec:pt-materialbloecke} und \autoref{sec:ref-pt-bloecke}.
 
 \section{Anzeigeblöcke}\label{sec:bloecke-anzeige}
 

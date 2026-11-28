@@ -177,3 +177,14 @@ the C++ kernel *Processes* are threads (0: all cores).
 
 Continuous spectra and colours, measured materials, sources and cameras inside glass, a compiled
 intersection kernel, keeping results with the document (until then: *Also write to file*).
+
+## Material blocks in the node workflow (ADR 0011, M2)
+
+With an RTT-Fusion that knows the data type `bsdf`, the plugin provides four data-only blocks:
+`pathtracer.bsdf_file` (a `.bsdf` file), `pathtracer.bsdf_analytic` (Lambert or the GGX metal),
+`pathtracer.bsdf_mix` (`(1 − w) a + w b`, b resampled onto a's grids) and `pathtracer.material`
+(a name for the BSDF at its input). When it computes, the plugin reads the material blocks of the
+document's workflow itself (`pt_blocks.workflow_materials`) and adds them as tabulated materials
+next to the panel's table; objects refer to them by name. The block preview draws a sphere in the
+material (`pt_blocks.preview`).
+

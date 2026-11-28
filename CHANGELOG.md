@@ -7,6 +7,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Materials as blocks of the node workflow** (ADR 0011, stage M2): the Path Tracer provides the
+  data blocks *BSDF file*, *analytic BSDF* (Lambert, GGX metal), *BSDF mix* and *material*; a
+  material block's name is assigned to objects like a name of the material table, and the plugin
+  reads the blocks itself when it computes (no workflow run needed). The block preview shows a
+  sphere in the material. Needs RTT-Fusion with the data type `bsdf`.
 - **Tabulated materials in the Path Tracer** (ADR 0011, stage M1): the material kind `tabulated`
   takes a BSDF from a `.bsdf` file (`rtt_fusion.material`, simulated or measured) – mirror
   reflection and refraction plus a diffuse part over the incidence angle and the wavelength,
