@@ -40,10 +40,11 @@ plugin = PathTracerPlugin()
 
 # ---- the catalogue: four data-only blocks, readable by the engine
 catalogue = plugin.blocks()
-assert [e["type"] for e in catalogue] == list(pt_blocks.TYPES_ALL)
+ROUGH = pt_blocks.rough_available()
+assert [e["type"] for e in catalogue] == list(pt_blocks.TYPES_ALL[:4]) + (list(pt_blocks.TYPES_ALL[4:]) if ROUGH else [])
 for entry in catalogue:
     t = NodeType.from_dict(entry)
-    assert all(s.kind.value == "data" and s.accepts == frozenset({"bsdf"}) for s in t.sockets), entry["type"]
+    assert all(s.kind.value == "data" and s.accepts <= {"bsdf", "nk", "topography"} for s in t.sockets), entry["type"]
     assert entry["representations"] == []
 
 # ---- a block through the engine's remote evaluator equals the block in the plugin
@@ -227,4 +228,52 @@ reds = [int(c["fill"][1:3], 16) - int(c["fill"][5:7], 16) for c in copper["drawi
 assert np.mean(reds) > 20, np.mean(reds)                  # reflects red more than blue
 assert not plugin.preview_block({"node": {"id": "z", "type": pt_blocks.MATERIAL}, "type": pt_blocks.MATERIAL,
                                  "model": {"nodes": [], "links": []}})["ok"]
+
+# ---- rough surfaces (R36c): n,k and topography into the Rayleigh–Rice block, as rtt_fusion computes it
+if ROUGH:
+    (folder / "silver.txt").write_text("# wavelength/nm n k (as elliDFT writes them)\n"
+                                       "450, 0.14, 2.5\n550; 0.12; 3.3\n650 0.14 4.1\n")
+    heights = np.random.default_rng(5).standard_normal((64, 64)) * 2.0                 # nm
+    np.save(folder / "map.npy", heights)
+    chain = [
+        {"id": "ag", "type": pt_blocks.NK, "params": {"file": str(folder / "silver.txt")}},
+        {"id": "t", "type": pt_blocks.TOPOGRAPHY, "params": {"kind": "gaussian", "rms": 3.0, "correlation": 2.0}},
+        {"id": "r", "type": pt_blocks.ROUGH, "params": {"wavelengths": "450, 550, 650", "step": 3.0}},
+        {"id": "satin", "type": pt_blocks.MATERIAL, "params": {"name": "satin silver"}},
+        {"id": "m", "type": pt_blocks.TOPOGRAPHY, "params": {"kind": "map", "file": str(folder / "map.npy"),
+                                                            "pitch": 0.2}},
+        {"id": "glass", "type": pt_blocks.NK, "params": {"n": 1.5}},
+        {"id": "r2", "type": pt_blocks.ROUGH, "params": {"wavelengths": "550"}},
+        {"id": "frost", "type": pt_blocks.MATERIAL, "params": {"name": "lightly etched"}},
+    ]
+    chain_links = [{"from": ["ag", "nk"], "to": ["r", "nk"]}, {"from": ["t", "topography"], "to": ["r", "topography"]},
+                   link("r", "satin"), {"from": ["glass", "nk"], "to": ["r2", "nk"]},
+                   {"from": ["m", "topography"], "to": ["r2", "topography"]}, link("r2", "frost")]
+    got = pt_blocks.workflow_materials(wf(chain, chain_links))
+    silver = material.RefractiveIndex(np.array([0.45, 0.55, 0.65]), np.array([0.14, 0.12, 0.14]),
+                                      np.array([2.5, 3.3, 4.1]))
+    direct = material.rayleigh_rice(silver, material.Topography(kind="gaussian", rms=3e-6, correlation=2e-3),
+                                    np.array([0.45, 0.55, 0.65]), np.deg2rad(np.arange(0.0, 90.0, 5.0)),
+                                    np.deg2rad(np.linspace(0, 90, 31)), np.deg2rad(np.linspace(0, 180, 61)))
+    assert np.array_equal(got["satin silver"].brdf, direct.brdf)
+    assert np.array_equal(got["satin silver"].reflectance, direct.reflectance)
+    etched = got["lightly etched"]
+    assert etched.index_behind is not None and abs(etched.transmittance[0, 0] - 0.96) < 1e-12
+    assert 0 < etched.scattered_reflectance()[0, 0] < 0.04                 # some of the 4 % is scattered
+    try:                                                                   # a rough surface without its topography
+        pt_blocks.workflow_materials(wf(chain[:4], chain_links[:1] + chain_links[2:3]))
+        raise AssertionError("not refused")
+    except pt_blocks.BlockError as e:
+        assert "nk and topography" in str(e), e
+    # previews: the rough block shows its sphere, n,k its polished sphere, a topography none
+    for nid, ok in (("r", True), ("ag", True), ("t", False)):
+        node = next(n for n in chain if n["id"] == nid)
+        answer = plugin.preview_block({"node": node, "type": node["type"], "model": wf(chain, chain_links)["model"]})
+        assert answer["ok"] is ok and (not ok or not drawing.check(answer["drawing"])), (nid, answer)
+    # rendering with it works (the satin silver on the floor)
+    satin_params = {**params, "workflow_materials": {k: pt_blocks.table_of(v) for k, v in got.items()}}
+    satin_model = [{**model[0], "attributes": {"pt.material": "satin silver"}}] + model[1:]
+    assert up_light(satin_model, satin_params) > 0
+else:
+    print("rtt_fusion without nk/topography (R36c): rough surfaces skipped")
 print("ok")

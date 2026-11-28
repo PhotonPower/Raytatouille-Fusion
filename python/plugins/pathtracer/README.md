@@ -188,3 +188,9 @@ document's workflow itself (`pt_blocks.workflow_materials`) and adds them as tab
 next to the panel's table; objects refer to them by name. The block preview draws a sphere in the
 material (`pt_blocks.preview`).
 
+Rough surfaces (M3a, RTT-Fusion R36c): `pathtracer.nk` (n + ik, constant or a table of wavelength,
+n, k – e.g. elliDFT's), `pathtracer.topography` (Gaussian / exponential statistics or a height
+map) and `pathtracer.rough_surface` (Rayleigh–Rice: coherent reflection with the Debye–Waller
+factor, the scattered part from the roughness spectrum, transmission into a dielectric or
+absorption). The preview of an nk block is the polished sphere of the material.
+

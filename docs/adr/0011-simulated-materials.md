@@ -202,6 +202,19 @@ Costs:
    with `nk.*` and `bsdf.*`?
 5. **elliDFT as a plugin.** A plugin of its own, or are its n,k tables imported as files at first?
 
+## Stage M3 split (2026-11-28, with the maintainer)
+
+A rigorous SpeckleBem run of one rough patch takes 26–50 min on a 24-thread desktop, a whole BSDF
+100–200 h: not on the workstation. M3 is therefore split:
+
+- **M3a – approximation (local, seconds).** `pathtracer.nk`, `pathtracer.topography` (statistics or
+  a height map; the `topo.*` blocks of D4, now in the pathtracer plugin) and
+  `pathtracer.rough_surface` (Rayleigh–Rice, RTT-Fusion `material.rayleigh_rice`). It is also the
+  reference the rigorous results are checked against in its range (σ ≪ λ).
+- **M3b – SpeckleBem on a server.** The SpeckleBem plugin writes the cases of a BSDF as a job
+  (SpeckleBem's sweep driver), the maintainer runs it on a server and copies the result folders
+  back; a block reads them into a `Bsdf`.
+
 ## Answers of the maintainer (2026-11-28)
 
 1. Rough surfaces first: M3 (SpeckleBem) before M4 (hp-FEM particles).

@@ -7,6 +7,11 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
 ## [Unreleased]
 
 ### Added
+- **Rough surfaces as workflow blocks** (ADR 0011, stage M3a): *refractive index* (n + ik, constant or a
+  table, e.g. from elliDFT), *topography* (statistics or a measured height map) and *rough surface*
+  – the BSDF of a slightly rough interface by the Rayleigh–Rice approximation, ready for a material
+  block. The fast stand-in for the rigorous SpeckleBem runs. Needs RTT-Fusion with `nk` and
+  `topography`.
 - **Materials as blocks of the node workflow** (ADR 0011, stage M2): the Path Tracer provides the
   data blocks *BSDF file*, *analytic BSDF* (Lambert, GGX metal), *BSDF mix* and *material*; a
   material block's name is assigned to objects like a name of the material table, and the plugin

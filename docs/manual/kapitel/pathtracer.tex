@@ -276,8 +276,16 @@ Block & Wirkung \\
 \code{pathtracer.bsdf\_analytic} & ein Modell: \code{lambert} (matt) oder \code{metal} (GGX wie die Art \code{metal}); \gui{Reflectance} als Zahl oder als Paare \code{nm:Wert}, \gui{Roughness}, \gui{Bin size} der Tabelle \\
 \code{pathtracer.bsdf\_mix} & mischt die BSDFs an \code{a} und \code{b}: $(1-w)\,a + w\,b$ mit $w$ = \gui{Share of b}; \code{b} wird auf die Gitter von \code{a} umgerechnet (energieerhaltend) \\
 \code{pathtracer.material} & macht die BSDF an seinem Eingang zu einem Material; \gui{Material name} (leer: der Name des Blocks) \\
+\code{pathtracer.nk} & Brechzahl $n + \mathrm{i}k$: konstant (\gui{n}, \gui{k}) oder aus einer Tabelle (Spalten Wellenlänge in nm, $n$, $k$ -- z.\,B. die Ergebnisse von elliDFT); Ausgang \code{nk} \\
+\code{pathtracer.topography} & raue Oberfläche: Statistik (\code{gaussian} oder \code{exponential}, \gui{rms height} in nm, \gui{Correlation length} in µm) oder eine gemessene Höhenkarte (\code{map}: \code{.npy} oder Textraster, Höhen in nm, \gui{Pitch} in µm); Ausgang \code{topography} \\
+\code{pathtracer.rough\_surface} & BSDF einer leicht rauen Grenzfläche aus \code{nk} und \code{topography} nach Rayleigh--Rice: kohärente Spiegelung (mit Debye--Waller-Faktor), gestreuter Anteil aus dem Rauheitsspektrum, Transmission in ein Dielektrikum bzw. Absorption in einem Metall; \gui{Wavelengths} in nm, \gui{Bin size} \\
 \bottomrule
 \end{referenz}
+
+Die Rayleigh--Rice-Näherung gilt für Rauheiten weit unter der Wellenlänge ($\sigma \ll \lambda$). Bei
+rauerer Oberfläche würde sie mehr streuen, als die glatte Fläche reflektiert; der gestreute Anteil
+wird dann verkleinert, damit die Energie stimmt. Für rauere Flächen und als exakte Referenz ist die
+rigorose Rechnung mit SpeckleBem vorgesehen (ADR 0011, Stufe M3b).
 
 Der Name eines Material-Blocks steht gleichberechtigt neben den Namen der Tabelle: Sie weisen ihn
 wie in \autoref{sec:pt-materialien} beschrieben über \gui{Material for the selection} zu. Ein Name

@@ -6,6 +6,10 @@ Blocks with data sockets only (no light), of the data type `bsdf` (rtt_fusion.ma
   pathtracer.bsdf_analytic  Lambert or the GGX conductor ("metal"), on a grid of its own
   pathtracer.bsdf_mix       (1 − weight) a + weight b, on the grids of a
   pathtracer.material       a material of the Path Tracer: a name for the BSDF at its input
+  pathtracer.nk             a refractive index n + ik (constant or a table: also n,k of elliDFT)
+  pathtracer.topography     a rough surface: Gaussian or exponential statistics or a height map
+  pathtracer.rough_surface  the BSDF of a slightly rough interface from nk and topography
+                            (Rayleigh–Rice; the fast approximation of SpeckleBem, stage M3a)
 
 The plugin provides them to the workflow (`provider`), and when it computes it collects the
 material blocks of the document's workflow itself (`workflow_materials`): reading a file or making
@@ -25,8 +29,10 @@ import pt_table
 
 PREFIX = "pathtracer."
 FILE, ANALYTIC, MIX, MATERIAL = (PREFIX + t for t in ("bsdf_file", "bsdf_analytic", "bsdf_mix", "material"))
-BSDF_TYPES = (FILE, ANALYTIC, MIX)
-TYPES_ALL = BSDF_TYPES + (MATERIAL,)
+NK, TOPOGRAPHY, ROUGH = (PREFIX + t for t in ("nk", "topography", "rough_surface"))
+BSDF_TYPES = (FILE, ANALYTIC, MIX, ROUGH)
+PRODUCERS = BSDF_TYPES + (NK, TOPOGRAPHY)         # blocks with an output the resolver follows
+TYPES_ALL = (FILE, ANALYTIC, MIX, MATERIAL, NK, TOPOGRAPHY, ROUGH)
 
 
 class BlockError(ValueError):
@@ -46,6 +52,16 @@ def available() -> bool:
     except ImportError:
         return False
     return "bsdf" in DATA_TYPES
+
+
+def rough_available() -> bool:
+    """Whether it also knows refractive indices and topographies (R36c)."""
+    try:
+        from rtt_fusion.graph.model import DATA_TYPES
+        mt = _material_module()
+    except ImportError:
+        return False
+    return {"nk", "topography"} <= DATA_TYPES and hasattr(mt, "rayleigh_rice")
 
 
 # ------------------------------------------------------------------------------- the BSDFs
@@ -98,7 +114,69 @@ def bsdf_of(node: dict, inputs: dict):
         if a is None or b is None:
             raise ValueError("both inputs a and b need a BSDF")
         return mt.mix(a, b, float(params.get("weight", 0.5)))
+    if kind == ROUGH:
+        nk, topo = inputs.get("nk"), inputs.get("topography")
+        if nk is None or topo is None:
+            raise ValueError("the inputs nk and topography are needed")
+        text = str(params.get("wavelengths", "450, 550, 650")).replace(";", ",")
+        values = [float(v) for v in text.split(",") if v.strip()]
+        if not values or min(values) <= 0:
+            raise ValueError("wavelengths: positive values in nm, separated by commas")
+        step = float(params.get("step", 2.0))
+        return mt.rayleigh_rice(nk, topo, np.array(sorted(values)) / 1000.0, np.deg2rad(np.arange(0.0, 90.0, 5.0)),
+                                np.deg2rad(np.linspace(0, 90, round(90 / step) + 1)),
+                                np.deg2rad(np.linspace(0, 180, round(180 / step) + 1)))
+    if kind in (NK, TOPOGRAPHY):
+        return value_of(node)
     raise ValueError(f"not a BSDF block: {kind}")
+
+
+def read_table(path: str) -> np.ndarray:
+    """Numbers of a text table (spaces, commas, semicolons or tabs between them; lines starting
+    with # and lines that are not numbers are skipped)."""
+    rows = []
+    for line in open(path, encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            rows.append([float(v) for v in line.replace(";", " ").replace(",", " ").replace("\t", " ").split()])
+        except ValueError:
+            continue
+    if not rows:
+        raise ValueError(f"{path}: no numbers")
+    width = min(len(r) for r in rows)
+    return np.array([r[:width] for r in rows])
+
+
+def value_of(node: dict):
+    """The value of a pathtracer.nk or pathtracer.topography block (RTT-Fusion's units: µm, mm)."""
+    mt = _material_module()
+    kind, params = node.get("type"), node.get("params") or {}
+    if kind == NK:
+        path = str(params.get("file", "")).strip()
+        if path:                                   # columns wavelength (nm; µm if all < 10), n, k
+            t = read_table(path)
+            if t.shape[1] < 2:
+                raise ValueError(f"{path}: columns wavelength, n and k are needed")
+            lam = t[:, 0] if t[:, 0].max() < 10 else t[:, 0] / 1000.0
+            order = np.argsort(lam)
+            k = t[:, 2] if t.shape[1] >= 3 else np.zeros(len(t))
+            return mt.RefractiveIndex(lam[order], t[order, 1], k[order])
+        n, k = float(params.get("n", 1.5)), float(params.get("k", 0.0))
+        return mt.RefractiveIndex(np.array([0.55]), np.array([n]), np.array([k]))
+    if kind == TOPOGRAPHY:
+        model = str(params.get("kind", "gaussian")).strip().lower()
+        if model == "map":
+            path = str(params.get("file", "")).strip()
+            if not path:
+                raise ValueError("a height map needs its file (.npy or a text grid, heights in nm)")
+            heights = np.load(path) if path.endswith(".npy") else read_table(path)
+            pitch = float(params.get("pitch", 0.0)) * 1e-3
+            return mt.Topography(heights=np.asarray(heights, dtype=float) * 1e-6, pitch=pitch)
+        return mt.Topography(kind=model, rms=float(params.get("rms", 2.0)) * 1e-6,
+                             correlation=float(params.get("correlation", 1.0)) * 1e-3)
+    raise ValueError(f"not a value block: {kind}")
 
 
 # ------------------------------------------------------------------- blocks for the workflow
@@ -127,6 +205,34 @@ def node_types() -> list:
             ParamSpec("name", "text", "", label="Material name",
                       description="what the attribute pt.material of objects refers to (empty: the block's name)"),),
             description="A material of the Path Tracer from the BSDF at its input"),
+    ] + (rough_types() if rough_available() else [])
+
+
+def rough_types() -> list:
+    """The blocks of rough surfaces (R36c): refractive index, topography, Rayleigh–Rice."""
+    from rtt_fusion.graph.model import Category, NodeType, ParamSpec, data_in, data_out
+    return [
+        NodeType(NK, Category.DATA, (data_out("nk", "nk", "n, k"),), (
+            ParamSpec("n", "number", 1.5, minimum=0.001, label="n", description="without a file: constant"),
+            ParamSpec("k", "number", 0.0, minimum=0.0, label="k", description="without a file: constant (absorption)"),
+            ParamSpec("file", "file", "", label="Table",
+                      description="columns wavelength (nm), n, k – e.g. the n,k of elliDFT; replaces n and k"),),
+            description="A refractive index n + ik, constant or from a table"),
+        NodeType(TOPOGRAPHY, Category.DATA, (data_out("topography", "topography", "Topography"),), (
+            ParamSpec("kind", "choice", "gaussian", options=("gaussian", "exponential", "map"), label="Kind",
+                      description="statistics (Gaussian or exponential autocorrelation) or a measured height map"),
+            ParamSpec("rms", "number", 2.0, unit="nm", minimum=0.0, label="rms height"),
+            ParamSpec("correlation", "number", 1.0, unit="µm", minimum=1e-4, label="Correlation length"),
+            ParamSpec("file", "file", "", label="Height map",
+                      description="kind map: .npy or a text grid, heights in nm"),
+            ParamSpec("pitch", "number", 0.1, unit="µm", minimum=1e-5, label="Pitch", description="of the map's points"),),
+            description="A rough surface: statistics or a height map"),
+        NodeType(ROUGH, Category.DATA, (data_in("nk", "nk", "n, k"), data_in("topography", "topography", "Topography"),
+                                        data_out("bsdf", "bsdf", "BSDF")), (
+            ParamSpec("wavelengths", "text", "450, 550, 650", unit="nm", label="Wavelengths"),
+            ParamSpec("step", "number", 2.0, unit="°", minimum=0.5, maximum=15.0, label="Bin size"),),
+            through=(("bsdf", ("nk", "topography")),),
+            description="BSDF of a slightly rough interface (Rayleigh–Rice; σ ≪ λ)"),
     ]
 
 
@@ -155,7 +261,10 @@ def provider():
     if not available():
         return None
     from rtt_fusion.graph.remote import BlockProvider
-    return BlockProvider(node_types(), {FILE: _evaluate, ANALYTIC: _evaluate, MIX: _evaluate, MATERIAL: _material_sink})
+    evaluators = {FILE: _evaluate, ANALYTIC: _evaluate, MIX: _evaluate, MATERIAL: _material_sink}
+    if rough_available():
+        evaluators.update({NK: _evaluate, TOPOGRAPHY: _evaluate, ROUGH: _evaluate})
+    return BlockProvider(node_types(), evaluators)
 
 
 # --------------------------------------------------------------- the document's materials
@@ -184,7 +293,7 @@ def _resolve(node: dict, nodes: dict, links: list, memo: dict, stack: tuple = ()
         to = link.get("to") or []
         if len(to) == 2 and str(to[0]) == nid:
             src = nodes.get(str((link.get("from") or [None])[0]))
-            if src is not None and src.get("type") in BSDF_TYPES and not src.get("muted"):
+            if src is not None and src.get("type") in PRODUCERS and not src.get("muted"):
                 inputs[str(to[1])] = _resolve(src, nodes, links, memo, stack + (nid,))
     try:
         memo[nid] = bsdf_of(node, inputs)
@@ -236,7 +345,8 @@ def table_of(bsdf) -> dict:
 def sphere_colours(bsdf, cells: int = 40):
     """sRGB (0 … 1) of the visible cells of a sphere in the material, and their squares
     (x0, y0, x1, y1 in −1 … 1): lit by a white sun (from the upper left, behind the viewer) with
-    irradiance 2.5 and a white sky of radiance 0.12 above the horizon and 0.02 below; seen from +z."""
+    irradiance 2.5 and a white sky of radiance 0.35 above the horizon and 0.03 below (seen in the
+    mirror part; the diffuse part gets an even 0.07); seen from +z."""
     table = pt_table.Table.from_dict(table_of(bsdf))
     # white light over the visible range (the table linear between its wavelengths); one
     # wavelength only: grey
@@ -253,7 +363,7 @@ def sphere_colours(bsdf, cells: int = 40):
     s = np.tile(sun, (len(n), 1))
     cos_s = np.clip(n @ sun, 0.0, None)
     r = 2 * n[:, 2:3] * n - v                              # mirror direction of the view
-    sky = np.where(r[:, 1] > 0, 0.12, 0.02)
+    sky = np.where(r[:, 1] > 0, 0.35, 0.03)
     sky = sky + np.where(r @ sun > math.cos(math.radians(4)), 60.0, 0.0)   # the sun in the mirror
     channels = []
     for c in range(len(nm)):
@@ -293,8 +403,16 @@ def preview(request: dict) -> dict:
             if src is None:
                 return dr.unsupported("connect a BSDF block to the material's input")
             node = src
-        bsdf = _resolve(node, nodes, links, {})
-        rgb, squares = sphere_colours(bsdf)
+        if node.get("type") == TOPOGRAPHY:
+            return dr.unsupported("a topography alone has no sphere: connect it to a rough surface block")
+        value = _resolve(node, nodes, links, {})
+        if node.get("type") == NK:                         # the polished surface of the material
+            mt = _material_module()
+            lam = value.wavelength if value.wavelength.size > 1 else np.array([0.45, 0.55, 0.65])
+            value = mt.rayleigh_rice(value, mt.Topography(rms=0.0, correlation=1.0), lam,
+                                     np.deg2rad(np.arange(0.0, 90.0, 5.0)), np.deg2rad(np.linspace(0, 90, 46)),
+                                     np.deg2rad(np.linspace(0, 180, 37)))
+        rgb, squares = sphere_colours(value)
     except Exception as e:  # noqa: BLE001
         return dr.unsupported(str(e))
     d = dr.Drawing("Material", unit="", axes=None)

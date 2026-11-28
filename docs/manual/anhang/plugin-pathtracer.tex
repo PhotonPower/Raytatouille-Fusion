@@ -142,8 +142,8 @@ Name & Kind & Reflectance & Weitere Werte \\
 
 \section{Blöcke für den Workflow}\label{sec:ref-pt-bloecke}
 
-Datenblöcke vom Typ \code{bsdf} (\autoref{sec:pt-materialbloecke}); sie brauchen RTT-Fusion mit dem
-Datentyp \code{bsdf} (R36b).
+Datenblöcke (\autoref{sec:pt-materialbloecke}); sie brauchen RTT-Fusion mit dem Datentyp \code{bsdf}
+(R36b), die Blöcke für raue Oberflächen außerdem \code{nk} und \code{topography} (R36c).
 
 \begin{referenz}{@{}>{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X@{}}
 \toprule
@@ -153,6 +153,9 @@ Block & Anschlüsse & Parameter \\
 \code{pathtracer.bsdf\_analytic} & aus: \code{bsdf} & \param{model} (\code{lambert}, \code{metal}), \param{value} (Zahl oder \code{nm:Wert, …}; Standard 0{,}8), \param{roughness} (0{,}01 \dots{} 1; 0{,}3), \param{step} (0{,}5 \dots{} 15\,°; 2) \\
 \code{pathtracer.bsdf\_mix} & ein: \code{a}, \code{b}; aus: \code{bsdf} & \param{weight} (Anteil von \code{b}, 0 \dots{} 1; 0{,}5) \\
 \code{pathtracer.material} & ein: \code{bsdf} & \param{name} (leer: Name des Blocks) \\
+\code{pathtracer.nk} & aus: \code{nk} & \param{n} (1{,}5), \param{k} (0), \param{file} (Tabelle nm, n, k; ersetzt n und k) \\
+\code{pathtracer.topography} & aus: \code{topography} & \param{kind} (\code{gaussian}, \code{exponential}, \code{map}), \param{rms} (nm; 2), \param{correlation} (µm; 1), \param{file} (Höhenkarte, nm), \param{pitch} (µm; 0{,}1) \\
+\code{pathtracer.rough\_surface} & ein: \code{nk}, \code{topography}; aus: \code{bsdf} & \param{wavelengths} (nm; \code{450, 550, 650}), \param{step} (0{,}5 \dots{} 15\,°; 2) \\
 \bottomrule
 \end{referenz}
 

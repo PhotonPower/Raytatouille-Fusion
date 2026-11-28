@@ -103,6 +103,9 @@ Dialog nicht direkt zeigt.
 \block{pathtracer.bsdf\_analytic} & data & Path Tracer & BSDF aus Modell \\
 \block{pathtracer.bsdf\_mix} & data & Path Tracer & BSDF-Mischung \\
 \block{pathtracer.material} & data & Path Tracer & Material des Path Tracers \\
+\block{pathtracer.nk} & data & Path Tracer & Brechzahl \\
+\block{pathtracer.topography} & data & Path Tracer & raue Oberfläche \\
+\block{pathtracer.rough\_surface} & data & Path Tracer & Streuung rauer Flächen (Näherung) \\
 \block{display.image} & analysis & Workflow & Bildanzeige \\
 \block{display.plot} & analysis & Workflow & Kurvenanzeige \\
 \block{display.beam} & analysis & Workflow & Sonde \\
@@ -855,7 +858,9 @@ aus einem Ausgabeordner von BioOptoMD.
 \subsection{Materialblöcke des Path Tracers}\label{sec:block-pathtracer-material}\index{pathtracer.material@\texttt{pathtracer.material} (Block)}
 
 \block{pathtracer.bsdf\_file}, \block{pathtracer.bsdf\_analytic}, \block{pathtracer.bsdf\_mix} und
-\block{pathtracer.material} haben nur Datenanschlüsse vom Typ \code{bsdf} und kein Licht. Sie
+\block{pathtracer.material} haben nur Datenanschlüsse vom Typ \code{bsdf} und kein Licht; ebenso
+\block{pathtracer.nk}, \block{pathtracer.topography} und \block{pathtracer.rough\_surface} mit den
+Typen \code{nk} und \code{topography}. Sie
 beschreiben Materialien, die der Path Tracer beim Rechnen selbst aus dem Workflow liest; Parameter
 und Bedeutung in \autoref{sec:pt-materialbloecke} und \autoref{sec:ref-pt-bloecke}.
 
