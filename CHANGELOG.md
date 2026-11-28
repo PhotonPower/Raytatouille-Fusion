@@ -11,8 +11,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   takes a BSDF from a `.bsdf` file (`rtt_fusion.material`, simulated or measured) – mirror
   reflection and refraction plus a diffuse part over the incidence angle and the wavelength,
   column *BSDF file*. A material may have both parts (a clear coat over a matt base); the
-  bidirectional method weighs their mirror events correctly. NumPy kernel for now; *automatic*
-  picks it when a table is used.
+  bidirectional method weighs their mirror events correctly. Both kernels (C++ from 0.4.0;
+  *automatic* uses NumPy with an older C++ kernel).
 - **Shrink wrap and meshes** (Nurbforge 0.18): Shrink wrap (`shrinkwrap`, tool group *Solids*) builds one
   closed triangle mesh around selected surfaces and solids, even overlapping, gapped or open ones.
   Triangle meshes are a new kind of object (*Mesh*): drawn, picked, transformed, hidden, saved
