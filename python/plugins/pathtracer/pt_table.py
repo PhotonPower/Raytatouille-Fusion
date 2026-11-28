@@ -12,7 +12,11 @@ linear in λ (resampled to the kernel's channels by `at_channels`); within a bin
 material is a stack of lobes: mirror, refraction, diffuse reflection, diffuse transmission, chosen
 in proportion to their power at the angle of wo. Sampling uses the table at the angle of wo for
 both directions of transport (reciprocity); the weight f |cos| / pdf then corrects for tables that
-are not reciprocal, as `f` always takes the direction the light really travels."""
+are not reciprocal, as `f` always takes the direction the light really travels.
+
+Limits: no volume behind the surface (refraction changes the direction only; absorption inside
+is the table's); light from the back sees the front table; the photon method does not follow the
+mirror part from the camera (its camera paths stop at the first surface that is not specular)."""
 
 from __future__ import annotations
 
