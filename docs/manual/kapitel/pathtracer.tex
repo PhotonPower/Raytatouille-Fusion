@@ -259,6 +259,42 @@ is not in the table of materials}} ab. Weisen Sie das Material neu zu oder ergä
 Tabelle.
 \end{warnung}
 
+\subsection{Materialien als Blöcke im Workflow}\label{sec:pt-materialbloecke}
+\index{Material!Block}\index{Workflow!Materialblock}
+
+Statt in der Tabelle kann ein Material auch im Knoten-Workflow entstehen: aus einer BSDF-Datei,
+aus einem Modell oder als Mischung. Das ist der Weg für Materialien aus Simulationen (z.\,B. eine
+raue Oberfläche aus SpeckleBem) und für gemessene Daten. Das Kontextmenü des Workflow-Editors
+(\gui{Add block}, Gruppe \gui{Path Tracer}) bietet vier Blöcke, alle nur mit Datenanschlüssen vom
+Typ \code{bsdf}:
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Block & Wirkung \\
+\midrule\endhead
+\code{pathtracer.bsdf\_file} & eine \code{.bsdf}-Datei (Parameter \gui{BSDF file}) \\
+\code{pathtracer.bsdf\_analytic} & ein Modell: \code{lambert} (matt) oder \code{metal} (GGX wie die Art \code{metal}); \gui{Reflectance} als Zahl oder als Paare \code{nm:Wert}, \gui{Roughness}, \gui{Bin size} der Tabelle \\
+\code{pathtracer.bsdf\_mix} & mischt die BSDFs an \code{a} und \code{b}: $(1-w)\,a + w\,b$ mit $w$ = \gui{Share of b}; \code{b} wird auf die Gitter von \code{a} umgerechnet (energieerhaltend) \\
+\code{pathtracer.material} & macht die BSDF an seinem Eingang zu einem Material; \gui{Material name} (leer: der Name des Blocks) \\
+\bottomrule
+\end{referenz}
+
+Der Name eines Material-Blocks steht gleichberechtigt neben den Namen der Tabelle: Sie weisen ihn
+wie in \autoref{sec:pt-materialien} beschrieben über \gui{Material for the selection} zu. Ein Name
+darf nur einmal vorkommen -- in der Tabelle oder in einem Block. Beim Rechnen liest das Plugin die
+Blöcke selbst aus dem Workflow; \gui{Run workflow} ist dafür nicht nötig. Stummgeschaltete
+Material-Blöcke zählen nicht; Blöcke in einer Gruppe zählen in ihrer aktiven Variante.
+
+Die Registerkarte \gui{Overview} im Dialog eines dieser Blöcke zeigt eine Kugel im Material,
+beleuchtet von einer weißen Sonne von links oben und einem Himmel -- zum schnellen Vergleich, keine
+Rechnung des Path Tracers.
+
+\begin{hinweis}
+Ein Material-Block ohne verbundene BSDF oder ein Block, der seine BSDF nicht liefern kann (Datei
+fehlt, unbekanntes Modell), bricht die Rechnung mit \enquote{\texttt{Workflow: …}} und dem Namen des
+Blocks ab.
+\end{hinweis}
+
 \section{Lichtquellen}\label{sec:pt-quellen}
 \index{Lichtquelle}\index{Path Tracer!Quelle}
 

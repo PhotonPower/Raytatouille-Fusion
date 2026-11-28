@@ -88,6 +88,11 @@ parameters, and, for statistical results, the number of realisations and an unce
 | `bsdf.mix` | pathtracer | `Bsdf` × n, weights → `Bsdf` |
 | `pt.material` | pathtracer | `Bsdf` (later also maps over (u, v), D9), name → material |
 
+Type ids carry their plugin's id (ADR 0010, D2); the short names here stand for them – in the
+pathtracer plugin `pathtracer.bsdf_file`, `pathtracer.bsdf_analytic`, `pathtracer.bsdf_mix`,
+`pathtracer.material` (stage M2), later `pathtracer.layer_stack`, `pathtracer.nk_file`,
+`pathtracer.render`.
+
 Details of the producing blocks:
 
 - **`speckle.scatter`** uses the DRC of SpeckleBem, averaged over realisations, and separates the

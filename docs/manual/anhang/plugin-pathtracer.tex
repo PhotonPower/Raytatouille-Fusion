@@ -140,6 +140,22 @@ Name & Kind & Reflectance & Weitere Werte \\
 \bottomrule
 \end{referenz}
 
+\section{Blöcke für den Workflow}\label{sec:ref-pt-bloecke}
+
+Datenblöcke vom Typ \code{bsdf} (\autoref{sec:pt-materialbloecke}); sie brauchen RTT-Fusion mit dem
+Datentyp \code{bsdf} (R36b).
+
+\begin{referenz}{@{}>{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Block & Anschlüsse & Parameter \\
+\midrule\endhead
+\code{pathtracer.bsdf\_file} & aus: \code{bsdf} & \param{file} (Datei) \\
+\code{pathtracer.bsdf\_analytic} & aus: \code{bsdf} & \param{model} (\code{lambert}, \code{metal}), \param{value} (Zahl oder \code{nm:Wert, …}; Standard 0{,}8), \param{roughness} (0{,}01 \dots{} 1; 0{,}3), \param{step} (0{,}5 \dots{} 15\,°; 2) \\
+\code{pathtracer.bsdf\_mix} & ein: \code{a}, \code{b}; aus: \code{bsdf} & \param{weight} (Anteil von \code{b}, 0 \dots{} 1; 0{,}5) \\
+\code{pathtracer.material} & ein: \code{bsdf} & \param{name} (leer: Name des Blocks) \\
+\bottomrule
+\end{referenz}
+
 \section{Spalten der Quellentabelle}\label{sec:ref-pt-quellentabelle}
 
 Vorgabe: eine Zeile \code{lamp} mit den Standardwerten der Tabelle.

@@ -259,7 +259,11 @@ def describe(entities: list[dict], params: dict, files: Distributions | None = N
     luminaire file, or None), file, axis), closed (the entities that are bodies), tol, exact.
     ValueError with a message for the user when something is missing."""
     rows = [{**row, "spectrum": parse_values(row.get("spectrum", ""))} for row in params["materials"]]
+    for name, table in (params.get("workflow_materials") or {}).items():   # material blocks of the workflow
+        rows.append({"name": name, "kind": "tabulated", "table": table, "spectrum": []})
     for row in rows:
+        if "table" in row:
+            continue
         if str(row.get("kind", "")).strip().lower() == "tabulated":
             try:
                 row["table"] = load_bsdf(row.get("bsdf", ""))

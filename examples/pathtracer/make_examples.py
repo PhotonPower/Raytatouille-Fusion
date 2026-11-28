@@ -352,6 +352,8 @@ class Host:
             return self.entities
         if method == "results.create_set":
             return 1
+        if method == "workflow.get":                     # no node workflow: no material blocks
+            return {}
         if method == "results.image":
             shape = (args["height"], args["width"])
             image = {"name": args["name"]}
