@@ -38,6 +38,7 @@ _MATERIAL = {
     "absorption": Param.number(0.0, min=0.0, decimals=5, unit="1/mm", label="Absorption"),
     "abbe": Param.number(0.0, min=0.0, decimals=2, label="Abbe number"),
     "spectrum": Param.text("", label="By wavelength"),
+    "bsdf": Param.text("", label="BSDF file"),
 }
 _SOURCE = {
     "name": Param.text("", label="Name"),
@@ -59,7 +60,10 @@ class PathTracerPlugin(Plugin):
                                              "Abbe number the index is n_d and depends on the wavelength); "
                                              "detector (the light passes, only to measure). By wavelength: the "
                                              "reflectance (glass: the absorption) at wavelengths in nm, e.g. "
-                                             "450:0.2, 550:0.8, 650:0.9 – replaces the constant value"),
+                                             "450:0.2, 550:0.8, 650:0.9 – replaces the constant value. "
+                                             "tabulated: the BSDF of a .bsdf file (simulated or measured: "
+                                             "mirror, refraction and a diffuse part over the incidence angle "
+                                             "and the wavelength), its path in the column BSDF file"),
         "default_material": Param.text("white", label="Material of the other objects", group="Materials",
                                        description="For objects without a material of their own"),
         "assign_material": Param.text("white", label="Material for the selection", group="Materials",
@@ -169,7 +173,11 @@ class PathTracerPlugin(Plugin):
         if choice == "C++" and not pt_native.available():
             raise UserError("The C++ kernel is not installed in the plugin's Python (package \"pathtracer\"): "
                             "install it, or choose the kernel NumPy or automatic.")
-        return choice != "NumPy" and pt_native.available()
+        tabulated = any(str(m.get("kind", "")).strip().lower() == "tabulated" for m in ctx.params["materials"])
+        if choice == "C++" and tabulated and not pt_native.supports("tabulated"):
+            raise UserError(f"The C++ kernel {pt_native.version()} has no tabulated materials yet: choose the "
+                            "kernel NumPy or automatic.")
+        return choice != "NumPy" and pt_native.available() and (not tabulated or pt_native.supports("tabulated"))
 
     # ------------------------------------------------------------------ assignments
     @staticmethod

@@ -21,6 +21,9 @@ pairs, the first / last value outside them.
                lobes; `ior`, `abbe`, `absorption` as for glass
   detector     no surface at all for the light: rays pass as if it were not there. Only a place
                to measure the irradiance (the scene keeps such faces out of the tracing)
+  tabulated    a BSDF from a table (a `.bsdf` file: simulated or measured, see pt_table): mirror
+               reflection and refraction plus a diffuse part, on a grid of incidence angles and
+               wavelengths
 
 mirror and glass scatter into single directions ("specular"); they cannot be connected to
 other points, only followed."""
@@ -31,8 +34,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-ABSORBER, DIFFUSE, MIRROR, GLOSSY, GLASS, DETECTOR, METAL, FROSTED = range(8)
-KINDS = ["absorber", "diffuse", "mirror", "glossy", "glass", "detector", "metal", "frosted"]
+import pt_table
+
+ABSORBER, DIFFUSE, MIRROR, GLOSSY, GLASS, DETECTOR, METAL, FROSTED, TABULATED = range(9)
+KINDS = ["absorber", "diffuse", "mirror", "glossy", "glass", "detector", "metal", "frosted", "tabulated"]
 
 
 @dataclass
@@ -51,6 +56,7 @@ class Materials:
     ior_table: np.ndarray | None = None  # index [material, wavelength], set by wavelengths()
     rho_table: np.ndarray | None = None  # reflectance [material, wavelength]
     absorb_table: np.ndarray | None = None
+    tables: dict | None = None           # tabulated: material number -> pt_table.Table
 
     @staticmethod
     def from_rows(rows: list[dict]) -> "Materials":
@@ -61,6 +67,7 @@ class Materials:
         names = []
         cols: dict[str, list[float]] = {k: [] for k in ("kind", "rho", "tau", "exp", "ior", "abs", "abbe", "alpha")}
         spectra = []
+        tables = {}
         for row in rows:
             name = str(row.get("name", "")).strip()
             kind = str(row.get("kind", "diffuse")).strip().lower()
@@ -96,6 +103,14 @@ class Materials:
                                      + ("that are not negative" if kind in ("glass", "frosted") else
                                         "in 0 … 1 (with the transmittance)"))
             spectra.append(pairs or None)
+            if kind == "tabulated":
+                if not isinstance(row.get("table"), dict):
+                    raise ValueError(f"material {name!r}: a tabulated material needs its BSDF file")
+                try:
+                    tables[len(names)] = pt_table.Table.from_dict(row["table"])
+                except ValueError as e:
+                    raise ValueError(f"material {name!r}: {e}") from None
+                tables[len(names)].at_channels(np.array([550.0]))
             names.append(name)
             cols["kind"].append(KINDS.index(kind))
             cols["rho"].append(rho)
@@ -106,7 +121,7 @@ class Materials:
             cols["abs"].append(absorb)
         return Materials(np.asarray(cols["kind"], dtype=np.int64), np.asarray(cols["rho"]), np.asarray(cols["tau"]),
                          np.asarray(cols["exp"]), np.asarray(cols["ior"]), np.asarray(cols["abs"]), names,
-                         np.asarray(cols["abbe"]), spectra, np.asarray(cols["alpha"]))
+                         np.asarray(cols["abbe"]), spectra, np.asarray(cols["alpha"]), tables=tables or None)
 
     def wavelengths(self, nm) -> np.ndarray:
         """Sets and returns the refractive index of every material at the wavelengths (nm):
@@ -125,6 +140,8 @@ class Materials:
             if pairs:
                 at = np.interp(np.atleast_1d(np.asarray(nm, dtype=float)), [p[0] for p in pairs], [p[1] for p in pairs])
                 (self.absorb_table if self.kind[k] in (GLASS, FROSTED) else self.rho_table)[k] = at
+        for k, table in (self.tables or {}).items():
+            table.at_channels(np.atleast_1d(np.asarray(nm, dtype=float)))
         return self.ior_table
 
     def _rho(self, m: np.ndarray, channel) -> np.ndarray:
@@ -139,8 +156,22 @@ class Materials:
         return self.absorb_table[m, channel]
 
     def specular(self, m: np.ndarray) -> np.ndarray:
+        """Materials that scatter only into single directions (no connections end on them). A
+        tabulated material without a diffuse part is one; with both parts it is not, but its
+        mirror and refraction events are (the integrators see them as pdf 0 with a weight)."""
         k = self.kind[m]
-        return (k == MIRROR) | (k == GLASS)
+        out = (k == MIRROR) | (k == GLASS)
+        for i, table in (self.tables or {}).items():
+            if not table.diffuse():
+                out = out | (np.asarray(m) == i)
+        return out
+
+    def _tabulated(self, m: np.ndarray):
+        """(table, rows) for each tabulated material among m."""
+        for i, table in (self.tables or {}).items():
+            rows = np.nonzero(m == i)[0]
+            if rows.size:
+                yield table, rows
 
     # ------------------------------------------------------------------ evaluation
     def _ior(self, m: np.ndarray, channel) -> np.ndarray:
@@ -220,6 +251,12 @@ class Materials:
                                              through * g_o * eta_i ** 2 / aco), 0.0)
             p_rev[t] = np.where(ok, np.where(same[t], fresnel * g_i * dist / (4 * aci),
                                              through * g_i * eta_o ** 2 / aci), 0.0)
+        for table, r in self._tabulated(m):                  # the diffuse part (mirror, refraction: deltas)
+            c = np.zeros(len(r), dtype=np.int64) if channel is None else channel[r]
+            a, b = (wi[r], wo[r]) if radiance else (wo[r], wi[r])          # the light goes a -> b
+            f[r] = table.f(n[r], a, b, c)
+            p_fwd[r] = table.density(n[r], wo[r], wi[r], c)
+            p_rev[r] = table.density(n[r], wi[r], wo[r], c)
         return f, p_fwd, p_rev
 
     # ------------------------------------------------------------------ sampling
@@ -312,6 +349,9 @@ class Materials:
             refr = -eta[:, None] * wo[t] + (eta * cos_o - cos_t)[:, None] * nn
             wi[t] = np.where(reflect[:, None], refl, refr)
             weight[t] = np.where(reflect | (not radiance), 1.0, eta ** 2)
+        for table, r in self._tabulated(m):
+            c = np.zeros(len(r), dtype=np.int64) if channel is None else channel[r]
+            wi[r], weight[r], pdf[r], _ = table.sample(n[r], wo[r], c, rng, radiance)
         if straight is not None and straight.any():
             wi[straight], weight[straight], pdf[straight] = -wo[straight], 1.0, 0.0
         return wi, weight, pdf

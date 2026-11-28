@@ -96,6 +96,36 @@ for method in ("light", "path", "bidir"):
         assert np.allclose(got["channels"].sum(axis=1) / reference["channels"].sum(axis=1), 1, atol=0.05), method
 rows = pt_setup.irradiance(native_sensor, got["values"], got["error"])
 assert [(r["entity"], r["face"], r["w"], r["h"]) for r in rows] == [(11, 0, 3, 3), (18, 0, 3, 3)] and 0 < rows[0]["noise"] < 0.05
+# ---- tabulated materials (from version 0.4.0): a clear coat whose base is red, from a .bsdf file –
+# both kernels give the same light at every wavelength
+try:
+    from rtt_fusion import material
+except ImportError:
+    material = None
+if material is not None and pt_native.supports("tabulated"):
+    j, k, q = 10, 45, 36
+    lam = np.array([0.45, 0.65])
+    base = np.array([0.1, 0.6])[None, :, None, None] / math.pi
+    coat = material.Bsdf(lam, np.deg2rad(np.arange(0.0, 90.0, 9.0)), np.deg2rad(np.linspace(0, 90, k + 1)),
+                         np.deg2rad(np.linspace(0, 180, q + 1)), np.full((j, 2), 0.3), np.zeros((j, 2)),
+                         1 - 0.3 - np.array([[0.1, 0.6]]) * np.ones((j, 1)),
+                         brdf=np.broadcast_to(base, (j, 2, k, q)).copy())
+    coat.check()
+    material.save(coat, str(folder / "coat.bsdf"))
+    tab_params = {**params, "materials": pt_setup.DEFAULT_MATERIALS + [
+        {"name": "coat", "kind": "tabulated", "bsdf": str(folder / "coat.bsdf")}]}
+    tab_model = [{**e, "attributes": {**e["attributes"], "pt.material": "coat"}} if e["id"] == 11 else e for e in model]
+    numpy_tab = pt_setup.build_scene(tab_model, tab_params)
+    native_tab = pt_native.build_scene(tab_model, tab_params)
+    numpy_sens = pt_scene.TexelSensor(numpy_tab, faces, 3)
+    native_sens = pt_native.texel_sensor(native_tab, faces, 3)
+    reference = pt_integrator.render(numpy_tab, numpy_sens, "light", 150_000, 6, seed=SEED)
+    for method in ("light", "path", "bidir"):
+        got = pt_native.render(native_tab, native_sens, method, 600_000, 6, seed=SEED)
+        gauge = slice(9, 18)                 # the gauge sees the floor's light (the coat and its red base)
+        if method != "path":
+            assert abs(got["values"][gauge].sum() / reference["values"][gauge].sum() - 1) < 0.08, method
+            assert np.allclose(got["channels"].sum(axis=1) / reference["channels"].sum(axis=1), 1, atol=0.06), method
 numpy_camera = pt_scene.Camera((0, -250, 150), (0, 0, 20), (0, 0, 1), 40.0, 4, 3)
 native_camera = pt_native.camera((0, -250, 150), (0, 0, 20), (0, 0, 1), 40.0, 4, 3)
 for method, samples in (("path", 60_000), ("bidir", 40_000)):       # (bidirectional also finds the bulb's light
