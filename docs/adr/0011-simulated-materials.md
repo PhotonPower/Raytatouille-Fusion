@@ -1,6 +1,7 @@
 # ADR 0011 – Simulated materials: from refractive index and topography to the rendered product
 
-Status: **proposed** 2026-11-28
+Status: **accepted** 2026-11-28 (by the maintainer: SpeckleBem before hp-FEM, `layer.stack` in the
+pathtracer plugin; questions 2, 3 and 5 are decided when their stages start)
 
 **Context.** Customers want to see what a material looks like in the finished product. Several of
 our kernels can each answer part of that question, but nothing yet links them:
@@ -78,7 +79,7 @@ parameters, and, for statistical results, the number of realisations and an unce
 | Block | Plugin | Inputs → output |
 |---|---|---|
 | `elli.nk` | elliDFT (new plugin) | polymer / oligomer parameters → `RefractiveIndex` |
-| `nk.file`, `nk.catalogue` | pathtracer (or a small materials plugin) | table file; glass catalogue (AGF/Sellmeier) → `RefractiveIndex` |
+| `nk.file`, `nk.catalogue` | pathtracer | table file; glass catalogue (AGF/Sellmeier) → `RefractiveIndex` |
 | `topo.file`, `topo.random` | SpeckleBem | measured height map (AFM, WLI); Gaussian / exponential random surface → `Topography` |
 | `speckle.scatter` | SpeckleBem (new plugin, ADR 0010 W5) | `RefractiveIndex` (material and background), `Topography`, λ and θᵢ grids, number of realisations → `Bsdf` |
 | `hpfem.particle` | hp-FEM | particle shape (parametric or a CAD body), anisotropic `RefractiveIndex`, host index, orientation distribution → `ParticleScatter` |
@@ -196,3 +197,11 @@ Costs:
 4. **Where `layer.stack` lives.** In the pathtracer plugin, or in a small materials plugin together
    with `nk.*` and `bsdf.*`?
 5. **elliDFT as a plugin.** A plugin of its own, or are its n,k tables imported as files at first?
+
+## Answers of the maintainer (2026-11-28)
+
+1. Rough surfaces first: M3 (SpeckleBem) before M4 (hp-FEM particles).
+2. Topography formats: decided when M3 starts.
+3. Goniometer formats: our own `.bsdf` first (M1); importers are decided later.
+4. `layer.stack` lives in the pathtracer plugin (with `nk.*` and `bsdf.*`).
+5. elliDFT as a plugin or as files: decided when M3 starts.

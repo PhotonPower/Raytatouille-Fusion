@@ -15,4 +15,4 @@ New ADRs get the next number; superseded ADRs stay and are marked as such.
 | [0008](0008-plugin-architecture.md) | Plugin architecture: library / CAD core / signed Python plugins | accepted |
 | [0009](0009-plugin-signatures.md) | Plugin signatures: Ed25519 with Monocypher, checked private copy | accepted |
 | [0010](0010-multi-plugin-workflow.md) | One node workflow, blocks from many plugins | accepted |
-| [0011](0011-simulated-materials.md) | Simulated materials: from refractive index and topography to the rendered product | proposed |
+| [0011](0011-simulated-materials.md) | Simulated materials: from refractive index and topography to the rendered product | accepted |
