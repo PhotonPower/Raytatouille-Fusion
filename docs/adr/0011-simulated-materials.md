@@ -1,7 +1,7 @@
 # ADR 0011 – Simulated materials: from refractive index and topography to the rendered product
 
 Status: **accepted** 2026-11-28 (by the maintainer: SpeckleBem before hp-FEM, `layer.stack` in the
-pathtracer plugin; questions 2, 3 and 5 are decided when their stages start)
+pathtracer plugin; elliDFT as tables; questions 2 and 3 are decided when their stages start)
 
 **Context.** Customers want to see what a material looks like in the finished product. Several of
 our kernels can each answer part of that question, but nothing yet links them:
@@ -78,8 +78,7 @@ parameters, and, for statistical results, the number of realisations and an unce
 
 | Block | Plugin | Inputs → output |
 |---|---|---|
-| `elli.nk` | elliDFT (new plugin) | polymer / oligomer parameters → `RefractiveIndex` |
-| `nk.file`, `nk.catalogue` | pathtracer | table file; glass catalogue (AGF/Sellmeier) → `RefractiveIndex` |
+| `nk.file`, `nk.catalogue` | pathtracer | table file (also n,k computed by elliDFT); glass catalogue (AGF/Sellmeier) → `RefractiveIndex` |
 | `topo.file`, `topo.random` | SpeckleBem | measured height map (AFM, WLI); Gaussian / exponential random surface → `Topography` |
 | `speckle.scatter` | SpeckleBem (new plugin, ADR 0010 W5) | `RefractiveIndex` (material and background), `Topography`, λ and θᵢ grids, number of realisations → `Bsdf` |
 | `hpfem.particle` | hp-FEM | particle shape (parametric or a CAD body), anisotropic `RefractiveIndex`, host index, orientation distribution → `ParticleScatter` |
@@ -166,15 +165,15 @@ in Python, as the path tracer's irradiance textures already are, so the kernels 
 |---|---|---|
 | **M1 BSDF in the kernels** | `rtt_fusion.material` (`Spectrum`, `Bsdf`), lobe stacks and the tabulated lobe in both kernels, `bsdf.file`, `bsdf.analytic` | GGX as a table reproduces today's metal material within the noise; white furnace; NumPy and C++ agree; old documents unchanged |
 | **M2 Materials in the workflow** | data-only blocks, `pt.material`, `bsdf.mix`, assignment by name, a preview sphere for material blocks (block previews) | a document with block materials renders as with the equivalent table materials |
-| **M3 Rough surfaces** | SpeckleBem plugin with `topo.*` and `speckle.scatter`; `elli.nk`, `nk.file`, `nk.catalogue` | smooth surface: Fresnel only, no scatter; small roughness: agrees with Rayleigh–Rice in its range; energy balance of the simulation within 1 % |
+| **M3 Rough surfaces** | SpeckleBem plugin with `topo.*` and `speckle.scatter`; `nk.file`, `nk.catalogue` | smooth surface: Fresnel only, no scatter; small roughness: agrees with Rayleigh–Rice in its range; energy balance of the simulation within 1 % |
 | **M4 Coatings with particles** | `hpfem.particle`, `layer.stack` (adding–doubling) | isotropic sphere: equals Mie; layer without particles: equals the Fresnel stack; energy balance |
 | **M5 The product under the luminaire** | `pt.render` block, ray set source from Raytatouille, later the near-field source | a plane under the luminaire: irradiance equals Raytatouille's own detector within the noise |
 | **M6 Spatial variation** | (u, v) maps (D9) | per feature |
 
 Repositories touched: RTT-Fusion (`rtt_fusion.material`, port data), PathTracer (both kernels:
 lobes, tabulated BSDF, ray set source), CAD (plugins `pathtracer`, `hpfem`, new plugins SpeckleBem
-and elliDFT; data-only blocks in the workflow editor if they need changes), SpeckleBem and elliDFT
-(Python APIs as needed by their plugins).
+; data-only blocks in the workflow editor if they need changes), SpeckleBem
+(Python API as needed by its plugin).
 
 ## Consequences
 
@@ -186,7 +185,7 @@ simulated ones.
 Costs:
 - a BSDF format and the `rtt_fusion.material` types to maintain;
 - the lobe-stack extension in two kernels, which must be kept in step;
-- two new plugins (SpeckleBem, elliDFT);
+- a new plugin (SpeckleBem);
 - expensive simulations, which make the cache and the cost estimates essential.
 
 ## Open questions for the maintainer
@@ -204,4 +203,5 @@ Costs:
 2. Topography formats: decided when M3 starts.
 3. Goniometer formats: our own `.bsdf` first (M1); importers are decided later.
 4. `layer.stack` lives in the pathtracer plugin (with `nk.*` and `bsdf.*`).
-5. elliDFT as a plugin or as files: decided when M3 starts.
+5. elliDFT stays outside: its computations take very long, so its n,k results come in as tables
+   (`nk.file`). There is no `elli.nk` block and no elliDFT plugin.
