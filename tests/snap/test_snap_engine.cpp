@@ -276,6 +276,34 @@ class TestSnapEngine : public QObject {
     }
   }
 
+  void nearlyCoincidentCurvesStayFast() {
+    // two copies of a wavy curve, 3e-6 apart in the view plane: a global curve/curve intersection
+    // subdivides them for minutes; the snap must answer at once and offer no real crossing
+    std::vector<nf::Vec3> pa;
+    std::vector<nf::Vec3> pb;
+    for (int i = 0; i <= 60; ++i) {
+      const double x = -20.0 + i * 40.0 / 60.0;
+      pa.push_back({x, 3.0 * std::sin(0.3 * x), 0.0});
+      pb.push_back({x, 3.0 * std::sin(0.3 * x) + 3e-6, 0.0});
+    }
+    const std::vector<Item> items = {item(11, nf::NurbsCurve::from_points(3, pa)),
+                                     item(12, nf::NurbsCurve::from_points(3, pb))};
+    SnapEngine engine;
+    QElapsedTimer timer;
+    timer.start();
+    for (const ViewKind kind : {ViewKind::Top, ViewKind::Perspective}) {
+      for (const double x : {-11.0, 0.5, 7.0}) {
+        const Camera c = camera(kind);
+        const nf::Vec3 p{x, 3.0 * std::sin(0.3 * x), 0.0};
+        SnapQuery q;
+        q.cursor_px = *c.project({static_cast<float>(p.x), static_cast<float>(p.y), 0.0F});
+        q.mask = only(SnapType::Intersection);
+        for (const SnapResult& r : engine.query(targets(items), c, q)) QVERIFY(r.apparent);
+      }
+    }
+    QVERIFY2(timer.elapsed() < 2000, qPrintable(QString::number(timer.elapsed())));
+  }
+
   void faceCornerAndEdgeMid() {
     auto r = at({-17, 13, 4});  // top corner of the box
     QVERIFY(!r.empty());

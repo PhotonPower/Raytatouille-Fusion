@@ -85,8 +85,11 @@ Measured (release build, Apple Silicon): **0.34 ms** per query with 10 000 curve
   ("quadrants") and detects circles / arcs exactly (equidistant samples, 1e-7 relative).
 - `SnapQuery::command_points`: points of the running command (`Command::snapPoints()`, e.g. the
   vertices of a polyline being drawn), offered as End.
-- Characteristic points are cached per entity on first contact (`SnapEngine::cache`);
-  intersections per curve pair. The cache follows the geometry identity.
+- Characteristic points are cached per entity on first contact (`SnapEngine::cache`). The cache
+  follows the geometry identity.
+- Real intersections are refined locally: Gauss-Newton on a(s) - b(t) = 0 from the foot points of
+  the display crossing, accepted when the curves meet within 1e-6 (also tangentially). A global `nf::intersect` is not used on mouse moves: on nearly coincident curves
+  (a gap just above its tolerance) it subdivides down to its size limit and takes minutes.
 - Intersections between edges of the same face / shell are not offered: they only meet at
   vertices, which are Face corners.
 
