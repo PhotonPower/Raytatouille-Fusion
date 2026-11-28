@@ -87,7 +87,9 @@ class ShrinkWrapCommand : public Command {
       nf::ShrinkWrapOptions o;
       o.offset = offset;
       o.max_nodes = 10'000'000;  // memory: a few hundred MB at most
-      nf::TriangleMesh m = nf::shrink_wrap(faces_, *resolution_, o);
+      // long for fine resolutions: computed on a worker thread, the views keep drawing
+      nf::TriangleMesh m;
+      run_responsive([&] { m = nf::shrink_wrap(faces_, *resolution_, o); });
       message_ = QObject::tr("Shrink wrap: %1 triangles, %2, worst triangle quality %3")
                      .arg(m.triangles.size())
                      .arg(m.is_watertight() ? QObject::tr("closed") : QObject::tr("open"))
