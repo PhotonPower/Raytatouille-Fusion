@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include <nurbforge/analysis/closest_point.hpp>
+
 #include "kernel/curve_features.hpp"
 
 namespace nfcad::snap {
@@ -40,6 +42,75 @@ std::pair<double, double> point_segment_2d(const QPointF& p, const QPointF& a, c
   return {std::hypot(p.x() - c.x(), p.y() - c.y()), s};
 }
 
+/// Gap below which two curves are taken to really cross (the modelling tolerance).
+constexpr double kCrossingGap = 1e-6;
+
+/// The curve of `curves` nearest to `p` and the parameter of its foot point.
+std::optional<std::pair<const nf::NurbsCurve*, double>> foot_on(const std::vector<nf::NurbsCurve>& curves,
+                                                                const nf::Vec3& p) {
+  std::optional<std::pair<const nf::NurbsCurve*, double>> best;
+  double best_d = std::numeric_limits<double>::max();
+  for (const nf::NurbsCurve& c : curves) {
+    try {
+      const nf::CurvePoint f = nf::closest_point(c, p);
+      if (f.distance < best_d) {
+        best_d = f.distance;
+        best = std::make_pair(&c, f.u);
+      }
+    } catch (const std::exception&) {
+    }
+  }
+  return best;
+}
+
+/// The crossing of two curves near the display crossing `pa` (on A) / `pb` (on B): Gauss-Newton
+/// on a(s) - b(t) = 0 from the foot points. Local and cheap, unlike a global curve/curve
+/// intersection, which subdivides nearly coincident curves down to its size limit and must not run
+/// on every mouse move. Empty when the curves do not meet there (gap above kCrossingGap).
+std::optional<nf::Vec3> refine_crossing(const std::vector<nf::NurbsCurve>& as,
+                                        const std::vector<nf::NurbsCurve>& bs, const nf::Vec3& pa,
+                                        const nf::Vec3& pb) {
+  const auto fa = foot_on(as, pa);
+  const auto fb = foot_on(bs, pb);
+  if (!fa || !fb) return std::nullopt;
+  const nf::NurbsCurve& a = *fa->first;
+  const nf::NurbsCurve& b = *fb->first;
+  double s = fa->second;
+  double t = fb->second;
+  try {
+    for (int it = 0; it < 64; ++it) {
+      const std::vector<nf::Vec3> da = a.derivatives(s, 1);
+      const std::vector<nf::Vec3> db = b.derivatives(t, 1);
+      const nf::Vec3 r = da[0] - db[0];
+      // normal equations of J = [a'(s), -b'(t)]
+      // (slightly damped: at a tangential crossing the tangents are parallel)
+      const double damp = 1e-9 * (nf::dot(da[1], da[1]) + nf::dot(db[1], db[1]));
+      const double m11 = nf::dot(da[1], da[1]) + damp;
+      const double m12 = -nf::dot(da[1], db[1]);
+      const double m22 = nf::dot(db[1], db[1]) + damp;
+      const double g1 = nf::dot(da[1], r);
+      const double g2 = -nf::dot(db[1], r);
+      const double det = m11 * m22 - m12 * m12;
+      if (!(det > 0.0)) return std::nullopt;  // degenerate (zero tangent)
+      const double ds = -(m22 * g1 - m12 * g2) / det;
+      const double dt = -(m11 * g2 - m12 * g1) / det;
+      const double s1 = std::clamp(s + ds, a.domain_start(), a.domain_end());
+      const double t1 = std::clamp(t + dt, b.domain_start(), b.domain_end());
+      const bool done = std::abs(s1 - s) <= 1e-14 * (1.0 + std::abs(s)) &&
+                        std::abs(t1 - t) <= 1e-14 * (1.0 + std::abs(t));
+      s = s1;
+      t = t1;
+      if (done) break;
+    }
+    const nf::Vec3 qa = a.evaluate(s);
+    const nf::Vec3 qb = b.evaluate(t);
+    if (nf::distance(qa, qb) > kCrossingGap) return std::nullopt;
+    return 0.5 * (qa + qb);
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
 nf::Vec3 nearest_on(const std::vector<nf::NurbsCurve>& curves, const nf::Vec3& p) {
   nf::Vec3 best = p;
   double best_d = std::numeric_limits<double>::max();
@@ -58,17 +129,11 @@ nf::Vec3 nearest_on(const std::vector<nf::NurbsCurve>& curves, const nf::Vec3& p
 
 void SnapEngine::clear() {
   caches_.clear();
-  intersections_.clear();
 }
 
 const SnapEngine::Cache& SnapEngine::cache(const pick::Target& t) {
   const auto it = caches_.find(t.id);
   if (it != caches_.end() && it->second.geometry == t.geometry) return it->second;
-  // geometry changed: drop its cached intersections
-  for (auto x = intersections_.begin(); x != intersections_.end();) {
-    x = (std::get<0>(x->first) == t.id || std::get<2>(x->first) == t.id) ? intersections_.erase(x)
-                                                                           : std::next(x);
-  }
   Cache c;
   c.geometry = t.geometry;
   const document::Geometry& g = *t.geometry;
@@ -201,30 +266,11 @@ std::vector<SnapResult> SnapEngine::query(const std::vector<pick::Target>& targe
         const bool has_curves = A.polyline < A.cache->curves.size() &&
                                 B.polyline < B.cache->curves.size();
         if ((pa - pb).length() < tol && has_curves) {
-          // real intersection: exact points of the curve pair (cached)
-          PairKey key{A.target->id, A.polyline, B.target->id, B.polyline};
-          if (std::get<0>(key) > std::get<2>(key) ||
-              (std::get<0>(key) == std::get<2>(key) && std::get<1>(key) > std::get<3>(key))) {
-            key = {B.target->id, B.polyline, A.target->id, A.polyline};
-          }
-          auto it = intersections_.find(key);
-          if (it == intersections_.end()) {
-            std::vector<nf::Vec3> pts;
-            for (const auto& ca : A.cache->curves[A.polyline]) {
-              for (const auto& cb : B.cache->curves[B.polyline]) {
-                const auto xs = kernel::curve_intersections(ca, cb);
-                pts.insert(pts.end(), xs.begin(), xs.end());
-              }
-            }
-            it = intersections_.emplace(key, std::move(pts)).first;
-          }
-          const nf::Vec3 approx = n3(pa);
-          const nf::Vec3* bestp = nullptr;
-          for (const nf::Vec3& p : it->second) {
-            if (bestp == nullptr || nf::distance(p, approx) < nf::distance(*bestp, approx)) bestp = &p;
-          }
-          if (bestp != nullptr && nf::distance(*bestp, approx) < 10.0 * tol) {
-            add(*bestp, SnapType::Intersection, A.target->id, B.target->id);
+          // real intersection: refined locally on the exact curves
+          const auto p = refine_crossing(A.cache->curves[A.polyline], B.cache->curves[B.polyline],
+                                         n3(pa), n3(pb));
+          if (p && nf::distance(*p, n3(pa)) < 10.0 * tol) {
+            add(*p, SnapType::Intersection, A.target->id, B.target->id);
           }
         } else if (parallel) {
           // apparent intersection: the point on the curve nearer to the viewer

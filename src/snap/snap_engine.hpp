@@ -42,7 +42,8 @@ struct SnapResult {
 
 /// Object snaps on the display meshes, refined on the exact geometry (ADR 0005,
 /// docs/snapping.md). Characteristic points per entity are computed lazily and cached
-/// (`SnapCache`); intersections per curve pair. Not thread-safe (GUI thread).
+/// (`SnapCache`); intersections are refined locally from the display crossing. Not thread-safe
+/// (GUI thread).
 class SnapEngine {
  public:
   /// All candidates within the radius, best first: priority of the type, then screen distance,
@@ -68,8 +69,6 @@ class SnapEngine {
   const Cache& cache(const pick::Target& t);
 
   std::unordered_map<document::EntityId, Cache> caches_;
-  using PairKey = std::tuple<document::EntityId, std::uint32_t, document::EntityId, std::uint32_t>;
-  std::map<PairKey, std::vector<nf::Vec3>> intersections_;
 };
 
 }  // namespace nfcad::snap

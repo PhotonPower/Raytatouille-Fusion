@@ -82,6 +82,9 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   plugin action can now be offered on every block (`block_types=("*",)`).
 
 ### Fixed
+- The program no longer freezes when the cursor (or a mouse-wheel zoom) comes near two curves or
+  edges that nearly coincide, e.g. edges of neighbouring objects a few micrometres apart: the
+  intersection snap is refined locally instead of by a global curve/curve intersection.
 - **The planes of blocks without a Raytatouille surface are drawn**: a FourierGrating stack (in
   the FrObSy exposure head E1 and E2, the outer faces of the grating plates), a grating added in the
   workflow. The rays bend there – at E2 they leave the glass of the second plate –, but nothing was
