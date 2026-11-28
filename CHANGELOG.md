@@ -82,6 +82,8 @@ versioning: [SemVer](https://semver.org): from 1.0 on, the `.nfcad` format and t
   plugin action can now be offered on every block (`block_types=("*",)`).
 
 ### Fixed
+- Shrink wrap no longer freezes the window while it computes: it runs on a worker thread, the
+  views keep drawing and a busy cursor is shown.
 - The program no longer freezes when the cursor (or a mouse-wheel zoom) comes near two curves or
   edges that nearly coincide, e.g. edges of neighbouring objects a few micrometres apart: the
   intersection snap is refined locally instead of by a global curve/curve intersection.

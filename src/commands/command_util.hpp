@@ -54,6 +54,12 @@ inline QString failure(const QString& what, const std::exception& e) {
   return QObject::tr("%1: %2").arg(what, reason(e));
 }
 
+/// Runs `work` on a worker thread while the event loop goes on (views redraw, no "not
+/// responding"); user input waits until it is done. A busy cursor is shown meanwhile. Without a
+/// running application (tests) `work` runs directly. `work` must not touch the document or
+/// widgets; exceptions are passed on to the caller.
+void run_responsive(const std::function<void()>& work);
+
 /// Circle polyline (preview).
 Polyline3 circle(const nf::Vec3& centre, const nf::Vec3& normal, double r, std::size_t n = 72);
 

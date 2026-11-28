@@ -46,6 +46,7 @@ add_library(nfcad_core STATIC
   src/commands/analysis_commands.cpp
   src/commands/view_drawing_commands.cpp
   src/commands/dimension_commands.cpp
+  src/commands/command_util.cpp
   src/commands/mesh_commands.cpp
   src/commands/edit_commands.cpp
   src/commands/input_parser.cpp
