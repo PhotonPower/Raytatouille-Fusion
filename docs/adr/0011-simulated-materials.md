@@ -40,12 +40,12 @@ blocks in the workflow of ADR 0010. Blocks with data sockets only (no light port
   *Alternatives*).
 
 **D2 – New port data types.** They are dataclasses in a new module `rtt_fusion.material`, written
-with `rtt_fusion.portdata`. All lengths are in µm, wavelengths in nm and angles in radians; every
-type is versioned.
+with `rtt_fusion.portdata`. Units are RTT-Fusion's (its docs/konventionen.md): lengths in mm, vacuum
+wavelengths in µm, angles in radians; the path tracer converts to its nm. Every type is versioned.
 
 | Type | Content |
 |---|---|
-| `Spectrum` | values on a wavelength grid (nm); linear interpolation, constant outside the grid |
+| `Spectrum` | values on a wavelength grid (µm); linear interpolation, constant outside the grid |
 | `RefractiveIndex` | n(λ), k(λ) on a grid. Anisotropic case: principal values n₁,₂,₃(λ), k₁,₂,₃(λ) and the orientation of the principal axes |
 | `Topography` | either a height map (heights, pixel pitch, size) or statistics: rms height, correlation length, autocorrelation type (Gaussian, exponential) or a tabulated PSD |
 | `ParticleScatter` | per wavelength: scattering and absorption cross sections, and the phase function (unpolarised: M₁₁ over the scattering angle), averaged over the orientation distribution of the particles; the host medium's index |
@@ -171,8 +171,8 @@ in Python, as the path tracer's irradiance textures already are, so the kernels 
 | **M6 Spatial variation** | (u, v) maps (D9) | per feature |
 
 Repositories touched: RTT-Fusion (`rtt_fusion.material`, port data), PathTracer (both kernels:
-lobes, tabulated BSDF, ray set source), CAD (plugins `pathtracer`, `hpfem`, new plugins SpeckleBem
-; data-only blocks in the workflow editor if they need changes), SpeckleBem
+lobes, tabulated BSDF, ray set source), CAD (plugins `pathtracer`, `hpfem`, new plugin SpeckleBem;
+data-only blocks in the workflow editor if they need changes), SpeckleBem
 (Python API as needed by its plugin).
 
 ## Consequences

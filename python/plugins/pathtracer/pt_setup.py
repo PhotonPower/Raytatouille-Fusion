@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 
 import numpy as np
 
@@ -218,6 +219,38 @@ class MeshCache:
         return self.mesh
 
 
+_BSDF_CACHE: dict = {}
+
+
+def load_bsdf(path: str) -> dict:
+    """The arrays of a `.bsdf` file (rtt_fusion.material) for pt_table.Table: wavelengths in nm.
+    Kept while the file is unchanged. ValueError with a message for the user."""
+    file = os.path.expanduser(str(path or "").strip())
+    if not file:
+        raise ValueError("a tabulated material needs a BSDF file (.bsdf) in the column \"BSDF file\"")
+    try:
+        stamp = os.stat(file).st_mtime_ns
+    except OSError:
+        raise ValueError(f"the BSDF file {file} does not exist") from None
+    hit = _BSDF_CACHE.get(file)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    try:
+        from rtt_fusion import material
+    except ImportError:
+        raise ValueError("reading BSDF files needs the package rtt_fusion in the plugin's Python") from None
+    try:
+        b = material.load(file)
+    except Exception as e:  # noqa: BLE001 – a broken file is the user's to fix
+        raise ValueError(f"cannot read the BSDF file {file}: {e}") from None
+    table = {"nm": b.wavelength * 1000.0, "theta_in": b.theta_in, "theta_edges": b.theta_edges,
+             "phi_edges": b.phi_edges, "reflectance": b.reflectance, "transmittance": b.transmittance,
+             "brdf": b.brdf, "btdf": b.btdf,
+             "index_behind": None if b.index_behind is None else b.index_behind.at(b.wavelength)}
+    _BSDF_CACHE[file] = (stamp, table)
+    return table
+
+
 def describe(entities: list[dict], params: dict, files: Distributions | None = None) -> dict:
     """What a kernel builds its scene from – the model and the panel in plain data:
     surfaces (the entities that are traced), materials (rows with their spectra as pairs),
@@ -226,6 +259,12 @@ def describe(entities: list[dict], params: dict, files: Distributions | None = N
     luminaire file, or None), file, axis), closed (the entities that are bodies), tol, exact.
     ValueError with a message for the user when something is missing."""
     rows = [{**row, "spectrum": parse_values(row.get("spectrum", ""))} for row in params["materials"]]
+    for row in rows:
+        if str(row.get("kind", "")).strip().lower() == "tabulated":
+            try:
+                row["table"] = load_bsdf(row.get("bsdf", ""))
+            except ValueError as e:
+                raise ValueError(f"material {str(row.get('name', '')).strip()!r}: {e}") from None
     names_m = pt_bsdf.Materials.from_rows(rows).names                  # (checks the rows)
     default = str(params.get("default_material", "")).strip()
     if default not in names_m:

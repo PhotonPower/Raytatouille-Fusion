@@ -169,6 +169,7 @@ Wert außerhalb seines Bereichs wird mit einer Meldung abgelehnt.
 \code{metal} & Reflectance, Roughness & raues Metall: Mikrofacetten (GGX, Breite roughness$^2$), die frontal \emph{Reflectance} und unter streifendem Einfall mehr reflektieren -- gebürstete oder gestrahlte Oberflächen, mit einem Glanzlicht, das sich bei flachem Winkel streckt \\
 \code{frosted} & Index, Roughness, Absorption, Abbe number & raues Glas: dieselben Mikrofacetten auf einem Dielektrikum; Licht wird in Keulen statt in einzelne Richtungen reflektiert und gebrochen -- geätztes oder sandgestrahltes Glas, Glasdiffusoren; Körper geschlossen und in Luft \\
 \code{detector} & -- & keine Fläche für das Licht: Es läuft durch, als wäre das Objekt nicht da. Nur ein Ort, an dem die Bestrahlungsstärke gemessen wird; für die Kamera unsichtbar, kann keine Quelle sein \\
+\code{tabulated} & BSDF file & ein Material aus einer Tabelle (\code{.bsdf}-Datei, simuliert oder gemessen): spiegelnde Reflexion und Brechung (der kohärente Anteil) plus ein gestreuter Anteil über Einfallswinkel und Wellenlänge -- z.\,B. ein Lack mit rauer Oberfläche aus SpeckleBem. Nur der NumPy-Kern; Automatisch wählt ihn dann von selbst \\
 \bottomrule
 \end{referenz}
 

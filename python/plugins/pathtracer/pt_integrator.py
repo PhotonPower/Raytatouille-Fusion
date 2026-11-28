@@ -58,6 +58,10 @@ class Path:
         self.pf = np.zeros((k, n))
         self.pr = np.zeros((k, n))
         self.spec = np.zeros((k, n), dtype=bool)
+        # the direction leaving the vertex was certain (mirror, refraction, a straight pass): the
+        # densities cancel in the weights. spec is the material's (nothing connects there); a
+        # tabulated material that is not specular can still scatter into a delta
+        self.delta = np.zeros((k, n), dtype=bool)
         self.outside = np.ones((k, n))                       # index in front of the vertex's surface (1: air)
         self.valid = np.zeros((k, n), dtype=bool)
         self.point = np.zeros(n, dtype=bool)                 # vertex 0 is a point (no surface)
@@ -173,10 +177,12 @@ def _walk(scene, sensor, path: Path, start: dict, beta0: np.ndarray, rng, radian
         path.pf[k, idx] = pdf[idx] * np.abs(cs) / dist2
         spec = mats.specular(m) | straight
         path.spec[k, idx] = spec
+        path.delta[k, idx] = spec
         path.valid[k, idx] = True
         if k == k_max - 1:
             break
         wi, weight, pd = mats.sample(m, ns, -dk, rng, radiance, path.channel[idx], outside, straight)
+        path.delta[k, idx] = spec | ((pd == 0) & (weight > 0))
         _, _, p_rev = mats.eval(m, ns, -dk, wi, path.channel[idx], outside=outside)
         path.pr[k - 1, idx] = p_rev * path.cos(k - 1, idx, dk) / dist2
         ok = (weight > 0) & (_dot(ns, wi) * _dot(ng, wi) > 0)
@@ -425,7 +431,9 @@ def _weight(scene, sensor, light: Path, eye: Path | None, s: int, t: int, j: np.
     # can end on them
     spec = [np.zeros(count, dtype=bool)] * n
     for i in range(1, n - 1):
-        spec[i] = light.spec[i, j] if i < s else eye.spec[n - 1 - i, j]
+        if s >= 1 and t >= 1 and i in (s - 1, s):            # the ends of this connection scatter into it
+            continue
+        spec[i] = light.delta[i, j] if i < s else eye.delta[n - 1 - i, j]
         if i + 1 < n:
             pf[i + 1] = np.where(spec[i], 1.0, pf[i + 1])
         pr[i - 1] = np.where(spec[i], 1.0, pr[i - 1])

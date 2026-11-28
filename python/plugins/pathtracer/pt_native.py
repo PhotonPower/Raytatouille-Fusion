@@ -20,6 +20,11 @@ def available() -> bool:
     return _pt is not None
 
 
+def supports(feature: str) -> bool:
+    """Whether the installed C++ kernel has a feature (its `FEATURES`, e.g. "tabulated" materials)."""
+    return _pt is not None and feature in getattr(_pt, "FEATURES", ())
+
+
 def version() -> str:
     return getattr(_pt, "__version__", "") if _pt is not None else ""
 
